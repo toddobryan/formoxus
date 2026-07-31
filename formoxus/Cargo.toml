@@ -1,0 +1,10 @@
+[package]
+name = "formoxus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dioxus = { workspace = true }
+serde = { workspace = true }
+rushdown = "0.18.0"
+ammonia = "4.1.3"
