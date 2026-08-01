@@ -89,3 +89,155 @@ fn TextInputWidget(field: Store<FormField<String>>, props: FieldProps) -> Elemen
 impl DefaultWidget for String {
     type Widget = TextInput;
 }
+
+/// The default numeric input, for `i32` fields.
+pub struct NumberInput;
+
+impl FieldWidget<i32> for NumberInput {
+    fn render(field: Store<FormField<i32>>, props: FieldProps) -> Element {
+        rsx! { NumberInputWidget { field, props } }
+    }
+}
+
+#[component]
+fn NumberInputWidget(field: Store<FormField<i32>>, props: FieldProps) -> Element {
+    let FieldProps {
+        label,
+        required,
+        placeholder,
+    } = props;
+    let mut value = field.value();
+    // A number input reports `.value` as "" for empty *or* invalid input, so
+    // `parse().ok()` collapses both to `None` — no un-storable "raw invalid" state.
+    let current = value.cloned().map(|n| n.to_string()).unwrap_or_default();
+    rsx! {
+        label {
+            "{label}"
+            if required { span { class: "required", " *" } }
+            input {
+                r#type: "number",
+                step: 1,
+                required,
+                value: "{current}",
+                placeholder,
+                oninput: move |e| value.set(e.value().parse::<i32>().ok()),
+            }
+            FieldErrors { errors: field.errors().cloned() }
+        }
+    }
+}
+
+impl DefaultWidget for i32 {
+    type Widget = NumberInput;
+}
+
+pub struct CheckboxInput;
+
+impl FieldWidget<bool> for CheckboxInput {
+    fn render(field: Store<FormField<bool>>, props: FieldProps) -> Element {
+        rsx! { CheckboxWidget { field, props } }
+    }
+}
+
+#[component]
+fn CheckboxWidget(field: Store<FormField<bool>>, props: FieldProps) -> Element {
+    let label = props.label;
+    let mut value = field.value();
+    let current = value.cloned().unwrap_or(false);
+    rsx! {
+        label {
+            "{label}"
+            input {
+                r#type: "checkbox",
+                checked: current,
+                onchange: move |_| value.set(Some(!current)),
+            }
+            FieldErrors { errors: field.errors().cloned() }
+        }
+    
+    }
+}
+
+impl DefaultWidget for bool {
+    type Widget = CheckboxInput;
+}
+
+pub struct UnsetBooleanSelect;
+
+impl FieldWidget<bool> for UnsetBooleanSelect {
+    fn render(field: Store<FormField<bool>>, props: FieldProps) -> Element {
+        rsx! { SelectWidget { field, props, choices: vec![
+            SelectChoice { value: true, display: "True".to_string() },
+            SelectChoice { value: false, display: "False".to_string() },
+        ] } }
+    }
+}
+
+impl FieldWidget<Option<bool>> for UnsetBooleanSelect {
+    fn render(field: Store<FormField<Option<bool>>>, props: FieldProps) -> Element {
+        rsx! { SelectWidget { field, props, choices: vec![
+            SelectChoice { value: Some(true), display: "True".to_string() },
+            SelectChoice { value: Some(false), display: "False".to_string() },
+            SelectChoice { value: None, display: "Neither".to_string() },
+        ] } }
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectChoice<T> {
+    pub value: T,
+    pub display: String,
+}
+
+#[component]
+pub fn SelectWidget<T: 'static + Clone + PartialEq>(
+    field: Store<FormField<T>>,
+    props: FieldProps,
+    choices: ReadSignal<Vec<SelectChoice<T>>>,
+) -> Element {
+    let FieldProps {
+        label,
+        required,
+        placeholder
+    } = props;
+    rsx! {
+        label { 
+            "{label}"
+            if required { span { class: "required", " *" } },
+            select {
+                required,
+                onchange: move |evt| {
+                    let v = evt.value();
+                    if v.is_empty() {
+                        field.value().set(None);
+                    } else if let Ok(i) = v.parse::<usize>() {
+                        field.value().set(choices().get(i).map(|opt| opt.value.clone()));
+                    }
+                },
+                if required && field.value().is_none() {
+                    option {
+                        value: "",
+                        selected: true,
+                        disabled: true,
+                        hidden: true,
+                        "{placeholder.clone().unwrap_or_default()}"
+                    }
+                }
+                for (i, opt) in choices().into_iter().enumerate() {
+                    option {
+                        value: "{i}",
+                        selected: field.value().cloned() == Some(opt.value.clone()),
+                        "{opt.display}"
+                    }
+                }
+            }
+            FieldErrors { errors: field.errors().cloned() }
+        }
+    }
+}
+
+
+
+
+
