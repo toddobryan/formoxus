@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
-use formoxus::{FormError, FormField};
+use formoxus::{FieldProps, FieldWidget, FormError, FormField, UnsetBooleanSelect, render_default};
 use serde::{Deserialize, Serialize};
+
+pub async fn submit_sample(model: SampleModel) {
+    println!("{model:?}");
+}
 
 /// The cleaned, validated output — what a successful submit produces. Required
 /// fields are their real types; genuinely optional ones stay `Option`.
@@ -10,6 +14,7 @@ pub struct SampleModel {
     pub count: i32,
     pub max: Option<i32>,
     pub flag: bool,
+    pub opt_flag: Option<bool>,
 }
 
 /// The reactive, in-progress form state: the `Store` content *and* the
@@ -19,12 +24,13 @@ pub struct SampleModel {
 ///
 /// ```ignore
 /// #[derive(Form)]
-/// #[form(model = SampleModel)]
+/// #[form(model = SampleModel, onsubmit = submit_sample)]
 /// struct SampleForm {
-///     #[form(required)] text: String,
-///     #[form(required)] count: i32,
+///     text: String,
+///     count: i32,
 ///     max: Option<i32>,          // optional
-///     #[form(required)] flag: bool,
+///     flag: bool,
+///     opt_flag: Option<bool>,
 /// }
 /// ```
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
@@ -33,6 +39,7 @@ pub struct SampleFormState {
     pub count: FormField<i32>,
     pub max: FormField<i32>, // optional field — no `required`
     pub flag: FormField<bool>,
+    pub opt_flag: FormField<bool>,
 
     pub errors: Vec<FormError>,
 }
@@ -45,6 +52,7 @@ impl SampleFormState {
             count: FormField::with_value(model.count),
             max: FormField::with_optional(model.max),
             flag: FormField::with_value(model.flag),
+            opt_flag: FormField::with_optional(model.opt_flag),
             errors: Vec::new(),
         }
     }
@@ -70,6 +78,7 @@ impl SampleFormState {
         self.count.clear_errors();
         self.max.clear_errors();
         self.flag.clear_errors();
+        self.opt_flag.clear_errors();
         self.errors.clear();
 
         // Field-level: required fields must have a value; the optional one passes
@@ -78,6 +87,7 @@ impl SampleFormState {
         let count = self.count.required();
         let max = self.max.optional();
         let flag = self.flag.required();
+        let opt_flag = self.opt_flag.optional();
 
         // If any required field is missing, its error is already attached — bail.
         let (Some(text), Some(count), Some(flag)) = (text, count, flag) else {
@@ -85,13 +95,42 @@ impl SampleFormState {
         };
 
         // Build the tentative model, then run the cross-field validator.
-        let model = SampleModel { text, count, max, flag };
+        let model = SampleModel { text, count, max, flag, opt_flag };
         let form_errors = self.validate_form(&model);
         if !form_errors.is_empty() {
             self.errors = form_errors;
             return None;
         }
         Some(model)
+    }
+}
+
+#[component]
+pub fn SampleForm(data: Store<SampleFormState>) -> Element {
+    rsx! {
+        form {
+            class: "form",
+            { render_default(
+                data.text().into(),
+                FieldProps { label: "Text".into(), required: true, placeholder: None },
+            ) }
+            { render_default(
+                data.count().into(),
+                FieldProps { label: "Count".into(), required: true, placeholder: None },
+            ) }
+            { render_default(
+                data.max().into(),
+                FieldProps { label: "Max".into(), required: false, placeholder: None },
+            ) }
+            { render_default(
+                data.flag().into(),
+                FieldProps { label: "Flag".into(), required: true, placeholder: None },
+            ) }
+            { UnsetBooleanSelect::render(
+                data.opt_flag().into(),
+                FieldProps { label: "OptFlag".into(), required: false, placeholder: None },
+            ) }
+        }
     }
 }
 
@@ -106,6 +145,7 @@ fn main() {
     assert_eq!(form.count.errors.len(), 1);
     assert_eq!(form.flag.errors.len(), 1);
     assert_eq!(form.max.errors.len(), 0);
+    assert_eq!(form.opt_flag.errors.len(), 0);
     println!("1. empty  → invalid; text error = {:?}", form.text.errors);
 
     // 2. Filled + valid → a clean model, no errors.
@@ -114,6 +154,7 @@ fn main() {
         count: 3,
         max: Some(5),
         flag: true,
+        opt_flag: None,
     });
     let model = form.validate().expect("should be valid");
     println!("2. filled → valid;   model = {model:?}");

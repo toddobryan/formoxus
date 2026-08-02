@@ -173,17 +173,6 @@ impl FieldWidget<bool> for UnsetBooleanSelect {
     }
 }
 
-impl FieldWidget<Option<bool>> for UnsetBooleanSelect {
-    fn render(field: Store<FormField<Option<bool>>>, props: FieldProps) -> Element {
-        rsx! { SelectWidget { field, props, choices: vec![
-            SelectChoice { value: Some(true), display: "True".to_string() },
-            SelectChoice { value: Some(false), display: "False".to_string() },
-            SelectChoice { value: None, display: "Neither".to_string() },
-        ] } }
-    }
-}
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectChoice<T> {
     pub value: T,
@@ -201,8 +190,11 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
         required,
         placeholder
     } = props;
+    // Label for the selectable "no value" option in an optional select (a required
+    // select uses a hidden placeholder that fails validation instead). Defaults to "None".
+    let none_label = placeholder.clone().unwrap_or_else(|| "None".to_string());
     rsx! {
-        label { 
+        label {
             "{label}"
             if required { span { class: "required", " *" } },
             select {
@@ -222,6 +214,14 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
                         disabled: true,
                         hidden: true,
                         "{placeholder.clone().unwrap_or_default()}"
+                    }
+                } else if !required {
+                    // Optional select: a visible, selectable "no value" option. Its empty
+                    // value routes through the `is_empty()` arm of onchange → sets None.
+                    option {
+                        value: "",
+                        selected: field.value().is_none(),
+                        "{none_label}"
                     }
                 }
                 for (i, opt) in choices().into_iter().enumerate() {
