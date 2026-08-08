@@ -1,0 +1,5 @@
+error: Deriving Form requires a struct with named fields
+ --> tests/ui/tuple_struct.rs:6:16
+  |
+6 | struct Question(String);
+  |                ^^^^^^^^

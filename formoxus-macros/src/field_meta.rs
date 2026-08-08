@@ -101,7 +101,7 @@ impl FieldMetas for [FieldMeta] {
         let fields: Vec<&syn::Ident> = self.iter().map(|f| f.field_ident()).collect();
         Ok(quote! {
             let model = #model_ident { #( #fields ),* };
-            let form_errors = self.validate_form(&model);
+            let form_errors = ::formoxus::form::ValidateForm::validate_form(self, &model);
             if form_errors.is_empty() {
                 Some(model)
             } else {
