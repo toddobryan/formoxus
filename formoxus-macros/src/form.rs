@@ -53,7 +53,6 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
     let trait_impls: Option<TokenStream2> = if form_meta.model.is_none() {
         let from_model_impl = from_model_impl(&form_meta, &field_metas)?;
         let form_state_impl = form_state_impl(&form_meta, &field_metas)?;
-        
 
         Some(quote! {
             #from_model_impl
@@ -140,7 +139,6 @@ fn validate_form_impl(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> 
         Some(fn_path) => quote! { #fn_path(model) },
         None => quote! { Vec::new() },
     };
-
 
     Ok(quote! {
         impl ::formoxus::ValidateForm<#model_ident> for #state_ident {
