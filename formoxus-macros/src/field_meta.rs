@@ -23,7 +23,7 @@ impl FieldMeta {
         let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
 
         quote! {
-            pub #field_ident: ::formoxus::FormField<#inner_type>
+            pub #field_ident: ::formoxus::fields::FormField<#inner_type>
         }
     }
 
@@ -118,10 +118,10 @@ impl FieldMetas for [FieldMeta] {
                 let field_ident = f.field_ident();
                 let initializer = match option_inner(&f.ty) {
                     Some(_) => {
-                        quote! { ::formoxus::FormField::with_optional(model.#field_ident.clone()) }
+                        quote! { ::formoxus::fields::FormField::with_optional(model.#field_ident.clone()) }
                     }
                     None => {
-                        quote! { ::formoxus::FormField::with_value(model.#field_ident.clone()) }
+                        quote! { ::formoxus::fields::FormField::with_value(model.#field_ident.clone()) }
                     }
                 };
                 quote! {

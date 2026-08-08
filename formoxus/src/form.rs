@@ -1,7 +1,7 @@
 use dioxus::prelude::WritableExt;
 use dioxus::stores::Store;
 
-use crate::FormError;
+use crate::error::FormError;
 
 pub trait FormStoreExt {
     type Model;

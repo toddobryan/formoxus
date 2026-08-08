@@ -12,7 +12,7 @@
 //! `validate`, and the `Form` / `ValidateForm` impls; these tests exercise that
 //! generated behavior — no Dioxus runtime required, since a form is plain data.
 
-use formoxus::*;
+use formoxus::prelude::*;
 use googletest::prelude::*;
 
 #[derive(Form, Debug)]

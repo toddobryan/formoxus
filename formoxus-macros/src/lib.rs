@@ -33,9 +33,11 @@
 //! required iff its type is not `Option<…>`. Value-level validators (`non_empty`, …)
 //! are orthogonal and opt-in via `#[form(non_empty)]` etc.
 //!
-//! Emitted code must reference formoxus items by fully-qualified path
-//! (`::formoxus::FormField`, `::formoxus::FieldProps`, `::formoxus::render_default`, …)
-//! so the derive works from any consumer crate.
+//! Emitted code must reference formoxus items by fully-qualified, module-canonical
+//! path (`::formoxus::fields::FormField`, `::formoxus::form::FormState`,
+//! `::formoxus::error::FormError`, …) — NOT via `::formoxus::prelude::…`. The crate
+//! root no longer re-exports these; the canonical home is the defining module, which
+//! is a stabler contract for generated code than the human-facing prelude.
 //!
 //! Right now this is a SKELETON: it parses the input and emits nothing, so it
 //! compiles and is a no-op. Fill in the real codegen incrementally.

@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::{FieldError, FormField, FormFieldStoreExt};
+use crate::error::FieldError;
+use crate::fields::{FormField, FormFieldStoreExt};
 
 /// Presentational config a form hands a widget when rendering a field — the bits
 /// that come from the declaration (`#[form(label = …)]`, required-ness), not the

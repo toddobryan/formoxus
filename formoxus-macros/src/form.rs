@@ -51,8 +51,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     // no separate Model to derive
     let trait_impls: Option<TokenStream2> = if form_meta.model.is_none() {
-        let from_model_impl = from_model_impl(&form_meta, &field_metas)?;
-        let form_state_impl = form_state_impl(&form_meta, &field_metas)?;
+        let from_model_impl = from_model_impl(&form_meta, field_metas)?;
+        let form_state_impl = form_state_impl(&form_meta, field_metas)?;
 
         Some(quote! {
             #from_model_impl
@@ -79,7 +79,7 @@ fn form_impl_for(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> {
     let state_ident = &form_meta.state_struct_name();
 
     Ok(quote! {
-        impl ::formoxus::Form for #form_ident {
+        impl ::formoxus::form::Form for #form_ident {
             type State = #state_ident;
         }
     })
@@ -106,7 +106,7 @@ fn form_state_struct(
         pub struct #state_struct_name {
             #( #field_entries, )*
 
-            pub errors: Vec<::formoxus::FormError>
+            pub errors: Vec<::formoxus::error::FormError>
         }
     })
 }
@@ -121,7 +121,7 @@ fn from_model_impl(
     let field_initializers = field_metas.field_initializers();
 
     Ok(quote! {
-        impl ::formoxus::FromModel<#model_ident> for #state_ident {
+        impl ::formoxus::form::FromModel<#model_ident> for #state_ident {
             fn from_model(model: &#model_ident) -> Self {
                 #state_ident {
                     #field_initializers,
@@ -141,8 +141,8 @@ fn validate_form_impl(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> 
     };
 
     Ok(quote! {
-        impl ::formoxus::ValidateForm<#model_ident> for #state_ident {
-            fn validate_form(&self, model: &#model_ident) -> Vec<::formoxus::FormError> {
+        impl ::formoxus::form::ValidateForm<#model_ident> for #state_ident {
+            fn validate_form(&self, model: &#model_ident) -> Vec<::formoxus::error::FormError> {
                 #func
             }
         }
@@ -163,7 +163,7 @@ fn form_state_impl(
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
 
     Ok(quote! {
-        impl ::formoxus::FormState for #state_ident {
+        impl ::formoxus::form::FormState for #state_ident {
             type Model = #struct_ident;
 
             fn validate(&mut self) -> Option<#struct_ident> {

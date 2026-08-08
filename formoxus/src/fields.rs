@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::FieldError;
+use crate::error::FieldError;
 
 /// One field's state: where it started (`initial`), its current value
 /// (`None` = empty/unfilled), and any errors currently attached to it.
