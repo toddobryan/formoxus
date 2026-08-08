@@ -6,5 +6,20 @@ edition = "2024"
 [dependencies]
 dioxus = { workspace = true }
 serde = { workspace = true }
-rushdown = "0.18.0"
-ammonia = "4.1.3"
+formoxus-macros = { workspace = true, optional = true }
+
+[dev-dependencies]
+googletest = { workspace = true }
+trybuild = { workspace = true }
+
+[features]
+# The derive is the whole point of the crate, so it's on by default. Anyone who
+# wants only the runtime types can opt out with `default-features = false`.
+default = ["derive"]
+derive = ["dep:formoxus-macros"]
+
+# Gated so `--no-default-features` skips the derive tests cleanly rather than
+# failing to find the macro. With `derive` in `default`, plain `cargo test` runs them.
+[[test]]
+name = "derive"
+required-features = ["derive"]

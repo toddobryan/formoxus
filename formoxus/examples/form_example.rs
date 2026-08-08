@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
-use formoxus::{FieldProps, FieldWidget, FormError, FormField, UnsetBooleanSelect, render_default};
+use formoxus::{
+    FieldProps, FieldWidget, FormError, FormField, FormState, FromModel, UnsetBooleanSelect,
+    ValidateForm, render_default,
+};
 use serde::{Deserialize, Serialize};
 
 pub async fn submit_sample(model: SampleModel) {
@@ -44,35 +47,13 @@ pub struct SampleFormState {
     pub errors: Vec<FormError>,
 }
 
-impl SampleFormState {
-    /// Seed a form from an existing model (edit mode): `initial == value`.
-    pub fn from_model(model: &SampleModel) -> Self {
-        SampleFormState {
-            text: FormField::with_value(model.text.clone()),
-            count: FormField::with_value(model.count),
-            max: FormField::with_optional(model.max),
-            flag: FormField::with_value(model.flag),
-            opt_flag: FormField::with_optional(model.opt_flag),
-            errors: Vec::new(),
-        }
-    }
-
-    /// The cross-field validator — the one piece the macro can't generate, so the
-    /// user hand-writes it. Runs against the tentatively-cleaned model.
-    fn validate_form(&self, model: &SampleModel) -> Vec<FormError> {
-        match model.max {
-            Some(max) if model.count > max => vec![FormError(
-                "if max is set, it must be at least count".to_string(),
-            )],
-            _ => Vec::new(),
-        }
-    }
-
+impl FormState for SampleFormState {
+    type Model = SampleModel;
     /// Clean the form: stamp field/form errors **in place**, and yield the model
     /// iff everything passed. Errors live on the fields/form, never in the return
     /// type — so there's nothing to reconstruct on failure. This is the entity
     /// `#[derive(Form)]` generates.
-    pub fn validate(&mut self) -> Option<SampleModel> {
+    fn validate(&mut self) -> Option<SampleModel> {
         // Re-validate from scratch so errors don't pile up across passes.
         self.text.clear_errors();
         self.count.clear_errors();
@@ -95,13 +76,46 @@ impl SampleFormState {
         };
 
         // Build the tentative model, then run the cross-field validator.
-        let model = SampleModel { text, count, max, flag, opt_flag };
+        let model = Self::Model {
+            text,
+            count,
+            max,
+            flag,
+            opt_flag,
+        };
         let form_errors = self.validate_form(&model);
         if !form_errors.is_empty() {
             self.errors = form_errors;
             return None;
         }
         Some(model)
+    }
+}
+
+impl FromModel<SampleModel> for SampleFormState {
+    /// Seed a form from an existing model (edit mode): `initial == value`.
+    fn from_model(model: &SampleModel) -> Self {
+        SampleFormState {
+            text: FormField::with_value(model.text.clone()),
+            count: FormField::with_value(model.count),
+            max: FormField::with_optional(model.max),
+            flag: FormField::with_value(model.flag),
+            opt_flag: FormField::with_optional(model.opt_flag),
+            errors: Vec::new(),
+        }
+    }
+}
+
+impl ValidateForm<SampleModel> for SampleFormState {
+    /// The cross-field validator — the one piece the macro can't generate, so the
+    /// user hand-writes it. Runs against the tentatively-cleaned model.
+    fn validate_form(&self, model: &SampleModel) -> Vec<FormError> {
+        match model.max {
+            Some(max) if model.count > max => vec![FormError(
+                "if max is set, it must be at least count".to_string(),
+            )],
+            _ => Vec::new(),
+        }
     }
 }
 

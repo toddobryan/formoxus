@@ -30,10 +30,7 @@ pub trait DefaultWidget: Clone + 'static {
 }
 
 /// Render a field with its value type's default widget.
-pub fn render_default<T: DefaultWidget>(
-    field: Store<FormField<T>>,
-    props: FieldProps,
-) -> Element {
+pub fn render_default<T: DefaultWidget>(field: Store<FormField<T>>, props: FieldProps) -> Element {
     <T::Widget as FieldWidget<T>>::render(field, props)
 }
 
@@ -154,7 +151,7 @@ fn CheckboxWidget(field: Store<FormField<bool>>, props: FieldProps) -> Element {
             }
             FieldErrors { errors: field.errors().cloned() }
         }
-    
+
     }
 }
 
@@ -188,7 +185,7 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
     let FieldProps {
         label,
         required,
-        placeholder
+        placeholder,
     } = props;
     // Label for the selectable "no value" option in an optional select (a required
     // select uses a hidden placeholder that fails validation instead). Defaults to "None".
@@ -236,8 +233,3 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
         }
     }
 }
-
-
-
-
-
