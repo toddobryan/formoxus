@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use formoxus::prelude::*;
+use formoxus::{fields::FieldValue, prelude::*};
 use serde::{Deserialize, Serialize};
 
 pub async fn submit_sample(model: SampleModel) {
@@ -24,7 +24,7 @@ pub struct SampleModel {
 ///
 /// ```ignore
 /// #[derive(Form)]
-/// #[form(model = SampleModel, onsubmit = submit_sample)]
+/// #[form(onsubmit = submit_sample)]
 /// struct SampleForm {
 ///     text: String,
 ///     count: i32,
@@ -171,7 +171,7 @@ fn main() {
     println!("2. filled → valid;   model = {model:?}");
 
     // 3. Cross-field failure (count > max) → a form-level error, no model.
-    form.count.value = Some(10);
+    form.count.value = FieldValue::Valid(10);
     assert!(form.validate().is_none());
     println!("3. 10>5   → invalid; form errors = {:?}", form.errors);
 }

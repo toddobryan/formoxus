@@ -1,4 +1,4 @@
-use darling::{self, FromField};
+use darling::{self, FromField, util::Flag};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::Type;
@@ -10,6 +10,10 @@ use crate::error::MacroError;
 pub struct FieldMeta {
     pub ident: Option<syn::Ident>,
     pub ty: Type,
+
+    // attrs for all fields
+    pub component: Option<syn::Path>,
+
 }
 
 impl FieldMeta {

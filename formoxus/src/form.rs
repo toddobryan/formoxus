@@ -1,4 +1,4 @@
-use dioxus::prelude::WritableExt;
+use dioxus::prelude::{WritableExt, use_store};
 use dioxus::stores::Store;
 
 use crate::error::FormError;
@@ -34,4 +34,18 @@ pub trait FromModel<Model> {
 
 pub trait ValidateForm<Model> {
     fn validate_form(&self, model: &Model) -> Vec<FormError>;
+}
+
+/// Create an empty form (create mode): the reactive `Store` for `F`'s state,
+/// seeded with defaults. Call it as `use_form::<LoginForm>()` — you name only
+/// your form struct; the synthetic `…State` type stays hidden behind `F::State`.
+pub fn use_form<F: Form>() -> Store<F::State> {
+    use_store(|| F::State::default())
+}
+
+/// Create a form seeded from an existing model (edit mode): every field starts
+/// with `initial == value`. The model type is `F`'s cleaned output — for a form
+/// whose declaration *is* its model, that's the form struct itself.
+pub fn use_form_from<F: Form>(model: <F::State as FormState>::Model) -> Store<F::State> {
+    use_store(move || F::State::from_model(&model))
 }

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use dioxus::prelude::*;
 
 use crate::error::FieldError;
@@ -58,6 +60,32 @@ impl FieldWidget<String> for TextInput {
         rsx! { TextInputWidget { field, props } }
     }
 }
+/*
+#[component]
+pub fn InputWidget<T>(field: Store<FormField<T>>, ty: String, props: FieldProps) -> Element where T: 'static + Clone + Default + Display {
+    let FieldProps {
+        label,
+        required,
+        placeholder,
+    } = props;
+    let mut value = field.value();
+    let current = value.cloned().unwrap_or_default();
+    rsx! {
+        label {
+            "{label}"
+            if required { span { class: "required", " *" } }
+            input {
+                r#type: "{ty}",
+                required,
+                value: "{current}",
+                placeholder,
+                oninput: move |e| value.set(TryFrom::try_from(e.value())),
+            }
+            FieldErrors { errors: field.errors().cloned() }
+        }
+    }
+}
+*/
 
 #[component]
 fn TextInputWidget(field: Store<FormField<String>>, props: FieldProps) -> Element {

@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::FieldError;
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
+pub enum FieldValue<T> {
+    #[default]
+    Empty,
+    Valid(T),
+    Invalid { raw: String, error: FieldError },
+}
+
 /// One field's state: where it started (`initial`), its current value
 /// (`None` = empty/unfilled), and any errors currently attached to it.
 ///
@@ -11,7 +19,7 @@ use crate::error::FieldError;
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
 pub struct FormField<T: Clone> {
     pub initial: Option<T>,
-    pub value: Option<T>,
+    pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }
 
@@ -21,7 +29,7 @@ impl<T: Clone> FormField<T> {
     pub fn with_value(value: T) -> Self {
         Self {
             initial: Some(value.clone()),
-            value: Some(value),
+            value: FieldValue::Valid(value),
             errors: Vec::new(),
         }
     }
@@ -30,7 +38,10 @@ impl<T: Clone> FormField<T> {
     pub fn with_optional(value: Option<T>) -> Self {
         Self {
             initial: value.clone(),
-            value,
+            value: match value {
+                None => FieldValue::Empty,
+                Some(t) => FieldValue::Valid(t),
+            },
             errors: Vec::new(),
         }
     }
@@ -45,17 +56,29 @@ impl<T: Clone> FormField<T> {
     /// (in place) and yield `None`.
     pub fn required(&mut self) -> Option<T> {
         match &self.value {
-            Some(v) => Some(v.clone()),
-            None => {
+            FieldValue::Empty => {
                 self.errors
                     .push(FieldError("This field is required.".to_string()));
                 None
-            }
+            },
+            FieldValue::Valid(t) => Some(t.clone()),
+            FieldValue::Invalid { raw: _, error: _ } => None,
         }
     }
 
     /// Clean an **optional** field: yield the value as-is — `None` is not an error.
     pub fn optional(&self) -> Option<T> {
-        self.value.clone()
+        match &self.value {
+            FieldValue::Empty => None,
+            FieldValue::Valid(t) => Some(t.clone()),
+            FieldValue::Invalid { raw: _, error: _ } => None,
+        }
+    }
+
+    /// A validate-time error, or an unparseable `Invalid` value (which carries its
+    /// own parse error). The `Invalid` branch is why this isn't just `!errors.is_empty()`.
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty() || matches!(self.value, FieldValue::Invalid { .. })
     }
 }
+

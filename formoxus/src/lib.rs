@@ -1,6 +1,7 @@
 pub mod error;
 pub mod fields;
 pub mod form;
+pub mod validators;
 pub mod widgets;
 
 /// `#[derive(Form)]`. The trait [`form::Form`] and the derive share a name but live
@@ -21,7 +22,9 @@ pub mod prelude {
 
     pub use crate::error::{FieldError, FormError};
     pub use crate::fields::{FormField, FormFieldStoreExt};
-    pub use crate::form::{Form, FormState, FormStoreExt, FromModel, ValidateForm};
+    pub use crate::form::{
+        Form, FormState, FormStoreExt, FromModel, ValidateForm, use_form, use_form_from,
+    };
     pub use crate::widgets::{
         CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget, NumberInput,
         SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
