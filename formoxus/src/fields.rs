@@ -1,14 +1,24 @@
+use std::{fmt::Debug, str::FromStr};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::error::FieldError;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
-pub enum FieldValue<T> {
+pub enum FieldValue<T: Debug + Clone + FromStr> {
     #[default]
     Empty,
     Valid(T),
     Invalid { raw: String, error: FieldError },
+}
+
+impl<T: Debug + Clone + FromStr> FieldValue<T> {
+    fn is_empty(&self) -> bool {
+        match self {
+            FieldValue::Empty => true,
+            _ => false,
+        }
+    }
 }
 
 /// One field's state: where it started (`initial`), its current value
@@ -17,13 +27,13 @@ pub enum FieldValue<T> {
 /// `value` carries the emptiness, so `T` is always the field's *cleaned* type
 /// (`FormField<String>`, not `FormField<Option<String>>`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
-pub struct FormField<T: Clone> {
+pub struct FormField<T: Debug + Clone + FromStr> {
     pub initial: Option<T>,
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }
 
-impl<T: Clone> FormField<T> {
+impl<T: Clone + Debug + FromStr> FormField<T> {
     /// A pristine field seeded with a concrete value — a required field in edit
     /// mode (`initial == value`, no errors).
     pub fn with_value(value: T) -> Self {

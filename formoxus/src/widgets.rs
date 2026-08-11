@@ -1,9 +1,10 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+use std::str::FromStr;
 
 use dioxus::prelude::*;
 
-use crate::error::FieldError;
-use crate::fields::{FormField, FormFieldStoreExt};
+use crate::error::{FieldError, try_from};
+use crate::fields::{FieldValue, FormField, FormFieldStoreExt};
 
 /// Presentational config a form hands a widget when rendering a field — the bits
 /// that come from the declaration (`#[form(label = …)]`, required-ness), not the
@@ -18,7 +19,7 @@ pub struct FieldProps {
 /// A widget that knows how to render a [`FormField`] of value type `T`: its input
 /// (bound to the value lens) and its errors. Implemented on a marker type (e.g.
 /// [`TextInput`]); a field selects one by naming its type.
-pub trait FieldWidget<T: Clone + 'static> {
+pub trait FieldWidget<T: Clone + Debug + FromStr + 'static> {
     fn render(field: Store<FormField<T>>, props: FieldProps) -> Element;
 }
 
@@ -28,7 +29,7 @@ pub trait FieldWidget<T: Clone + 'static> {
 /// ships them for the std types it renders (`String`, …); an app implements it
 /// for types it owns. A foreign type (from another crate) can still get a widget
 /// via an explicit `#[form(component = …)]` override — just not a *default*.
-pub trait DefaultWidget: Clone + 'static {
+pub trait DefaultWidget: Clone + Debug + FromStr + 'static {
     type Widget: FieldWidget<Self>;
 }
 
@@ -52,62 +53,61 @@ pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
     }
 }
 
-/// The default single-line text input, for `String` fields.
-pub struct TextInput;
-
-impl FieldWidget<String> for TextInput {
-    fn render(field: Store<FormField<String>>, props: FieldProps) -> Element {
-        rsx! { TextInputWidget { field, props } }
-    }
-}
-/*
 #[component]
-pub fn InputWidget<T>(field: Store<FormField<T>>, ty: String, props: FieldProps) -> Element where T: 'static + Clone + Default + Display {
+pub fn InputWidget<T>(input_type: String, field: Store<FormField<T>>, props: FieldProps) -> Element 
+where T: 'static + Clone + Debug + Default + FromStr + Display, T::Err: Display {
     let FieldProps {
         label,
         required,
         placeholder,
     } = props;
     let mut value = field.value();
-    let current = value.cloned().unwrap_or_default();
+    let current = match value() {
+        FieldValue::Empty => T::default().to_string(),
+        FieldValue::Valid(t) => t.to_string(),
+        FieldValue::Invalid { raw, error } => raw.clone(),
+    };
     rsx! {
         label {
             "{label}"
-            if required { span { class: "required", " *" } }
+            if required {
+                span { class: "required", " *" }
+            }
             input {
-                r#type: "{ty}",
+                r#type: "{input_type}",
                 required,
                 value: "{current}",
                 placeholder,
-                oninput: move |e| value.set(TryFrom::try_from(e.value())),
+                oninput: move |e| {
+                    let trimmed = e.value().trim().to_string();
+                    if trimmed.is_empty() {
+                        value.set(FieldValue::Empty);
+                    } else {
+                        match try_from::<T>(&trimmed) {
+                            Ok(parsed) => value.set(FieldValue::Valid(parsed)),
+                            Err(err) => {
+                                value
+                                    .set(FieldValue::Invalid {
+                                        raw: trimmed,
+                                        error: err,
+                                    })
+                            }
+                        }
+                    }
+                },
             }
             FieldErrors { errors: field.errors().cloned() }
         }
     }
 }
-*/
 
-#[component]
-fn TextInputWidget(field: Store<FormField<String>>, props: FieldProps) -> Element {
-    let FieldProps {
-        label,
-        required,
-        placeholder,
-    } = props;
-    let mut value = field.value();
-    let current = value.cloned().unwrap_or_default();
-    rsx! {
-        label {
-            "{label}"
-            if required { span { class: "required", " *" } }
-            input {
-                r#type: "text",
-                required,
-                value: "{current}",
-                placeholder,
-                oninput: move |e| value.set(Some(e.value())),
-            }
-            FieldErrors { errors: field.errors().cloned() }
+/// The default single-line text input, for `String` fields.
+pub struct TextInput;
+
+impl FieldWidget<String> for TextInput {
+    fn render(field: Store<FormField<String>>, props: FieldProps) -> Element {
+        rsx! {
+            InputWidget::<String> { input_type: "text", field, props }
         }
     }
 }
@@ -121,34 +121,8 @@ pub struct NumberInput;
 
 impl FieldWidget<i32> for NumberInput {
     fn render(field: Store<FormField<i32>>, props: FieldProps) -> Element {
-        rsx! { NumberInputWidget { field, props } }
-    }
-}
-
-#[component]
-fn NumberInputWidget(field: Store<FormField<i32>>, props: FieldProps) -> Element {
-    let FieldProps {
-        label,
-        required,
-        placeholder,
-    } = props;
-    let mut value = field.value();
-    // A number input reports `.value` as "" for empty *or* invalid input, so
-    // `parse().ok()` collapses both to `None` — no un-storable "raw invalid" state.
-    let current = value.cloned().map(|n| n.to_string()).unwrap_or_default();
-    rsx! {
-        label {
-            "{label}"
-            if required { span { class: "required", " *" } }
-            input {
-                r#type: "number",
-                step: 1,
-                required,
-                value: "{current}",
-                placeholder,
-                oninput: move |e| value.set(e.value().parse::<i32>().ok()),
-            }
-            FieldErrors { errors: field.errors().cloned() }
+        rsx! {
+            InputWidget::<i32> { input_type: "number", field, props }
         }
     }
 }
@@ -161,7 +135,9 @@ pub struct CheckboxInput;
 
 impl FieldWidget<bool> for CheckboxInput {
     fn render(field: Store<FormField<bool>>, props: FieldProps) -> Element {
-        rsx! { CheckboxWidget { field, props } }
+        rsx! {
+            CheckboxWidget { field, props }
+        }
     }
 }
 
@@ -169,7 +145,11 @@ impl FieldWidget<bool> for CheckboxInput {
 fn CheckboxWidget(field: Store<FormField<bool>>, props: FieldProps) -> Element {
     let label = props.label;
     let mut value = field.value();
-    let current = value.cloned().unwrap_or(false);
+    let current = match value() {
+        FieldValue::Empty => false,
+        FieldValue::Valid(t) => t,
+        FieldValue::Invalid { raw, error } => raw == "true",
+    };
     rsx! {
         label {
             "{label}"
@@ -192,10 +172,22 @@ pub struct UnsetBooleanSelect;
 
 impl FieldWidget<bool> for UnsetBooleanSelect {
     fn render(field: Store<FormField<bool>>, props: FieldProps) -> Element {
-        rsx! { SelectWidget { field, props, choices: vec![
-            SelectChoice { value: true, display: "True".to_string() },
-            SelectChoice { value: false, display: "False".to_string() },
-        ] } }
+        rsx! {
+            SelectWidget {
+                field,
+                props,
+                choices: vec![
+                    SelectChoice {
+                        value: true,
+                        display: "True".to_string(),
+                    },
+                    SelectChoice {
+                        value: false,
+                        display: "False".to_string(),
+                    },
+                ],
+            }
+        }
     }
 }
 
@@ -206,7 +198,7 @@ pub struct SelectChoice<T> {
 }
 
 #[component]
-pub fn SelectWidget<T: 'static + Clone + PartialEq>(
+pub fn SelectWidget<T: 'static + Clone + Debug + Default + FromStr + PartialEq>(
     field: Store<FormField<T>>,
     props: FieldProps,
     choices: ReadSignal<Vec<SelectChoice<T>>>,
@@ -219,21 +211,24 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
     // Label for the selectable "no value" option in an optional select (a required
     // select uses a hidden placeholder that fails validation instead). Defaults to "None".
     let none_label = placeholder.clone().unwrap_or_else(|| "None".to_string());
+    let current = field.value();
     rsx! {
         label {
             "{label}"
-            if required { span { class: "required", " *" } },
+            if required {
+                span { class: "required", " *" }
+            }
             select {
                 required,
                 onchange: move |evt| {
                     let v = evt.value();
                     if v.is_empty() {
-                        field.value().set(None);
+                        current.set(FieldValue::Empty);
                     } else if let Ok(i) = v.parse::<usize>() {
-                        field.value().set(choices().get(i).map(|opt| opt.value.clone()));
+                        current.set(FieldValue::Valid(choices().get(i).map(|opt| opt.value.clone()).unwrap_or_default()));
                     }
                 },
-                if required && field.value().is_none() {
+                if required && current.is_empty() {
                     option {
                         value: "",
                         selected: true,
@@ -244,13 +239,9 @@ pub fn SelectWidget<T: 'static + Clone + PartialEq>(
                 } else if !required {
                     // Optional select: a visible, selectable "no value" option. Its empty
                     // value routes through the `is_empty()` arm of onchange → sets None.
-                    option {
-                        value: "",
-                        selected: field.value().is_none(),
-                        "{none_label}"
-                    }
+                    option { value: "", selected: current.is_empty(), "{none_label}" }
                 }
-                for (i, opt) in choices().into_iter().enumerate() {
+                for (i , opt) in choices().into_iter().enumerate() {
                     option {
                         value: "{i}",
                         selected: field.value().cloned() == Some(opt.value.clone()),
