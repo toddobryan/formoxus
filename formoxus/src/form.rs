@@ -26,6 +26,7 @@ pub trait Form: std::fmt::Debug {
 pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + std::fmt::Debug {
     type Model: std::fmt::Debug;
     fn validate(&mut self) -> Option<Self::Model>;
+    fn has_errors(&self) -> bool;
 }
 
 pub trait FromModel<Model> {

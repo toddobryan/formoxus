@@ -90,6 +90,7 @@ fn form_state_struct(
     field_metas: &[FieldMeta],
 ) -> Result<TokenStream2, MacroError> {
     let state_struct_name = form_meta.state_struct_name();
+    let vis = &form_meta.vis;
     let attrs: &[syn::Attribute] = &form_meta.attrs;
 
     let field_entries: Vec<TokenStream2> = field_metas.iter().map(|fm| fm.to_decl()).collect();
@@ -103,7 +104,7 @@ fn form_state_struct(
 
         #[derive(Clone, Debug, Default, ::formoxus::__private::dioxus::prelude::Store)]
         #( #attrs )*
-        pub struct #state_struct_name {
+        #vis struct #state_struct_name {
             #( #field_entries, )*
 
             pub errors: Vec<::formoxus::error::FormError>
@@ -161,6 +162,7 @@ fn form_state_impl(
     let assign_to_vars = field_metas.assign_to_vars()?;
     let let_required_fields = field_metas.let_required_fields()?;
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
+    let has_errors = field_metas.has_errors()?;
 
     Ok(quote! {
         impl ::formoxus::form::FormState for #state_ident {
@@ -175,6 +177,8 @@ fn form_state_impl(
 
                 #validate_model
             }
+
+            #has_errors
         }
     })
 }

@@ -65,7 +65,7 @@ where T: 'static + Clone + Debug + Default + FromStr + Display, T::Err: Display 
     let current = match value() {
         FieldValue::Empty => T::default().to_string(),
         FieldValue::Valid(t) => t.to_string(),
-        FieldValue::Invalid { raw, error } => raw.clone(),
+        FieldValue::Invalid { raw, error: _ } => raw.clone(),
     };
     rsx! {
         label {
@@ -148,7 +148,7 @@ fn CheckboxWidget(field: Store<FormField<bool>>, props: FieldProps) -> Element {
     let current = match value() {
         FieldValue::Empty => false,
         FieldValue::Valid(t) => t,
-        FieldValue::Invalid { raw, error } => raw == "true",
+        FieldValue::Invalid { raw, error: _ } => raw == "true",
     };
     rsx! {
         label {
@@ -156,7 +156,7 @@ fn CheckboxWidget(field: Store<FormField<bool>>, props: FieldProps) -> Element {
             input {
                 r#type: "checkbox",
                 checked: current,
-                onchange: move |_| value.set(Some(!current)),
+                onchange: move |_| value.set(FieldValue::Valid(!current)),
             }
             FieldErrors { errors: field.errors().cloned() }
         }
@@ -211,7 +211,7 @@ pub fn SelectWidget<T: 'static + Clone + Debug + Default + FromStr + PartialEq>(
     // Label for the selectable "no value" option in an optional select (a required
     // select uses a hidden placeholder that fails validation instead). Defaults to "None".
     let none_label = placeholder.clone().unwrap_or_else(|| "None".to_string());
-    let current = field.value();
+    let mut current = field.value();
     rsx! {
         label {
             "{label}"
@@ -228,7 +228,7 @@ pub fn SelectWidget<T: 'static + Clone + Debug + Default + FromStr + PartialEq>(
                         current.set(FieldValue::Valid(choices().get(i).map(|opt| opt.value.clone()).unwrap_or_default()));
                     }
                 },
-                if required && current.is_empty() {
+                if required && current().is_empty() {
                     option {
                         value: "",
                         selected: true,
@@ -239,12 +239,12 @@ pub fn SelectWidget<T: 'static + Clone + Debug + Default + FromStr + PartialEq>(
                 } else if !required {
                     // Optional select: a visible, selectable "no value" option. Its empty
                     // value routes through the `is_empty()` arm of onchange → sets None.
-                    option { value: "", selected: current.is_empty(), "{none_label}" }
+                    option { value: "", selected: current().is_empty(), "{none_label}" }
                 }
                 for (i , opt) in choices().into_iter().enumerate() {
                     option {
                         value: "{i}",
-                        selected: field.value().cloned() == Some(opt.value.clone()),
+                        selected: field.value()() == FieldValue::Valid(opt.value),
                         "{opt.display}"
                     }
                 }

@@ -1,4 +1,4 @@
-use darling::{self, FromField, util::Flag};
+use darling::{self, FromField};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::Type;
@@ -12,7 +12,7 @@ pub struct FieldMeta {
     pub ty: Type,
 
     // attrs for all fields
-    pub component: Option<syn::Path>,
+    //pub component: Option<syn::Path>,
 
 }
 
@@ -42,6 +42,7 @@ pub(crate) trait FieldMetas {
     fn let_required_fields(&self) -> Result<TokenStream2, MacroError>;
     fn validate_model(&self, model_ident: &syn::Ident) -> Result<TokenStream2, MacroError>;
     fn field_initializers(&self) -> TokenStream2;
+    fn has_errors(&self) -> Result<TokenStream2, MacroError>;
 }
 
 impl FieldMetas for [FieldMeta] {
@@ -105,12 +106,15 @@ impl FieldMetas for [FieldMeta] {
         let fields: Vec<&syn::Ident> = self.iter().map(|f| f.field_ident()).collect();
         Ok(quote! {
             let model = #model_ident { #( #fields ),* };
-            let form_errors = ::formoxus::form::ValidateForm::validate_form(self, &model);
-            if form_errors.is_empty() {
-                Some(model)
-            } else {
-                self.errors = form_errors;
+            // Cross-field errors land on `self.errors` FIRST so the gate below sees
+            // them; then one `has_errors()` gate covers form-level errors, a field-level
+            // `Invalid` (the optional-invalid case, which still builds the model), and
+            // validator errors on a `Valid` field.
+            self.errors = ::formoxus::form::ValidateForm::validate_form(self, &model);
+            if self.has_errors() {
                 None
+            } else {
+                Some(model)
             }
         })
     }
@@ -134,6 +138,21 @@ impl FieldMetas for [FieldMeta] {
             })
             .collect();
         quote! { #( #inits ),* }
+    }
+
+    fn has_errors(&self) -> Result<TokenStream2, MacroError> {
+        let has_error_calls: Vec<TokenStream2> = self.iter().map(|f| {
+            let field_ident = f.field_ident();
+            quote! {
+                self.#field_ident.has_errors()
+            }
+        }).collect();
+        Ok(quote! {
+            fn has_errors(&self) -> bool {
+                !self.errors.is_empty()
+                    #( || #has_error_calls )*
+            }
+        })
     }
 }
 

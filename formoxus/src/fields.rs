@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::FieldError;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Store)]
 pub enum FieldValue<T: Debug + Clone + FromStr> {
     #[default]
     Empty,
@@ -13,7 +13,7 @@ pub enum FieldValue<T: Debug + Clone + FromStr> {
 }
 
 impl<T: Debug + Clone + FromStr> FieldValue<T> {
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         match self {
             FieldValue::Empty => true,
             _ => false,

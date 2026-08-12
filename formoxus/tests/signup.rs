@@ -21,6 +21,9 @@
 //!
 //! A follow-on target for the `#[form(min_len = …)]` validator is sketched at the end.
 
+use std::fmt::Debug;
+use std::str::FromStr;
+
 use formoxus::fields::FieldValue;
 use formoxus::prelude::*;
 use googletest::prelude::*;
@@ -34,7 +37,7 @@ struct Signup {
 
 /// An unparseable value, as a widget leaves it after a failed parse: the raw text
 /// plus a parse error, living in the `Invalid` branch (not the `errors` vec).
-fn invalid<T>(raw: &str) -> FieldValue<T> {
+fn invalid<T: Clone + Debug + FromStr>(raw: &str) -> FieldValue<T> {
     FieldValue::Invalid {
         raw: raw.to_string(),
         error: FieldError(format!("`{raw}` is not valid")),

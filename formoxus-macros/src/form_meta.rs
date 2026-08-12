@@ -8,6 +8,7 @@ use crate::field_meta::FieldMeta;
 pub(crate) struct FormMeta {
     pub attrs: Vec<syn::Attribute>,
     pub ident: syn::Ident,
+    pub vis: syn::Visibility,
     pub data: ast::Data<util::Ignored, FieldMeta>,
 
     #[darling(default)]

@@ -80,12 +80,28 @@ impl FormState for SampleFormState {
             flag,
             opt_flag,
         };
-        let form_errors = self.validate_form(&model);
-        if !form_errors.is_empty() {
-            self.errors = form_errors;
-            return None;
+        // Cross-field errors land on `self.errors` FIRST so the gate below sees them…
+        self.errors = self.validate_form(&model);
+        // …then one gate covers all three error sources: form-level errors, a
+        // field-level `Invalid` (the optional-invalid case, which still builds the
+        // model), and validator errors on a `Valid` field.
+        if self.has_errors() {
+            None
+        } else {
+            Some(model)
         }
-        Some(model)
+    }
+
+    /// True iff anything is wrong: a form-level error, or any field carrying an
+    /// error (its `errors` vec is non-empty OR it sits in the `Invalid` state).
+    /// This is the gate `validate()` uses, and what a view checks to disable submit.
+    fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+            || self.text.has_errors()
+            || self.count.has_errors()
+            || self.max.has_errors()
+            || self.flag.has_errors()
+            || self.opt_flag.has_errors()
     }
 }
 
