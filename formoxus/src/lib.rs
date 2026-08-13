@@ -27,7 +27,7 @@ pub mod prelude {
     };
     pub use crate::widgets::{
         CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget, NumberInput,
-        SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
+        PasswordInput, SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
     };
 }
 
@@ -46,5 +46,17 @@ pub mod __private {
     /// collide on the name.
     pub mod store_scope {
         pub use ::dioxus::stores as dioxus_stores;
+    }
+
+    /// Same trick as `store_scope`, for the generated field-rendering component:
+    /// dioxus's own `#[component]`/`rsx!` macros emit bare `dioxus_core::…` /
+    /// `dioxus_signals::…` paths, which normally resolve only because an app's
+    /// own `use dioxus::prelude::*;` re-exports the crates under those names. A
+    /// generated component can't rely on the caller's module having that glob
+    /// import (formoxus's own tests don't), so it glob-imports this instead.
+    pub mod component_scope {
+        pub use ::dioxus::core as dioxus_core;
+        pub use ::dioxus::prelude::Props;
+        pub use ::dioxus::signals as dioxus_signals;
     }
 }

@@ -47,6 +47,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     let state_struct = form_state_struct(&form_meta, field_metas)?;
 
+    let form_component = form_component(&form_meta, field_metas);
+
     let validate_form_impl = validate_form_impl(&form_meta)?;
 
     // no separate Model to derive
@@ -68,10 +70,38 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
         #state_struct
 
+        #form_component
+
         #validate_form_impl
 
         #trait_impls
     })
+}
+
+/// The generated field-rendering component (`FormMeta::fields_component_name`
+/// — see there for why it isn't just the form struct's own name). Renders each
+/// field's widget in declaration order; deliberately **not** wrapped in its own
+/// `<form>` element, so a view can embed it inside a `<form onsubmit=…>` that
+/// also carries a submit button / non-field errors without nesting `<form>`s.
+fn form_component(form_meta: &FormMeta, field_metas: &[FieldMeta]) -> TokenStream2 {
+    let fields_ident = form_meta.fields_component_name();
+    let vis = &form_meta.vis;
+    let state_ident = form_meta.state_struct_name();
+    let render_calls = field_metas.render_calls();
+
+    quote! {
+        #[allow(unused_imports)]
+        use ::formoxus::__private::component_scope::*;
+
+        #[::formoxus::__private::dioxus::prelude::component]
+        #vis fn #fields_ident(
+            data: ::formoxus::__private::dioxus::prelude::Store<#state_ident>,
+        ) -> ::formoxus::__private::dioxus::prelude::Element {
+            ::formoxus::__private::dioxus::prelude::rsx! {
+                #( #render_calls )*
+            }
+        }
+    }
 }
 
 fn form_impl_for(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> {

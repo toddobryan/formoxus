@@ -116,6 +116,16 @@ impl DefaultWidget for String {
     type Widget = TextInput;
 }
 
+pub struct PasswordInput;
+
+impl FieldWidget<String> for PasswordInput {
+    fn render(field: Store<FormField<String>>, props: FieldProps) -> Element {
+        rsx! {
+            InputWidget::<String> { input_type: "password", field, props  }
+        }
+    }
+}
+
 /// The default numeric input, for `i32` fields.
 pub struct NumberInput;
 

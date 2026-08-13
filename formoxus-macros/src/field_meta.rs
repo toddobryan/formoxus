@@ -12,7 +12,7 @@ pub struct FieldMeta {
     pub ty: Type,
 
     // attrs for all fields
-    //pub component: Option<syn::Path>,
+    pub component: Option<syn::Path>,
 
 }
 
@@ -34,6 +34,57 @@ impl FieldMeta {
     pub fn field_ident(&self) -> &syn::Ident {
         self.ident.as_ref().expect("All fields should have idents")
     }
+
+    /// A human-readable default label: `opt_flag` → "Opt Flag". No
+    /// `#[form(label = …)]` override exists yet — this is the only source.
+    fn label(&self) -> String {
+        self.field_ident()
+            .to_string()
+            .split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// The `{ … }` rsx block that renders this field: the `#[form(component =
+    /// …)]` override if given, else the value type's `DefaultWidget`.
+    pub fn render_call(&self) -> TokenStream2 {
+        let field_ident = self.field_ident();
+        let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
+        let required = option_inner(&self.ty).is_none();
+        let label = self.label();
+
+        let render_expr = match &self.component {
+            Some(path) => quote! {
+                <#path as ::formoxus::widgets::FieldWidget<#inner_type>>::render(
+                    data.#field_ident().into(),
+                    ::formoxus::widgets::FieldProps {
+                        label: #label.to_string(),
+                        required: #required,
+                        placeholder: None,
+                    },
+                )
+            },
+            None => quote! {
+                ::formoxus::widgets::render_default(
+                    data.#field_ident().into(),
+                    ::formoxus::widgets::FieldProps {
+                        label: #label.to_string(),
+                        required: #required,
+                        placeholder: None,
+                    },
+                )
+            },
+        };
+
+        quote! { { #render_expr } }
+    }
 }
 
 pub(crate) trait FieldMetas {
@@ -43,6 +94,7 @@ pub(crate) trait FieldMetas {
     fn validate_model(&self, model_ident: &syn::Ident) -> Result<TokenStream2, MacroError>;
     fn field_initializers(&self) -> TokenStream2;
     fn has_errors(&self) -> Result<TokenStream2, MacroError>;
+    fn render_calls(&self) -> Vec<TokenStream2>;
 }
 
 impl FieldMetas for [FieldMeta] {
@@ -153,6 +205,10 @@ impl FieldMetas for [FieldMeta] {
                     #( || #has_error_calls )*
             }
         })
+    }
+
+    fn render_calls(&self) -> Vec<TokenStream2> {
+        self.iter().map(FieldMeta::render_call).collect()
     }
 }
 

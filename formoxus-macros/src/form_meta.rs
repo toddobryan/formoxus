@@ -26,4 +26,14 @@ impl FormMeta {
     pub fn state_struct_name(&self) -> syn::Ident {
         format_ident!("{}{}", self.ident.to_string(), "State")
     }
+
+    /// The generated field-rendering component's name. Can't reuse the form
+    /// struct's own name (`LoginForm`): once dioxus's `#[component]`/`Properties`
+    /// codegen is in the mix, a `struct LoginForm` + `fn LoginForm` in the same
+    /// module fails to compile (E0255) even though a plain struct/fn pair with
+    /// matching names normally coexists fine (different namespaces) — so this
+    /// gets its own name instead.
+    pub fn fields_component_name(&self) -> syn::Ident {
+        format_ident!("{}{}", self.ident.to_string(), "Fields")
+    }
 }
