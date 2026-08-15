@@ -48,15 +48,15 @@ pub mod __private {
         pub use ::dioxus::stores as dioxus_stores;
     }
 
-    /// Same trick as `store_scope`, for the generated field-rendering component:
-    /// dioxus's own `#[component]`/`rsx!` macros emit bare `dioxus_core::…` /
-    /// `dioxus_signals::…` paths, which normally resolve only because an app's
-    /// own `use dioxus::prelude::*;` re-exports the crates under those names. A
-    /// generated component can't rely on the caller's module having that glob
-    /// import (formoxus's own tests don't), so it glob-imports this instead.
+    /// Same trick as `store_scope`, for the generated `FormState::render`: `rsx!`
+    /// emits bare `dioxus_core::…` / `dioxus_signals::…` / `dioxus_elements::…`
+    /// paths, which normally resolve only because an app's own `use
+    /// dioxus::prelude::*;` re-exports the crates under those names. Generated
+    /// code can't rely on the caller's module having that glob import (formoxus's
+    /// own tests don't), so it glob-imports this instead.
     pub mod component_scope {
         pub use ::dioxus::core as dioxus_core;
-        pub use ::dioxus::prelude::Props;
+        pub use ::dioxus::prelude::dioxus_elements;
         pub use ::dioxus::signals as dioxus_signals;
     }
 }

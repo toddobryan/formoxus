@@ -92,6 +92,47 @@ impl FormState for SampleFormState {
         }
     }
 
+    fn render<F, Fut>(data: Store<Self>, on_submit: F) -> Element
+    where
+    Self: Sized + 'static,
+    F: Fn(Self::Model) -> Fut + Clone + 'static,
+    Fut: Future<Output = ()> + 'static {
+        rsx! {
+            form {
+                class: "form",
+                onsubmit: move |e| {
+                    let on_submit = on_submit.clone();
+                    async move {
+                        e.prevent_default();
+                        if let Some(model) = ::formoxus::form::FormStoreExt::validate(&data) {
+                            on_submit(model).await;
+                        }
+                    }
+                },
+                { render_default(
+                    data.text().into(),
+                    FieldProps { label: "Text".into(), required: true, placeholder: None },
+                ) }
+                { render_default(
+                    data.count().into(),
+                    FieldProps { label: "Count".into(), required: true, placeholder: None },
+                ) }
+                { render_default(
+                    data.max().into(),
+                    FieldProps { label: "Max".into(), required: false, placeholder: None },
+                ) }
+                { render_default(
+                    data.flag().into(),
+                    FieldProps { label: "Flag".into(), required: true, placeholder: None },
+                ) }
+                { UnsetBooleanSelect::render(
+                    data.opt_flag().into(),
+                    FieldProps { label: "OptFlag".into(), required: false, placeholder: None },
+                ) }
+            }
+        }
+    }
+
     /// True iff anything is wrong: a form-level error, or any field carrying an
     /// error (its `errors` vec is non-empty OR it sits in the `Invalid` state).
     /// This is the gate `validate()` uses, and what a view checks to disable submit.
@@ -103,6 +144,7 @@ impl FormState for SampleFormState {
             || self.flag.has_errors()
             || self.opt_flag.has_errors()
     }
+
 }
 
 impl FromModel<SampleModel> for SampleFormState {

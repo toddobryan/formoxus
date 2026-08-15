@@ -47,8 +47,6 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     let state_struct = form_state_struct(&form_meta, field_metas)?;
 
-    let form_component = form_component(&form_meta, field_metas);
-
     let validate_form_impl = validate_form_impl(&form_meta)?;
 
     // no separate Model to derive
@@ -70,38 +68,10 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
         #state_struct
 
-        #form_component
-
         #validate_form_impl
 
         #trait_impls
     })
-}
-
-/// The generated field-rendering component (`FormMeta::fields_component_name`
-/// — see there for why it isn't just the form struct's own name). Renders each
-/// field's widget in declaration order; deliberately **not** wrapped in its own
-/// `<form>` element, so a view can embed it inside a `<form onsubmit=…>` that
-/// also carries a submit button / non-field errors without nesting `<form>`s.
-fn form_component(form_meta: &FormMeta, field_metas: &[FieldMeta]) -> TokenStream2 {
-    let fields_ident = form_meta.fields_component_name();
-    let vis = &form_meta.vis;
-    let state_ident = form_meta.state_struct_name();
-    let render_calls = field_metas.render_calls();
-
-    quote! {
-        #[allow(unused_imports)]
-        use ::formoxus::__private::component_scope::*;
-
-        #[::formoxus::__private::dioxus::prelude::component]
-        #vis fn #fields_ident(
-            data: ::formoxus::__private::dioxus::prelude::Store<#state_ident>,
-        ) -> ::formoxus::__private::dioxus::prelude::Element {
-            ::formoxus::__private::dioxus::prelude::rsx! {
-                #( #render_calls )*
-            }
-        }
-    }
 }
 
 fn form_impl_for(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> {
@@ -192,6 +162,7 @@ fn form_state_impl(
     let assign_to_vars = field_metas.assign_to_vars()?;
     let let_required_fields = field_metas.let_required_fields()?;
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
+    let render_calls = field_metas.render_calls();
     let has_errors = field_metas.has_errors()?;
 
     Ok(quote! {
@@ -209,6 +180,34 @@ fn form_state_impl(
             }
 
             #has_errors
+
+            fn render<F, Fut>(
+                data: ::formoxus::__private::dioxus::prelude::Store<Self>,
+                on_submit: F,
+            ) -> ::formoxus::__private::dioxus::prelude::Element
+            where
+            F: Fn(Self::Model) -> Fut + Clone + 'static,
+            Fut: ::std::future::Future<Output = ()> + 'static {
+                #[allow(unused_imports)]
+                use ::formoxus::__private::component_scope::*;
+                use ::formoxus::__private::dioxus::prelude::ReadableExt;
+                ::formoxus::__private::dioxus::prelude::rsx! {
+                    form {
+                        onsubmit: move |e| {
+                            let on_submit = on_submit.clone();
+                            async move {
+                                e.prevent_default();
+                                if let Some(model) = ::formoxus::form::FormStoreExt::validate(&data) {
+                                    on_submit(model).await;
+                                }
+                            }
+                        },
+                        #(#render_calls)*
+                        ::formoxus::widgets::FormErrors { errors: data.errors().cloned() },
+                        button { r#type: "submit", "Sign In" }
+                    }
+                }
+            }
         }
     })
 }

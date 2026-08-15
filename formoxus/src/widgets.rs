@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use dioxus::prelude::*;
 
-use crate::error::{FieldError, try_from};
+use crate::error::{FieldError, FormError, try_from};
 use crate::fields::{FieldValue, FormField, FormFieldStoreExt};
 
 /// Presentational config a form hands a widget when rendering a field — the bits
@@ -47,6 +47,19 @@ pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
             ul { class: "field-errors",
                 for error in errors.iter() {
                     li { class: "field-error", "{error.0}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn FormErrors(errors: Vec<FormError>) -> Element {
+    rsx! {
+        if !errors.is_empty() {
+            ul { class: "form-errors",
+                for error in errors.iter() {
+                    li { class: "form-error", "{error.0}"}
                 }
             }
         }

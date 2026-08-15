@@ -1,3 +1,4 @@
+use dioxus::core::Element;
 use dioxus::prelude::{WritableExt, use_store};
 use dioxus::stores::Store;
 
@@ -6,6 +7,10 @@ use crate::error::FormError;
 pub trait FormStoreExt {
     type Model;
     fn validate(&self) -> Option<Self::Model>;
+    fn render<F, Fut>(&self, on_submit: F) -> Element
+    where
+        F: Fn(Self::Model) -> Fut + Clone + 'static,
+        Fut: Future<Output = ()> + 'static;
 }
 
 impl<S: FormState + 'static> FormStoreExt for Store<S> {
@@ -17,6 +22,13 @@ impl<S: FormState + 'static> FormStoreExt for Store<S> {
         let mut store = *self;
         store.write().validate()
     }
+
+    fn render<F, Fut>(&self, on_submit: F) -> Element 
+    where
+    F: Fn(Self::Model) -> Fut + Clone + 'static,
+    Fut: Future<Output = ()> + 'static {
+        S::render(*self, on_submit)
+    }
 }
 
 pub trait Form: std::fmt::Debug {
@@ -27,6 +39,12 @@ pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + std::f
     type Model: std::fmt::Debug;
     fn validate(&mut self) -> Option<Self::Model>;
     fn has_errors(&self) -> bool;
+    fn render<F, Fut>(data: Store<Self>, on_submit: F) -> Element
+    where
+        Self: Sized + 'static,
+        F: Fn(Self::Model) -> Fut + Clone + 'static,
+        Fut: Future<Output = ()> + 'static;
+
 }
 
 pub trait FromModel<Model> {
