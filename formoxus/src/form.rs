@@ -23,10 +23,11 @@ impl<S: FormState + 'static> FormStoreExt for Store<S> {
         store.write().validate()
     }
 
-    fn render<F, Fut>(&self, on_submit: F) -> Element 
+    fn render<F, Fut>(&self, on_submit: F) -> Element
     where
-    F: Fn(Self::Model) -> Fut + Clone + 'static,
-    Fut: Future<Output = ()> + 'static {
+        F: Fn(Self::Model) -> Fut + Clone + 'static,
+        Fut: Future<Output = ()> + 'static,
+    {
         S::render(*self, on_submit)
     }
 }
@@ -44,7 +45,6 @@ pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + std::f
         Self: Sized + 'static,
         F: Fn(Self::Model) -> Fut + Clone + 'static,
         Fut: Future<Output = ()> + 'static;
-
 }
 
 pub trait FromModel<Model> {

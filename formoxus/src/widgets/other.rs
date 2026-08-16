@@ -3,7 +3,10 @@ use std::str::FromStr;
 
 use dioxus::prelude::*;
 
-use crate::{fields::{FieldValue, FormField, FormFieldStoreExt}, widgets::{DefaultWidget, FieldErrors, FieldProps, FieldWidget}};
+use crate::{
+    fields::{FieldValue, FormField, FormFieldStoreExt},
+    widgets::{DefaultWidget, FieldErrors, FieldProps, FieldWidget},
+};
 
 pub struct CheckboxInput;
 

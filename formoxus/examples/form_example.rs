@@ -85,18 +85,15 @@ impl FormState for SampleFormState {
         // …then one gate covers all three error sources: form-level errors, a
         // field-level `Invalid` (the optional-invalid case, which still builds the
         // model), and validator errors on a `Valid` field.
-        if self.has_errors() {
-            None
-        } else {
-            Some(model)
-        }
+        if self.has_errors() { None } else { Some(model) }
     }
 
     fn render<F, Fut>(data: Store<Self>, on_submit: F) -> Element
     where
-    Self: Sized + 'static,
-    F: Fn(Self::Model) -> Fut + Clone + 'static,
-    Fut: Future<Output = ()> + 'static {
+        Self: Sized + 'static,
+        F: Fn(Self::Model) -> Fut + Clone + 'static,
+        Fut: Future<Output = ()> + 'static,
+    {
         rsx! {
             form {
                 class: "form",
@@ -144,7 +141,6 @@ impl FormState for SampleFormState {
             || self.flag.has_errors()
             || self.opt_flag.has_errors()
     }
-
 }
 
 impl FromModel<SampleModel> for SampleFormState {

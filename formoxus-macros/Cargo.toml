@@ -10,5 +10,8 @@ proc-macro = true
 syn = { version = "3", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
-heck = "0.5.0"
+heck = { workspace = true }
 darling = "0.24.0"
+
+[dev-dependencies]
+googletest = { workspace = true }

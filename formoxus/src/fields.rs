@@ -1,6 +1,6 @@
-use std::{fmt::Debug, str::FromStr};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::{fmt::Debug, str::FromStr};
 
 use crate::error::FieldError;
 
@@ -9,7 +9,10 @@ pub enum FieldValue<T: Debug + Clone + FromStr> {
     #[default]
     Empty,
     Valid(T),
-    Invalid { raw: String, error: FieldError },
+    Invalid {
+        raw: String,
+        error: FieldError,
+    },
 }
 
 impl<T: Debug + Clone + FromStr> FieldValue<T> {
@@ -70,7 +73,7 @@ impl<T: Clone + Debug + FromStr> FormField<T> {
                 self.errors
                     .push(FieldError("This field is required.".to_string()));
                 None
-            },
+            }
             FieldValue::Valid(t) => Some(t.clone()),
             FieldValue::Invalid { raw: _, error: _ } => None,
         }
@@ -91,4 +94,3 @@ impl<T: Clone + Debug + FromStr> FormField<T> {
         !self.errors.is_empty() || matches!(self.value, FieldValue::Invalid { .. })
     }
 }
-

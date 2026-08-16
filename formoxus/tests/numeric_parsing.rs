@@ -92,9 +92,15 @@ fn non_numeric_text_is_rejected_for_every_type() {
 #[gtest]
 fn u128_and_i128_round_trip_values_that_overflow_64_bit() {
     // One past u64::MAX (18446744073709551615) — only representable in a 128-bit type.
-    expect_that!(parse::<u128>("18446744073709551616"), ok(eq(&18446744073709551616)));
+    expect_that!(
+        parse::<u128>("18446744073709551616"),
+        ok(eq(&18446744073709551616))
+    );
     // Below i64::MIN (-9223372036854775808).
-    expect_that!(parse::<i128>("-9223372036854775809"), ok(eq(&-9223372036854775809)));
+    expect_that!(
+        parse::<i128>("-9223372036854775809"),
+        ok(eq(&-9223372036854775809))
+    );
 }
 
 #[gtest]

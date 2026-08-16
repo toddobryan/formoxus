@@ -15,6 +15,8 @@ pub(crate) struct FormMeta {
     pub model: Option<syn::Ident>,
     #[darling(default)]
     pub form_validator: Option<syn::Path>,
+    #[darling(default)]
+    pub label_case: Option<syn::Path>,
 }
 
 impl FormMeta {

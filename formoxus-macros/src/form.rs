@@ -162,7 +162,7 @@ fn form_state_impl(
     let assign_to_vars = field_metas.assign_to_vars()?;
     let let_required_fields = field_metas.let_required_fields()?;
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
-    let render_calls = field_metas.render_calls();
+    let render_calls = field_metas.render_calls(form_meta);
     let has_errors = field_metas.has_errors()?;
 
     Ok(quote! {

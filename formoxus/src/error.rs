@@ -13,5 +13,5 @@ where
     T: FromStr,
     T::Err: Display,
 {
-    raw.parse::<T>().map_err(|e| FieldError(e.to_string())) 
+    raw.parse::<T>().map_err(|e| FieldError(e.to_string()))
 }

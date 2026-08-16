@@ -1,6 +1,7 @@
 pub mod error;
 pub mod fields;
 pub mod form;
+pub mod label_case;
 pub mod validators;
 pub mod widgets;
 
@@ -25,9 +26,10 @@ pub mod prelude {
     pub use crate::form::{
         Form, FormState, FormStoreExt, FromModel, ValidateForm, use_form, use_form_from,
     };
+    pub use crate::label_case::{LabelCase, ToCase};
     pub use crate::widgets::{
-        CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget,
-        PasswordInput, SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
+        CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget, PasswordInput,
+        SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
     };
 }
 

@@ -10,12 +10,15 @@ use crate::{fields::FormField, widgets::FieldProps};
 
 #[component]
 pub fn InputWidget<T>(
-    input_type: String, 
-    #[props(default)]
-    inputmode: Option<String>,
-    field: Store<FormField<T>>, 
-    props: FieldProps) -> Element 
-where T: 'static + Clone + Debug + Default + FromStr + Display, T::Err: Display {
+    input_type: String,
+    #[props(default)] inputmode: Option<String>,
+    field: Store<FormField<T>>,
+    props: FieldProps,
+) -> Element
+where
+    T: 'static + Clone + Debug + Default + FromStr + Display,
+    T::Err: Display,
+{
     let FieldProps {
         label,
         required,
