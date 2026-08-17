@@ -157,6 +157,9 @@ fn form_state_impl(
     assert!(form_meta.model.is_none());
     let state_ident = form_meta.state_struct_name();
     let struct_ident = &form_meta.ident;
+    let title = form_meta.title.clone().map(|t| quote! {
+        h2 { class: "form-title", #t },
+    });
 
     let clear_all = field_metas.clear()?;
     let assign_to_vars = field_metas.assign_to_vars()?;
@@ -164,6 +167,8 @@ fn form_state_impl(
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
     let render_calls = field_metas.render_calls(form_meta);
     let has_errors = field_metas.has_errors()?;
+    //let submit_text = form_meta.submit_text.clone().unwrap_or_else(|| "Submit".to_string());
+    let button_tokens = form_meta.tokens_for_buttons();
 
     Ok(quote! {
         impl ::formoxus::form::FormState for #state_ident {
@@ -192,6 +197,7 @@ fn form_state_impl(
                 use ::formoxus::__private::component_scope::*;
                 use ::formoxus::__private::dioxus::prelude::ReadableExt;
                 ::formoxus::__private::dioxus::prelude::rsx! {
+                    #title
                     form {
                         onsubmit: move |e| {
                             let on_submit = on_submit.clone();
@@ -204,7 +210,7 @@ fn form_state_impl(
                         },
                         #(#render_calls)*
                         ::formoxus::widgets::FormErrors { errors: data.errors().cloned() },
-                        button { r#type: "submit", "Sign In" }
+                        #button_tokens,
                     }
                 }
             }
