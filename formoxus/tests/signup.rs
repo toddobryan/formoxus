@@ -29,6 +29,7 @@ use formoxus::prelude::*;
 use googletest::prelude::*;
 
 #[derive(Form, Debug, Clone, PartialEq)]
+#[form(button(type = "submit", name = submit))]
 struct Signup {
     username: String,      // required text
     age: i32,              // required, parsed → can be Invalid

@@ -6,7 +6,7 @@ use syn::{Data, DeriveInput, Fields, parse2};
 use crate::{
     error::MacroError,
     field_meta::{FieldMeta, FieldMetas},
-    form_meta::FormMeta,
+    form_meta::{FormMeta, HandlerKind},
 };
 
 /// Entry point for `#[derive(Form)]`. SKELETON: parses the input (so malformed
@@ -47,6 +47,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     let state_struct = form_state_struct(&form_meta, field_metas)?;
 
+    let handlers_struct = form_handlers_struct(&form_meta)?;
+
     let validate_form_impl = validate_form_impl(&form_meta)?;
 
     // no separate Model to derive
@@ -67,6 +69,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
         #form_impl
 
         #state_struct
+
+        #handlers_struct
 
         #validate_form_impl
 
@@ -108,6 +112,35 @@ fn form_state_struct(
             #( #field_entries, )*
 
             pub errors: Vec<::formoxus::error::FormError>
+        }
+    })
+}
+
+/// One field per `#[form(button(...))]`, named after the button, typed as
+/// `Handler<Model>` or `UncheckedHandler` per that button's resolved
+/// `HandlerKind`. Callers construct this by hand at the `store.render(...)`
+/// call site — see `formoxus::form::{handler, unchecked_handler}`.
+fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> {
+    let handlers_ident = form_meta.handlers_struct_name();
+    let vis = &form_meta.vis;
+    let model_ident = form_meta.model.as_ref().unwrap_or(&form_meta.ident);
+
+    let fields: Vec<TokenStream2> = form_meta
+        .buttons
+        .iter()
+        .map(|b| {
+            let name = &b.name;
+            let field_ty = match b.handler_kind() {
+                HandlerKind::Validated => quote! { ::formoxus::form::Handler<#model_ident> },
+                HandlerKind::Unchecked => quote! { ::formoxus::form::UncheckedHandler },
+            };
+            quote! { pub #name: #field_ty }
+        })
+        .collect();
+
+    Ok(quote! {
+        #vis struct #handlers_ident {
+            #( #fields ),*
         }
     })
 }
@@ -157,8 +190,11 @@ fn form_state_impl(
     assert!(form_meta.model.is_none());
     let state_ident = form_meta.state_struct_name();
     let struct_ident = &form_meta.ident;
-    let title = form_meta.title.clone().map(|t| quote! {
-        h2 { class: "form-title", #t },
+    let handlers_ident = form_meta.handlers_struct_name();
+    let title = form_meta.title.clone().map(|t| {
+        quote! {
+            h2 { class: "form-title", #t },
+        }
     });
 
     let clear_all = field_metas.clear()?;
@@ -167,12 +203,14 @@ fn form_state_impl(
     let validate_model = field_metas.validate_model(&form_meta.ident)?;
     let render_calls = field_metas.render_calls(form_meta);
     let has_errors = field_metas.has_errors()?;
-    //let submit_text = form_meta.submit_text.clone().unwrap_or_else(|| "Submit".to_string());
+    let destructure_handlers = form_meta.tokens_for_destructure_handlers();
+    let onsubmit = form_meta.tokens_for_onsubmit();
     let button_tokens = form_meta.tokens_for_buttons();
 
     Ok(quote! {
         impl ::formoxus::form::FormState for #state_ident {
             type Model = #struct_ident;
+            type Handlers = #handlers_ident;
 
             fn validate(&mut self) -> Option<#struct_ident> {
                 #clear_all
@@ -186,28 +224,18 @@ fn form_state_impl(
 
             #has_errors
 
-            fn render<F, Fut>(
+            fn render(
                 data: ::formoxus::__private::dioxus::prelude::Store<Self>,
-                on_submit: F,
-            ) -> ::formoxus::__private::dioxus::prelude::Element
-            where
-            F: Fn(Self::Model) -> Fut + Clone + 'static,
-            Fut: ::std::future::Future<Output = ()> + 'static {
+                handlers: #handlers_ident,
+            ) -> ::formoxus::__private::dioxus::prelude::Element {
                 #[allow(unused_imports)]
                 use ::formoxus::__private::component_scope::*;
                 use ::formoxus::__private::dioxus::prelude::ReadableExt;
+                #destructure_handlers
                 ::formoxus::__private::dioxus::prelude::rsx! {
                     #title
                     form {
-                        onsubmit: move |e| {
-                            let on_submit = on_submit.clone();
-                            async move {
-                                e.prevent_default();
-                                if let Some(model) = ::formoxus::form::FormStoreExt::validate(&data) {
-                                    on_submit(model).await;
-                                }
-                            }
-                        },
+                        onsubmit: #onsubmit,
                         #(#render_calls)*
                         ::formoxus::widgets::FormErrors { errors: data.errors().cloned() },
                         #button_tokens,

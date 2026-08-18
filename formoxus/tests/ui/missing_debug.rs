@@ -4,6 +4,7 @@
 use formoxus::Form;
 
 #[derive(Form)]
+#[form(button(type = "submit", name = submit))]
 struct NoDebug {
     name: String,
 }
