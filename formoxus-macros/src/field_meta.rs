@@ -45,20 +45,21 @@ impl FieldMeta {
         let required = option_inner(&self.ty).is_none();
         let label_tokens = match self.label.clone() {
             Some(label_name) => match self.case.clone() {
-                Some(override_case) => quote! { ::formoxus::label_case::ToCase::to_case(#label_name, #override_case) },
+                Some(override_case) => {
+                    quote! { ::formoxus::label_case::ToCase::to_case(#label_name, #override_case) }
+                }
                 None => quote! { #label_name },
             },
             None => {
                 let label_name = field_ident.to_string();
                 let default_case = syn::parse_quote!(::formoxus::label_case::LabelCase::Title);
-                let label_case = self
-                    .case
-                    .clone()
-                    .unwrap_or_else(|| form_meta.label_case.clone().unwrap_or_else(|| default_case));
+                let label_case = self.case.clone().unwrap_or_else(|| {
+                    form_meta.label_case.clone().unwrap_or_else(|| default_case)
+                });
                 quote! {
                     ::formoxus::label_case::ToCase::to_case(#label_name, #label_case)
                 }
-            },
+            }
         };
 
         let render_expr = match &self.component {
@@ -247,7 +248,7 @@ mod tests {
     #[gtest]
     fn field_level_case_wins_over_form_level_label_case() {
         let form_meta = parse_form(parse_quote! {
-            #[form(label_case = test_case::FormLoses)]
+            #[form(label_case = test_case::FormLoses, button(type = "submit", name = submit))]
             struct MyForm {
                 #[form(case = test_case::FieldWins)]
                 opt_flag: bool,
@@ -266,7 +267,7 @@ mod tests {
         // no `case` of its own is not run through it — the field author wrote
         // exactly what they want shown.
         let form_meta = parse_form(parse_quote! {
-            #[form(label_case = test_case::Ignored)]
+            #[form(label_case = test_case::Ignored, button(type = "submit", name = submit))]
             struct MyForm {
                 #[form(label = "Custom Label")]
                 opt_flag: bool,
@@ -286,7 +287,7 @@ mod tests {
         // conversion applied to my custom label" — and it uses the field's
         // own `case`, not the form's `label_case`, even if both are set.
         let form_meta = parse_form(parse_quote! {
-            #[form(label_case = test_case::FormLoses)]
+            #[form(label_case = test_case::FormLoses, button(type = "submit", name = submit))]
             struct MyForm {
                 #[form(label = "Custom Label", case = test_case::FieldWins)]
                 opt_flag: bool,
@@ -304,7 +305,7 @@ mod tests {
     #[gtest]
     fn form_level_label_case_applies_when_field_has_no_override() {
         let form_meta = parse_form(parse_quote! {
-            #[form(label_case = test_case::FormWins)]
+            #[form(label_case = test_case::FormWins, button(type = "submit", name = submit))]
             struct MyForm {
                 opt_flag: bool,
             }
@@ -318,6 +319,7 @@ mod tests {
     #[gtest]
     fn defaults_to_title_case_when_neither_is_set() {
         let form_meta = parse_form(parse_quote! {
+            #[form(button(type = "submit", name = submit))]
             struct MyForm {
                 opt_flag: bool,
             }
@@ -342,6 +344,7 @@ mod tests {
         // no `case` override should never go through — see
         // `custom_label_without_a_case_override_is_used_verbatim`).
         let form_meta = parse_form(parse_quote! {
+            #[form(button(type = "submit", name = submit))]
             struct MyForm {
                 #[form(label = "")]
                 opt_flag: bool,

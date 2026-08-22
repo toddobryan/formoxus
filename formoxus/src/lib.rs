@@ -24,7 +24,8 @@ pub mod prelude {
     pub use crate::error::{FieldError, FormError};
     pub use crate::fields::{FormField, FormFieldStoreExt};
     pub use crate::form::{
-        Form, FormState, FormStoreExt, FromModel, ValidateForm, use_form, use_form_from,
+        Form, FormState, FormStoreExt, FromModel, Handler, UncheckedHandler, ValidateForm, handler,
+        unchecked_handler, use_form, use_form_from,
     };
     pub use crate::label_case::{LabelCase, ToCase};
     pub use crate::widgets::{

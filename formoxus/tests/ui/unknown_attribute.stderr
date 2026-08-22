@@ -1,4 +1,4 @@
-error: Unknown field: `bogus`. Available values: `button`, `form_validator`, `label_case`, `model`, `submit_text`, `title`
+error: Unknown field: `bogus`. Available values: `button`, `form_validator`, `label_case`, `model`, `title`
  --> tests/ui/unknown_attribute.rs:6:8
   |
 6 | #[form(bogus = Whatever)]

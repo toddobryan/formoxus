@@ -1,20 +1,54 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+
 use dioxus::core::Element;
 use dioxus::prelude::{WritableExt, use_store};
 use dioxus::stores::Store;
 
 use crate::error::FormError;
 
+/// A button handler that receives the form's validated `Model` — only called
+/// once `FormStoreExt::validate` succeeds. `Rc`, not `Box`: the generated
+/// `onclick`/`onsubmit` closures run on every click, and each run needs to move
+/// an owned copy into a fresh `async move` block, so the handler itself must be
+/// cheaply `Clone`. Single-threaded (WASM), so `Rc` over `Arc`.
+pub type Handler<M> = Rc<dyn Fn(M) -> Pin<Box<dyn Future<Output = ()>>>>;
+
+/// A button handler that runs unconditionally — no validation attempt, no
+/// access to the model. For buttons like Cancel that must work even while the
+/// form is invalid.
+pub type UncheckedHandler = Rc<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>;
+
+/// Wrap a plain async closure as a [`Handler`], for a `#[form(button(...))]`
+/// field on a generated `…Handlers` struct.
+pub fn handler<M, F, Fut>(f: F) -> Handler<M>
+where
+    F: Fn(M) -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    Rc::new(move |m| Box::pin(f(m)))
+}
+
+/// Wrap a plain async closure as an [`UncheckedHandler`].
+pub fn unchecked_handler<F, Fut>(f: F) -> UncheckedHandler
+where
+    F: Fn() -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    Rc::new(move || Box::pin(f()))
+}
+
 pub trait FormStoreExt {
     type Model;
+    type Handlers;
     fn validate(&self) -> Option<Self::Model>;
-    fn render<F, Fut>(&self, on_submit: F) -> Element
-    where
-        F: Fn(Self::Model) -> Fut + Clone + 'static,
-        Fut: Future<Output = ()> + 'static;
+    fn render(&self, handlers: Self::Handlers) -> Element;
 }
 
 impl<S: FormState + 'static> FormStoreExt for Store<S> {
     type Model = S::Model;
+    type Handlers = S::Handlers;
 
     fn validate(&self) -> Option<S::Model> {
         // `Store` is a Copy handle to shared reactive state; copy it for a mutable
@@ -23,12 +57,8 @@ impl<S: FormState + 'static> FormStoreExt for Store<S> {
         store.write().validate()
     }
 
-    fn render<F, Fut>(&self, on_submit: F) -> Element
-    where
-        F: Fn(Self::Model) -> Fut + Clone + 'static,
-        Fut: Future<Output = ()> + 'static,
-    {
-        S::render(*self, on_submit)
+    fn render(&self, handlers: Self::Handlers) -> Element {
+        S::render(*self, handlers)
     }
 }
 
@@ -38,13 +68,15 @@ pub trait Form: std::fmt::Debug {
 
 pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + std::fmt::Debug {
     type Model: std::fmt::Debug;
+    /// The per-form `…Handlers` struct the derive generates: one field per
+    /// `#[form(button(...))]`, each a [`Handler<Self::Model>`] or an
+    /// [`UncheckedHandler`] depending on that button's resolved `HandlerKind`.
+    type Handlers;
     fn validate(&mut self) -> Option<Self::Model>;
     fn has_errors(&self) -> bool;
-    fn render<F, Fut>(data: Store<Self>, on_submit: F) -> Element
+    fn render(data: Store<Self>, handlers: Self::Handlers) -> Element
     where
-        Self: Sized + 'static,
-        F: Fn(Self::Model) -> Fut + Clone + 'static,
-        Fut: Future<Output = ()> + 'static;
+        Self: Sized + 'static;
 }
 
 pub trait FromModel<Model> {

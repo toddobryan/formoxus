@@ -44,8 +44,17 @@ pub struct SampleFormState {
     pub errors: Vec<FormError>,
 }
 
+/// One field per `#[form(button(...))]` the derive would see — here, just the
+/// mandatory submit button. Built by hand at the call site via
+/// `formoxus::form::handler`.
+pub struct SampleFormHandlers {
+    pub submit: Handler<SampleModel>,
+}
+
 impl FormState for SampleFormState {
     type Model = SampleModel;
+    type Handlers = SampleFormHandlers;
+
     /// Clean the form: stamp field/form errors **in place**, and yield the model
     /// iff everything passed. Errors live on the fields/form, never in the return
     /// type — so there's nothing to reconstruct on failure. This is the entity
@@ -88,21 +97,20 @@ impl FormState for SampleFormState {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    fn render<F, Fut>(data: Store<Self>, on_submit: F) -> Element
+    fn render(data: Store<Self>, handlers: Self::Handlers) -> Element
     where
         Self: Sized + 'static,
-        F: Fn(Self::Model) -> Fut + Clone + 'static,
-        Fut: Future<Output = ()> + 'static,
     {
+        let SampleFormHandlers { submit } = handlers;
         rsx! {
             form {
                 class: "form",
                 onsubmit: move |e| {
-                    let on_submit = on_submit.clone();
+                    let submit = submit.clone();
                     async move {
                         e.prevent_default();
                         if let Some(model) = ::formoxus::form::FormStoreExt::validate(&data) {
-                            on_submit(model).await;
+                            submit(model).await;
                         }
                     }
                 },
@@ -126,6 +134,10 @@ impl FormState for SampleFormState {
                     data.opt_flag().into(),
                     FieldProps { label: "OptFlag".into(), required: false, placeholder: None },
                 ) }
+                div {
+                    class: "formoxus-buttons",
+                    button { r#type: "submit", class: "primary", "Submit" }
+                }
             }
         }
     }

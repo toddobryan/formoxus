@@ -16,6 +16,7 @@ use formoxus::prelude::*;
 use googletest::prelude::*;
 
 #[derive(Form, Debug)]
+#[form(button(type = "submit", name = submit))]
 #[allow(dead_code)]
 pub struct DummyForm {
     name: String,
