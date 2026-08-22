@@ -93,4 +93,8 @@ impl<T: Clone + Debug + FromStr> FormField<T> {
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty() || matches!(self.value, FieldValue::Invalid { .. })
     }
+
+    pub fn add_error(&mut self, error_string: &str) {
+        self.errors.push(FieldError(error_string.to_string()));
+    }
 }

@@ -106,7 +106,14 @@ fn form_state_struct(
         #[allow(unused_imports)]
         use ::formoxus::__private::store_scope::*;
 
-        #[derive(Clone, Debug, Default, ::formoxus::__private::dioxus::prelude::Store)]
+        #[derive(
+            Clone,
+            Debug,
+            Default,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+            ::formoxus::__private::dioxus::prelude::Store,
+        )]
         #( #attrs )*
         #vis struct #state_struct_name {
             #( #field_entries, )*
