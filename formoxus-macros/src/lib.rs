@@ -54,8 +54,12 @@
 
 use proc_macro::TokenStream;
 
+mod container;
 mod error;
+mod field_container_meta;
 mod field_meta;
+mod field_set;
+mod field_set_meta;
 mod form;
 mod form_meta;
 
@@ -65,4 +69,14 @@ mod form_meta;
 #[proc_macro_derive(Form, attributes(form))]
 pub fn derive_form(input: TokenStream) -> TokenStream {
     form::derive_form(input.into()).into()
+}
+
+// `form` is here too, not just `field_set`: `FieldMeta` (shared with `Form`)
+// always parses per-field attributes under the `form` namespace regardless of
+// the container, so a field on a `FieldSet`-derived struct still writes
+// `#[form(component = ..., ...)]` — omitting it here left rustc rejecting that
+// as an unknown attribute before darling ever saw it.
+#[proc_macro_derive(FieldSet, attributes(field_set, form))]
+pub fn derive_fieldset(input: TokenStream) -> TokenStream {
+    field_set::derive_field_set(input.into()).into()
 }

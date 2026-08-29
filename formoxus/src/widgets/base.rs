@@ -6,6 +6,7 @@ use dioxus::prelude::*;
 
 use crate::error::{FieldError, FormError};
 use crate::fields::FormField;
+use crate::form::Provider;
 
 /// Presentational config a form hands a widget when rendering a field — the bits
 /// that come from the declaration (`#[form(label = …)]`, required-ness), not the
@@ -22,6 +23,18 @@ pub struct FieldProps {
 /// [`TextInput`]); a field selects one by naming its type.
 pub trait FieldWidget<T: Clone + Debug + FromStr + 'static> {
     fn render(field: Store<FormField<T>>, props: FieldProps) -> Element;
+}
+
+/// A widget that additionally needs externally-supplied data to render — e.g. a
+/// picker's list of choices — via `#[form(component = ..., provided)]`.
+/// `Choices` is whatever shape *this widget* needs; it's the widget's call, not
+/// the field's value type, since a `Ref<Source>` field's picker needs a
+/// `Vec<SourcePath>` of candidates, not a `Ref<Source>` itself. The caller
+/// supplies the [`Provider`] at the `store.render(handlers, providers)` call
+/// site — see [`crate::form::Provider`].
+pub trait ProvidedWidget<T: Clone + Debug + FromStr + 'static> {
+    type Choices: 'static;
+    fn render(field: Store<FormField<T>>, props: FieldProps, provide: Provider<Self::Choices>) -> Element;
 }
 
 /// The default widget for a field value type — "the default widget per kind".

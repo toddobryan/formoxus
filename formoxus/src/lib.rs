@@ -11,26 +11,32 @@ pub mod widgets;
 #[cfg(feature = "derive")]
 pub use formoxus_macros::Form;
 
+/// `#[derive(FieldSet)]`. Same shared-name trick as `Form`: the trait
+/// [`form::FieldSet`] and this derive live in different namespaces.
+#[cfg(feature = "derive")]
+pub use formoxus_macros::FieldSet;
+
 /// The common surface. `use formoxus::prelude::*;` brings in the derive, the trait
 /// vocabulary, and the built-in field widgets — the one blessed glob. For precise
 /// imports, reach into the modules directly (`formoxus::fields::FormField`, …); the
 /// crate root deliberately does *not* re-export everything.
 pub mod prelude {
-    // The derive macro. The trait of the same name is re-exported from `form` below;
-    // they share a name across namespaces, so a single glob import brings both.
+    // The derive macros. The traits of the same names are re-exported from `form`
+    // below; they share names across namespaces, so a single glob import brings both.
     #[cfg(feature = "derive")]
-    pub use crate::Form;
+    pub use crate::{FieldSet, Form};
 
     pub use crate::error::{FieldError, FormError};
     pub use crate::fields::{FormField, FormFieldStoreExt};
     pub use crate::form::{
-        Form, FormState, FormStoreExt, FromModel, Handler, UncheckedHandler, ValidateForm, handler,
-        unchecked_handler, use_form, use_form_from,
+        FieldSet, FieldSetState, FieldSetStoreExt, Form, FormState, FormStoreExt, FromModel,
+        Handler, Provider, UncheckedHandler, ValidateForm, handler, provider, unchecked_handler,
+        use_field_set, use_field_set_from, use_form, use_form_from,
     };
     pub use crate::label_case::{LabelCase, ToCase};
     pub use crate::widgets::{
         CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget, PasswordInput,
-        SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
+        ProvidedWidget, SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
     };
 }
 

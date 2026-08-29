@@ -1,24 +1,47 @@
-use darling::{self, FromField};
+use darling::{self, FromField, util::Flag};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::Type;
 
-use crate::{error::MacroError, form_meta::FormMeta};
+use crate::{error::MacroError, field_container_meta::FieldContainerMeta};
 
 #[derive(Debug, FromField)]
-#[darling(attributes(form), forward_attrs(serde), and_then = "Self::validate")]
+#[darling(attributes(form), and_then = "Self::validate")]
 pub struct FieldMeta {
     pub ident: Option<syn::Ident>,
     pub ty: Type,
 
     // attrs for all fields
+    pub field_set: Flag,
     pub component: Option<syn::Path>,
     pub label: Option<String>,
     pub case: Option<syn::Path>,
+    pub provided: Flag,
 }
 
 impl FieldMeta {
     pub fn validate(self) -> darling::Result<Self> {
+        // `errors` is the one field every generated state struct adds itself
+        // (`form_state_struct`/`fieldset_state_struct`); a same-named user field
+        // would silently collide with it on the wire (serde doesn't reject two
+        // fields serializing to the same key — it only surfaces as a
+        // `duplicate_field` error on deserialize, far from this mistake).
+        if self.field_ident() == "errors" {
+            return Err(darling::Error::custom(
+                "a field can't be named `errors` — that name is reserved for the form-level \
+                 errors formoxus adds to every generated state struct",
+            )
+            .with_span(self.field_ident()));
+        }
+
+        if self.provided.is_present() && self.component.is_none() {
+            return Err(darling::Error::custom(
+                "`provided` needs a `component` to provide to — add `#[form(component = \
+                 SomeWidget, provided)]`",
+            )
+            .with_span(self.field_ident()));
+        }
+
         // TODO
         // check for duplicate labels
         Ok(self)
@@ -26,10 +49,27 @@ impl FieldMeta {
 
     pub fn to_decl(&self) -> TokenStream2 {
         let field_ident = self.field_ident();
-        let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
+
+        let field_type: TokenStream2 = if self.field_set.is_present() {
+            let element_type = self.field_set_element_type();
+            if self.is_field_set_list() {
+                quote! {
+                    ::std::vec::Vec<<#element_type as ::formoxus::form::FieldSet>::State>
+                }
+            } else {
+                quote! {
+                    <#element_type as ::formoxus::form::FieldSet>::State
+                }
+            }
+        } else {
+            let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
+            quote! {
+                ::formoxus::fields::FormField<#inner_type>
+            }
+        };
 
         quote! {
-            pub #field_ident: ::formoxus::fields::FormField<#inner_type>
+            pub #field_ident: #field_type
         }
     }
 
@@ -37,55 +77,165 @@ impl FieldMeta {
         self.ident.as_ref().expect("All fields should have idents")
     }
 
+    /// The `FieldSet`-implementing type this `#[form(field_set)]` field wraps:
+    /// for `common: Common` that's `Common` itself; for `options: Vec<Choice>`
+    /// (a repeating group — formoxus's analog of a Django formset) that's
+    /// `Choice`. Only meaningful when `field_set` is present.
+    fn field_set_element_type(&self) -> &syn::Type {
+        vec_inner(&self.ty).unwrap_or(&self.ty)
+    }
+
+    /// Whether a `#[form(field_set)]` field is a repeating group
+    /// (`Vec<T>` where `T: FieldSet`) rather than a single nested `FieldSet`.
+    fn is_field_set_list(&self) -> bool {
+        self.field_set.is_present() && vec_inner(&self.ty).is_some()
+    }
+
+    /// A `#[form(component = ..., provided)]` field's `Provider<C>` payload
+    /// type, projected from the widget's own `ProvidedWidget::Choices` rather
+    /// than the field's value type — a `Ref<Source>` field's picker needs a
+    /// `Vec<SourcePath>` of candidates, not a `Ref<Source>` itself. Only
+    /// meaningful when `provided` is present (`validate()` ensures `component`
+    /// is `Some` whenever it is).
+    fn choices_type(&self) -> TokenStream2 {
+        let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
+        let component = self
+            .component
+            .as_ref()
+            .expect("validate() ensures `provided` implies `component`");
+        quote! { <#component as ::formoxus::widgets::ProvidedWidget<#inner_type>>::Choices }
+    }
+
+    /// The `pub field: Type` entry this field contributes to the generated
+    /// `...Providers` struct, if any: present when the field itself needs
+    /// externally-supplied data (`provided`), or nests a `FieldSet` (singular
+    /// or repeating-group) whose own `Providers` needs a slot here — nested
+    /// regardless of whether that field set happens to need any itself, since
+    /// this macro invocation can't see the other derive's expansion to know.
+    pub fn providers_slot(&self) -> Option<TokenStream2> {
+        let field_ident = self.field_ident();
+        if self.provided.is_present() {
+            let choices_ty = self.choices_type();
+            Some(quote! { pub #field_ident: ::formoxus::form::Provider<#choices_ty> })
+        } else if self.field_set.is_present() {
+            let element_type = self.field_set_element_type();
+            Some(quote! {
+                pub #field_ident: <<#element_type as ::formoxus::form::FieldSet>::State as ::formoxus::form::FieldSetState>::Providers
+            })
+        } else {
+            None
+        }
+    }
+
     /// The `{ … }` rsx block that renders this field: the `#[form(component =
     /// …)]` override if given, else the value type's `DefaultWidget`.
-    pub fn render_call(&self, form_meta: &FormMeta) -> TokenStream2 {
+    pub fn render_call(&self, container: &impl FieldContainerMeta) -> TokenStream2 {
         let field_ident = self.field_ident();
-        let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
-        let required = option_inner(&self.ty).is_none();
-        let label_tokens = match self.label.clone() {
-            Some(label_name) => match self.case.clone() {
-                Some(override_case) => {
-                    quote! { ::formoxus::label_case::ToCase::to_case(#label_name, #override_case) }
-                }
-                None => quote! { #label_name },
-            },
-            None => {
-                let label_name = field_ident.to_string();
-                let default_case = syn::parse_quote!(::formoxus::label_case::LabelCase::Title);
-                let label_case = self.case.clone().unwrap_or_else(|| {
-                    form_meta.label_case.clone().unwrap_or_else(|| default_case)
-                });
-                quote! {
-                    ::formoxus::label_case::ToCase::to_case(#label_name, #label_case)
+
+        // A field set has no single label/required-ness of its own — it renders
+        // its own fields (and its own `FormErrors`) via its generated `render`,
+        // spliced in bare (no `<fieldset>` wrapper) rather than routed through
+        // `FieldWidget`/`render_default`.
+        if self.is_field_set_list() {
+            let element_type = self.field_set_element_type();
+            quote! {
+                div { class: "field-set-list",
+                    // The row's own position is its only identity here — the
+                    // underlying store addresses rows positionally (there's no
+                    // separate stable id), so the `key` mirrors that exactly.
+                    for (i , row) in data.#field_ident().iter().enumerate() {
+                        div { key: "{i}", class: "field-set-list-row",
+                            // The same provider(s) are shared across every row — a
+                            // repeating group's rows source their choices from the
+                            // same place (e.g. one shared list of sources), so this
+                            // clones the slot rather than needing a per-row one.
+                            { ::formoxus::form::FieldSetState::render(row, providers.#field_ident.clone()) }
+                            button {
+                                r#type: "button",
+                                onclick: move |_| {
+                                    let mut rows = data.#field_ident();
+                                    rows.remove(i);
+                                },
+                                "Remove",
+                            }
+                        }
+                    }
+                    button {
+                        r#type: "button",
+                        onclick: move |_| {
+                            let mut rows = data.#field_ident();
+                            rows.push(<#element_type as ::formoxus::form::FieldSet>::State::default());
+                        },
+                        "Add",
+                    }
                 }
             }
-        };
+        } else if self.field_set.is_present() {
+            quote! {
+                { ::formoxus::form::FieldSetState::render(data.#field_ident(), providers.#field_ident) }
+            }
+        } else {
+            let inner_type = option_inner(&self.ty).unwrap_or(&self.ty);
+            let required = option_inner(&self.ty).is_none();
+            let label_tokens = match self.label.clone() {
+                Some(label_name) => match self.case.clone() {
+                    Some(override_case) => {
+                        quote! { ::formoxus::label_case::ToCase::to_case(#label_name, #override_case) }
+                    }
+                    None => quote! { #label_name },
+                },
+                None => {
+                    let label_name = field_ident.to_string();
+                    let default_case = syn::parse_quote!(::formoxus::label_case::LabelCase::Title);
+                    let label_case = self.case.clone().unwrap_or_else(|| {
+                        container
+                            .common()
+                            .label_case
+                            .clone()
+                            .unwrap_or_else(|| default_case)
+                    });
+                    quote! {
+                        ::formoxus::label_case::ToCase::to_case(#label_name, #label_case)
+                    }
+                }
+            };
 
-        let render_expr = match &self.component {
-            Some(path) => quote! {
-                <#path as ::formoxus::widgets::FieldWidget<#inner_type>>::render(
-                    data.#field_ident().into(),
-                    ::formoxus::widgets::FieldProps {
-                        label: #label_tokens,
-                        required: #required,
-                        placeholder: None,
-                    },
-                )
-            },
-            None => quote! {
-                ::formoxus::widgets::render_default(
-                    data.#field_ident().into(),
-                    ::formoxus::widgets::FieldProps {
-                        label: #label_tokens,
-                        required: #required,
-                        placeholder: None,
-                    },
-                )
-            },
-        };
+            let render_expr = match &self.component {
+                Some(path) if self.provided.is_present() => quote! {
+                    <#path as ::formoxus::widgets::ProvidedWidget<#inner_type>>::render(
+                        data.#field_ident().into(),
+                        ::formoxus::widgets::FieldProps {
+                            label: #label_tokens,
+                            required: #required,
+                            placeholder: None,
+                        },
+                        providers.#field_ident,
+                    )
+                },
+                Some(path) => quote! {
+                    <#path as ::formoxus::widgets::FieldWidget<#inner_type>>::render(
+                        data.#field_ident().into(),
+                        ::formoxus::widgets::FieldProps {
+                            label: #label_tokens,
+                            required: #required,
+                            placeholder: None,
+                        },
+                    )
+                },
+                None => quote! {
+                    ::formoxus::widgets::render_default(
+                        data.#field_ident().into(),
+                        ::formoxus::widgets::FieldProps {
+                            label: #label_tokens,
+                            required: #required,
+                            placeholder: None,
+                        },
+                    )
+                },
+            };
 
-        quote! { { #render_expr } }
+            quote! { { #render_expr } }
+        }
     }
 }
 
@@ -96,15 +246,19 @@ pub(crate) trait FieldMetas {
     fn validate_model(&self, model_ident: &syn::Ident) -> Result<TokenStream2, MacroError>;
     fn field_initializers(&self) -> TokenStream2;
     fn has_errors(&self) -> Result<TokenStream2, MacroError>;
-    fn render_calls(&self, form_meta: &FormMeta) -> Vec<TokenStream2>;
+    fn render_calls(&self, container: &impl FieldContainerMeta) -> Vec<TokenStream2>;
 }
 
 impl FieldMetas for [FieldMeta] {
     fn clear(&self) -> Result<TokenStream2, MacroError> {
-        let clear_errors_for_fields = self.iter().map(|f| {
-            let field_ident = f.field_ident();
-            quote! {
-                self.#field_ident.clear_errors();
+        let clear_errors_for_fields = self.iter().filter_map(|f| {
+            if f.field_set.is_present() {
+                None
+            } else {
+                let field_ident = f.field_ident();
+                Some(quote! {
+                    self.#field_ident.clear_errors();
+                })
             }
         });
 
@@ -119,12 +273,33 @@ impl FieldMetas for [FieldMeta] {
             .iter()
             .map(|f| {
                 let field_ident = f.field_ident();
-                let optional_or_required = match option_inner(&f.ty) {
-                    Some(_) => quote! { optional() },
-                    None => quote! { required() },
-                };
-                quote! {
-                    let #field_ident = self.#field_ident.#optional_or_required
+                if f.is_field_set_list() {
+                    quote! {
+                        let #field_ident = {
+                            // Eager `Vec<Option<_>>` first, THEN a second, pure
+                            // `Option<Vec<_>>` pass — collecting straight from
+                            // `.map(...)` into `Option<Vec<_>>` would short-circuit
+                            // on the first `None`, skipping `validate()` (and the
+                            // errors it stamps as a side effect) on every row after it.
+                            let validated: ::std::vec::Vec<_> = self.#field_ident
+                                .iter_mut()
+                                .map(|row| ::formoxus::form::FieldSetState::validate(row))
+                                .collect();
+                            validated.into_iter().collect::<::std::option::Option<::std::vec::Vec<_>>>()
+                        };
+                    }
+                } else if f.field_set.is_present() {
+                    quote! {
+                        let #field_ident = ::formoxus::form::FieldSetState::validate(&mut self.#field_ident);
+                    }
+                } else {
+                    let optional_or_required = match option_inner(&f.ty) {
+                        Some(_) => quote! { optional() },
+                        None => quote! { required() },
+                    };
+                    quote! {
+                        let #field_ident = self.#field_ident.#optional_or_required
+                    }
                 }
             })
             .collect();
@@ -178,12 +353,23 @@ impl FieldMetas for [FieldMeta] {
             .iter()
             .map(|f| {
                 let field_ident = f.field_ident();
-                let initializer = match option_inner(&f.ty) {
-                    Some(_) => {
-                        quote! { ::formoxus::fields::FormField::with_optional(model.#field_ident.clone()) }
+                let initializer = if f.is_field_set_list() {
+                    quote! {
+                        model.#field_ident
+                            .iter()
+                            .map(|row| ::formoxus::form::FromModel::from_model(row))
+                            .collect()
                     }
-                    None => {
-                        quote! { ::formoxus::fields::FormField::with_value(model.#field_ident.clone()) }
+                } else if f.field_set.is_present() {
+                    quote! { ::formoxus::form::FromModel::from_model(&model.#field_ident) }
+                } else {
+                    match option_inner(&f.ty) {
+                        Some(_) => {
+                            quote! { ::formoxus::fields::FormField::with_optional(model.#field_ident.clone()) }
+                        }
+                        None => {
+                            quote! { ::formoxus::fields::FormField::with_value(model.#field_ident.clone()) }
+                        }
                     }
                 };
                 quote! {
@@ -199,8 +385,20 @@ impl FieldMetas for [FieldMeta] {
             .iter()
             .map(|f| {
                 let field_ident = f.field_ident();
-                quote! {
-                    self.#field_ident.has_errors()
+                if f.is_field_set_list() {
+                    quote! {
+                        self.#field_ident
+                            .iter()
+                            .any(|row| ::formoxus::form::FieldSetState::has_errors(row))
+                    }
+                } else if f.field_set.is_present() {
+                    quote! {
+                        ::formoxus::form::FieldSetState::has_errors(&self.#field_ident)
+                    }
+                } else {
+                    quote! {
+                        self.#field_ident.has_errors()
+                    }
                 }
             })
             .collect();
@@ -212,9 +410,9 @@ impl FieldMetas for [FieldMeta] {
         })
     }
 
-    fn render_calls(&self, form_meta: &FormMeta) -> Vec<TokenStream2> {
+    fn render_calls(&self, container: &impl FieldContainerMeta) -> Vec<TokenStream2> {
         self.iter()
-            .map(|field| field.render_call(form_meta))
+            .map(|field| field.render_call(container))
             .collect()
     }
 }
@@ -359,6 +557,22 @@ mod tests {
 }
 
 fn option_inner(ty: &syn::Type) -> Option<&syn::Type> {
+    single_generic_arg(ty, "Option")
+}
+
+/// The `T` in `Vec<T>`, or `None` if `ty` isn't (syntactically) a bare `Vec<...>`.
+/// A `#[form(field_set)]` field whose declared type has this shape is a
+/// repeating group (formoxus's analog of a Django formset) rather than a
+/// single nested `FieldSet`.
+fn vec_inner(ty: &syn::Type) -> Option<&syn::Type> {
+    single_generic_arg(ty, "Vec")
+}
+
+/// The sole generic argument of a bare `name<T>` path type (e.g. `Option<T>`,
+/// `Vec<T>`), or `None` if `ty` doesn't syntactically match that shape (a
+/// different type, more than one generic argument, or a qualified path like
+/// `<X as Trait>::Option`).
+fn single_generic_arg<'a>(ty: &'a syn::Type, name: &str) -> Option<&'a syn::Type> {
     let syn::Type::Path(type_path) = ty else {
         return None;
     };
@@ -366,7 +580,7 @@ fn option_inner(ty: &syn::Type) -> Option<&syn::Type> {
         return None; // e.g. `<X as Trait>::Option`
     }
     let segment = type_path.path.segments.last()?;
-    if segment.ident != "Option" {
+    if segment.ident != name {
         return None;
     }
     let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {

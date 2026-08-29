@@ -4,15 +4,27 @@ use std::{fmt::Debug, str::FromStr};
 
 use crate::error::FieldError;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Store)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Store)]
 pub enum FieldValue<T: Debug + Clone + FromStr> {
-    #[default]
     Empty,
     Valid(T),
     Invalid {
         raw: String,
         error: FieldError,
     },
+}
+
+// Hand-written rather than `#[derive(Default)]`: the derive macro always adds
+// a blanket `T: Default` bound to a generic type's impl, even though the
+// `Empty` variant it defaults to carries no `T` at all — a well-known
+// limitation (rust-lang/rust#26925), not something specific to this type.
+// That spurious bound would rule out a `T` with no sensible "empty" value of
+// its own (e.g. `Ref<Source>` — a record reference has no default row to
+// point to), which is exactly the kind of type a field needs to support.
+impl<T: Debug + Clone + FromStr> Default for FieldValue<T> {
+    fn default() -> Self {
+        FieldValue::Empty
+    }
 }
 
 impl<T: Debug + Clone + FromStr> FieldValue<T> {
@@ -29,11 +41,26 @@ impl<T: Debug + Clone + FromStr> FieldValue<T> {
 ///
 /// `value` carries the emptiness, so `T` is always the field's *cleaned* type
 /// (`FormField<String>`, not `FormField<Option<String>>`).
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Store)]
+#[derive(Clone, Debug, Serialize, Deserialize, Store)]
 pub struct FormField<T: Debug + Clone + FromStr> {
     pub initial: Option<T>,
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
+}
+
+// Hand-written for the same reason as `FieldValue`'s: `#[derive(Default)]`
+// would add a spurious `T: Default` bound that a `Ref<Source>`-typed field
+// (no sensible default record to point to) could never satisfy, even though
+// nothing here actually needs one — `initial: None`, `value:
+// FieldValue::Empty`, and an empty `errors` are all buildable for any `T`.
+impl<T: Debug + Clone + FromStr> Default for FormField<T> {
+    fn default() -> Self {
+        Self {
+            initial: None,
+            value: FieldValue::default(),
+            errors: Vec::new(),
+        }
+    }
 }
 
 impl<T: Clone + Debug + FromStr> FormField<T> {

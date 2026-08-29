@@ -7,22 +7,21 @@ use darling::{
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 
-use crate::field_meta::FieldMeta;
+use crate::{
+    field_container_meta::FieldContainerMeta, field_meta::FieldMeta, field_set_meta::CommonMeta,
+};
 
 #[derive(Debug, FromDeriveInput)]
-#[darling(attributes(form), forward_attrs(serde), and_then = "Self::validate")]
+#[darling(attributes(form), and_then = "Self::validate")]
 pub(crate) struct FormMeta {
-    pub attrs: Vec<syn::Attribute>,
     pub ident: syn::Ident,
     pub vis: syn::Visibility,
     pub data: ast::Data<util::Ignored, FieldMeta>,
 
-    pub model: Option<syn::Ident>,
-    pub title: Option<String>,
+    #[darling(flatten)]
+    pub common: CommonMeta,
     #[darling(multiple, rename = "button")]
     pub buttons: Vec<SpannedValue<ButtonInfo>>,
-    pub form_validator: Option<syn::Path>,
-    pub label_case: Option<syn::Path>,
 }
 
 impl FormMeta {
@@ -56,10 +55,6 @@ impl FormMeta {
         Ok(self)
     }
 
-    pub fn state_struct_name(&self) -> syn::Ident {
-        format_ident!("{}{}", self.ident.to_string(), "State")
-    }
-
     pub fn handlers_struct_name(&self) -> syn::Ident {
         format_ident!("{}Handlers", self.ident)
     }
@@ -69,7 +64,8 @@ impl FormMeta {
     /// don't get their own `case` override — same casing source as fields, by
     /// design (see formoxus-roadmap memory).
     pub fn button_label_case(&self) -> syn::Path {
-        self.label_case
+        self.common
+            .label_case
             .clone()
             .unwrap_or_else(|| syn::parse_quote!(::formoxus::label_case::LabelCase::Title))
     }
@@ -136,6 +132,18 @@ impl FormMeta {
                 #( #tokens )*
             }
         }
+    }
+}
+
+impl FieldContainerMeta for FormMeta {
+    fn ident(&self) -> &syn::Ident {
+        &self.ident
+    }
+    fn vis(&self) -> &syn::Visibility {
+        &self.vis
+    }
+    fn common(&self) -> &CommonMeta {
+        &self.common
     }
 }
 

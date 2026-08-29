@@ -54,6 +54,10 @@ pub struct SampleFormHandlers {
 impl FormState for SampleFormState {
     type Model = SampleModel;
     type Handlers = SampleFormHandlers;
+    // No `#[form(component = ..., provided)]` field and no embedded `#[form(field_set)]`
+    // here, so there's nothing to provide — `#[derive(Form)]` would generate this
+    // same `()` for any form in that position.
+    type Providers = ();
 
     /// Clean the form: stamp field/form errors **in place**, and yield the model
     /// iff everything passed. Errors live on the fields/form, never in the return
@@ -97,7 +101,7 @@ impl FormState for SampleFormState {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    fn render(data: Store<Self>, handlers: Self::Handlers) -> Element
+    fn render(data: Store<Self>, handlers: Self::Handlers, _providers: Self::Providers) -> Element
     where
         Self: Sized + 'static,
     {
