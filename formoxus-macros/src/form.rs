@@ -56,7 +56,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
     // no separate Model to derive
     let trait_impls: Option<TokenStream2> = if form_meta.common.model.is_none() {
         let from_model_impl = container::from_model_impl(&form_meta, field_metas)?;
-        let form_state_impl = form_state_impl(&form_meta, field_metas, &providers_decl.providers_type)?;
+        let form_state_impl =
+            form_state_impl(&form_meta, field_metas, &providers_decl.providers_type)?;
 
         Some(quote! {
             #from_model_impl
@@ -85,10 +86,11 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 fn form_impl_for(form_meta: &impl FieldContainerMeta) -> Result<TokenStream2, MacroError> {
     let form_ident = &form_meta.ident();
     let state_ident = &form_meta.state_struct_name();
+    let (impl_generics, ty_generics, where_clause) = form_meta.generics().split_for_impl();
 
     Ok(quote! {
-        impl ::formoxus::form::Form for #form_ident {
-            type State = #state_ident;
+        impl #impl_generics ::formoxus::form::Form for #form_ident #ty_generics #where_clause {
+            type State = #state_ident #ty_generics;
         }
     })
 }
@@ -101,7 +103,19 @@ fn form_impl_for(form_meta: &impl FieldContainerMeta) -> Result<TokenStream2, Ma
 fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError> {
     let handlers_ident = form_meta.handlers_struct_name();
     let vis = &form_meta.vis;
-    let model_ident = form_meta.common.model.as_ref().unwrap_or(&form_meta.ident);
+    let (impl_generics, ty_generics, where_clause) = form_meta.generics.split_for_impl();
+    // `Handler<Model>` needs `Model` spelled out generics and all only when the
+    // model *is* the form itself (the common case, `form_meta.common.model ==
+    // None`) — a `#[form(model = ...)]` override names a concrete,
+    // independently-declared type that isn't parameterized by the form's own
+    // generics, so splicing `#ty_generics` onto it would be wrong.
+    let model_ty = match &form_meta.common.model {
+        Some(model_ident) => quote! { #model_ident },
+        None => {
+            let form_ident = &form_meta.ident;
+            quote! { #form_ident #ty_generics }
+        }
+    };
 
     let fields: Vec<TokenStream2> = form_meta
         .buttons
@@ -109,7 +123,7 @@ fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError
         .map(|b| {
             let name = &b.name;
             let field_ty = match b.handler_kind() {
-                HandlerKind::Validated => quote! { ::formoxus::form::Handler<#model_ident> },
+                HandlerKind::Validated => quote! { ::formoxus::form::Handler<#model_ty> },
                 HandlerKind::Unchecked => quote! { ::formoxus::form::UncheckedHandler },
             };
             quote! { pub #name: #field_ty }
@@ -117,7 +131,7 @@ fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError
         .collect();
 
     Ok(quote! {
-        #vis struct #handlers_ident {
+        #vis struct #handlers_ident #impl_generics #where_clause {
             #( #fields ),*
         }
     })
@@ -137,6 +151,7 @@ fn form_state_impl(
     let state_ident = form_meta.state_struct_name();
     let struct_ident = &form_meta.ident;
     let handlers_ident = form_meta.handlers_struct_name();
+    let (impl_generics, ty_generics, where_clause) = form_meta.generics.split_for_impl();
     let title = form_meta.common.title.clone().map(|t| {
         quote! {
             h2 { class: "form-title", #t },
@@ -156,12 +171,12 @@ fn form_state_impl(
     let button_tokens = form_meta.tokens_for_buttons();
 
     Ok(quote! {
-        impl ::formoxus::form::FormState for #state_ident {
-            type Model = #struct_ident;
-            type Handlers = #handlers_ident;
+        impl #impl_generics ::formoxus::form::FormState for #state_ident #ty_generics #where_clause {
+            type Model = #struct_ident #ty_generics;
+            type Handlers = #handlers_ident #ty_generics;
             type Providers = #providers_type;
 
-            fn validate(&mut self) -> Option<#struct_ident> {
+            fn validate(&mut self) -> Option<#struct_ident #ty_generics> {
                 #clear_all
 
                 #assign_to_vars;
@@ -175,7 +190,7 @@ fn form_state_impl(
 
             fn render(
                 data: ::formoxus::__private::dioxus::prelude::Store<Self>,
-                handlers: #handlers_ident,
+                handlers: #handlers_ident #ty_generics,
                 providers: #providers_type,
             ) -> ::formoxus::__private::dioxus::prelude::Element {
                 #[allow(unused_imports)]

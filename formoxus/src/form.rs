@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -5,6 +6,7 @@ use std::rc::Rc;
 use dioxus::core::Element;
 use dioxus::prelude::{UnsyncStorage, Writable, WritableExt, use_store};
 use dioxus::stores::Store;
+use serde::{Deserialize, Serialize};
 
 use crate::error::FormError;
 
@@ -66,7 +68,18 @@ pub trait FormStoreExt {
     type Handlers;
     type Providers;
     fn validate(&self) -> Option<Self::Model>;
-    fn render(&self, handlers: Self::Handlers, providers: Self::Providers) -> Element;
+    /// The common case: no `#[form(component = ..., provided)]` field and no
+    /// embedded `#[form(field_set)]` that needs one, so `Providers = ()` (or
+    /// some other `Default`-able type) and there's nothing to supply. Use
+    /// [`render_with_providers`](Self::render_with_providers) when there is.
+    fn render(&self, handlers: Self::Handlers) -> Element
+    where
+        Self::Providers: Default;
+    fn render_with_providers(
+        &self,
+        handlers: Self::Handlers,
+        providers: Self::Providers,
+    ) -> Element;
 }
 
 impl<S: FormState + 'static> FormStoreExt for Store<S> {
@@ -81,7 +94,18 @@ impl<S: FormState + 'static> FormStoreExt for Store<S> {
         store.write().validate()
     }
 
-    fn render(&self, handlers: Self::Handlers, providers: Self::Providers) -> Element {
+    fn render(&self, handlers: Self::Handlers) -> Element
+    where
+        Self::Providers: Default,
+    {
+        self.render_with_providers(handlers, Default::default())
+    }
+
+    fn render_with_providers(
+        &self,
+        handlers: Self::Handlers,
+        providers: Self::Providers,
+    ) -> Element {
         S::render(*self, handlers, providers)
     }
 }
@@ -90,8 +114,8 @@ pub trait Form: std::fmt::Debug {
     type State: FormState + Default + Clone + std::fmt::Debug + 'static;
 }
 
-pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + std::fmt::Debug {
-    type Model: std::fmt::Debug;
+pub trait FormState: FromModel<Self::Model> + ValidateForm<Self::Model> + Debug {
+    type Model: Debug;
     /// The per-form `…Handlers` struct the derive generates: one field per
     /// `#[form(button(...))]`, each a [`Handler<Self::Model>`] or an
     /// [`UncheckedHandler`] depending on that button's resolved `HandlerKind`.
@@ -121,8 +145,14 @@ pub trait ValidateForm<Model> {
 /// on a plain declaration struct, embeddable as a field inside a `Form` or
 /// another `FieldSet` (e.g. `name`/`source`/tags shared by every question kind).
 /// Mirrors [`Form`] minus everything button-related.
-pub trait FieldSet: std::fmt::Debug {
-    type State: FieldSetState + Default + Clone + std::fmt::Debug + 'static;
+pub trait FieldSet: Clone + Debug + 'static {
+    type State: FieldSetState
+        + Default
+        + Clone
+        + Debug
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + 'static;
 }
 
 /// Mirrors [`FormState`] minus `Handlers` — a `FieldSet` has nothing to click,
@@ -135,7 +165,7 @@ pub trait FieldSetState:
     /// Mirrors [`FormState::Providers`] — a `FieldSet` has no buttons but can
     /// still have provided-data fields (or embed another `FieldSet` that does),
     /// so it needs the same slot.
-    type Providers;
+    type Providers: Clone;
     fn validate(&mut self) -> Option<Self::Model>;
     fn has_errors(&self) -> bool;
     /// Generic over the store's lens, not just `Store<Self>` (= `Store<Self,
@@ -161,7 +191,13 @@ pub trait FieldSetStoreExt {
     type Model;
     type Providers;
     fn validate(&self) -> Option<Self::Model>;
-    fn render(&self, providers: Self::Providers) -> Element;
+    /// See [`FormStoreExt::render`] — same "the common case needs nothing"
+    /// reasoning, [`render_with_providers`](Self::render_with_providers) for
+    /// when it does.
+    fn render(&self) -> Element
+    where
+        Self::Providers: Default;
+    fn render_with_providers(&self, providers: Self::Providers) -> Element;
 }
 
 impl<S: FieldSetState + 'static> FieldSetStoreExt for Store<S> {
@@ -173,7 +209,14 @@ impl<S: FieldSetState + 'static> FieldSetStoreExt for Store<S> {
         store.write().validate()
     }
 
-    fn render(&self, providers: Self::Providers) -> Element {
+    fn render(&self) -> Element
+    where
+        Self::Providers: Default,
+    {
+        self.render_with_providers(Default::default())
+    }
+
+    fn render_with_providers(&self, providers: Self::Providers) -> Element {
         S::render(*self, providers)
     }
 }

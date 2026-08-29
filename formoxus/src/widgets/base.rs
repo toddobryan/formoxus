@@ -34,7 +34,11 @@ pub trait FieldWidget<T: Clone + Debug + FromStr + 'static> {
 /// site — see [`crate::form::Provider`].
 pub trait ProvidedWidget<T: Clone + Debug + FromStr + 'static> {
     type Choices: 'static;
-    fn render(field: Store<FormField<T>>, props: FieldProps, provide: Provider<Self::Choices>) -> Element;
+    fn render(
+        field: Store<FormField<T>>,
+        props: FieldProps,
+        provide: Provider<Self::Choices>,
+    ) -> Element;
 }
 
 /// The default widget for a field value type — "the default widget per kind".

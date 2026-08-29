@@ -81,10 +81,11 @@ fn field_set_impl_for(
 ) -> Result<TokenStream2, MacroError> {
     let field_set_ident = &field_set_meta.ident();
     let state_ident = &field_set_meta.state_struct_name();
+    let (impl_generics, ty_generics, where_clause) = field_set_meta.generics().split_for_impl();
 
     Ok(quote! {
-        impl ::formoxus::form::FieldSet for #field_set_ident {
-            type State = #state_ident;
+        impl #impl_generics ::formoxus::form::FieldSet for #field_set_ident #ty_generics #where_clause {
+            type State = #state_ident #ty_generics;
         }
     })
 }
@@ -101,6 +102,7 @@ fn field_set_state_impl(
 ) -> Result<TokenStream2, MacroError> {
     let state_ident = field_set_meta.state_struct_name();
     let struct_ident = &field_set_meta.ident;
+    let (impl_generics, ty_generics, where_clause) = field_set_meta.generics().split_for_impl();
     let title = field_set_meta.common.title.clone().map(|t| {
         quote! {
             h2 { class: "form-title", #t },
@@ -117,11 +119,11 @@ fn field_set_state_impl(
     } = container::state_fragments(field_set_meta, field_metas)?;
 
     Ok(quote! {
-        impl ::formoxus::form::FieldSetState for #state_ident {
-            type Model = #struct_ident;
+        impl #impl_generics ::formoxus::form::FieldSetState for #state_ident #ty_generics #where_clause {
+            type Model = #struct_ident #ty_generics ;
             type Providers = #providers_type;
 
-            fn validate(&mut self) -> Option<#struct_ident> {
+            fn validate(&mut self) -> Option<#struct_ident #ty_generics> {
                 #clear_all
 
                 #assign_to_vars;

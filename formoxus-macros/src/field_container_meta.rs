@@ -14,4 +14,6 @@ pub(crate) trait FieldContainerMeta {
     fn providers_struct_name(&self) -> syn::Ident {
         format_ident!("{}Providers", self.ident())
     }
+
+    fn generics(&self) -> &syn::Generics;
 }

@@ -22,8 +22,10 @@ pub(crate) fn state_struct(
 ) -> Result<TokenStream2, MacroError> {
     let state_struct_name = container.state_struct_name();
     let vis = container.vis();
+    let (impl_generics, ty_generics, where_clause) = container.generics().split_for_impl();
 
     let field_entries: Vec<TokenStream2> = field_metas.iter().map(|fm| fm.to_decl()).collect();
+    let field_idents: Vec<&syn::Ident> = field_metas.iter().map(|fm| fm.field_ident()).collect();
 
     Ok(quote! {
         // Bring `dioxus_stores` into scope for the `Store` derive's bare paths
@@ -32,18 +34,38 @@ pub(crate) fn state_struct(
         #[allow(unused_imports)]
         use ::formoxus::__private::store_scope::*;
 
+        // No `#[derive(Default)]`: for a generic container, it blanket-adds a
+        // `T: Default` bound to the whole impl regardless of whether `T` is
+        // actually used directly (rust-lang/rust#26925 — the same limitation
+        // `fields.rs` already works around for `FieldValue<T>`/`FormField<T>`).
+        // A field_set-typed field here is `<T as FieldSet>::State`, whose own
+        // `Default` is already guaranteed by `FieldSet::State`'s bound — no
+        // `T: Default` needed at all, so hand-writing it instead of deriving
+        // avoids demanding a bound nothing here actually requires. (`Clone`/
+        // `Debug`/`Serialize`/`Deserialize` don't have this problem: their
+        // derives bound the field's own syntactic type rather than blanket-
+        // bounding every generic parameter, so `<T as FieldSet>::State: Trait`
+        // — already guaranteed — is all they ask for.)
         #[derive(
             Clone,
             Debug,
-            Default,
             ::serde::Serialize,
             ::serde::Deserialize,
             ::formoxus::__private::dioxus::prelude::Store,
         )]
-        #vis struct #state_struct_name {
+        #vis struct #state_struct_name #impl_generics #where_clause {
             #( #field_entries, )*
 
             pub errors: Vec<::formoxus::error::FormError>
+        }
+
+        impl #impl_generics ::std::default::Default for #state_struct_name #ty_generics #where_clause {
+            fn default() -> Self {
+                Self {
+                    #( #field_idents: ::std::default::Default::default(), )*
+                    errors: ::std::vec::Vec::new(),
+                }
+            }
         }
     })
 }
@@ -76,10 +98,11 @@ pub(crate) fn providers_decl(
     }
 
     let providers_ident = container.providers_struct_name();
+    let (impl_generics, ty_generics, where_clause) = container.generics().split_for_impl();
     let vis = container.vis();
 
     ProvidersDecl {
-        providers_type: quote! { #providers_ident },
+        providers_type: quote! { #providers_ident #ty_generics },
         // No `Debug`: a `Provider<C>` is an `Rc<dyn Fn() -> ...>`, and trait-object
         // `Fn`/`Future`s aren't `Debug` — same reason the generated `...Handlers`
         // struct derives nothing at all. `Clone` still works (`Rc` is `Clone`
@@ -87,7 +110,7 @@ pub(crate) fn providers_decl(
         // `render_call` can share one provider slot across every row.
         struct_decl: Some(quote! {
             #[derive(Clone)]
-            #vis struct #providers_ident {
+            #vis struct #providers_ident #impl_generics #where_clause {
                 #( #slots ),*
             }
         }),
@@ -103,12 +126,13 @@ pub(crate) fn from_model_impl(
     assert!(container.common().model.is_none());
     let model_ident = container.ident();
     let state_ident = container.state_struct_name();
+    let (impl_generics, ty_generics, where_clause) = container.generics().split_for_impl();
     let field_initializers = field_metas.field_initializers();
 
     Ok(quote! {
-        impl ::formoxus::form::FromModel<#model_ident> for #state_ident {
-            fn from_model(model: &#model_ident) -> Self {
-                #state_ident {
+        impl #impl_generics ::formoxus::form::FromModel<#model_ident #ty_generics> for #state_ident #ty_generics #where_clause {
+            fn from_model(model: &#model_ident #ty_generics) -> Self {
+                Self {
                     #field_initializers,
                     errors: Vec::new(),
                 }
@@ -123,20 +147,27 @@ pub(crate) fn from_model_impl(
 pub(crate) fn validate_form_impl(
     container: &impl FieldContainerMeta,
 ) -> Result<TokenStream2, MacroError> {
-    let model_ident = container
-        .common()
-        .model
-        .as_ref()
-        .unwrap_or(container.ident());
     let state_ident = container.state_struct_name();
+    let (impl_generics, ty_generics, where_clause) = container.generics().split_for_impl();
+    // Same reasoning as `form_handlers_struct`'s `model_ty`: a `#[form(model =
+    // ...)]` override names a concrete, independently-declared type that isn't
+    // parameterized by the container's own generics, so `#ty_generics` only
+    // belongs on `model_ident` when the model *is* the container itself.
+    let model_ty = match &container.common().model {
+        Some(model_ident) => quote! { #model_ident },
+        None => {
+            let container_ident = container.ident();
+            quote! { #container_ident #ty_generics }
+        }
+    };
     let func = match &container.common().validator {
         Some(fn_path) => quote! { #fn_path(model) },
         None => quote! { Vec::new() },
     };
 
     Ok(quote! {
-        impl ::formoxus::form::ValidateForm<#model_ident> for #state_ident {
-            fn validate_form(&self, model: &#model_ident) -> Vec<::formoxus::error::FormError> {
+        impl #impl_generics ::formoxus::form::ValidateForm<#model_ty> for #state_ident #ty_generics #where_clause {
+            fn validate_form(&self, model: &#model_ty) -> Vec<::formoxus::error::FormError> {
                 #func
             }
         }

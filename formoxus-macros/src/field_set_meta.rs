@@ -17,6 +17,7 @@ pub(crate) struct FieldSetMeta {
     pub ident: syn::Ident,
     pub vis: syn::Visibility,
     pub data: ast::Data<util::Ignored, FieldMeta>,
+    pub generics: syn::Generics,
 
     #[darling(flatten)]
     pub common: CommonMeta,
@@ -38,5 +39,8 @@ impl FieldContainerMeta for FieldSetMeta {
     }
     fn common(&self) -> &CommonMeta {
         &self.common
+    }
+    fn generics(&self) -> &syn::Generics {
+        &self.generics
     }
 }

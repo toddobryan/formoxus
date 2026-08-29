@@ -9,7 +9,7 @@
 use formoxus::prelude::*;
 use googletest::prelude::*;
 
-#[derive(FieldSet, Debug)]
+#[derive(FieldSet, Clone, Debug)]
 #[allow(dead_code)]
 pub struct DummyFieldSet {
     name: String,

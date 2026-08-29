@@ -8,10 +8,7 @@ use crate::error::FieldError;
 pub enum FieldValue<T: Debug + Clone + FromStr> {
     Empty,
     Valid(T),
-    Invalid {
-        raw: String,
-        error: FieldError,
-    },
+    Invalid { raw: String, error: FieldError },
 }
 
 // Hand-written rather than `#[derive(Default)]`: the derive macro always adds
