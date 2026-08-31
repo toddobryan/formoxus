@@ -5,7 +5,11 @@ use crate::field_meta::FieldMeta;
 
 #[derive(Debug, FromMeta)]
 pub(crate) struct CommonMeta {
-    pub model: Option<syn::Ident>,
+    // `syn::Path`, not `syn::Ident`: a `#[form(model = QuestionData::TrueFalse)]`
+    // needs to name a specific enum variant, not just a bare type — every use
+    // site below just splices this into `quote!` (`#model_path`), which works
+    // identically for a `Path` as it did for an `Ident`.
+    pub model: Option<syn::Path>,
     pub title: Option<String>,
     pub validator: Option<syn::Path>,
     pub label_case: Option<syn::Path>,

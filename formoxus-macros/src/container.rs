@@ -117,21 +117,41 @@ pub(crate) fn providers_decl(
     }
 }
 
-/// `FromModel<Model>` for the container's own struct as its Model (the
-/// `#[form(model = ...)]`-absent case) — type-driven field seeding.
+/// `FromModel<Model>` — type-driven field seeding. `field_initializers`
+/// reads fields directly off a local binding named `model` shaped like the
+/// container's own declaration struct (`Self`'s fields ARE these field
+/// names). In the common case `Model` already *is* Self, so `model` needs no
+/// adjustment. With a `#[form(model = ...)]` override, `Model`'s fields don't
+/// necessarily line up at all — `model` is first reseated to a `Self`-shaped
+/// value via `Self: From<Model>` (the app author's job to implement; a
+/// missing impl surfaces as a compile error naming exactly that), requiring
+/// `Model: Clone` to get an owned value out of the `&Model` this fn receives.
 pub(crate) fn from_model_impl(
     container: &impl FieldContainerMeta,
     field_metas: &[FieldMeta],
 ) -> Result<TokenStream2, MacroError> {
-    assert!(container.common().model.is_none());
-    let model_ident = container.ident();
+    let self_ident = container.ident();
     let state_ident = container.state_struct_name();
     let (impl_generics, ty_generics, where_clause) = container.generics().split_for_impl();
     let field_initializers = field_metas.field_initializers();
 
+    let model_ty = match &container.common().model {
+        Some(model_path) => quote! { #model_path },
+        None => quote! { #self_ident #ty_generics },
+    };
+    let reseat_as_self = if container.common().model.is_some() {
+        quote! {
+            let model: #self_ident #ty_generics =
+                ::std::convert::From::from(::std::clone::Clone::clone(model));
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
-        impl #impl_generics ::formoxus::form::FromModel<#model_ident #ty_generics> for #state_ident #ty_generics #where_clause {
-            fn from_model(model: &#model_ident #ty_generics) -> Self {
+        impl #impl_generics ::formoxus::form::FromModel<#model_ty> for #state_ident #ty_generics #where_clause {
+            fn from_model(model: &#model_ty) -> Self {
+                #reseat_as_self
                 Self {
                     #field_initializers,
                     errors: Vec::new(),
@@ -152,9 +172,9 @@ pub(crate) fn validate_form_impl(
     // Same reasoning as `form_handlers_struct`'s `model_ty`: a `#[form(model =
     // ...)]` override names a concrete, independently-declared type that isn't
     // parameterized by the container's own generics, so `#ty_generics` only
-    // belongs on `model_ident` when the model *is* the container itself.
+    // belongs on the container's own name when the model *is* the container itself.
     let model_ty = match &container.common().model {
-        Some(model_ident) => quote! { #model_ident },
+        Some(model_path) => quote! { #model_path },
         None => {
             let container_ident = container.ident();
             quote! { #container_ident #ty_generics }
@@ -190,12 +210,11 @@ pub(crate) fn state_fragments(
     container: &impl FieldContainerMeta,
     field_metas: &[FieldMeta],
 ) -> Result<StateFragments, MacroError> {
-    assert!(container.common().model.is_none());
     Ok(StateFragments {
         clear_all: field_metas.clear()?,
         assign_to_vars: field_metas.assign_to_vars()?,
         let_required_fields: field_metas.let_required_fields()?,
-        validate_model: field_metas.validate_model(container.ident())?,
+        validate_model: field_metas.validate_model(container)?,
         render_calls: field_metas.render_calls(container),
         has_errors: field_metas.has_errors()?,
     })

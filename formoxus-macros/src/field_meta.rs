@@ -243,7 +243,7 @@ pub(crate) trait FieldMetas {
     fn clear(&self) -> Result<TokenStream2, MacroError>;
     fn assign_to_vars(&self) -> Result<TokenStream2, MacroError>;
     fn let_required_fields(&self) -> Result<TokenStream2, MacroError>;
-    fn validate_model(&self, model_ident: &syn::Ident) -> Result<TokenStream2, MacroError>;
+    fn validate_model(&self, container: &impl FieldContainerMeta) -> Result<TokenStream2, MacroError>;
     fn field_initializers(&self) -> TokenStream2;
     fn has_errors(&self) -> Result<TokenStream2, MacroError>;
     fn render_calls(&self, container: &impl FieldContainerMeta) -> Vec<TokenStream2>;
@@ -331,10 +331,23 @@ impl FieldMetas for [FieldMeta] {
         })
     }
 
-    fn validate_model(&self, model_ident: &syn::Ident) -> Result<TokenStream2, MacroError> {
+    fn validate_model(&self, container: &impl FieldContainerMeta) -> Result<TokenStream2, MacroError> {
+        let self_ident = container.ident();
         let fields: Vec<&syn::Ident> = self.iter().map(|f| f.field_ident()).collect();
+        // `model` is always built as `Self` first, by name — that always
+        // matches (Self's fields ARE these field names), override or not.
+        // Only when `#[form(model = ...)]` names something else does it then
+        // get converted via `.into()`, which requires the app to have
+        // written `impl From<Self> for Model` — a compile error names the
+        // missing conversion if they haven't.
+        let convert_to_model = if container.common().model.is_some() {
+            quote! { let model = ::std::convert::Into::into(model); }
+        } else {
+            quote! {}
+        };
         Ok(quote! {
-            let model = #model_ident { #( #fields ),* };
+            let model = #self_ident { #( #fields ),* };
+            #convert_to_model
             // Cross-field errors land on `self.errors` FIRST so the gate below sees
             // them; then one `has_errors()` gate covers form-level errors, a field-level
             // `Invalid` (the optional-invalid case, which still builds the model), and

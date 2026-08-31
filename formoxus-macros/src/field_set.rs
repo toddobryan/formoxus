@@ -48,20 +48,9 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     let validate_form_impl = container::validate_form_impl(&field_set_meta)?;
 
-    // no separate Model to derive
-    let trait_impls: Option<TokenStream2> = if field_set_meta.common.model.is_none() {
-        let from_model_impl = container::from_model_impl(&field_set_meta, field_metas)?;
-        let field_set_state_impl =
-            field_set_state_impl(&field_set_meta, field_metas, &providers_decl.providers_type)?;
-
-        Some(quote! {
-            #from_model_impl
-
-            #field_set_state_impl
-        })
-    } else {
-        None
-    };
+    let from_model_impl = container::from_model_impl(&field_set_meta, field_metas)?;
+    let field_set_state_impl =
+        field_set_state_impl(&field_set_meta, field_metas, &providers_decl.providers_type)?;
 
     Ok(quote! {
         #field_set_impl
@@ -72,7 +61,9 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
         #validate_form_impl
 
-        #trait_impls
+        #from_model_impl
+
+        #field_set_state_impl
     })
 }
 
@@ -103,6 +94,10 @@ fn field_set_state_impl(
     let state_ident = field_set_meta.state_struct_name();
     let struct_ident = &field_set_meta.ident;
     let (impl_generics, ty_generics, where_clause) = field_set_meta.generics().split_for_impl();
+    let model_ty = match &field_set_meta.common.model {
+        Some(model_path) => quote! { #model_path },
+        None => quote! { #struct_ident #ty_generics },
+    };
     let title = field_set_meta.common.title.clone().map(|t| {
         quote! {
             h2 { class: "form-title", #t },
@@ -120,10 +115,10 @@ fn field_set_state_impl(
 
     Ok(quote! {
         impl #impl_generics ::formoxus::form::FieldSetState for #state_ident #ty_generics #where_clause {
-            type Model = #struct_ident #ty_generics ;
+            type Model = #model_ty;
             type Providers = #providers_type;
 
-            fn validate(&mut self) -> Option<#struct_ident #ty_generics> {
+            fn validate(&mut self) -> Option<#model_ty> {
                 #clear_all
 
                 #assign_to_vars;

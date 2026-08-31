@@ -53,20 +53,8 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
     let validate_form_impl = container::validate_form_impl(&form_meta)?;
 
-    // no separate Model to derive
-    let trait_impls: Option<TokenStream2> = if form_meta.common.model.is_none() {
-        let from_model_impl = container::from_model_impl(&form_meta, field_metas)?;
-        let form_state_impl =
-            form_state_impl(&form_meta, field_metas, &providers_decl.providers_type)?;
-
-        Some(quote! {
-            #from_model_impl
-
-            #form_state_impl
-        })
-    } else {
-        None
-    };
+    let from_model_impl = container::from_model_impl(&form_meta, field_metas)?;
+    let form_state_impl = form_state_impl(&form_meta, field_metas, &providers_decl.providers_type)?;
 
     Ok(quote! {
         #form_impl
@@ -79,7 +67,9 @@ fn derive_inner(tokens: TokenStream2) -> Result<TokenStream2, MacroError> {
 
         #validate_form_impl
 
-        #trait_impls
+        #from_model_impl
+
+        #form_state_impl
     })
 }
 
@@ -110,7 +100,7 @@ fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError
     // independently-declared type that isn't parameterized by the form's own
     // generics, so splicing `#ty_generics` onto it would be wrong.
     let model_ty = match &form_meta.common.model {
-        Some(model_ident) => quote! { #model_ident },
+        Some(model_path) => quote! { #model_path },
         None => {
             let form_ident = &form_meta.ident;
             quote! { #form_ident #ty_generics }
@@ -130,9 +120,24 @@ fn form_handlers_struct(form_meta: &FormMeta) -> Result<TokenStream2, MacroError
         })
         .collect();
 
-    Ok(quote! {
-        #vis struct #handlers_ident #impl_generics #where_clause {
-            #( #fields ),*
+    // The struct only needs the container's own generics when a button's
+    // `Handler<Model>` actually mentions them — i.e. when there's no
+    // `#[form(model = ...)]` override, so `Model` is `Self` (generic if the
+    // container is). A model override names a fixed, independently-declared
+    // type none of these fields reference at all — declaring the struct
+    // generic anyway would leave `T` unused (E0392), and there's no ergonomic
+    // way to make callers fill in a `PhantomData` field they'd never expect.
+    Ok(if form_meta.common.model.is_none() {
+        quote! {
+            #vis struct #handlers_ident #impl_generics #where_clause {
+                #( #fields ),*
+            }
+        }
+    } else {
+        quote! {
+            #vis struct #handlers_ident {
+                #( #fields ),*
+            }
         }
     })
 }
@@ -152,6 +157,17 @@ fn form_state_impl(
     let struct_ident = &form_meta.ident;
     let handlers_ident = form_meta.handlers_struct_name();
     let (impl_generics, ty_generics, where_clause) = form_meta.generics.split_for_impl();
+    let model_ty = match &form_meta.common.model {
+        Some(model_path) => quote! { #model_path },
+        None => quote! { #struct_ident #ty_generics },
+    };
+    // Mirrors `form_handlers_struct`'s own condition: the struct it declared
+    // is only generic when there's no model override.
+    let handlers_ty = if form_meta.common.model.is_none() {
+        quote! { #handlers_ident #ty_generics }
+    } else {
+        quote! { #handlers_ident }
+    };
     let title = form_meta.common.title.clone().map(|t| {
         quote! {
             h2 { class: "form-title", #t },
@@ -172,11 +188,11 @@ fn form_state_impl(
 
     Ok(quote! {
         impl #impl_generics ::formoxus::form::FormState for #state_ident #ty_generics #where_clause {
-            type Model = #struct_ident #ty_generics;
-            type Handlers = #handlers_ident #ty_generics;
+            type Model = #model_ty;
+            type Handlers = #handlers_ty;
             type Providers = #providers_type;
 
-            fn validate(&mut self) -> Option<#struct_ident #ty_generics> {
+            fn validate(&mut self) -> Option<#model_ty> {
                 #clear_all
 
                 #assign_to_vars;
@@ -190,7 +206,7 @@ fn form_state_impl(
 
             fn render(
                 data: ::formoxus::__private::dioxus::prelude::Store<Self>,
-                handlers: #handlers_ident #ty_generics,
+                handlers: #handlers_ty,
                 providers: #providers_type,
             ) -> ::formoxus::__private::dioxus::prelude::Element {
                 #[allow(unused_imports)]
