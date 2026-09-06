@@ -7,6 +7,7 @@ use crate::reflect::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
+use googletest::prelude::*;
 
 /// One signal per leaf input, keyed by qualified path.
 ///
@@ -63,7 +64,7 @@ fn EventFormView() -> Element {
 /// hands the whole form back and we shuffle it into a `Form<T>` once.
 #[component]
 fn UncontrolledEventForm() -> Element {
-    let form = use_hook(|| empty_form::<EventForCreate>());
+    let form = use_hook(empty_form::<EventForCreate>);
     let leaves = form.leaves();
 
     rsx! {
@@ -91,20 +92,17 @@ fn UncontrolledEventForm() -> Element {
     }
 }
 
-#[test]
+#[gtest]
 fn uncontrolled_inputs_are_named_by_qualified_path() {
     // `FormData::values()` keys off the `name` attribute, so these names
     // are the entire contract between the DOM and `apply_form_values`.
     let html = render_to_html(UncontrolledEventForm);
     for path in ["title", "location.street", "location.city", "location.zip"] {
-        assert!(
-            html.contains(&format!(r#"name="{path}""#)),
-            "expected an input named {path} in:\n{html}"
-        );
+        expect_that!(html, contains_substring(format!(r#"name="{path}""#)));
     }
 }
 
-#[test]
+#[gtest]
 fn submitted_values_shuffle_into_a_model() {
     // Exactly the shape `FormData::values()` produces, minus the DOM.
     let submitted = vec![
@@ -117,16 +115,16 @@ fn submitted_values_shuffle_into_a_model() {
     let mut form = empty_form::<EventForCreate>();
     form.apply_form_values(&submitted);
 
-    assert_eq!(
+    expect_that!(
         form.validate(),
-        Some(EventForCreate {
+        some(eq(&EventForCreate {
             title: "Board Game Night".to_string(),
             location: ModelLocation {
                 street: "123 Main St".to_string(),
                 city: "Springfield".to_string(),
                 zip: "12345".to_string(),
             },
-        })
+        }))
     );
 }
 
@@ -136,29 +134,20 @@ fn render_to_html(app: fn() -> Element) -> String {
     dioxus_ssr::render(&dom)
 }
 
-#[test]
+#[gtest]
 fn component_mints_one_signal_per_leaf() {
     let html = render_to_html(EventFormView);
 
     // Nested paths are qualified, so `location.street` can't collide with
     // a top-level `street` in some other field set.
     for path in ["title", "location.street", "location.city", "location.zip"] {
-        assert!(
-            html.contains(&format!(r#"name="{path}""#)),
-            "expected an input named {path} in:\n{html}"
-        );
+        expect_that!(html, contains_substring(format!(r#"name="{path}""#)));
     }
 }
 
-#[test]
+#[gtest]
 fn signals_are_populated_from_the_model() {
     let html = render_to_html(EventFormView);
-    assert!(
-        html.contains("Board Game Night"),
-        "expected the populated title in:\n{html}"
-    );
-    assert!(
-        html.contains("123 Main St"),
-        "expected the populated street in:\n{html}"
-    );
+    expect_that!(html, contains_substring("Board Game Night"));
+    expect_that!(html, contains_substring("123 Main St"));
 }

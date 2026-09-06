@@ -3,6 +3,7 @@
 use crate::reflect::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
+use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Optional {
@@ -25,17 +26,17 @@ where
     reloaded.validate()
 }
 
-#[test]
+#[gtest]
 fn populating_some_empty_collapses_to_none() {
     // Regression: populating used to keep `Valid("")` here, so this returned
     // `Some("")` while the DOM path returned `None` for the same model.
     let mut form = form_for(&Optional {
         body: Some(String::new()),
     });
-    assert_eq!(form.validate(), Some(Optional { body: None }));
+    expect_that!(form.validate(), some(eq(&Optional { body: None })));
 }
 
-#[test]
+#[gtest]
 fn some_empty_agrees_on_both_paths() {
     let value = Optional {
         body: Some(String::new()),
@@ -44,11 +45,11 @@ fn some_empty_agrees_on_both_paths() {
     let populated = form_for(&value).validate();
     let dom = through_the_dom(&form, empty_form::<Optional>());
 
-    assert_eq!(populated, dom);
-    assert_eq!(populated, Some(Optional { body: None }));
+    expect_that!(populated, eq(&dom));
+    expect_that!(populated, some(eq(&Optional { body: None })));
 }
 
-#[test]
+#[gtest]
 fn a_required_empty_string_fails_on_both_paths() {
     // The genuine cost of the rule, made explicit: a model holding `""` in a
     // required field can't round-trip. That's HTML5's constraint, not ours —
@@ -61,11 +62,11 @@ fn a_required_empty_string_fails_on_both_paths() {
     let populated = form_for(&value).validate();
     let dom = through_the_dom(&form, empty_form::<Required>());
 
-    assert_eq!(populated, None);
-    assert_eq!(dom, None);
+    expect_that!(populated, none());
+    expect_that!(dom, none());
 }
 
-#[test]
+#[gtest]
 fn none_and_some_empty_are_indistinguishable() {
     // Both directions of the same coin: populating with `None` and `Some("")`
     // produce the same form, so nothing downstream can tell them apart.
@@ -73,10 +74,10 @@ fn none_and_some_empty_are_indistinguishable() {
     let from_empty = form_for(&Optional {
         body: Some(String::new()),
     });
-    assert_eq!(from_none.leaves(), from_empty.leaves());
+    expect_that!(from_none.leaves(), eq(&from_empty.leaves()));
 }
 
-#[test]
+#[gtest]
 fn non_empty_strings_are_untouched() {
     // Guard on the collapse: it must catch `""` and nothing else. A string of
     // spaces is a real value — trimming is a validator's job, not populating's.
@@ -84,16 +85,16 @@ fn non_empty_strings_are_untouched() {
         body: Some("   ".to_string()),
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 
     let value = Required {
         body: "hello".to_string(),
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn zero_valued_scalars_are_not_empty() {
     // The collapse keys on the *display* string, so it must not swallow
     // falsy-looking numbers and bools — `0`/`0.0`/`false` all render
@@ -111,5 +112,5 @@ fn zero_valued_scalars_are_not_empty() {
         flag: false,
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }

@@ -4,6 +4,7 @@ use crate::reflect::*;
 use facet::Facet;
 use std::collections::HashMap;
 use super::models::{Location, Shape};
+use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Quiz {
@@ -50,13 +51,13 @@ fn venues() -> Venues {
     }
 }
 
-#[test]
+#[gtest]
 fn scalar_rows_round_trip() {
     let mut form = form_for(&quiz());
-    assert_eq!(form.validate(), Some(quiz()));
+    expect_that!(form.validate(), some(eq(&quiz())));
 }
 
-#[test]
+#[gtest]
 fn an_empty_list_round_trips() {
     // `init_list` with no `begin_list_item` at all — the degenerate case
     // that would quietly pass even if populating were broken, which is why it
@@ -66,49 +67,49 @@ fn an_empty_list_round_trips() {
         answers: Vec::new(),
     };
     let mut form = form_for(&empty);
-    assert_eq!(form.validate(), Some(empty));
+    expect_that!(form.validate(), some(eq(&empty)));
 }
 
-#[test]
+#[gtest]
 fn struct_rows_round_trip() {
     // The case that proves the `write_value_into` split: a row is a
     // `FieldSet`, so this nests `begin_list_item` → `begin_field` per struct
     // field. Confusing the two halves fails exactly here.
     let mut form = form_for(&venues());
-    assert_eq!(form.validate(), Some(venues()));
+    expect_that!(form.validate(), some(eq(&venues())));
 }
 
-#[test]
+#[gtest]
 fn rows_are_named_by_index() {
     let form = form_for(&quiz());
-    assert_eq!(
+    expect_that!(
         form.leaves(),
-        vec![
+        eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
             ("answers.0".to_string(), "alpha".to_string()),
             ("answers.1".to_string(), "beta".to_string()),
-        ]
+        ])
     );
 }
 
-#[test]
+#[gtest]
 fn struct_rows_qualify_through_their_index() {
     let form = form_for(&venues());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    assert_eq!(
+    expect_that!(
         paths,
-        vec![
-            "places.0.street",
-            "places.0.city",
-            "places.0.zip",
-            "places.1.street",
-            "places.1.city",
-            "places.1.zip",
+        elements_are![
+            eq("places.0.street"),
+            eq("places.0.city"),
+            eq("places.0.zip"),
+            eq("places.1.street"),
+            eq("places.1.city"),
+            eq("places.1.zip"),
         ]
     );
 }
 
-#[test]
+#[gtest]
 fn nested_lists_nest_their_indices() {
     let grid = Grid {
         rows: vec![
@@ -118,13 +119,13 @@ fn nested_lists_nest_their_indices() {
     };
     let form = form_for(&grid);
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    assert_eq!(paths, vec!["rows.0.0", "rows.0.1", "rows.1.0"]);
+    expect_that!(paths, elements_are![eq("rows.0.0"), eq("rows.0.1"), eq("rows.1.0")]);
 
     let mut form = form;
-    assert_eq!(form.validate(), Some(grid));
+    expect_that!(form.validate(), some(eq(&grid)));
 }
 
-#[test]
+#[gtest]
 fn enum_rows_are_pinned_by_the_value() {
     // Populating pins each row's variant independently — row 0 and row 1 are
     // different variants of the same enum, and neither needed a choice from
@@ -140,16 +141,16 @@ fn enum_rows_are_pinned_by_the_value() {
     };
     let form = form_for(&drawings);
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    assert_eq!(
+    expect_that!(
         paths,
-        vec!["shapes.0.radius", "shapes.1.width", "shapes.1.height"]
+        elements_are![eq("shapes.0.radius"), eq("shapes.1.width"), eq("shapes.1.height")]
     );
 
     let mut form = form;
-    assert_eq!(form.validate(), Some(drawings));
+    expect_that!(form.validate(), some(eq(&drawings)));
 }
 
-#[test]
+#[gtest]
 fn editing_one_row_leaves_the_others_alone() {
     let mut form = form_for(&venues());
     form.apply(&HashMap::from([(
@@ -159,10 +160,10 @@ fn editing_one_row_leaves_the_others_alone() {
 
     let mut expected = venues();
     expected.places[1].city = "Ogdenville".to_string();
-    assert_eq!(form.validate(), Some(expected));
+    expect_that!(form.validate(), some(eq(&expected)));
 }
 
-#[test]
+#[gtest]
 fn leaves_then_apply_is_an_identity_round_trip() {
     // The widget loop, for lists. Note this reloads into a form of the SAME
     // shape rather than `empty_form` (the way the scalar version of this
@@ -174,10 +175,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 
     let mut reloaded = form_for(&venues());
     reloaded.apply(&collected);
-    assert_eq!(reloaded.validate(), Some(venues()));
+    expect_that!(reloaded.validate(), some(eq(&venues())));
 }
 
-#[test]
+#[gtest]
 fn create_mode_yields_no_rows_yet() {
     // Characterization, not an endorsement: `list_member` has no length to
     // work from without a value, so it builds an empty `ListSet` and
@@ -185,11 +186,11 @@ fn create_mode_yields_no_rows_yet() {
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>();
     form.apply(&HashMap::from([("title".to_string(), "Unit 1".to_string())]));
-    assert_eq!(
+    expect_that!(
         form.validate(),
-        Some(Quiz {
+        some(eq(&Quiz {
             title: "Unit 1".to_string(),
             answers: Vec::new(),
-        })
+        }))
     );
 }

@@ -24,6 +24,7 @@ use crate::reflect::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
 use super::models::{Location, Mode};
+use googletest::prelude::*;
 
 /// `Option<Struct>` — the case that used to panic one way and lie the other.
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -82,7 +83,7 @@ fn paths<T: Clone + Debug + PartialEq + Facet<'static>>(form: &Form<T>) -> Vec<S
 
 // ── Shape of the form ──
 
-#[test]
+#[gtest]
 fn an_absent_optional_struct_still_offers_its_leaves() {
     // Passes today, and the decorator must not break it: an absent optional
     // struct still renders its inner inputs, empty. If it hid them there
@@ -92,31 +93,31 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
     // Also pins that `Option` contributes no path segment of its own:
     // `address.street`, never `address.some.street`.
     let form = form_for(&contact(None));
-    assert_eq!(
+    expect_that!(
         paths(&form),
-        vec!["name", "address.street", "address.city", "address.zip"],
+        elements_are![eq("name"), eq("address.street"), eq("address.city"), eq("address.zip")]
     );
-    assert_eq!(
+    expect_that!(
         form.leaves(),
-        vec![
+        eq(&vec![
             ("name".to_string(), "Ada".to_string()),
             ("address.street".to_string(), String::new()),
             ("address.city".to_string(), String::new()),
             ("address.zip".to_string(), String::new()),
-        ],
+        ])
     );
 }
 
 // ── Option<Struct> ──
 
-#[test]
+#[gtest]
 fn a_present_optional_struct_round_trips() {
     let value = contact(Some(springfield()));
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn an_absent_optional_struct_round_trips() {
     // The dangerous one. No panic today: the inner fields are required and
     // `Empty`, so `validate()` reports errors and hands back `None` — an
@@ -124,19 +125,19 @@ fn an_absent_optional_struct_round_trips() {
     // intercept `validate`, not just the write path.
     let value = contact(None);
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn create_mode_leaves_an_untouched_optional_struct_absent() {
     // Same rule arriving through the DOM path rather than through populating —
     // the two boundaries have to agree, as they now do for `""`.
     let mut form = empty_form::<Contact>();
     form.apply(&applied(&[("name", "Ada")]));
-    assert_eq!(form.validate(), Some(contact(None)));
+    expect_that!(form.validate(), some(eq(&contact(None))));
 }
 
-#[test]
+#[gtest]
 fn filling_in_an_absent_optional_struct_makes_it_present() {
     // `present` is DERIVED, never asked: the user typing into the inner
     // inputs is what makes the container `Some`. No third construction
@@ -147,10 +148,10 @@ fn filling_in_an_absent_optional_struct_makes_it_present() {
         ("address.city", "Springfield"),
         ("address.zip", "12345"),
     ]));
-    assert_eq!(form.validate(), Some(contact(Some(springfield()))));
+    expect_that!(form.validate(), some(eq(&contact(Some(springfield())))));
 }
 
-#[test]
+#[gtest]
 fn blanking_a_present_optional_struct_makes_it_absent() {
     // The inverse, and the same rule one level up from `""` IS absence:
     // every leaf underneath empty ⟺ the container is absent.
@@ -160,10 +161,10 @@ fn blanking_a_present_optional_struct_makes_it_absent() {
         ("address.city", ""),
         ("address.zip", ""),
     ]));
-    assert_eq!(form.validate(), Some(contact(None)));
+    expect_that!(form.validate(), some(eq(&contact(None))));
 }
 
-#[test]
+#[gtest]
 fn a_partly_filled_optional_struct_is_an_error() {
     // Green today, but only vacuously — everything under an `Option<Struct>`
     // is required right now, so *any* partial fill errors. Its real job is
@@ -178,29 +179,29 @@ fn a_partly_filled_optional_struct_is_an_error() {
     // one.
     let mut form = form_for(&contact(None));
     form.apply(&applied(&[("address.street", "123 Main St")]));
-    assert_eq!(form.validate(), None);
-    assert!(form.has_errors());
+    expect_that!(form.validate(), none());
+    expect_that!(form.has_errors(), eq(true));
 }
 
 // ── Option<Vec<T>> ──
 
-#[test]
+#[gtest]
 fn a_present_optional_list_round_trips() {
     let value = Tagged {
         tags: Some(vec!["x".to_string()]),
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn an_absent_optional_list_round_trips() {
     let value = Tagged { tags: None };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn an_empty_optional_list_collapses_to_absent() {
     // DESIGN QUESTION, not a settled rule. `Some(vec![])` has no leaves at
     // all, so "absent ⟺ every leaf underneath is empty" is vacuously true
@@ -215,10 +216,10 @@ fn an_empty_optional_list_collapses_to_absent() {
     let mut form = form_for(&Tagged {
         tags: Some(Vec::new()),
     });
-    assert_eq!(form.validate(), Some(Tagged { tags: None }));
+    expect_that!(form.validate(), some(eq(&Tagged { tags: None })));
 }
 
-#[test]
+#[gtest]
 fn an_optional_list_of_structs_round_trips() {
     // Three frames deep on the write path — `begin_some` → `init_list` →
     // `begin_list_item` → `begin_field` — which is where a decorator that
@@ -227,12 +228,12 @@ fn an_optional_list_of_structs_round_trips() {
         members: Some(vec![springfield()]),
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
 // ── Composition ──
 
-#[test]
+#[gtest]
 fn option_peels_one_layer_at_a_time() {
     // `Option<Vec<Option<String>>>` →
     // `OptionalMember(ListSet(rows of OptionalMember(FormField)))`, each
@@ -243,10 +244,10 @@ fn option_peels_one_layer_at_a_time() {
         cells: Some(vec![Some("a".to_string()), None]),
     };
     let form = form_for(&value);
-    assert_eq!(paths(&form), vec!["cells.0", "cells.1"]);
+    expect_that!(paths(&form), elements_are![eq("cells.0"), eq("cells.1")]);
 
     let mut form = form;
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
 // ── Presence that the leaves cannot see ──
@@ -271,7 +272,7 @@ struct Schedule {
     modes: Option<Vec<Mode>>,
 }
 
-#[test]
+#[gtest]
 fn a_chosen_unit_variant_survives_behind_an_option() {
     // The regression. Scanning leaves reports "absent" for a present unit
     // variant, so `write_value_into` takes the `set_default()` branch and the
@@ -281,10 +282,10 @@ fn a_chosen_unit_variant_survives_behind_an_option() {
         mode: Some(Mode::Fast),
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn an_absent_optional_unit_variant_stays_absent() {
     // The other direction, and NOT redundant: it's what stops the bug above from
     // being "fixed" by having `is_present` answer `true` unconditionally. Both
@@ -294,10 +295,10 @@ fn an_absent_optional_unit_variant_stays_absent() {
         mode: None,
     };
     let mut form = form_for(&value);
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }
 
-#[test]
+#[gtest]
 fn a_chosen_unit_variant_survives_two_containers_deep() {
     // `OptionMember` -> `ListSet` -> `VariantSet`, none of which has a leaf to
     // its name. Presence has to be asked for, one member at a time, the whole
@@ -306,8 +307,8 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
         modes: Some(vec![Mode::Fast, Mode::Slow]),
     };
     let form = form_for(&value);
-    assert_eq!(form.leaves(), Vec::new(), "fieldless variants have no leaves");
+    expect_that!(form.leaves(), eq(&Vec::new()), "fieldless variants have no leaves");
 
     let mut form = form;
-    assert_eq!(form.validate(), Some(value));
+    expect_that!(form.validate(), some(eq(&value)));
 }

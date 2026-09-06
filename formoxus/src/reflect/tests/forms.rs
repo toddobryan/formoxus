@@ -4,6 +4,7 @@ use crate::reflect::*;
 use facet::Facet;
 use std::{collections::HashMap, marker::PhantomData};
 use super::models::{Event, EventForCreate, Location};
+use googletest::prelude::*;
 
 fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
     Box::new(FormField {
@@ -60,51 +61,48 @@ fn member_names(members: &[Box<dyn FormMember>]) -> Vec<String> {
     members.iter().map(|m| m.name()).collect()
 }
 
-#[test]
+#[gtest]
 fn repeated_struct_types_get_distinct_paths() {
     let form = empty_form::<Trip>();
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
 
-    assert_eq!(
+    expect_that!(
         paths,
-        vec![
-            "origin.street",
-            "origin.city",
-            "origin.zip",
-            "destination.street",
-            "destination.city",
-            "destination.zip",
+        elements_are![
+            eq("origin.street"),
+            eq("origin.city"),
+            eq("origin.zip"),
+            eq("destination.street"),
+            eq("destination.city"),
+            eq("destination.zip"),
         ]
     );
 }
 
-#[test]
+#[gtest]
 fn form_for_none_walks_the_shape_into_empty_members() {
     let form = empty_form::<EventForCreate>();
 
-    assert_eq!(member_names(&form.members), vec!["title", "location"]);
+    expect_that!(member_names(&form.members), elements_are![eq("title"), eq("location")]);
 
     // The nested struct field became a FieldSet with its own members,
     // discovered purely from `Location`'s shape.
     let rendered = form.render();
     for name in ["title", "street", "city", "zip"] {
-        assert!(
-            rendered.contains(&format!(r#"name="{name}""#)),
-            "expected an input for {name} in:\n{rendered}"
-        );
+        expect_that!(rendered, contains_substring(format!(r#"name="{name}""#)));
     }
     // Nothing was populated, so every input is blank.
-    assert!(!rendered.contains(r#"value="Board Game Night""#));
+    expect_that!(rendered, not(contains_substring(r#"value="Board Game Night""#)));
 }
 
-#[test]
+#[gtest]
 fn form_for_none_is_invalid_until_filled() {
     let mut form = empty_form::<EventForCreate>();
-    assert_eq!(form.validate(), None);
-    assert!(form.has_errors());
+    expect_that!(form.validate(), none());
+    expect_that!(form.has_errors(), eq(true));
 }
 
-#[test]
+#[gtest]
 fn form_for_some_round_trips_the_model() {
     let event = EventForCreate {
         title: "Board Game Night".to_string(),
@@ -116,11 +114,11 @@ fn form_for_some_round_trips_the_model() {
     };
 
     let mut form = form_for(&event);
-    assert!(!form.has_errors());
-    assert_eq!(form.validate(), Some(event));
+    expect_that!(form.has_errors(), eq(false));
+    expect_that!(form.validate(), some(eq(&event)));
 }
 
-#[test]
+#[gtest]
 fn option_fields_are_not_required() {
     let mut form = empty_form::<Rsvp>();
 
@@ -135,30 +133,24 @@ fn option_fields_are_not_required() {
         .filter(|m| m.has_errors())
         .map(|m| m.name())
         .collect();
-    assert_eq!(complaining, vec!["name", "guests"]);
+    expect_that!(complaining, elements_are![eq("name"), eq("guests")]);
 }
 
-#[test]
+#[gtest]
 fn option_fields_round_trip_both_ways() {
     let with_note = Rsvp {
         name: "Ada".to_string(),
         guests: 2,
         note: Some("bringing dessert".to_string()),
     };
-    assert_eq!(
-        form_for(&with_note).validate(),
-        Some(with_note)
-    );
+    expect_that!(form_for(&with_note).validate(), some(eq(&with_note)));
 
     let without_note = Rsvp {
         name: "Ada".to_string(),
         guests: 2,
         note: None,
     };
-    assert_eq!(
-        form_for(&without_note).validate(),
-        Some(without_note)
-    );
+    expect_that!(form_for(&without_note).validate(), some(eq(&without_note)));
 }
 
 fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
@@ -168,7 +160,7 @@ fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         .collect()
 }
 
-#[test]
+#[gtest]
 fn applying_widget_values_round_trips_to_a_model() {
     // The full loop: shape-walk an empty form, take raw strings back in
     // the way a submit handler would, then validate into a model.
@@ -180,20 +172,20 @@ fn applying_widget_values_round_trips_to_a_model() {
         ("location.zip", "12345"),
     ]));
 
-    assert_eq!(
+    expect_that!(
         form.validate(),
-        Some(EventForCreate {
+        some(eq(&EventForCreate {
             title: "Board Game Night".to_string(),
             location: Location {
                 street: "123 Main St".to_string(),
                 city: "Springfield".to_string(),
                 zip: "12345".to_string(),
             },
-        })
+        }))
     );
 }
 
-#[test]
+#[gtest]
 fn non_string_scalars_parse_through_the_shape_vtable() {
     // `u32` here never touches `FromStr` — facet parses it from the shape.
     let mut form = empty_form::<Rsvp>();
@@ -203,23 +195,23 @@ fn non_string_scalars_parse_through_the_shape_vtable() {
         ("note", "bringing dessert"),
     ]));
 
-    assert_eq!(
+    expect_that!(
         form.validate(),
-        Some(Rsvp {
+        some(eq(&Rsvp {
             name: "Ada".to_string(),
             guests: 2,
             note: Some("bringing dessert".to_string()),
-        })
+        }))
     );
 }
 
-#[test]
+#[gtest]
 fn unparseable_input_becomes_invalid_not_a_panic() {
     let mut form = empty_form::<Rsvp>();
     form.apply(&values(&[("name", "Ada"), ("guests", "not a number")]));
 
-    assert_eq!(form.validate(), None);
-    assert!(form.has_errors());
+    expect_that!(form.validate(), none());
+    expect_that!(form.has_errors(), eq(true));
 
     // The bad input is preserved so the widget can show it back.
     let guests = form
@@ -227,10 +219,10 @@ fn unparseable_input_becomes_invalid_not_a_panic() {
         .into_iter()
         .find(|(p, _)| p == "guests")
         .map(|(_, raw)| raw);
-    assert_eq!(guests, Some("not a number".to_string()));
+    expect_that!(guests, some(eq(&"not a number".to_string())));
 }
 
-#[test]
+#[gtest]
 fn blanking_a_field_makes_it_empty_again() {
     let mut form = form_for(&Rsvp {
         name: "Ada".to_string(),
@@ -240,17 +232,17 @@ fn blanking_a_field_makes_it_empty_again() {
     // Clearing an optional field is legal; clearing a required one isn't.
     form.apply(&values(&[("note", ""), ("name", "")]));
 
-    assert_eq!(form.validate(), None);
+    expect_that!(form.validate(), none());
     let complaining: Vec<String> = form
         .members
         .iter()
         .filter(|m| m.has_errors())
         .map(|m| m.name())
         .collect();
-    assert_eq!(complaining, vec!["name"]);
+    expect_that!(complaining, elements_are![eq("name")]);
 }
 
-#[test]
+#[gtest]
 fn leaves_then_apply_is_an_identity_round_trip() {
     // The actual widget loop: populate a form from a model, hand the raw
     // strings to the widget layer, take them straight back, and validate.
@@ -267,10 +259,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     let mut reloaded = empty_form::<Rsvp>();
     reloaded.apply(&round_tripped);
 
-    assert_eq!(reloaded.validate(), Some(rsvp));
+    expect_that!(reloaded.validate(), some(eq(&rsvp)));
 }
 
-#[test]
+#[gtest]
 fn empty_event_form_is_invalid() {
     let mut form: Form<Event> = Form {
         title: Some("New Event".to_string()),
@@ -282,11 +274,11 @@ fn empty_event_form_is_invalid() {
         _type: PhantomData,
     };
 
-    assert_eq!(form.validate(), None);
-    assert!(form.has_errors());
+    expect_that!(form.validate(), none());
+    expect_that!(form.has_errors(), eq(true));
 }
 
-#[test]
+#[gtest]
 fn location_form_round_trips_to_model() {
     // `Location` has no uncollected fields, so this exercises the core
     // `FormField::write_into` -> `Partial::build` -> `materialize` path
@@ -303,17 +295,17 @@ fn location_form_round_trips_to_model() {
     };
 
     let model = form.validate().expect("all required fields are filled");
-    assert_eq!(
+    expect_that!(
         model,
-        Location {
+        eq(&Location {
             street: "123 Main St".to_string(),
             city: "Springfield".to_string(),
             zip: "12345".to_string(),
-        }
+        })
     );
 }
 
-#[test]
+#[gtest]
 fn event_for_create_form_round_trips_to_model() {
     let mut form: Form<EventForCreate> = Form {
         title: Some("New Event".to_string()),
@@ -332,8 +324,8 @@ fn event_for_create_form_round_trips_to_model() {
         _type: PhantomData,
     };
 
-    assert!(!form.has_errors());
+    expect_that!(form.has_errors(), eq(false));
     let model = form.validate().expect("all required fields are filled");
-    assert_eq!(model.title, "Board Game Night");
-    assert_eq!(model.location.street, "123 Main St");
+    expect_that!(model.title, eq(&"Board Game Night"));
+    expect_that!(model.location.street, eq(&"123 Main St"));
 }

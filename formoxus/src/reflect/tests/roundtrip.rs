@@ -22,25 +22,32 @@
 
 use crate::reflect::fields::parse_scalar;
 use facet::{Facet, Peek};
+use googletest::prelude::*;
 use std::fmt::Debug;
 
 /// Assert `T -> String -> T` for each value, reporting the intermediate string
 /// on failure — without it, a mismatch tells you nothing about which direction
 /// broke.
+///
+/// `expect_that!` rather than `assert_that!` so one bad value doesn't hide the
+/// rest of the list: a whole width of integers reports in a single run. The
+/// assertions land in the calling `#[gtest]` fn's context, which is what lets a
+/// plain helper like this aggregate failures at all.
 fn round_trips<T>(values: &[T])
 where
     T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
 {
     for v in values {
         let s = Peek::new(v).to_string();
-        match parse_scalar::<T>(&s) {
-            Ok(back) => assert_eq!(back, *v, "{v:?} formatted as {s:?}, parsed back as {back:?}"),
-            Err(e) => panic!("{v:?} formatted as {s:?}, which failed to parse: {e:?}"),
-        }
+        expect_that!(
+            parse_scalar::<T>(&s),
+            ok(eq(v)),
+            "{v:?} formatted as {s:?}, which should have parsed back to it"
+        );
     }
 }
 
-#[test]
+#[gtest]
 fn strings_round_trip() {
     // The empty string is here for completeness, but note it can never actually
     // reach `Valid`: "" IS absence, so it collapses to `Empty` at both
@@ -55,12 +62,12 @@ fn strings_round_trip() {
     ]);
 }
 
-#[test]
+#[gtest]
 fn bools_round_trip() {
     round_trips(&[true, false]);
 }
 
-#[test]
+#[gtest]
 fn signed_integers_round_trip_at_their_limits() {
     // MIN is the interesting one: its magnitude has no positive counterpart, so
     // a formatter that produced `-` plus `abs()` would overflow.
@@ -71,7 +78,7 @@ fn signed_integers_round_trip_at_their_limits() {
     round_trips(&[isize::MIN, 0, isize::MAX]);
 }
 
-#[test]
+#[gtest]
 fn unsigned_integers_round_trip_at_their_limits() {
     round_trips(&[0u8, u8::MAX]);
     round_trips(&[0u16, u16::MAX]);
@@ -80,7 +87,7 @@ fn unsigned_integers_round_trip_at_their_limits() {
     round_trips(&[0usize, usize::MAX]);
 }
 
-#[test]
+#[gtest]
 fn floats_round_trip_including_the_awkward_ones() {
     // `1.0/3.0` and `0.1 + 0.2` are the classic shortest-repr traps, and the
     // subnormal/limit values are where a naive `{:.N}` formatter loses bits.
@@ -94,12 +101,16 @@ fn floats_round_trip_including_the_awkward_ones() {
     ]);
 }
 
-#[test]
+#[gtest]
 fn nan_survives_the_trip_even_though_it_is_never_equal_to_itself() {
     // NaN can't go through `round_trips` — `NaN == NaN` is false by IEEE rule,
     // not because anything was lost. Check the property that actually matters:
     // what comes back is still a NaN.
     let s = Peek::new(&f64::NAN).to_string();
     let back = parse_scalar::<f64>(&s).expect("NaN should parse back");
-    assert!(back.is_nan(), "f64::NAN formatted as {s:?}, parsed back as {back:?}");
+    expect_that!(
+        back.is_nan(),
+        eq(true),
+        "f64::NAN formatted as {s:?}, parsed back as {back:?}"
+    );
 }
