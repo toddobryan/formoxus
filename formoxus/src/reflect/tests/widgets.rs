@@ -170,6 +170,7 @@ fn PopulatedInput() -> Element {
             path: "title".to_string(),
             label: Some("Title".to_string()),
             errors: Vec::new(),
+            required: true,
             values,
         }
     }
@@ -185,6 +186,7 @@ fn EmptyInput() -> Element {
             path: "shape.radius".to_string(),
             label: None,
             errors: Vec::new(),
+            required: true,
             values,
         }
     }

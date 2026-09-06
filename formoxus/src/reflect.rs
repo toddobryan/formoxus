@@ -15,16 +15,15 @@ pub mod form;
 pub mod members;
 pub mod widgets;
 
-use std::collections::HashMap;
-
 // A flat root, so `use formoxus::reflect::*` (and the test modules' `use
 // crate::reflect::*`) reaches the whole vocabulary without knowing which module
 // each name lives in.
 pub use crate::error::{FieldError, FormError};
-use dioxus::stores::Store;
 pub use fields::{FieldValue, FormField};
 pub use form::{Form, empty_form, form_for, use_form_values};
-pub use members::{FieldSet, FormMember, ListSet, VariantChoice, VariantSet};
+pub use members::{
+    FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
+};
 
 // The one crate-internal item the test modules reach for directly.
 #[cfg(test)]
@@ -32,5 +31,3 @@ pub(crate) use members::ABSENT_DISPLAY;
 
 #[cfg(test)]
 mod tests;
-
-pub type ValuesByPath = Store<HashMap<String, String>>;

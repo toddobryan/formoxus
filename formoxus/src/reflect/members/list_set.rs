@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
-use crate::reflect::ValuesByPath;
+use crate::reflect::RenderCtx;
 use crate::reflect::members::{FormMember, owns, qualify};
 
 #[derive(Clone, Debug)]
@@ -25,9 +25,9 @@ impl FormMember for ListSet {
         self.label.clone()
     }
 
-    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
-        let nested = qualify(prefix, &self.name);
-        let rows_rendered = self.rows.iter().map(|r| r.render(&nested, values));
+    fn render(&self, ctx: &RenderCtx) -> Element {
+        let nested = ctx.nested(&self.name);
+        let rows_rendered = self.rows.iter().map(|r| r.render(&nested));
         rsx! {
             { rows_rendered.into_iter() }
         }

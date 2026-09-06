@@ -21,6 +21,7 @@
 //! cannot be derived the way it is for structs and lists.
 
 use crate::reflect::*;
+use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
 use super::models::{Location, Mode};
@@ -311,4 +312,51 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&value)));
+}
+
+#[component]
+fn EmptyContactForm() -> Element {
+    let form = use_hook(empty_form::<Contact>);
+    let values = use_form_values(&form);
+    form.render(values)
+}
+
+/// The attribute list of the `<input>` named `name`, cut at the first `>` so a
+/// neighbouring field's `class="required"` marker can't leak into the match.
+fn input_tag(html: &str, name: &str) -> String {
+    html.split("<input")
+        .map(|frag| frag.split('>').next().unwrap_or_default())
+        .find(|tag| tag.contains(&format!(r#"name="{name}""#)))
+        .unwrap_or_else(|| panic!("no input named {name} in:\n{html}"))
+        .to_string()
+}
+
+#[gtest]
+fn an_optional_structs_leaves_are_not_marked_required() {
+    // `required` is per-input in HTML5, so it cannot express the all-or-nothing
+    // rule an optional struct follows. Marking `address.*` would let the browser
+    // block a deliberately blank address — which is a legal value here, per
+    // `an_absent_optional_struct_round_trips`. So the leaves render unmarked and
+    // `validate()` stays the authority; the partly-filled case is caught by
+    // `a_partly_filled_optional_struct_is_an_error`, not by the browser.
+    //
+    // This is what `RenderCtx::optional()` buys, and the only place a member
+    // changes the context instead of passing it along.
+    let html = super::render_to_html(EmptyContactForm);
+
+    expect_that!(input_tag(&html, "name"), contains_substring("required"));
+    for leaf in ["address.street", "address.city", "address.zip"] {
+        expect_that!(input_tag(&html, leaf), not(contains_substring("required")));
+    }
+}
+
+#[gtest]
+fn an_optional_structs_leaves_are_still_rendered() {
+    // The pairing for `an_absent_optional_struct_still_offers_its_leaves`: not
+    // marking them required must not shade into hiding them. Presence is derived
+    // from what the user types, so there has to be somewhere to type.
+    let html = super::render_to_html(EmptyContactForm);
+    for leaf in ["address.street", "address.city", "address.zip"] {
+        expect_that!(html, contains_substring(format!(r#"name="{leaf}""#)));
+    }
 }

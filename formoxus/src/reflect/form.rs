@@ -4,7 +4,7 @@
 use facet::{Facet, Partial, Peek};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
 use dioxus::prelude::*;
-use crate::reflect::ValuesByPath;
+use crate::reflect::{RenderCtx, ValuesByPath};
 use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::members::{FormMember, owns};
@@ -112,10 +112,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
             }
         });
            
-        let members_rendered = self
-            .members
-            .iter()
-            .map(|m| m.render("", values));
+        let ctx = RenderCtx::root(values);
+        let members_rendered = self.members.iter().map(|m| m.render(&ctx));
         
         rsx! {
             { title }

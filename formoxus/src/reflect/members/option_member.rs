@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::core::Element;
 
-use crate::reflect::{FormMember, ValuesByPath};
+use crate::reflect::{FormMember, RenderCtx};
 use crate::error::FormAccessError;
 
 
@@ -20,8 +20,11 @@ impl FormMember for OptionMember {
         self.inner.label()
     }
 
-    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
-        self.inner.render(prefix, values)
+    fn render(&self, ctx: &RenderCtx) -> Element {
+        // The prefix passes through unchanged — this is a decorator, and
+        // `name()` delegates inward, so qualifying here would double up. What
+        // it *does* change is `required`: everything below is optional.
+        self.inner.render(&ctx.optional())
     }
 
     fn raw_value(&self) -> String {

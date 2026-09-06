@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
-use crate::reflect::ValuesByPath;
+use crate::reflect::RenderCtx;
 use crate::reflect::members::{FormMember, qualify};
 use crate::reflect::widgets::ScalarInput;
 
@@ -73,14 +73,14 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         };
     }
 
-    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
-        let path = qualify(prefix, &self.name);
+    fn render(&self, ctx: &RenderCtx) -> Element {
         rsx! {
             ScalarInput {
-                path,
+                path: ctx.path(&self.name),
                 label: self.label.clone(),
                 errors: self.errors.clone(),
-                values,
+                required: ctx.required,
+                values: ctx.values,
             }
         }
     }

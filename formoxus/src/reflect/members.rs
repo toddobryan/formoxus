@@ -15,12 +15,13 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::{error::FormAccessError, reflect::ValuesByPath};
+use crate::error::FormAccessError;
+use dioxus::stores::Store;
 
 pub trait FormMember: Debug {
     fn name(&self) -> String;
     fn label(&self) -> Option<String>;
-    fn render(&self, prefix: &str, values: ValuesByPath) -> Element;
+    fn render(&self, ctx: &RenderCtx) -> Element;
     /// This member's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
     /// widget layer only ever asks leaves for this.
@@ -79,5 +80,63 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
         name.to_string()
     } else {
         format!("{prefix}.{name}")
+    }
+}
+
+/// The live raw values, keyed by qualified path — what `leaves()` produces and
+/// what `apply()` consumes, held in a store so a write touches one input.
+pub type ValuesByPath = Store<HashMap<String, String>>;
+
+/// What a member needs in order to render: where it sits in the path tree,
+/// where the live values are, and whether the browser should treat its leaves
+/// as required.
+///
+/// A struct rather than three parameters because this only grows — the variant
+/// `<select>` and the add/remove-row buttons will each need a way to signal a
+/// structural edit back up.
+///
+/// **`required` is a presentation hint, not the authority.** HTML5 `required`
+/// is per-input, so it cannot express the all-or-nothing rule an optional
+/// struct follows (absent means EVERY leaf empty; a partly filled one is an
+/// error). Marking those leaves required would block a deliberately blank
+/// address; leaving them unmarked lets the browser accept a half-filled one.
+/// The second is the lesser evil, and `validate()` remains where the real rule
+/// lives — see the optional-container tests.
+#[derive(Clone, Debug)]
+pub struct RenderCtx {
+    pub prefix: String,
+    pub values: ValuesByPath,
+    pub required: bool,
+}
+
+impl RenderCtx {
+    /// The context a whole form starts from: at the root, and required until
+    /// some `OptionMember` says otherwise.
+    pub fn root(values: ValuesByPath) -> Self {
+        Self { prefix: String::new(), values, required: true }
+    }
+
+    /// Descend into a named child — the `qualify` every container already does.
+    pub fn nested(&self, name: &str) -> Self {
+        Self {
+            prefix: qualify(&self.prefix, name),
+            values: self.values,
+            required: self.required,
+        }
+    }
+
+    /// Everything from here down is optional. `OptionMember` is the only member
+    /// that *changes* the context rather than passing it along unaltered.
+    pub fn optional(&self) -> Self {
+        Self {
+            prefix: self.prefix.clone(),
+            values: self.values,
+            required: false,
+        }
+    }
+
+    /// This member's own qualified path, for a leaf's `name` attribute.
+    pub fn path(&self, name: &str) -> String {
+        qualify(&self.prefix, name)
     }
 }

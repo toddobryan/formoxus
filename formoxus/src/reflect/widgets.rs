@@ -28,6 +28,12 @@ pub fn ScalarInput(
     path: String,
     label: Option<String>,
     errors: Vec<FieldError>,
+    /// A presentation hint only. It is deliberately false for every leaf under
+    /// an `Option`, including the leaves of an optional *struct* — HTML5
+    /// `required` is per-input and can't express "all of these or none", so
+    /// marking them would block a deliberately blank one. `validate()` stays
+    /// the authority on the all-or-nothing rule. See [`crate::reflect::RenderCtx`].
+    required: bool,
     values: ValuesByPath,
 ) -> Element {
     // `get_unchecked`, not `get`: `get` calls `contains_key`, which tracks the
@@ -47,10 +53,14 @@ pub fn ScalarInput(
             if let Some(text) = label_text {
                 span { class: "field-label", "{text}" }
             }
+            if required {
+                span { class: "required", " *" }
+            }
             input {
                 r#type: "text",
                 name: "{path}",
                 value: "{current}",
+                required,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     // Write *through the child store* when the key exists: that
