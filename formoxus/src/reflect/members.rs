@@ -1,6 +1,7 @@
 //! The `FormMember` trait every part of a form implements, and the container
 //! kinds that make a form a tree rather than a flat list.
 
+use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 
@@ -14,12 +15,12 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::error::FormAccessError;
+use crate::{error::FormAccessError, reflect::ValuesByPath};
 
 pub trait FormMember: Debug {
     fn name(&self) -> String;
     fn label(&self) -> Option<String>;
-    fn render(&self) -> String; // Element, later
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element;
     /// This member's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
     /// widget layer only ever asks leaves for this.

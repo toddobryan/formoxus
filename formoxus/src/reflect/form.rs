@@ -3,9 +3,19 @@
 
 use facet::{Facet, Partial, Peek};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
+use dioxus::prelude::*;
+use crate::reflect::ValuesByPath;
 use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::members::{FormMember, owns};
+
+pub fn use_form_values<T>(form: &Form<T>) -> ValuesByPath
+where
+    T: Clone + Debug + PartialEq + Facet<'static>,
+{
+    let leaves = form.leaves();
+    use_store(move || leaves.into_iter().collect())
+}
 
 #[derive(Clone, Debug)]
 pub struct Form<T: Clone + Debug + Facet<'static>> {
@@ -95,19 +105,22 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
         Err(FormAccessError(format!("no such path: {path}")))
     }
 
-    pub fn render(&self) -> String {
-        let title = self
-            .title
-            .as_ref()
-            .map(|t| format!("<h2>{}</h2>\n", t))
-            .unwrap_or("".to_string());
+    pub fn render(&self, values: ValuesByPath) -> Element {
+        let title = self.title.as_ref().map(|t| {
+            rsx! {
+                h2 { class: "form-title", "{t}" }
+            }
+        });
+           
         let members_rendered = self
             .members
             .iter()
-            .map(|m| m.render())
-            .collect::<Vec<String>>()
-            .join("\n");
-        format!("{}{}", title, members_rendered)
+            .map(|m| m.render("", values));
+        
+        rsx! {
+            { title }
+            { members_rendered.into_iter() }
+        }
     }
 }
 

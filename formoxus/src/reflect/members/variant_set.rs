@@ -1,7 +1,9 @@
 //! An enum-typed member, locked to one variant chosen before the form existed.
 
+use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError};
 use std::collections::HashMap;
+use crate::reflect::ValuesByPath;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::members::{ABSENT_DISPLAY, FormMember, owns, qualify};
@@ -46,7 +48,7 @@ impl FormMember for VariantSet {
         self.label.clone()
     }
 
-    fn render(&self) -> String {
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
         match &self.choice {
             // Visible but inert, so the user can see they chose to leave a value
             // out rather than the field silently vanishing. `disabled` also means
@@ -54,21 +56,31 @@ impl FormMember for VariantSet {
             // This is the one member that renders without being a leaf — and the
             // natural spot for a `<select>` if variant choice ever goes live.
             VariantChoice::Unchosen => {
-                let input = format!(
-                    r#"<input type="text" name="{}" value="{ABSENT_DISPLAY}" disabled>"#,
-                    self.name
-                );
+                let path = qualify(prefix, &self.name);
+                let input = rsx! {
+                    input { 
+                        r#type: "text", 
+                        name: "{path}",
+                        value: "{ABSENT_DISPLAY}",
+                        disabled: true
+                    }
+                };
                 match &self.label {
-                    Some(label) => format!("<label>{label} {input}</label>"),
+                    Some(label) => rsx! { 
+                        label { "{label}",
+                            { input }
+                        }
+                    },
                     None => input,
                 }
             }
-            VariantChoice::Named(_) => self
-                .members
-                .iter()
-                .map(|m| m.render())
-                .collect::<Vec<String>>()
-                .join("\n"),
+            VariantChoice::Named(_) => {
+                let nested = qualify(prefix, &self.name);
+                let members_rendered = self.members.iter().map(|m| m.render(&nested, values));
+                rsx! {
+                    { members_rendered.into_iter() }
+                }
+            },
         }
     }
 

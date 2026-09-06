@@ -12,6 +12,7 @@ formoxus-macros = { workspace = true, optional = true }
 paste = "1.0.15"
 
 [dev-dependencies]
+dioxus-html = { workspace = true }
 dioxus-ssr = { workspace = true }
 googletest = { workspace = true }
 trybuild = { workspace = true }

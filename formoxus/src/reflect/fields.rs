@@ -1,10 +1,13 @@
 //! Leaf members: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 
+use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
+use crate::reflect::ValuesByPath;
 use crate::reflect::members::{FormMember, qualify};
+use crate::reflect::widgets::ScalarInput;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -70,15 +73,15 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         };
     }
 
-    fn render(&self) -> String {
-        let value = self.raw_value();
-        let input = format!(
-            r#"<input type="text" name="{}" value="{}">"#,
-            self.name, value
-        );
-        match &self.label {
-            Some(label) => format!("<label>{label} {input}</label>"),
-            None => input,
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
+        let path = qualify(prefix, &self.name);
+        rsx! {
+            ScalarInput {
+                path,
+                label: self.label.clone(),
+                errors: self.errors.clone(),
+                values,
+            }
         }
     }
 

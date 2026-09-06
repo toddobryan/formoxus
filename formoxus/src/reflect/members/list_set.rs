@@ -1,9 +1,11 @@
 //! A list-typed member. Rows are members named by their index, which is what
 //! makes `answer_choices.0.text` fall out of the ordinary `qualify` nesting.
 
+use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
+use crate::reflect::ValuesByPath;
 use crate::reflect::members::{FormMember, owns, qualify};
 
 #[derive(Clone, Debug)]
@@ -23,12 +25,12 @@ impl FormMember for ListSet {
         self.label.clone()
     }
 
-    fn render(&self) -> String {
-        self.rows
-            .iter()
-            .map(|r| r.render())
-            .collect::<Vec<String>>()
-            .join("\n")
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
+        let nested = qualify(prefix, &self.name);
+        let rows_rendered = self.rows.iter().map(|r| r.render(&nested, values));
+        rsx! {
+            { rows_rendered.into_iter() }
+        }
     }
 
     fn raw_value(&self) -> String {

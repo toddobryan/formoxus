@@ -1,6 +1,8 @@
 //! End-to-end round trips through `Form<T>`: populate, collect, apply, validate.
 
+use super::render_to_html;
 use crate::reflect::*;
+use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, marker::PhantomData};
 use super::models::{Event, EventForCreate, Location};
@@ -79,6 +81,13 @@ fn repeated_struct_types_get_distinct_paths() {
     );
 }
 
+#[component]
+fn EmptyEventForm() -> Element {
+    let form = use_hook(empty_form::<EventForCreate>);
+    let values = use_form_values(&form);
+    form.render(values)
+}
+
 #[gtest]
 fn form_for_none_walks_the_shape_into_empty_members() {
     let form = empty_form::<EventForCreate>();
@@ -86,9 +95,12 @@ fn form_for_none_walks_the_shape_into_empty_members() {
     expect_that!(member_names(&form.members), elements_are![eq("title"), eq("location")]);
 
     // The nested struct field became a FieldSet with its own members,
-    // discovered purely from `Location`'s shape.
-    let rendered = form.render();
-    for name in ["title", "street", "city", "zip"] {
+    // discovered purely from `Location`'s shape. The inner names are now
+    // QUALIFIED (`location.street`, not `street`) — that changed when `render`
+    // started threading a prefix, and it's what stops two field sets in one
+    // form from both claiming `street`.
+    let rendered = render_to_html(EmptyEventForm);
+    for name in ["title", "location.street", "location.city", "location.zip"] {
         expect_that!(rendered, contains_substring(format!(r#"name="{name}""#)));
     }
     // Nothing was populated, so every input is blank.

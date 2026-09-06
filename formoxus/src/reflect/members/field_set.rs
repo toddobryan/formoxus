@@ -1,8 +1,10 @@
 //! A struct-typed member: its fields, nested under its own name.
 
+use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
+use crate::reflect::ValuesByPath;
 use crate::reflect::members::{FormMember, owns, qualify};
 
 #[derive(Clone, Debug)]
@@ -22,14 +24,13 @@ impl FormMember for FieldSet {
         self.label.clone()
     }
 
-    fn render(&self) -> String {
-        // TODO: need to decide whether to wrap in <fieldset> and whether we want to prefix
-        // the names somehow, in case there are multiple fieldsets in the same form
-        self.members
-            .iter()
-            .map(|m| m.render())
-            .collect::<Vec<String>>()
-            .join("\n")
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
+        // TODO: need to decide whether to wrap in <fieldset>
+        let nested = qualify(prefix, &self.name);
+        let members_rendered = self.members.iter().map(|m| m.render(&nested, values));
+        rsx! {
+            { members_rendered.into_iter() }
+        }
     }
 
     fn validate(&mut self) {

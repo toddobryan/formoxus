@@ -22,7 +22,9 @@
 //! `Form::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
+use super::render_to_html;
 use crate::reflect::*;
+use dioxus::prelude::*;
 use facet::Facet;
 use super::models::{Mode, Shape};
 use googletest::prelude::*;
@@ -145,15 +147,51 @@ fn an_untouched_optional_enum_validates_as_none() {
     );
 }
 
+/// A form has to be rendered inside a live runtime now — see
+/// [`super::render_to_html`]. Each render test owns a tiny component like this
+/// one because `Form<T>` isn't `PartialEq` and so can't be a component prop.
+#[component]
+fn UnchosenSketchForm() -> Element {
+    let form = use_hook(empty_form::<Sketch>);
+    let values = use_form_values(&form);
+    form.render(values)
+}
+
 #[gtest]
 fn unchosen_renders_a_visible_placeholder() {
     // Visible but inert, so leaving a value out is something the user can see
     // rather than a field silently vanishing. `disabled` also means the browser
     // won't submit it, so the placeholder text never comes back as a value.
     // (This is the spot the reactive `<select>` eventually takes over.)
-    let html = empty_form::<Sketch>().render();
+    let html = render_to_html(UnchosenSketchForm);
     expect_that!(html, contains_substring(ABSENT_DISPLAY));
     expect_that!(html, contains_substring("disabled"));
+}
+
+#[component]
+fn DocWithChosenOuter() -> Element {
+    let form = use_hook(|| {
+        let mut form = empty_form::<Doc>();
+        form.choose_variant("outer", "First").expect("First is a variant of Outer2");
+        form
+    });
+    let values = use_form_values(&form);
+    form.render(values)
+}
+
+#[gtest]
+fn a_nested_unchosen_placeholder_is_named_by_its_qualified_path() {
+    // Guards the fix that qualified this input's `name`. It has to be a NESTED
+    // enum to mean anything: `Sketch.shape` sits at the root, where
+    // `qualify("", "shape")` and the bare name are the same string, so it would
+    // pass with the bug still in. `Doc` gives us `outer.inner`, which differs.
+    //
+    // Cosmetic today (the input is `disabled`, so it never submits) and a real
+    // bug the moment this becomes a live `<select>`: a nested enum posting
+    // under `inner` would never be found by `apply_leaves`.
+    let html = render_to_html(DocWithChosenOuter);
+    expect_that!(html, contains_substring(r#"name="outer.inner""#));
+    expect_that!(html, not(contains_substring(r#"name="inner""#)));
 }
 
 // ── RED: validate() must report an unchosen REQUIRED enum ──

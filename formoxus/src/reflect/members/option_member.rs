@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::reflect::FormMember;
+use dioxus::core::Element;
+
+use crate::reflect::{FormMember, ValuesByPath};
 use crate::error::FormAccessError;
 
 
@@ -18,8 +20,8 @@ impl FormMember for OptionMember {
         self.inner.label()
     }
 
-    fn render(&self) -> String {
-        self.inner.render()
+    fn render(&self, prefix: &str, values: ValuesByPath) -> Element {
+        self.inner.render(prefix, values)
     }
 
     fn raw_value(&self) -> String {
