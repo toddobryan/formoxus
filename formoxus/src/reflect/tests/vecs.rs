@@ -1,6 +1,6 @@
 //! `Vec`/`Def::List` in edit mode.
 
-use crate::*;
+use crate::reflect::*;
 use facet::Facet;
 use std::collections::HashMap;
 use super::models::{Location, Shape};

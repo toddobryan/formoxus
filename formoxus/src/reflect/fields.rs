@@ -4,7 +4,7 @@
 use facet::{Facet, Partial, Peek, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
-use crate::members::{FormMember, qualify};
+use crate::reflect::members::{FormMember, qualify};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {

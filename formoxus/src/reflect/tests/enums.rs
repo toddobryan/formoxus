@@ -22,7 +22,7 @@
 //! `Form::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
-use crate::*;
+use crate::reflect::*;
 use facet::Facet;
 use super::models::{Mode, Shape};
 

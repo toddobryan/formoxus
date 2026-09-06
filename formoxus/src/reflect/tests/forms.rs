@@ -1,6 +1,6 @@
 //! End-to-end round trips through `Form<T>`: populate, collect, apply, validate.
 
-use crate::*;
+use crate::reflect::*;
 use facet::Facet;
 use std::{collections::HashMap, marker::PhantomData};
 use super::models::{Event, EventForCreate, Location};

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::FormMember;
+use crate::reflect::FormMember;
 use crate::error::FormAccessError;
 
 

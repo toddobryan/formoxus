@@ -2,6 +2,7 @@ pub mod error;
 pub mod fields;
 pub mod form;
 pub mod label_case;
+pub mod reflect;
 pub mod validators;
 pub mod widgets;
 

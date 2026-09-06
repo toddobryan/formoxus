@@ -3,7 +3,9 @@
 Decided 2026-09-05 against `ac09b6c` (74 tests green), after prototyping.
 Supersedes two earlier drafts of this file; what they got wrong is recorded
 under "Roads not taken", because that reasoning is the expensive part.
-Temporary — this file dies with the spike when it folds into `crates/formoxus`.
+Merged into `crates/formoxus` on 2026-09-06 as the `reflect` module; this file
+came along because its open items and its "Roads not taken" reasoning are still
+live. It dies when the reflection path is either finished or abandoned.
 
 ## The architecture
 

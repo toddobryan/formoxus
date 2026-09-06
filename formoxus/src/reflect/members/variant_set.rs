@@ -2,9 +2,9 @@
 
 use facet::{EnumType, Partial, ReflectError};
 use std::collections::HashMap;
-use crate::build::{FormMode, variant_members};
+use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
-use crate::members::{ABSENT_DISPLAY, FormMember, owns, qualify};
+use crate::reflect::members::{ABSENT_DISPLAY, FormMember, owns, qualify};
 
 /// The enum variant at a particular point
 ///

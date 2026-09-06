@@ -4,8 +4,8 @@
 
 use facet::{EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructType, Type, UserType, Variant};
 
-use crate::fields::{FormField, populate};
-use crate::members::{FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify};
+use crate::reflect::fields::{FormField, populate};
+use crate::reflect::members::{FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify};
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -90,14 +90,12 @@ fn chosen_variant(
     _prefix: &str,
 ) -> Option<&'static Variant> {
     if mode == FormMode::Populated {
-        let variant_name = match peek_enum {
-            Some(pe) => pe
-                .variant_name_active()
-                .expect("an enum value always has an active variant")
-                .to_string(),
-            // Populating from a value whose optional enum is `None`.
-            None => return None,
-        };
+        // `?` is the `None` case: populating from a value whose optional enum
+        // is itself `None`, so there is no active variant to read.
+        let variant_name = peek_enum?
+            .variant_name_active()
+            .expect("an enum value always has an active variant")
+            .to_string();
         Some(
             enum_type
                 .variants
@@ -330,7 +328,7 @@ fn enum_member(
     Box::new(VariantSet {
         name: name.to_string(),
         label: None,
-        enum_type: &enum_type,
+        enum_type,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it
         choice: match variant {
             Some(v) => VariantChoice::Named(v.name.to_string()),

@@ -3,9 +3,9 @@
 
 use facet::{Facet, Partial, Peek};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
-use crate::build::{FormMode, members_for};
+use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
-use crate::members::{FormMember, owns};
+use crate::reflect::members::{FormMember, owns};
 
 #[derive(Clone, Debug)]
 pub struct Form<T: Clone + Debug + Facet<'static>> {

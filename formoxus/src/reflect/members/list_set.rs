@@ -4,7 +4,7 @@
 use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
-use crate::members::{FormMember, owns, qualify};
+use crate::reflect::members::{FormMember, owns, qualify};
 
 #[derive(Clone, Debug)]
 pub struct ListSet {

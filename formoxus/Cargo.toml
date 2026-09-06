@@ -5,12 +5,14 @@ edition = "2024"
 
 [dependencies]
 dioxus = { workspace = true }
+facet = { workspace = true }
 heck = { workspace = true }
 serde = { workspace = true }
 formoxus-macros = { workspace = true, optional = true }
 paste = "1.0.15"
 
 [dev-dependencies]
+dioxus-ssr = { workspace = true }
 googletest = { workspace = true }
 trybuild = { workspace = true }
 
