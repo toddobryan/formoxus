@@ -28,7 +28,7 @@ pub use members::{
 
 // The one crate-internal item the test modules reach for directly.
 #[cfg(test)]
-pub(crate) use members::ABSENT_DISPLAY;
+pub(crate) use widgets::ABSENT_DISPLAY;
 
 #[cfg(test)]
 mod tests;

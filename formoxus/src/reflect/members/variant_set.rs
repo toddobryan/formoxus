@@ -7,9 +7,10 @@ use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::members::{
-    ABSENT_DISPLAY, Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     variant_segment,
 };
+use crate::reflect::widgets::VariantSelect;
 
 /// The enum variant at a particular point
 ///
@@ -121,6 +122,17 @@ impl VariantSet {
         self.errors.push(FieldError(message.clone()));
         Err(FormAccessError(message))
     }
+
+    pub fn variants(&self) -> Vec<&'static str> {
+        self.enum_type.variants.iter().map(|v| v.name).collect()
+    }
+
+    pub fn chosen(&self) -> Option<String> {
+        match &self.choice {
+            VariantChoice::Unchosen => None,
+            VariantChoice::Named(v) => Some(v.clone()),
+        }
+    }
 }
 
 impl FormMember for VariantSet {
@@ -133,39 +145,45 @@ impl FormMember for VariantSet {
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
-        match &self.choice {
-            // Visible but inert, so the user can see they chose to leave a value
-            // out rather than the field silently vanishing. `disabled` also means
-            // the browser won't submit it, so `ABSENT_DISPLAY` never round-trips.
-            // This is the one member that renders without being a leaf — and the
-            // natural spot for a `<select>` if variant choice ever goes live.
-            VariantChoice::Unchosen => {
-                let path = ctx.path(&self.name);
-                let input = rsx! {
-                    input { 
-                        r#type: "text", 
-                        name: "{path}",
-                        value: "{ABSENT_DISPLAY}",
-                        disabled: true
-                    }
-                };
-                match self.label() {
-                    Some(text) => rsx! {
-                        label { class: "form-field",
-                            span { class: "field-label", "{text}" }
-                            { input }
-                        }
-                    },
-                    None => input,
-                }
-            }
+        // A `fieldset` so the picker and the fields it revealed read as one
+        // thing — same treatment `FieldSet` gives a nested struct, and the
+        // legend carries the label so the select doesn't repeat it.
+        //
+        // Both arms build the SAME rsx template: the select is unconditional
+        // and `members` is simply empty when unchosen. That is deliberate — a
+        // conditional wrapper would give the two arms different templates, and
+        // dioxus would tear the `<select>` down and rebuild it on every change,
+        // losing keyboard focus mid-interaction.
+        let members: Vec<Element> = match &self.choice {
+            VariantChoice::Unchosen => Vec::new(),
             VariantChoice::Named(variant) => {
                 let nested = ctx.nested(&self.name).nested(&variant_segment(variant));
-                let members_rendered = self.members.iter().map(|m| m.render(&nested));
-                rsx! {
-                    { members_rendered.into_iter() }
+                self.members.iter().map(|m| m.render(&nested)).collect()
+            }
+        };
+        rsx! {
+            fieldset {
+                if let Some(text) = self.label() {
+                    legend {
+                        "{text}"
+                        if ctx.required {
+                            span { class: "required", " *" }
+                        }
+                    }
                 }
-            },
+                VariantSelect {
+                    path: ctx.path(&self.name),
+                    // The legend above already names this group; a second copy
+                    // beside the select would just be the same word twice.
+                    label: None,
+                    required: ctx.required,
+                    errors: self.errors.clone(),
+                    variants: self.variants(),
+                    selected: self.chosen(),
+                    on_edit: ctx.on_edit,
+                }
+                { members.into_iter() }
+            }
         }
     }
 

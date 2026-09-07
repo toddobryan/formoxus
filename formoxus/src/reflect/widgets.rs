@@ -13,7 +13,8 @@
 use dioxus::prelude::*;
 
 use crate::error::FieldError;
-use crate::reflect::ValuesByPath;
+use crate::label_case::{LabelCase, ToCase};
+use crate::reflect::{Edit, ValuesByPath};
 use crate::widgets::FieldErrors;
 
 /// A single-line text input bound to one path in the value map.
@@ -80,6 +81,70 @@ pub fn ScalarInput(
                         values.insert(write_path.clone(), raw);
                     }
                 },
+            }
+            FieldErrors { errors }
+        }
+    }
+}
+
+/// The "leave this out" entry in an optional enum's picker.
+///
+/// Display only, and it stays that way for a structural reason rather than a
+/// cosmetic one: the `<select>` carries no `name`, so nothing it holds is ever
+/// collected by `FormData::values()` and this text cannot come back as a value.
+/// That is what keeps it from reintroducing the sentinel problem
+/// [`VariantChoice`](crate::reflect::VariantChoice) exists to avoid — a model
+/// with a genuine `None` variant would otherwise be indistinguishable from an
+/// unanswered optional field. What the select actually emits is `""`, which
+/// `VariantSelect` turns into `ChooseVariant { variant: None }`.
+pub(crate) const ABSENT_DISPLAY: &str = "--none--";
+
+#[component]
+pub fn VariantSelect(
+    path: String,
+    label: Option<String>,
+    required: bool,
+    errors: Vec<FieldError>,
+    variants: Vec<&'static str>,
+    selected: Option<String>,
+    on_edit: Callback<Edit>,
+) -> Element {
+    let label_text = label;
+
+    rsx! {
+        label { class: "form-field",
+            // The star annotates the LABEL, so it only appears when there is
+            // one. Rendered inside a `VariantSet`'s fieldset there isn't: the
+            // legend carries both, and a lone `*` floating in front of the
+            // select reads as belonging to nothing.
+            if let Some(text) = label_text {
+                span { class: "field-label", "{text}" }
+                if required {
+                    span { class: "required", " *" }
+                }
+            }
+            select {
+                required,
+                onchange: move |e: FormEvent| {
+                    let v = e.value();
+                    let variant = (!v.is_empty()).then_some(v);
+                    on_edit.call(Edit::new_choose_variant(&path, variant.as_deref()));
+                },
+                // Required + unchosen: an unselectable placeholder that keeps the browser's
+                // own validation on the hook. Not required: a real "--none--" the user can
+                // pick, which routes through the empty arm above to Unchosen.
+                if required && selected.is_none() {
+                    option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
+                } else if !required {
+                    option { value: "", selected: selected.is_none(), "{ABSENT_DISPLAY}" }
+                }
+                for v in variants {
+                    option {
+                        value: "{v}",
+                        selected: selected.as_deref() == Some(v),
+                        "{v.to_case(LabelCase::Title)}"
+                    }
+                }
             }
             FieldErrors { errors }
         }

@@ -22,7 +22,8 @@
 //! `FormState::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
-use super::render_to_html;
+use super::{Harness, render_to_html};
+use dioxus::core::ElementId;
 use crate::reflect::*;
 use std::collections::HashMap;
 use dioxus::prelude::*;
@@ -159,14 +160,55 @@ fn UnchosenSketchForm() -> Element {
 }
 
 #[gtest]
-fn unchosen_renders_a_visible_placeholder() {
-    // Visible but inert, so leaving a value out is something the user can see
-    // rather than a field silently vanishing. `disabled` also means the browser
-    // won't submit it, so the placeholder text never comes back as a value.
-    // (This is the spot the reactive `<select>` eventually takes over.)
+fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
+    // Optional, so "leave this out" is something the user can actually pick —
+    // a visible, selectable option whose empty value routes back through
+    // `Edit::ChooseVariant { variant: None }`. It starts selected, which is what
+    // makes an untouched optional enum mean `None` rather than "unanswered".
     let html = render_to_html(UnchosenSketchForm);
-    expect_that!(html, contains_substring(ABSENT_DISPLAY));
-    expect_that!(html, contains_substring("disabled"));
+    expect_that!(
+        html,
+        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#))
+    );
+    // Not `required`: HTML5 validation must not block submitting without a shape.
+    expect_that!(html, not(contains_substring("<select required")));
+}
+
+#[component]
+fn UnchosenDrawingForm() -> Element {
+    let form = use_form(empty_form::<Drawing>());
+    form.render()
+}
+
+#[gtest]
+fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
+    // The mirror image, and the reason the two arms of `VariantSelect` aren't
+    // the same markup with a flag: a required enum's placeholder is `disabled`
+    // and `hidden`, so it shows before the first choice and can never be
+    // re-selected afterwards. `required` on the select puts the browser's own
+    // validation behind the same rule `validate()` enforces.
+    let html = render_to_html(UnchosenDrawingForm);
+    expect_that!(html, contains_substring("<select required=true>"));
+    expect_that!(html, contains_substring(r#"disabled=true hidden=true"#));
+    expect_that!(
+        html,
+        not(contains_substring(ABSENT_DISPLAY)),
+        "a required enum must not offer a way back to unchosen"
+    );
+}
+
+#[gtest]
+fn the_select_and_the_fields_it_reveals_render_as_one_group() {
+    // The picker and the fields it produced belong together, so they share a
+    // `fieldset` and the legend carries the label — the same treatment
+    // `FieldSet` gives a nested struct. The label lives on the legend and NOT
+    // beside the select, so it appears exactly once.
+    let html = render_to_html(DocWithChosenOuter);
+    expect_that!(html, contains_substring(r#"<fieldset><legend>Outer<span class="required"> *</span></legend><label"#));
+    expect_that!(html, contains_substring(r#"<legend>Inner<span class="required"> *</span></legend>"#));
+    // The star annotates the label, and the label is on the legend — so it must
+    // not also appear loose in front of the select.
+    expect_that!(html, not(contains_substring(r#"</legend><label class="form-field"><span"#)));
 }
 
 #[component]
@@ -179,19 +221,89 @@ fn DocWithChosenOuter() -> Element {
     form.render()
 }
 
+// ── The whole loop: a DOM event that rebuilds the schema ─────────────────
+//
+// Everything above drives `FormState` directly. These go in through the
+// `<select>`, so they cover the parts nothing else does: the `onchange`
+// handler, the `Edit` it builds, `use_form`'s callback, the `Signal<FormState>`
+// write, and the re-render that follows.
+
 #[gtest]
-fn a_nested_unchosen_placeholder_is_named_by_its_qualified_path() {
-    // Guards the fix that qualified this input's `name`. It has to be a NESTED
-    // enum to mean anything: `Sketch.shape` sits at the root, where
-    // `qualify("", "shape")` and the bare name are the same string, so it would
-    // pass with the bug still in. `Doc` gives us `outer.inner`, which differs.
+fn choosing_a_variant_in_the_select_reveals_its_fields() {
+    let mut app = Harness::mount(UnchosenDrawingForm);
+    expect_that!(
+        app.html(),
+        not(contains_substring("radius")),
+        "an unchosen enum contributes no fields"
+    );
+
+    app.fire("change", app.only_listener("change"), "Circle");
+
+    expect_that!(app.html(), contains_substring(r#"name="shape.$Circle.radius""#));
+}
+
+#[component]
+fn UnchosenDocForm() -> Element {
+    let form = use_form(empty_form::<Doc>());
+    form.render()
+}
+
+#[gtest]
+fn a_nested_enum_dispatches_under_its_qualified_path() {
+    // Successor to the old `name`-attribute check, which went away with the
+    // disabled placeholder: the select carries no `name`, so the path is no
+    // longer visible in the HTML and has to be proved by *use*.
     //
-    // Cosmetic today (the input is `disabled`, so it never submits) and a real
-    // bug the moment this becomes a live `<select>`: a nested enum posting
-    // under `inner` would never be found by `apply_leaves`.
-    let html = render_to_html(DocWithChosenOuter);
-    expect_that!(html, contains_substring(r#"name="outer.$First.inner""#));
-    expect_that!(html, not(contains_substring(r#"name="inner""#)));
+    // It has to be a NESTED enum to mean anything. `Sketch.shape` sits at the
+    // root, where `qualify("", "shape")` and the bare name are the same string,
+    // so a double-qualified prefix would pass unnoticed. `Doc` gives us
+    // `outer.$First.inner`, which differs — and if `VariantSet` handed the
+    // select the wrong path, `ensure_owned` would reject the edit and no fields
+    // would appear at all.
+    let mut app = Harness::mount(UnchosenDocForm);
+    let outer = app.only_listener("change");
+    app.fire("change", outer, "First");
+
+    // Identify the nested select by the fact that it *appeared*, rather than by
+    // its position: listener registration order is the order dioxus creates
+    // dynamic nodes, which is not document order.
+    let after = app.listeners("change");
+    expect_that!(
+        after,
+        contains(eq(&outer)),
+        "the outer select must survive its own edit, not be torn down and rebuilt — \
+         both arms of `VariantSet::render` are one template so the browser keeps focus"
+    );
+    let inner: Vec<ElementId> = after.into_iter().filter(|id| *id != outer).collect();
+    expect_that!(inner, elements_are![anything()], "choosing First reveals exactly one enum");
+
+    // `A` is a variant of `Inner` alone, so this also pins which select is
+    // which: fired at the outer one it would be rejected and nothing would
+    // change.
+    app.fire("change", inner[0], "A");
+
+    expect_that!(app.html(), contains_substring(r#"name="outer.$First.inner.$A.x""#));
+}
+
+#[gtest]
+fn picking_none_clears_an_optional_enums_subtree() {
+    // The `--none--` round trip: `""` from the select becomes
+    // `ChooseVariant { variant: None }`, which puts the member back to
+    // `Unchosen` and drops its fields. The reverse of the test above, and the
+    // reason `set_variant` takes an `Option<&str>` rather than a sentinel name.
+    let mut app = Harness::mount(UnchosenSketchForm);
+    app.fire("change", app.only_listener("change"), "Circle");
+    expect_that!(app.html(), contains_substring(r#"name="shape.$Circle.radius""#));
+
+    app.fire("change", app.only_listener("change"), "");
+
+    let html = app.html();
+    expect_that!(html, not(contains_substring("radius")));
+    expect_that!(
+        html,
+        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#)),
+        "--none-- is selected again"
+    );
 }
 
 // ── RED: validate() must report an unchosen REQUIRED enum ──
@@ -443,6 +555,45 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
     expect_that!(form.validate(), none());
 }
 
+#[component]
+fn PlotForm() -> Element {
+    let form = use_form(empty_form::<Plot>());
+    form.render()
+}
+
+#[gtest]
+fn switching_variants_keeps_each_ones_values_apart() {
+    // The payoff for `$Variant` path segments, end to end. Without them both
+    // variants' `size` would claim `footprint.size`, and switching to Square
+    // would hand it Circle's number — silent data corruption, which is exactly
+    // what this reproduced before the fix.
+    //
+    // It also shows why switching is no longer destructive: the schema rebuild
+    // throws away the *members*, but the value store is keyed by path and
+    // survives it, so a value comes back when its variant does.
+    let mut app = Harness::mount(PlotForm);
+    app.fire("change", app.only_listener("change"), "Circle");
+    app.fire("input", app.only_listener("input"), "5");
+    expect_that!(
+        app.html(),
+        contains_substring(r#"name="footprint.$Circle.size" value="5""#)
+    );
+
+    app.fire("change", app.only_listener("change"), "Square");
+    expect_that!(
+        app.html(),
+        contains_substring(r#"name="footprint.$Square.size" value="""#),
+        "Square's `size` is a different path, so it must start empty"
+    );
+
+    app.fire("change", app.only_listener("change"), "Circle");
+    expect_that!(
+        app.html(),
+        contains_substring(r#"name="footprint.$Circle.size" value="5""#),
+        "the value store outlives a schema rebuild"
+    );
+}
+
 // ── Paths still mirror the model, modulo `$` segments ────────────────────
 
 #[gtest]
@@ -596,4 +747,35 @@ fn unsetting_then_rechoosing_restores_what_was_typed() {
             shape: Some(Shape::Circle { radius: 2.5 }),
         }))
     );
+}
+
+#[gtest]
+fn switching_variants_actually_edits_the_dom() {
+    // Every other render assertion in this file reads the VIRTUAL dom, via
+    // `dioxus_ssr::render`. A browser doesn't — it applies the mutation stream.
+    // So a correct VDOM paired with an empty or wrong edit list looks perfect to
+    // every one of them and is broken on the page.
+    //
+    // That is not hypothetical: before the select and its members shared one
+    // `fieldset`, switching between two *fielded* variants produced a correct
+    // VDOM and ZERO mutations, because the two arms of `render` were different
+    // templates and the diff never reached the members. This test is the guard
+    // for that whole class, so it asserts on edit counts rather than markup.
+    let mut app = Harness::mount(PlotForm);
+    let select = app.only_listener("change");
+
+    for variant in ["Circle", "Square", "Circle"] {
+        let before = app.html();
+        let edits = app.fire("change", select, variant);
+        expect_that!(
+            app.html(),
+            not(eq(&before)),
+            "choosing {variant} should change what the form renders"
+        );
+        expect_that!(
+            edits,
+            gt(0),
+            "...and the browser only learns about it through mutations"
+        );
+    }
 }

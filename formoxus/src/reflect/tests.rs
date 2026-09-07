@@ -24,3 +24,109 @@ pub fn render_to_html(app: fn() -> Element) -> String {
     dom.rebuild_in_place();
     dioxus_ssr::render(&dom)
 }
+
+// ── Driving a real interaction ───────────────────────────────────────────
+//
+// Rendering to HTML proves what a form *looks* like. These prove what it
+// *does*: a DOM event goes in, an `Edit` travels through `use_form`'s callback
+// into `FormState`, the schema rebuilds, and the new subtree comes back out.
+
+use dioxus::core::{ElementId, Mutation, Mutations};
+use dioxus_html::{
+    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
+};
+use std::any::Any;
+use std::rc::Rc;
+
+/// A mounted app you can fire events at more than once.
+///
+/// The reason this is a struct and not a function: a structural edit rebuilds
+/// part of the tree, so the second event's target may not be the element the
+/// *first* rebuild registered. Listener ids are therefore accumulated across
+/// every render rather than read once — `Harness` tracks registrations and
+/// removals so `listeners()` always describes the tree as it stands now.
+pub struct Harness {
+    dom: VirtualDom,
+    listeners: Vec<(String, ElementId)>,
+}
+
+impl Harness {
+    pub fn mount(app: fn() -> Element) -> Self {
+        // A platform (web, desktop) normally installs this; a bare `VirtualDom`
+        // has none, and without it a listener's `PlatformEventData -> FormData`
+        // conversion has nothing to convert with. Idempotent, so every mount
+        // can call it.
+        set_event_converter(Box::new(SerializedHtmlEventConverter));
+        let mut dom = VirtualDom::new(app);
+        let mutations = dom.rebuild_to_vec();
+        let mut harness = Harness { dom, listeners: Vec::new() };
+        harness.absorb(&mutations);
+        harness
+    }
+
+    fn absorb(&mut self, mutations: &Mutations) {
+        for edit in mutations.edits.iter() {
+            match edit {
+                Mutation::NewEventListener { name, id } => {
+                    self.listeners.push((name.to_string(), *id))
+                }
+                Mutation::RemoveEventListener { name, id } => {
+                    self.listeners.retain(|(n, i)| !(n == name && i == id))
+                }
+                // A torn-down element takes its listeners with it, and dioxus
+                // recycles the id — so dropping these matters for correctness,
+                // not tidiness: a stale entry could name an element that is now
+                // something else entirely.
+                Mutation::Remove { id } => self.listeners.retain(|(_, i)| i != id),
+                _ => {}
+            }
+        }
+    }
+
+    /// Every element currently listening for `event`, in registration order —
+    /// which for a fresh subtree is document order.
+    pub fn listeners(&self, event: &str) -> Vec<ElementId> {
+        self.listeners
+            .iter()
+            .filter(|(name, _)| name == event)
+            .map(|(_, id)| *id)
+            .collect()
+    }
+
+    /// The sole listener for `event`, asserting there is exactly one. Keeps a
+    /// test from silently firing at the wrong control when the markup grows.
+    pub fn only_listener(&self, event: &str) -> ElementId {
+        let found = self.listeners(event);
+        assert_eq!(
+            found.len(),
+            1,
+            "expected exactly one `{event}` listener, found {}",
+            found.len()
+        );
+        found[0]
+    }
+
+    /// Fire `event` at `id` with `value` as the control's value, then flush the
+    /// re-render so the next assertion sees the result. Returns how many DOM
+    /// edits that re-render produced — see
+    /// [`switching_variants_actually_edits_the_dom`] for why the count matters.
+    ///
+    /// Listeners register against `PlatformEventData`, not `FormData` — the
+    /// event attribute macro does that conversion itself, inside the handler.
+    /// Handing it a `FormData` directly fails the downcast at dispatch.
+    pub fn fire(&mut self, event: &str, id: ElementId, value: &str) -> usize {
+        let payload = PlatformEventData::new(Box::new(SerializedFormData::new(
+            value.to_string(),
+            Vec::new(),
+        )));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event(event, dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
+    pub fn html(&self) -> String {
+        dioxus_ssr::render(&self.dom)
+    }
+}

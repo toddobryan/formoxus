@@ -64,13 +64,6 @@ impl Clone for Box<dyn FormMember> {
     }
 }
 
-/// Shown for an `Option<Enum>` the user chose to leave empty — in the disabled
-/// input below, and (later) as the "none" entry in a variant picker. Display
-/// only: a disabled input isn't submitted, so this never comes back through
-/// `FormData::values()` and can't be mistaken for a value. That's what keeps it
-/// from reintroducing the sentinel problem `VariantChoice` exists to avoid.
-pub(crate) const ABSENT_DISPLAY: &str = "--none--";
-
 /// Is `path` exactly `nested`, or somewhere inside its subtree?
 ///
 /// The guard every container's `choose_variant` uses before recursing. Testing
