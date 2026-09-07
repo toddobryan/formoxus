@@ -48,7 +48,13 @@ pub trait FormMember: Debug {
     fn is_present(&self) -> bool;
     fn clear_errors(&mut self);
 
-    fn choose_variant(&mut self, prefix: &str, path: &str, variant: &str) -> Result<(), FormAccessError>;
+    /// Apply a structural edit — choose a variant, add or remove a row.
+    ///
+    /// One method rather than one per edit kind because the containment walk
+    /// each container performs is identical regardless of the edit; only the
+    /// member that owns the path cares what kind it is. `Edit::path()` is the
+    /// only thing a container reads, so containers stay kind-agnostic.
+    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
 }
 
 impl Clone for Box<dyn FormMember> {
@@ -72,6 +78,19 @@ pub(crate) const ABSENT_DISPLAY: &str = "--none--";
 /// "no such path" by a parent that was still shopping around.
 pub(crate) fn owns(nested: &str, path: &str) -> bool {
     path == nested || path.strip_prefix(nested).is_some_and(|rest| rest.starts_with('.'))
+}
+
+pub(crate) fn no_such_path(path: &str) -> FormAccessError {
+    FormAccessError(format!("no such path: {path}"))
+}
+
+/// Guard that `path` is this member's own path or somewhere inside it.
+pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccessError> {
+    if owns(container, path) {
+        Ok(())
+    } else {
+        Err(no_such_path(path))
+    }
 }
 
 /// A variant descriptor segment: `Circle` -> `$Circle`.
@@ -161,5 +180,42 @@ impl RenderCtx {
     /// This member's own qualified path, for a leaf's `name` attribute.
     pub fn path(&self, name: &str) -> String {
         qualify(&self.prefix, name)
+    }
+}
+
+/// A change to the form's *shape*, as opposed to its values — the counterpart
+/// to `apply`. Crosses the widget boundary in a `Callback<Edit>`, which is why
+/// it owns its strings rather than borrowing.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Edit {
+    ChooseVariant {
+        path: String,
+        variant: Option<String>,
+    },
+    AddRow {
+        path: String,
+    },
+    RemoveRow {
+        path: String,
+        index: usize,
+    }
+}
+
+impl Edit {
+    /// Every edit names a target, and the containment walk reads only this —
+    /// never the kind.
+    pub fn path(&self) -> &str {
+        match self {
+            Edit::ChooseVariant { path, .. } => path,
+            Edit::AddRow { path } => path,
+            Edit::RemoveRow { path, .. } => path,
+        }
+    }
+
+    pub fn new_choose_variant(path: &str, variant: Option<&str>) -> Edit {
+        Edit::ChooseVariant {
+            path: path.to_string(),
+            variant: variant.map(str::to_string),
+        }
     }
 }

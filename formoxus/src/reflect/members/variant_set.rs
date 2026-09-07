@@ -1,12 +1,12 @@
 //! An enum-typed member, locked to one variant chosen before the form existed.
 
 use dioxus::prelude::*;
-use facet::{EnumType, Partial, ReflectError};
+use facet::{EnumType, Partial, ReflectError, Variant};
 use std::collections::HashMap;
 use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
-use crate::reflect::members::{ABSENT_DISPLAY, FormMember, owns, qualify, variant_segment};
+use crate::reflect::members::{ABSENT_DISPLAY, Edit, FormMember, ensure_owned, no_such_path, owns, qualify, variant_segment};
 
 /// The enum variant at a particular point
 ///
@@ -51,6 +51,72 @@ impl VariantSet {
             )),
             VariantChoice::Unchosen => None,
         }
+    }
+
+    /// Not me, but mine: an enum nested inside my chosen variant's fields. This is
+    /// what the iterative disclosure loop used to arrange in advance — `outer.inner`
+    /// simply becomes reachable once `outer` is answered.
+    fn forward_to_child(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+        let path = edit.path();
+        let Some(child_prefix) = self.child_prefix(prefix) else {
+            return Err(no_such_path(path)); // unchosen: no children to be inside
+        };
+        // Paths are unique, so at most one child can own this one. Dispatching by
+        // containment rather than trying each in turn is what lets a child's real
+        // error reach the caller intact.
+        for m in self.members.iter_mut() {
+            if owns(&qualify(&child_prefix, &m.name()), path) {
+                return m.edit(&child_prefix, edit);
+            }
+        }
+        Err(no_such_path(path))
+    }
+
+    /// Swap to `variant`, or clear back to `Unchosen` with `None`.
+    fn set_variant(&mut self, my_path: &str, variant: Option<&str>) -> Result<(), FormAccessError> {
+        let Some(name) = variant else {
+            // The `--none--` option. Always structurally legal; `validate()` decides
+            // whether leaving it unchosen is an error.
+            self.choice = VariantChoice::Unchosen;
+            self.members = Vec::new();
+            self.errors.clear();
+            return Ok(());
+        };
+        let chosen = self.lookup_variant(name, my_path)?;
+        self.choice = VariantChoice::Named(chosen.name.to_string());
+        self.members = variant_members(
+            chosen,
+            None,
+            FormMode::Blank,
+            &qualify(my_path, &variant_segment(chosen.name)),
+        );
+        self.errors.clear();
+        Ok(())
+    }
+
+    /// Look up a variant by name, recording the failure against this member *and*
+    /// returning it.
+    ///
+    /// Both, deliberately: a live `<select>` can send a stale name, and the useful
+    /// place for that message is beside the select — but tests and programmatic
+    /// callers still want the `Err`. Never a panic: on wasm that aborts rather than
+    /// reaching an `ErrorBoundary`. Listing the real options makes it actionable.
+    fn lookup_variant(
+        &mut self,
+        name: &str,
+        my_path: &str,
+    ) -> Result<&'static Variant, FormAccessError> {
+        // Copy the `&'static` out first, so the `self.errors.push` below isn't
+        // fighting a borrow of `self` held by the iterator.
+        let enum_type = self.enum_type;
+        if let Some(found) = enum_type.variants.iter().find(|v| v.name == name) {
+            return Ok(found);
+        }
+        let known: Vec<&str> = enum_type.variants.iter().map(|v| v.name).collect();
+        let message =
+            format!("{name:?} is not a variant of the enum at {my_path} (expected one of {known:?})");
+        self.errors.push(FieldError(message.clone()));
+        Err(FormAccessError(message))
     }
 }
 
@@ -109,51 +175,23 @@ impl FormMember for VariantSet {
         }
     }
 
-    fn choose_variant(&mut self, prefix: &str, path: &str, variant: &str) -> Result<(), FormAccessError> {
-        // Two different paths now, where one binding used to do both jobs: the
-        // `<select>` itself lives at `self_path`, but its children live one
-        // segment deeper, under the chosen variant's descriptor.
-        let self_path = qualify(prefix, &self.name);
-        if !owns(&self_path, path) {
-            return Err(FormAccessError(format!("no such path: {path}")));
+    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+        // Two paths are in play, and they are NOT the same: this member sits at
+        // `my_path`, where the `<select>` lives, but its children sit one segment
+        // deeper under the chosen variant's descriptor. `forward_to_child` owns
+        // that second one, via `child_prefix`.
+        let path = edit.path();
+        let my_path = qualify(prefix, &self.name);
+        ensure_owned(&my_path, path)?;
+        if path != my_path {
+            return self.forward_to_child(prefix, edit);
         }
-
-        // Not me, but mine: an enum nested inside my chosen variant's fields.
-        // This is what the iterative disclosure loop used to arrange in advance —
-        // now `outer.inner` simply becomes reachable once `outer` is answered.
-        if path != self_path {
-            let Some(child_prefix) = self.child_prefix(prefix) else {
-                // Unchosen, so there are no children for the path to be inside.
-                return Err(FormAccessError(format!("no such path: {path}")));
-            };
-            for m in self.members.iter_mut() {
-                if owns(&qualify(&child_prefix, &m.name()), path) {
-                    return m.choose_variant(&child_prefix, path, variant);
-                }
-            }
-            return Err(FormAccessError(format!("no such path: {path}")));
+        match edit {
+            Edit::ChooseVariant { variant, .. } => self.set_variant(&my_path, variant.as_deref()),
+            _ => Err(FormAccessError(format!("{my_path} is an enum, not a list"))),
         }
-
-        let Some(chosen) = self.enum_type.variants.iter().find(|v| v.name == variant) else {
-            // An `Err`, never a panic: with a live `<select>` this can arrive
-            // from a stale client, and on wasm a panic aborts rather than
-            // reaching an ErrorBoundary. Listing the real options makes the
-            // message actionable.
-            let known: Vec<&str> = self.enum_type.variants.iter().map(|v| v.name).collect();
-            return Err(FormAccessError(format!(
-                "{variant:?} is not a variant of the enum at {path} (expected one of {known:?})"
-            )));
-        };
-
-        // Replace, never merge. A half-filled `Circle` has no coherent
-        // `Rectangle` reading, so the old variant's members are discarded
-        // wholesale — the destructive switch the UX rule warns about.
-        self.choice = VariantChoice::Named(chosen.name.to_string());
-        let child_prefix = qualify(&self_path, &variant_segment(chosen.name));
-        self.members = variant_members(chosen, None, FormMode::Blank, &child_prefix);
-        self.errors.clear();
-        Ok(())
     }
+
 
     fn clear_errors(&mut self) {
         self.errors.clear();

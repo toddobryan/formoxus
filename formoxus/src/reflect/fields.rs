@@ -6,7 +6,7 @@ use facet::{Facet, Partial, Peek, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{FormMember, qualify};
+use crate::reflect::members::{Edit, FormMember, qualify};
 use crate::reflect::widgets::ScalarInput;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,17 +117,24 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn is_present(&self) -> bool {
         self.value != FieldValue::Empty
     }
-    
-    fn choose_variant(&mut self, prefix: &str, path: &str, _variant: &str) -> Result<(), FormAccessError> {
+
+    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
         // A leaf can only ever be the wrong answer, but which wrong answer is
         // worth saying: hitting a real field means the caller's path was right
         // and its *expectation* was wrong.
+        let path = edit.path();
         Err(if path == qualify(prefix, &self.name) {
-            FormAccessError(format!("{path} is a field, not an enum"))
+            // The article has to travel with the noun, so this carries both.
+            let wanted = match edit {
+                Edit::ChooseVariant { .. } => "an enum",
+                Edit::AddRow { .. } | Edit::RemoveRow { .. } => "a list",
+            };
+            FormAccessError(format!("{path} is a field, not {wanted}"))
         } else {
-            FormAccessError(format!("no such path: {path}"))
+            FormAccessError(format!("{path} is a field, so edits cannot be applied"))
         })
     }
+    
 
     fn clear_errors(&mut self) {
         self.errors.clear();

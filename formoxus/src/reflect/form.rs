@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use crate::reflect::{RenderCtx, ValuesByPath};
 use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
-use crate::reflect::members::{FormMember, owns};
+use crate::reflect::members::{Edit, FormMember, no_such_path, owns};
 
 pub fn use_form_values<T>(form: &Form<T>) -> ValuesByPath
 where
@@ -85,6 +85,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
         self.apply(&map);
     }
 
+    pub fn edit(&mut self, edit: &Edit) -> Result<(), FormAccessError> {
+        let path = edit.path();
+        for m in self.members.iter_mut() {
+            if owns(&m.name(), path) {
+                return m.edit("", edit);
+            }
+        }
+        Err(no_such_path(path))
+    }
+
     /// Answer the enum at `path`, rebuilding that subtree from the chosen
     /// variant's fields. The schema-rebuild a reactive `<select>` triggers;
     /// add/remove-row will be its sibling.
@@ -96,13 +106,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
     /// aborts instead of reaching an `ErrorBoundary` — dioxus-core notes that
     /// unwinds aren't caught there. The `Result` is the transport; the widget
     /// layer is expected to push it into the boundary rather than recover.
-    pub fn choose_variant(&mut self, path: &str, variant: &str) -> Result<(), FormAccessError> {
-        for m in self.members.iter_mut() {
-            if owns(&m.name(), path) {
-                return m.choose_variant("", path, variant);
-            }
-        }
-        Err(FormAccessError(format!("no such path: {path}")))
+    pub fn choose_variant(&mut self, path: &str, variant: Option<&str>) -> Result<(), FormAccessError> {
+        self.edit(&Edit::new_choose_variant(path, variant))
     }
 
     pub fn render(&self, values: ValuesByPath) -> Element {

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::core::Element;
 
+use crate::reflect::members::Edit;
 use crate::reflect::{FormMember, RenderCtx};
 use crate::error::FormAccessError;
 
@@ -67,12 +68,13 @@ impl FormMember for OptionMember {
         self.inner.is_present()
     }
 
-    fn choose_variant(&mut self, prefix: &str, path: &str, variant: &str) -> Result<(), FormAccessError> {
+    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
         // `name()` delegates to the inner, so the inner derives the same
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
-        self.inner.choose_variant(prefix, path, variant)
+        self.inner.edit(prefix, edit)
     }
+
 
     fn clear_errors(&mut self) {
         self.inner.clear_errors();

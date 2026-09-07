@@ -6,7 +6,7 @@ use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{FormMember, owns, qualify};
+use crate::reflect::members::{Edit, FormMember, ensure_owned, no_such_path, owns, qualify};
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
@@ -79,22 +79,22 @@ impl FormMember for ListSet {
     fn is_present(&self) -> bool {
         !self.rows.is_empty() && self.rows.iter().any(|fm| fm.is_present())
     }
-    
-    fn choose_variant(&mut self, prefix: &str, path: &str, variant: &str) -> Result<(), FormAccessError> {
+
+    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
         let nested = qualify(prefix, &self.name);
-        if !owns(&nested, path) {
-            return Err(FormAccessError(format!("no such path: {path}")));
-        }
-        // Paths are unique, so at most one child can own this one. Dispatching
-        // by containment rather than trying each in turn is what lets a child's
-        // real error ("no such variant") reach the caller intact.
+        let path = edit.path();
+        ensure_owned(&nested, path)?;
+        // Paths are unique, so at most one row can own this one. Dispatching by
+        // containment rather than trying each in turn is what lets a row's real
+        // error reach the caller intact.
         for m in self.rows.iter_mut() {
             if owns(&qualify(&nested, &m.name()), path) {
-                return m.choose_variant(&nested, path, variant);
+                return m.edit(&nested, edit);
             }
         }
-        Err(FormAccessError(format!("no such path: {path}")))
+        Err(no_such_path(path))
     }
+    
 
     fn clear_errors(&mut self) {
         self.errors.clear();
