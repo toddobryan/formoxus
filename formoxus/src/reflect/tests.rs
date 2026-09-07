@@ -33,7 +33,8 @@ pub fn render_to_html(app: fn() -> Element) -> String {
 
 use dioxus::core::{ElementId, Mutation, Mutations};
 use dioxus_html::{
-    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
+    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, SerializedMouseData,
+    set_event_converter,
 };
 use std::any::Any;
 use std::rc::Rc;
@@ -126,7 +127,33 @@ impl Harness {
         mutations.edits.len()
     }
 
+    /// Click the element at `id`, then flush. Returns the edit count, like
+    /// [`fire`](Self::fire).
+    ///
+    /// Separate from `fire` because the payload type has to match what the
+    /// handler will convert to: a listener registers against `PlatformEventData`
+    /// and the attribute macro downcasts inside, so handing an `onclick` a
+    /// `SerializedFormData` fails the downcast at dispatch rather than at
+    /// compile time.
+    pub fn click(&mut self, id: ElementId) -> usize {
+        let payload = PlatformEventData::new(Box::new(SerializedMouseData::default()));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event("click", dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
     pub fn html(&self) -> String {
         dioxus_ssr::render(&self.dom)
     }
+}
+
+/// The listeners in `after` that weren't in `before`.
+///
+/// How a test identifies a control that an edit just revealed. Position won't
+/// do it: registration order is the order dioxus creates dynamic nodes, not
+/// document order, so "the second `change` listener" is not "the nested select."
+pub fn new_since(before: &[ElementId], after: Vec<ElementId>) -> Vec<ElementId> {
+    after.into_iter().filter(|id| !before.contains(id)).collect()
 }

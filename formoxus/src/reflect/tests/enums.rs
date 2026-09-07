@@ -22,8 +22,7 @@
 //! `FormState::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
-use super::{Harness, render_to_html};
-use dioxus::core::ElementId;
+use super::{Harness, new_since, render_to_html};
 use crate::reflect::*;
 use std::collections::HashMap;
 use dioxus::prelude::*;
@@ -274,7 +273,7 @@ fn a_nested_enum_dispatches_under_its_qualified_path() {
         "the outer select must survive its own edit, not be torn down and rebuilt — \
          both arms of `VariantSet::render` are one template so the browser keeps focus"
     );
-    let inner: Vec<ElementId> = after.into_iter().filter(|id| *id != outer).collect();
+    let inner = new_since(&[outer], after);
     expect_that!(inner, elements_are![anything()], "choosing First reveals exactly one enum");
 
     // `A` is a variant of `Inner` alone, so this also pins which select is
@@ -446,7 +445,7 @@ fn choosing_a_variant_through_a_field_set() {
 
 #[gtest]
 fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
-    // `shapes.1` — the path crosses a `ListSet`, whose rows are named by index.
+    // `shapes.#1` — the path crosses a `ListSet`, whose rows are named by key.
     // Edit mode, because a blank form has no rows until create-mode lengths land.
     let gallery = Gallery {
         shapes: vec![
@@ -455,23 +454,23 @@ fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
         ],
     };
     let mut form = form_for(&gallery);
-    form.choose_variant("shapes.1", Some("Rectangle"))
+    form.choose_variant("shapes.#1", Some("Rectangle"))
         .expect("Rectangle is a variant of Shape");
 
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
         elements_are![
-            eq("shapes.0.$Circle.radius"),
-            eq("shapes.1.$Rectangle.width"),
-            eq("shapes.1.$Rectangle.height"),
+            eq("shapes.#0.$Circle.radius"),
+            eq("shapes.#1.$Rectangle.width"),
+            eq("shapes.#1.$Rectangle.height"),
         ],
         "row 0 keeps its variant and its value; only row 1 was rebuilt"
     );
 
     form.apply_form_values(&[
-        ("shapes.1.$Rectangle.width".to_string(), "3.0".to_string()),
-        ("shapes.1.$Rectangle.height".to_string(), "4.0".to_string()),
+        ("shapes.#1.$Rectangle.width".to_string(), "3.0".to_string()),
+        ("shapes.#1.$Rectangle.height".to_string(), "4.0".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -603,8 +602,10 @@ fn model_path_strips_variant_descriptors() {
     expect_that!(model_path("footprint.$Circle.size"), eq("footprint.size"));
     expect_that!(model_path("outer.$First.inner.$A.x"), eq("outer.inner.x"));
 
-    // A list index is part of the model path and must survive.
-    expect_that!(model_path("shapes.0.$Circle.radius"), eq("shapes.0.radius"));
+    // A row KEY survives: it names a real element of the model. Which element
+    // is a question the string can't answer — a key is an identity, not a
+    // position, and only `ListSet::rows` knows the order.
+    expect_that!(model_path("shapes.#0.$Circle.radius"), eq("shapes.#0.radius"));
 
     // Nothing to strip.
     expect_that!(model_path("location.street"), eq("location.street"));
@@ -638,7 +639,7 @@ fn a_row_edit_aimed_at_an_enum_is_rejected() {
     // "right path, wrong kind of member" couldn't be expressed at all.
     let mut form = empty_form::<Drawing>();
     let error = form
-        .edit(&Edit::AddRow { path: "shape".to_string() })
+        .edit(&Edit::AddRow { path: "shape".to_string(), before: None })
         .expect_err("an enum has no rows");
     expect_that!(error.0, contains_substring("shape is an enum, not a list"));
 }

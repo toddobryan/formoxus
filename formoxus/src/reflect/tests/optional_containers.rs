@@ -245,7 +245,7 @@ fn option_peels_one_layer_at_a_time() {
         cells: Some(vec![Some("a".to_string()), None]),
     };
     let form = form_for(&value);
-    expect_that!(paths(&form), elements_are![eq("cells.0"), eq("cells.1")]);
+    expect_that!(paths(&form), elements_are![eq("cells.#0"), eq("cells.#1")]);
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&value)));

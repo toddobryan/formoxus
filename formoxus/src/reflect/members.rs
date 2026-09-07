@@ -93,12 +93,11 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
 /// — the shape carries a field's name but no prose for it. Reuses the derive
 /// path's [`crate::label_case`], so both paths title-case identically.
 ///
-/// `None` for an all-digit name, because that's a `ListSet` row, whose name is
-/// its index: "0" is a position, not a label. (Tuple-struct fields land here for
-/// the same reason and want the same answer.) The list itself is what carries
-/// the prose.
+/// `None` for a `ListSet` row key (`#3`) and for an all-digit name. Neither is
+/// prose: a row key is an identity, and a tuple-struct field's "0" is a
+/// position. The list itself is what carries the label.
 pub(crate) fn default_label(name: &str) -> Option<String> {
-    if name.chars().all(|c| c.is_ascii_digit()) {
+    if name.starts_with(ROW_SIGIL) || name.chars().all(|c| c.is_ascii_digit()) {
         None
     } else {
         Some(name.to_case(LabelCase::Title))
@@ -114,6 +113,27 @@ pub(crate) fn variant_segment(variant: &str) -> String {
     format!("${variant}")
 }
 
+/// Row keys are `#`-prefixed for the same reason variants are `$`-prefixed:
+/// neither character can begin a Rust identifier, so a key can never be mistaken
+/// for a field name.
+pub(crate) const ROW_SIGIL: char = '#';
+
+/// A list-row key segment: `3` -> `#3`.
+///
+/// A row's name is its *identity*, not its position — which is what lets a row
+/// be inserted in the middle, removed, or reordered without renaming its
+/// neighbours. Renaming them would move every leaf beneath them to a different
+/// key in the value store, and the values would have to be shuffled to match:
+/// the same silent-corruption hazard [`variant_segment`] exists to prevent,
+/// except recurring on every insert and remove rather than only on a variant
+/// switch.
+///
+/// The cost is that a row's *position* is no longer recoverable from its path.
+/// Order lives in `ListSet::rows` and nowhere else — see [`model_path`].
+pub(crate) fn row_segment(key: usize) -> String {
+    format!("{ROW_SIGIL}{key}")
+}
+
 /// Strip variant descriptors from a leaf path, giving the path through the
 /// *model*: `footprint.$Circle.size` -> `footprint.size`.
 ///
@@ -121,6 +141,12 @@ pub(crate) fn variant_segment(variant: &str) -> String {
 /// only to keep same-named fields in different variants apart. A path segment
 /// beginning with `$` is never a field, and a descriptor never appears as the
 /// final segment of a leaf path — it is only ever a prefix.
+///
+/// A list-row key (`answers.#3.text`) is left alone: it *is* a real element of
+/// the model, just identified by [identity rather than
+/// position](row_segment). Which element it is cannot be read off the string —
+/// only `ListSet::rows` knows that — so the result names the row without
+/// placing it.
 pub fn model_path(path: &str) -> String {
     path.split('.')
         .filter(|segment| !segment.starts_with('$'))
@@ -209,6 +235,12 @@ pub enum Edit {
     },
     AddRow {
         path: String,
+        /// Insert the new row *before* the row currently at this position, or
+        /// append when `None`. A position rather than a key because that is what
+        /// the control knows: an "insert here" button sits between two rendered
+        /// rows and knows only where it is. Keys identify a row across edits;
+        /// positions locate a gap at one instant, which is all an insert needs.
+        before: Option<usize>,
     },
     RemoveRow {
         path: String,
@@ -222,7 +254,7 @@ impl Edit {
     pub fn path(&self) -> &str {
         match self {
             Edit::ChooseVariant { path, .. } => path,
-            Edit::AddRow { path } => path,
+            Edit::AddRow { path, .. } => path,
             Edit::RemoveRow { path, .. } => path,
         }
     }

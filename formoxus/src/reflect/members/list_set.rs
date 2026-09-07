@@ -1,21 +1,76 @@
-//! A list-typed member. Rows are members named by their index, which is what
-//! makes `answer_choices.0.text` fall out of the ordinary `qualify` nesting.
+//! A list-typed member. Rows are members named by a `#`-prefixed KEY, which is
+//! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
+//! nesting — and, because a key is an identity rather than a position, what lets
+//! a row be inserted mid-list, removed, or reordered without renaming its
+//! neighbours. See `row_segment` for why renaming would be a data hazard.
 
 use dioxus::prelude::*;
-use facet::{Partial, ReflectError};
+use facet::{Partial, ReflectError, Shape};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::RenderCtx;
+use crate::reflect::widgets::{AddRowButton, RemoveRowButton};
+use crate::reflect::build::{FormMode, member_for_shape};
 use crate::reflect::members::{
-    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, row_segment,
 };
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
     pub name: String,
     pub label: Option<String>,
+    pub shape: &'static Shape,
     pub rows: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FormError>,
+    pub next_key: usize,
+}
+
+impl ListSet {
+    /// Build one blank row and put it *before* position `at`, or on the end.
+    ///
+    /// `None` peek and `FormMode::Blank`: a new row has no value to read, the
+    /// same pair `VariantSet::set_variant` passes when it rebuilds a variant's
+    /// members. The row's prefix has to match what `list_member` produces at
+    /// construction, or the row would render fine and write to store keys
+    /// nobody reads.
+    fn add_row(&mut self, my_path: &str, before: Option<usize>) -> Result<(), FormAccessError> {
+        let at = before.unwrap_or(self.rows.len());
+        if at > self.rows.len() {
+            return Err(FormAccessError(format!(
+                "cannot insert at {at} in {my_path}: it has {} rows",
+                self.rows.len()
+            )));
+        }
+        let name = row_segment(self.next_key);
+        self.next_key += 1;
+        let row = member_for_shape(
+            self.shape,
+            &name,
+            None,
+            FormMode::Blank,
+            &qualify(my_path, &name),
+        );
+        self.rows.insert(at, row);
+        Ok(())
+    }
+
+    /// Drop the row at `index`.
+    ///
+    /// No renumbering, and that is the point of keys: the surviving rows keep
+    /// their names, so every leaf beneath them keeps its path and the value
+    /// store needs no shuffle. Bounds-checked rather than left to `Vec::remove`,
+    /// which panics — and on wasm a panic aborts instead of reaching an
+    /// `ErrorBoundary`.
+    fn remove_row(&mut self, my_path: &str, index: usize) -> Result<(), FormAccessError> {
+        if index >= self.rows.len() {
+            return Err(FormAccessError(format!(
+                "cannot remove row {index} from {my_path}: it has {} rows",
+                self.rows.len()
+            )));
+        }
+        self.rows.remove(index);
+        Ok(())
+    }
 }
 
 impl FormMember for ListSet {
@@ -29,9 +84,37 @@ impl FormMember for ListSet {
 
     fn render(&self, ctx: &RenderCtx) -> Element {
         let nested = ctx.nested(&self.name);
-        let rows_rendered = self.rows.iter().map(|r| r.render(&nested));
+        // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
+        // `nested.prefix`'s children: the controls act on the list, not on a row.
+        let path = ctx.path(&self.name);
+        // A `fieldset` for the same reason `VariantSet` uses one: the rows and
+        // the controls that manage them are one thing. It also gives the list's
+        // label somewhere to appear — until now no container but `FieldSet`
+        // rendered its own label, so a `Vec<String>` called `answers` showed up
+        // on the page as a bare stack of inputs.
+        //
+        // No required star, unlike `VariantSet`: nothing enforces a minimum row
+        // count, so marking a list required would be a promise `validate()`
+        // doesn't keep.
         rsx! {
-            { rows_rendered.into_iter() }
+            fieldset {
+                if let Some(text) = self.label() {
+                    legend { "{text}" }
+                }
+                for (index, row) in self.rows.iter().enumerate() {
+                    // Keyed by the row's own name, which is stable across
+                    // inserts, removals and reorders. Without a key dioxus diffs
+                    // the list by position, so inserting at the top would
+                    // re-render every row below it; with one it moves the nodes
+                    // it already has. The wrapper exists because a key has to sit
+                    // on an element, and it is what pairs a row with its control.
+                    div { class: "form-row", key: "{row.name()}",
+                        { row.render(&nested) }
+                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit }
+                    }
+                }
+                AddRowButton { path: path.clone(), on_edit: ctx.on_edit }
+            }
         }
     }
 
@@ -83,15 +166,27 @@ impl FormMember for ListSet {
     }
 
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
-        let nested = qualify(prefix, &self.name);
         let path = edit.path();
-        ensure_owned(&nested, path)?;
-        // Paths are unique, so at most one row can own this one. Dispatching by
-        // containment rather than trying each in turn is what lets a row's real
-        // error reach the caller intact.
-        for m in self.rows.iter_mut() {
-            if owns(&qualify(&nested, &m.name()), path) {
-                return m.edit(&nested, edit);
+        let my_path = qualify(prefix, &self.name);
+        ensure_owned(&my_path, path)?;
+        if path == my_path {
+            return match edit {
+                Edit::AddRow { before, .. } => self.add_row(&my_path, *before),
+                Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
+                _ => Err(FormAccessError(format!("{my_path} is a list, not an enum"))),
+            };
+        } else {
+            // Paths are unique, so at most one row can own this one. Dispatching by
+            // containment rather than trying each in turn is what lets a row's real
+            // error reach the caller intact.
+            // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
+            // member's own name, which the member qualifies on itself. Passing
+            // the row's full path double-qualifies it into `shapes.#1.#1` — the
+            // same trap `FieldSet::choose_variant` fell into.
+            for m in self.rows.iter_mut() {
+                if owns(&qualify(&my_path, &m.name()), path) {
+                    return m.edit(&my_path, edit);
+                }
             }
         }
         Err(no_such_path(path))

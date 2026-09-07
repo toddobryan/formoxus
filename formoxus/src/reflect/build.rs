@@ -5,7 +5,9 @@
 use facet::{EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructType, Type, UserType, Variant};
 
 use crate::reflect::fields::{FormField, populate};
-use crate::reflect::members::{FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify};
+use crate::reflect::members::{
+    FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify, row_segment,
+};
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -248,15 +250,17 @@ fn scalar_member(
     }
 }
 
-/// A list-typed field: a [`ListSet`] whose rows are named by their index, so
-/// the leaf paths (`answer_choices.0.text`) fall out of the same `qualify`
+/// A list-typed field: a [`ListSet`] whose rows are named by a `#`-prefixed key,
+/// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
-/// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s.
+/// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the
+/// `ListSet` keeps it: `Edit::AddRow` has to build a member for a row that has
+/// no value to peek at, and this is the only thing that says what kind.
 ///
 /// Edit mode takes the row count from the value. Create mode has no value to
-/// count, and the length is a construction parameter that isn't plumbed through
-/// yet — see VEC_PLAN.md step 4 — so it yields zero rows for now.
+/// count and so starts empty — which is now an answer rather than a gap, since
+/// `AddRow` is how a blank list gets its rows.
 fn list_member(
     shape: &'static Shape,
     name: &str,
@@ -264,7 +268,7 @@ fn list_member(
     mode: FormMode,
     prefix: &str,
 ) -> Box<dyn FormMember> {
-    let rows = peek
+    let rows: Vec<Box<dyn FormMember>> = peek
         .map(|p| {
             let list = p
                 .into_list()
@@ -272,12 +276,14 @@ fn list_member(
             list.iter()
                 .enumerate()
                 .map(|(i, element)| {
-                    // The index IS the row's name, and — unlike `struct_member`,
-                    // which passes `prefix` straight through — nothing upstream
-                    // has qualified it on yet, so do it here. Keeping this in
-                    // step with `collect_leaves` is what keeps the `variants`
-                    // map keys and the leaf paths the same strings.
-                    let row = i.to_string();
+                    // A row's KEY is its name — not its index. At construction
+                    // the two coincide, but they part company the moment a row
+                    // is inserted or removed; see `row_segment`. And unlike
+                    // `struct_member`, which passes `prefix` straight through,
+                    // nothing upstream has qualified this on yet, so do it here.
+                    // Keeping this in step with `collect_leaves` is what keeps
+                    // the leaf paths and the store keys the same strings.
+                    let row = row_segment(i);
                     member_for_shape(shape, &row, Some(element), mode, &qualify(prefix, &row))
                 })
                 .collect()
@@ -287,6 +293,10 @@ fn list_member(
     Box::new(ListSet {
         name: name.to_string(),
         label: None,
+        shape,
+        // The next key to hand out. Starts past the rows built here so a key is
+        // never reused, which is the whole point of keying by identity.
+        next_key: rows.len(),
         rows,
         errors: Vec::new(),
     })
