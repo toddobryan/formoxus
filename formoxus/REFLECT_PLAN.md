@@ -55,17 +55,35 @@ submit     form.apply(&values.read()); form.validate()      -> Option<T>
 **Structural edits keep the value map.** It is keyed by path, and paths are
 stable under growth — row *n*'s paths never move when *n+1* appears. So adding a
 row inserts new keys and leaves existing values untouched. Switching a variant
-drops the keys under that prefix and rebuilds the subtree.
+rebuilds the subtree under a *different* `$Variant` prefix, so the old keys stay
+put and stay inert; see the retired destructive-switch section below.
 
-### Destructive-switch warning
+### Destructive-switch warning — RETIRED 2026-09-06
 
-"Would switching this variant lose work?" is now just: **does any key under this
-prefix have a non-empty value?** No DOM query, no staleness, no dependence on a
-`$variant` marker being a real input. "Wipe the subtree" is: drop those keys.
+Two earlier answers, both now moot. The DOM-scan existed only because the
+in-memory `Form` was stale under the uncontrolled design. Its replacement — "does
+any key under this prefix have a non-empty value, and wipe the subtree on switch"
+— assumed switching a variant destroys work.
 
-This supersedes the DOM-scan decision from earlier today, which existed only
-because the in-memory `Form` was stale under the uncontrolled design. With the
-store holding live values, nothing is stale.
+**It no longer does.** A `VariantSet` namespaces its children under a `$Variant`
+descriptor segment, so `Circle` and `Square` own `footprint.$Circle.size` and
+`footprint.$Square.size` rather than both claiming `footprint.size`. Switching
+away leaves the old keys inert (nothing asks for those paths) and switching back
+finds them intact. Nothing is lost, so there is nothing to warn about and nothing
+to wipe.
+
+That started as a collision bug, not a UX wish: with a shared field name, the
+value map — which survives structural edits *by design* — handed the Circle's
+number straight to the Square, silently. `switching_variants_does_not_inherit_a_
+same_named_field` is the regression net.
+
+`$` cannot begin a Rust identifier, so a descriptor can never collide with a
+field name. Strip the `$` segments and a leaf path is the model path again;
+`model_path()` does exactly that, so the rule is executable rather than a comment.
+Note this is NOT the rejected `$variant`-marker idea below: that one made the
+variant a submitted *value* to be parsed back, and every objection to it was about
+parsing names *in*. A descriptor segment is output only — the `Form` still owns
+the choice, and nothing ever reads it back out of a name.
 
 ## What still has to be built
 

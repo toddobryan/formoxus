@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
-use crate::reflect::members::{ABSENT_DISPLAY, FormMember, owns, qualify};
+use crate::reflect::members::{ABSENT_DISPLAY, FormMember, owns, qualify, variant_segment};
 
 /// The enum variant at a particular point
 ///
@@ -37,6 +37,21 @@ pub struct VariantSet {
     pub choice: VariantChoice,
     pub members: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FieldError>,
+}
+
+impl VariantSet {
+    /// Where this member's *children* live: its own path plus a `$Variant`
+    /// descriptor, so two variants that share a field name can't both claim
+    /// `footprint.size`. `None` when unchosen — there are no children then.
+    fn child_prefix(&self, prefix: &str) -> Option<String> {
+        match &self.choice {
+            VariantChoice::Named(variant) => Some(qualify(
+                &qualify(prefix, &self.name),
+                &variant_segment(variant),
+            )),
+            VariantChoice::Unchosen => None,
+        }
+    }
 }
 
 impl FormMember for VariantSet {
@@ -74,8 +89,8 @@ impl FormMember for VariantSet {
                     None => input,
                 }
             }
-            VariantChoice::Named(_) => {
-                let nested = ctx.nested(&self.name);
+            VariantChoice::Named(variant) => {
+                let nested = ctx.nested(&self.name).nested(&variant_segment(variant));
                 let members_rendered = self.members.iter().map(|m| m.render(&nested));
                 rsx! {
                     { members_rendered.into_iter() }
@@ -95,18 +110,25 @@ impl FormMember for VariantSet {
     }
 
     fn choose_variant(&mut self, prefix: &str, path: &str, variant: &str) -> Result<(), FormAccessError> {
-        let nested = qualify(prefix, &self.name);
-        if !owns(&nested, path) {
+        // Two different paths now, where one binding used to do both jobs: the
+        // `<select>` itself lives at `self_path`, but its children live one
+        // segment deeper, under the chosen variant's descriptor.
+        let self_path = qualify(prefix, &self.name);
+        if !owns(&self_path, path) {
             return Err(FormAccessError(format!("no such path: {path}")));
         }
 
         // Not me, but mine: an enum nested inside my chosen variant's fields.
         // This is what the iterative disclosure loop used to arrange in advance —
         // now `outer.inner` simply becomes reachable once `outer` is answered.
-        if path != nested {
+        if path != self_path {
+            let Some(child_prefix) = self.child_prefix(prefix) else {
+                // Unchosen, so there are no children for the path to be inside.
+                return Err(FormAccessError(format!("no such path: {path}")));
+            };
             for m in self.members.iter_mut() {
-                if owns(&qualify(&nested, &m.name()), path) {
-                    return m.choose_variant(&nested, path, variant);
+                if owns(&qualify(&child_prefix, &m.name()), path) {
+                    return m.choose_variant(&child_prefix, path, variant);
                 }
             }
             return Err(FormAccessError(format!("no such path: {path}")));
@@ -127,7 +149,8 @@ impl FormMember for VariantSet {
         // `Rectangle` reading, so the old variant's members are discarded
         // wholesale — the destructive switch the UX rule warns about.
         self.choice = VariantChoice::Named(chosen.name.to_string());
-        self.members = variant_members(chosen, None, FormMode::Blank, &nested);
+        let child_prefix = qualify(&self_path, &variant_segment(chosen.name));
+        self.members = variant_members(chosen, None, FormMode::Blank, &child_prefix);
         self.errors.clear();
         Ok(())
     }
@@ -153,7 +176,9 @@ impl FormMember for VariantSet {
     }
 
     fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
-        let nested = qualify(prefix, &self.name);
+        let Some(nested) = self.child_prefix(prefix) else {
+            return; // unchosen: no members, so no leaves
+        };
         for m in self.members.iter() {
             m.collect_leaves(&nested, out);
         }
@@ -164,7 +189,9 @@ impl FormMember for VariantSet {
     }
 
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
-        let nested = qualify(prefix, &self.name);
+        let Some(nested) = self.child_prefix(prefix) else {
+            return; // unchosen: nothing to apply into
+        };
         for m in self.members.iter_mut() {
             m.apply_leaves(&nested, values);
         }

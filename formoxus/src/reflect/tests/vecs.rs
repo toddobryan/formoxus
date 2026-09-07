@@ -143,7 +143,11 @@ fn enum_rows_are_pinned_by_the_value() {
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
-        elements_are![eq("shapes.0.radius"), eq("shapes.1.width"), eq("shapes.1.height")]
+        elements_are![
+            eq("shapes.0.$Circle.radius"),
+            eq("shapes.1.$Rectangle.width"),
+            eq("shapes.1.$Rectangle.height"),
+        ]
     );
 
     let mut form = form;

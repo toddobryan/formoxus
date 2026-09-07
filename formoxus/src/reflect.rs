@@ -23,6 +23,7 @@ pub use fields::{FieldValue, FormField};
 pub use form::{Form, empty_form, form_for, use_form_values};
 pub use members::{
     FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
+    model_path,
 };
 
 // The one crate-internal item the test modules reach for directly.

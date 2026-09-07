@@ -24,6 +24,7 @@
 
 use super::render_to_html;
 use crate::reflect::*;
+use std::collections::HashMap;
 use dioxus::prelude::*;
 use facet::Facet;
 use super::models::{Mode, Shape};
@@ -190,7 +191,7 @@ fn a_nested_unchosen_placeholder_is_named_by_its_qualified_path() {
     // bug the moment this becomes a live `<select>`: a nested enum posting
     // under `inner` would never be found by `apply_leaves`.
     let html = render_to_html(DocWithChosenOuter);
-    expect_that!(html, contains_substring(r#"name="outer.inner""#));
+    expect_that!(html, contains_substring(r#"name="outer.$First.inner""#));
     expect_that!(html, not(contains_substring(r#"name="inner""#)));
 }
 
@@ -216,11 +217,11 @@ fn choosing_a_variant_reveals_its_fields() {
     form.choose_variant("shape", "Circle").expect("Circle is a variant of Shape");
 
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    expect_that!(paths, contains(eq("shape.radius")));
+    expect_that!(paths, contains(eq("shape.$Circle.radius")));
 
     form.apply_form_values(&[
         ("name".to_string(), "My Drawing".to_string()),
-        ("shape.radius".to_string(), "3.5".to_string()),
+        ("shape.$Circle.radius".to_string(), "3.5".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -240,7 +241,7 @@ fn choosing_a_variant_behind_an_option_builds_a_some() {
 
     form.apply_form_values(&[
         ("name".to_string(), "Doodle".to_string()),
-        ("shape.radius".to_string(), "2.5".to_string()),
+        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -270,11 +271,13 @@ fn choosing_a_variant_leaves_a_nested_enum_unchosen() {
 
     // `inner` is now reachable and unanswered, so it contributes no leaves yet…
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    expect_that!(paths, not(contains(starts_with("outer.inner."))));
+    expect_that!(paths, not(contains(starts_with("outer.$First.inner."))));
 
     // …and answering it reveals its fields.
-    form.choose_variant("outer.inner", "A").expect("A is a variant of Inner");
-    form.apply_form_values(&[("outer.inner.x".to_string(), "1.5".to_string())]);
+    form
+        .choose_variant("outer.$First.inner", "A")
+        .expect("A is a variant of Inner");
+    form.apply_form_values(&[("outer.$First.inner.$A.x".to_string(), "1.5".to_string())]);
     expect_that!(
         form.validate(),
         some(eq(&Doc { outer: Outer2::First { inner: Inner::A { x: 1.5 } } }))
@@ -287,12 +290,12 @@ fn switching_a_variant_replaces_the_subtree() {
     // type system prevents: the old variant's fields are gone, not merged.
     let mut form = empty_form::<Drawing>();
     form.choose_variant("shape", "Circle").expect("Circle is a variant");
-    form.apply_form_values(&[("shape.radius".to_string(), "3.5".to_string())]);
+    form.apply_form_values(&[("shape.$Circle.radius".to_string(), "3.5".to_string())]);
 
     form.choose_variant("shape", "Rectangle").expect("Rectangle is a variant");
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    expect_that!(paths, not(contains(eq("shape.radius"))));
-    expect_that!(paths, contains(eq("shape.width")));
+    expect_that!(paths, not(contains(eq("shape.$Circle.radius"))));
+    expect_that!(paths, contains(eq("shape.$Rectangle.width")));
 }
 
 // ── Reaching the enum through other containers ──
@@ -316,7 +319,7 @@ fn choosing_a_variant_through_a_field_set() {
     form.apply_form_values(&[
         ("title".to_string(), "T".to_string()),
         ("drawing.name".to_string(), "N".to_string()),
-        ("drawing.shape.radius".to_string(), "1.0".to_string()),
+        ("drawing.shape.$Circle.radius".to_string(), "1.0".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -347,13 +350,17 @@ fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
-        elements_are![eq("shapes.0.radius"), eq("shapes.1.width"), eq("shapes.1.height")],
+        elements_are![
+            eq("shapes.0.$Circle.radius"),
+            eq("shapes.1.$Rectangle.width"),
+            eq("shapes.1.$Rectangle.height"),
+        ],
         "row 0 keeps its variant and its value; only row 1 was rebuilt"
     );
 
     form.apply_form_values(&[
-        ("shapes.1.width".to_string(), "3.0".to_string()),
-        ("shapes.1.height".to_string(), "4.0".to_string()),
+        ("shapes.1.$Rectangle.width".to_string(), "3.0".to_string()),
+        ("shapes.1.$Rectangle.height".to_string(), "4.0".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -373,4 +380,102 @@ fn a_bad_path_is_an_error_not_a_panic() {
     // A real field, but not an enum — worth distinguishing, since it means the
     // caller's path was right and its expectation wasn't.
     expect_that!(form.choose_variant("name", "Circle"), err(anything()));
+}
+
+// ── Variants that share a field name ─────────────────────────────────────
+
+/// Two variants with a field of the same name. Without a variant segment in the
+/// path they would both own `footprint.size`, and the value map — which
+/// deliberately survives a structural edit — would hand the Circle's number to
+/// the Square.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Footprint {
+    Circle { size: f64 },
+    Square { size: f64 },
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Plot {
+    footprint: Footprint,
+}
+
+#[gtest]
+fn a_variants_fields_are_namespaced_under_a_variant_segment() {
+    // `$` can't begin a Rust identifier, so a descriptor segment can never
+    // collide with a field name. Strip the `$` segments and the path mirrors
+    // the model again: `footprint.size`.
+    let mut form = empty_form::<Plot>();
+    form
+        .choose_variant("footprint", "Circle")
+        .expect("Circle is a variant of Footprint");
+
+    let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    expect_that!(paths, elements_are![eq("footprint.$Circle.size")]);
+}
+
+#[gtest]
+fn switching_variants_does_not_inherit_a_same_named_field() {
+    // Deliberately written without hard-coded paths, so it states the *bug*
+    // rather than the fix: whatever the paths are, a value typed into Circle
+    // must not reappear in Square.
+    let mut form = empty_form::<Plot>();
+    form
+        .choose_variant("footprint", "Circle")
+        .expect("Circle is a variant of Footprint");
+
+    // Type into every leaf Circle offers, then snapshot the value map.
+    let typed: HashMap<String, String> = form
+        .leaves()
+        .into_iter()
+        .map(|(p, _)| (p, "5".to_string()))
+        .collect();
+    form.apply(&typed);
+    let store: HashMap<String, String> = form.leaves().into_iter().collect();
+
+    // Switch. The store is keyed by path and survives structural edits by
+    // design, so the Circle's entry is still sitting in it.
+    form
+        .choose_variant("footprint", "Square")
+        .expect("Square is a variant of Footprint");
+    form.apply(&store);
+
+    // Nothing was ever typed into Square's `size`, so the form must not build.
+    expect_that!(form.validate(), none());
+}
+
+// ── Paths still mirror the model, modulo `$` segments ────────────────────
+
+#[gtest]
+fn model_path_strips_variant_descriptors() {
+    // The rule that keeps namespacing from costing us path/model mirroring:
+    // drop every `$` segment and what's left is the path through the model.
+    expect_that!(model_path("footprint.$Circle.size"), eq("footprint.size"));
+    expect_that!(model_path("outer.$First.inner.$A.x"), eq("outer.inner.x"));
+
+    // A list index is part of the model path and must survive.
+    expect_that!(model_path("shapes.0.$Circle.radius"), eq("shapes.0.radius"));
+
+    // Nothing to strip.
+    expect_that!(model_path("location.street"), eq("location.street"));
+    expect_that!(model_path("title"), eq("title"));
+}
+
+#[gtest]
+fn every_leaf_path_maps_back_onto_the_model() {
+    // The property the unit cases above are examples of, checked against a real
+    // form: no model path retains a descriptor, and each one names a chain of
+    // real fields — here `shape.radius`, which is exactly how you'd reach the
+    // value in `Drawing` itself.
+    let mut form = empty_form::<Drawing>();
+    form.choose_variant("shape", "Circle").expect("Circle is a variant");
+
+    let model: Vec<String> = form
+        .leaves()
+        .into_iter()
+        .map(|(p, _)| model_path(&p))
+        .collect();
+
+    expect_that!(model, each(not(contains_substring("$"))));
+    expect_that!(model, contains(eq("shape.radius")));
 }

@@ -74,6 +74,29 @@ pub(crate) fn owns(nested: &str, path: &str) -> bool {
     path == nested || path.strip_prefix(nested).is_some_and(|rest| rest.starts_with('.'))
 }
 
+/// A variant descriptor segment: `Circle` -> `$Circle`.
+///
+/// `$` cannot begin a Rust identifier, so a descriptor can never collide with a
+/// field name. That's what lets two variants of the same enum each have a
+/// `size` without both claiming `footprint.size` — see [`model_path`].
+pub(crate) fn variant_segment(variant: &str) -> String {
+    format!("${variant}")
+}
+
+/// Strip variant descriptors from a leaf path, giving the path through the
+/// *model*: `footprint.$Circle.size` -> `footprint.size`.
+///
+/// Leaf paths mirror the model exactly apart from these segments, which exist
+/// only to keep same-named fields in different variants apart. A path segment
+/// beginning with `$` is never a field, and a descriptor never appears as the
+/// final segment of a leaf path — it is only ever a prefix.
+pub fn model_path(path: &str) -> String {
+    path.split('.')
+        .filter(|segment| !segment.starts_with('$'))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
 /// `("", "title") -> "title"`, `("location", "street") -> "location.street"`.
 pub(crate) fn qualify(prefix: &str, name: &str) -> String {
     if prefix.is_empty() {
