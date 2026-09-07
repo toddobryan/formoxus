@@ -503,3 +503,98 @@ fn a_variant_edit_aimed_at_a_scalar_is_rejected() {
         .expect_err("a String field is not an enum");
     expect_that!(error.0, contains_substring("name is a field, not an enum"));
 }
+
+// ── Unsetting a variant ──────────────────────────────────────────────────
+
+#[gtest]
+fn an_optional_enum_can_be_unset_after_being_chosen() {
+    // `choose_variant(path, None)` is the `--none--` option of an optional
+    // enum's `<select>`. Without it there was no way back to `Unchosen` — you
+    // could answer the question but never un-answer it.
+    let mut form = empty_form::<Sketch>();
+    form.choose_variant("shape", Some("Circle")).expect("Circle is a variant of Shape");
+    form.apply_form_values(&[
+        ("name".to_string(), "Doodle".to_string()),
+        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
+    ]);
+    expect_that!(
+        form.validate(),
+        some(eq(&Sketch {
+            name: "Doodle".to_string(),
+            shape: Some(Shape::Circle { radius: 2.5 }),
+        }))
+    );
+
+    form.choose_variant("shape", None).expect("an optional enum can be cleared");
+    expect_that!(
+        form.validate(),
+        some(eq(&Sketch {
+            name: "Doodle".to_string(),
+            shape: None,
+        }))
+    );
+}
+
+#[gtest]
+fn unsetting_drops_the_subtree_from_the_form() {
+    // The members go, so the enum contributes no leaves and `is_present` reads
+    // false — which is what lets `OptionMember` write a `None`.
+    let mut form = empty_form::<Sketch>();
+    form.choose_variant("shape", Some("Circle")).expect("Circle is a variant of Shape");
+    let chosen: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    expect_that!(chosen, contains(eq("shape.$Circle.radius")));
+
+    form.choose_variant("shape", None).expect("an optional enum can be cleared");
+    let cleared: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    expect_that!(cleared, elements_are![eq("name")]);
+}
+
+#[gtest]
+fn unsetting_a_required_enum_is_structurally_legal_but_fails_validation() {
+    // Clearing is always allowed on the way through — `validate()` is what
+    // decides whether leaving it unanswered is an error, exactly as it does for
+    // an enum that was never answered at all. `Drawing.shape` is a bare `Shape`,
+    // with no `Option` around it.
+    let mut form = empty_form::<Drawing>();
+    form.choose_variant("shape", Some("Circle")).expect("Circle is a variant");
+    form.apply_form_values(&[
+        ("name".to_string(), "My Drawing".to_string()),
+        ("shape.$Circle.radius".to_string(), "3.5".to_string()),
+    ]);
+    // Fully answered first, so the `none()` below can only be the clearing —
+    // otherwise this would pass just as well against an unset that did nothing.
+    expect_that!(form.validate(), some(anything()));
+
+    form.choose_variant("shape", None).expect("clearing is structurally legal");
+    expect_that!(form.validate(), none());
+}
+
+#[gtest]
+fn unsetting_then_rechoosing_restores_what_was_typed() {
+    // The payoff of the `$Variant` segment. The value map survives structural
+    // edits, and clearing doesn't touch it, so the radius is still sitting under
+    // `shape.$Circle.radius` when the user changes their mind.
+    let mut form = empty_form::<Sketch>();
+    form.choose_variant("shape", Some("Circle")).expect("Circle is a variant of Shape");
+    form.apply_form_values(&[
+        ("name".to_string(), "Doodle".to_string()),
+        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
+    ]);
+    let store: HashMap<String, String> = form.leaves().into_iter().collect();
+
+    form.choose_variant("shape", None).expect("an optional enum can be cleared");
+    // Pin the intermediate state, so this can't pass against an unset that
+    // silently did nothing.
+    expect_that!(form.validate(), some(eq(&Sketch { name: "Doodle".to_string(), shape: None })));
+
+    form.choose_variant("shape", Some("Circle")).expect("and chosen again");
+    form.apply(&store);
+
+    expect_that!(
+        form.validate(),
+        some(eq(&Sketch {
+            name: "Doodle".to_string(),
+            shape: Some(Shape::Circle { radius: 2.5 }),
+        }))
+    );
+}
