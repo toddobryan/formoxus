@@ -30,7 +30,7 @@ impl FormMember for FieldSet {
         let nested = ctx.nested(&self.name);
         let members_rendered = self.members.iter().map(|m| m.render(&nested));
         rsx! {
-            fieldset { class: "field-set",
+            fieldset {
                 if let Some(text) = self.label() {
                     legend { "{text}"}
                 }
