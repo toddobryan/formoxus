@@ -27,11 +27,15 @@ impl FormMember for FieldSet {
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
-        // TODO: need to decide whether to wrap in <fieldset>
         let nested = ctx.nested(&self.name);
         let members_rendered = self.members.iter().map(|m| m.render(&nested));
         rsx! {
-            { members_rendered.into_iter() }
+            fieldset { class: "field-set",
+                if let Some(text) = self.label() {
+                    legend { "{text}"}
+                }
+                { members_rendered.into_iter() }
+            }
         }
     }
 
