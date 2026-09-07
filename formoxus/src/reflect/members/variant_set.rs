@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
-use crate::reflect::members::{ABSENT_DISPLAY, Edit, FormMember, ensure_owned, no_such_path, owns, qualify, variant_segment};
+use crate::reflect::members::{
+    ABSENT_DISPLAY, Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    variant_segment,
+};
 
 /// The enum variant at a particular point
 ///
@@ -126,7 +129,7 @@ impl FormMember for VariantSet {
     }
 
     fn label(&self) -> Option<String> {
-        self.label.clone()
+        self.label.clone().or_else(|| default_label(&self.name))
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
@@ -146,9 +149,10 @@ impl FormMember for VariantSet {
                         disabled: true
                     }
                 };
-                match &self.label {
-                    Some(label) => rsx! { 
-                        label { "{label}",
+                match self.label() {
+                    Some(text) => rsx! {
+                        label { class: "form-field",
+                            span { class: "field-label", "{text}" }
                             { input }
                         }
                     },

@@ -6,7 +6,9 @@ use facet::{Partial, ReflectError};
 use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{Edit, FormMember, ensure_owned, no_such_path, owns, qualify};
+use crate::reflect::members::{
+    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+};
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
@@ -22,7 +24,7 @@ impl FormMember for ListSet {
     }
 
     fn label(&self) -> Option<String> {
-        self.label.clone()
+        self.label.clone().or_else(|| default_label(&self.name))
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {

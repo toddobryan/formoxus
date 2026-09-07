@@ -341,3 +341,58 @@ fn event_for_create_form_round_trips_to_model() {
     expect_that!(model.title, eq(&"Board Game Night"));
     expect_that!(model.location.street, eq(&"123 Main St"));
 }
+
+// ── Labels ───────────────────────────────────────────────────────────────
+
+#[gtest]
+fn a_label_defaults_to_the_humanized_field_name() {
+    // Nothing sets labels today — the shape carries a field's name but no prose
+    // for it — so without this every input renders bare.
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Settings {
+        can_shuffle: bool,
+        name: String,
+    }
+
+    let form = empty_form::<Settings>();
+    let labels: Vec<Option<String>> = form.members.iter().map(|m| m.label()).collect();
+    expect_that!(labels, elements_are![some(eq("Can Shuffle")), some(eq("Name"))]);
+}
+
+#[gtest]
+fn a_list_row_gets_no_label() {
+    // A row's name is its index, and "0" is a position, not a label. The list
+    // carries the prose; the rows are positional.
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Quiz {
+        answer_choices: Vec<String>,
+    }
+
+    let form = form_for(&Quiz {
+        answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
+    });
+    let list = &form.members[0];
+    expect_that!(list.label(), some(eq("Answer Choices")));
+
+    // Rendered, the rows must not pick up "0"/"1" as labels. Note the list's own
+    // label doesn't appear either — no container renders one yet, which is the
+    // other half of why a form still reads bare.
+    let html = super::render_to_html(QuizForm);
+    expect_that!(html, not(contains_substring(">0<")));
+    expect_that!(html, not(contains_substring(">1<")));
+}
+
+#[component]
+fn QuizForm() -> Element {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Quiz {
+        answer_choices: Vec<String>,
+    }
+    let form = use_hook(|| {
+        form_for(&Quiz {
+            answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
+        })
+    });
+    let values = use_form_values(&form);
+    form.render(values)
+}

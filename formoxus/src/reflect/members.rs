@@ -16,6 +16,7 @@ pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
 use crate::error::FormAccessError;
+use crate::label_case::{LabelCase, ToCase};
 use dioxus::stores::Store;
 
 pub trait FormMember: Debug {
@@ -90,6 +91,24 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
         Ok(())
     } else {
         Err(no_such_path(path))
+    }
+}
+
+/// A member's name humanized for display: `can_shuffle` -> "Can Shuffle".
+///
+/// The fallback when nothing set a label explicitly, which is every member today
+/// — the shape carries a field's name but no prose for it. Reuses the derive
+/// path's [`crate::label_case`], so both paths title-case identically.
+///
+/// `None` for an all-digit name, because that's a `ListSet` row, whose name is
+/// its index: "0" is a position, not a label. (Tuple-struct fields land here for
+/// the same reason and want the same answer.) The list itself is what carries
+/// the prose.
+pub(crate) fn default_label(name: &str) -> Option<String> {
+    if name.chars().all(|c| c.is_ascii_digit()) {
+        None
+    } else {
+        Some(name.to_case(LabelCase::Title))
     }
 }
 

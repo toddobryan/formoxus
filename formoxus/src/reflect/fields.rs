@@ -6,7 +6,7 @@ use facet::{Facet, Partial, Peek, ReflectError};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{Edit, FormMember, qualify};
+use crate::reflect::members::{Edit, FormMember, default_label, qualify};
 use crate::reflect::widgets::ScalarInput;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,7 +30,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn label(&self) -> Option<String> {
-        self.label.clone()
+        self.label.clone().or_else(|| default_label(&self.name))
     }
 
     fn raw_value(&self) -> String {
@@ -77,7 +77,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         rsx! {
             ScalarInput {
                 path: ctx.path(&self.name),
-                label: self.label.clone(),
+                label: self.label(),
                 errors: self.errors.clone(),
                 required: ctx.required,
                 values: ctx.values,
