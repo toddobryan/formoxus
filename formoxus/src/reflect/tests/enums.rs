@@ -150,12 +150,12 @@ fn an_untouched_optional_enum_validates_as_none() {
 
 /// A form has to be rendered inside a live runtime now — see
 /// [`super::render_to_html`]. Each render test owns a tiny component like this
-/// one because `FormState<T>` isn't `PartialEq` and so can't be a component prop.
+/// one because neither `FormState<T>` nor `Form<T>` is `PartialEq`, so neither
+/// can be a component prop.
 #[component]
 fn UnchosenSketchForm() -> Element {
-    let form = use_hook(empty_form::<Sketch>);
-    let values = use_form_values(&form);
-    form.render(&super::markup_ctx(values))
+    let form = use_form(empty_form::<Sketch>());
+    form.render()
 }
 
 #[gtest]
@@ -171,13 +171,12 @@ fn unchosen_renders_a_visible_placeholder() {
 
 #[component]
 fn DocWithChosenOuter() -> Element {
-    let form = use_hook(|| {
-        let mut form = empty_form::<Doc>();
-        form.choose_variant("outer", Some("First")).expect("First is a variant of Outer2");
-        form
+    let form = use_form({
+        let mut state = empty_form::<Doc>();
+        state.choose_variant("outer", Some("First")).expect("First is a variant of Outer2");
+        state
     });
-    let values = use_form_values(&form);
-    form.render(&super::markup_ctx(values))
+    form.render()
 }
 
 #[gtest]

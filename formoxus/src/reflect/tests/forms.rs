@@ -83,9 +83,8 @@ fn repeated_struct_types_get_distinct_paths() {
 
 #[component]
 fn EmptyEventForm() -> Element {
-    let form = use_hook(empty_form::<EventForCreate>);
-    let values = use_form_values(&form);
-    form.render(&super::markup_ctx(values))
+    let form = use_form(empty_form::<EventForCreate>());
+    form.render()
 }
 
 #[gtest]
@@ -388,11 +387,8 @@ fn QuizForm() -> Element {
     struct Quiz {
         answer_choices: Vec<String>,
     }
-    let form = use_hook(|| {
-        form_for(&Quiz {
-            answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
-        })
-    });
-    let values = use_form_values(&form);
-    form.render(&super::markup_ctx(values))
+    let form = use_form(form_for(&Quiz {
+        answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
+    }));
+    form.render()
 }

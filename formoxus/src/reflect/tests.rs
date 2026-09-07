@@ -1,7 +1,6 @@
 //! The test suite, one module per concern. These live inside the crate rather
 //! than in `tests/` because several reach crate-private items.
 
-use crate::reflect::{RenderCtx, ValuesByPath};
 use dioxus::prelude::*;
 
 pub mod models;
@@ -24,20 +23,4 @@ pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
     dioxus_ssr::render(&dom)
-}
-
-/// A root [`RenderCtx`] for tests that only inspect rendered markup.
-///
-/// The callback is a deliberate no-op, and a **silent** one — which is worth
-/// knowing, because it's indistinguishable from a working edit transport right
-/// up until a test drives the `<select>` and passes while achieving nothing.
-///
-/// Making it panic instead does NOT help: dioxus catches panics raised during a
-/// component's render (that's what `CapturedPanic` is), so the panic never
-/// reaches the test. Verified, not assumed.
-///
-/// The first test that actually fires an edit wants a callback that records
-/// what it received, and to assert on that — not this.
-pub fn markup_ctx(values: ValuesByPath) -> RenderCtx {
-    RenderCtx::root(values, Callback::default())
 }
