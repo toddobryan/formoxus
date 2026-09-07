@@ -155,7 +155,7 @@ fn an_untouched_optional_enum_validates_as_none() {
 fn UnchosenSketchForm() -> Element {
     let form = use_hook(empty_form::<Sketch>);
     let values = use_form_values(&form);
-    form.render(values)
+    form.render(&super::markup_ctx(values))
 }
 
 #[gtest]
@@ -177,7 +177,7 @@ fn DocWithChosenOuter() -> Element {
         form
     });
     let values = use_form_values(&form);
-    form.render(values)
+    form.render(&super::markup_ctx(values))
 }
 
 #[gtest]

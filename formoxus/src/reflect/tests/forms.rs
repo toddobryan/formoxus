@@ -85,7 +85,7 @@ fn repeated_struct_types_get_distinct_paths() {
 fn EmptyEventForm() -> Element {
     let form = use_hook(empty_form::<EventForCreate>);
     let values = use_form_values(&form);
-    form.render(values)
+    form.render(&super::markup_ctx(values))
 }
 
 #[gtest]
@@ -394,5 +394,5 @@ fn QuizForm() -> Element {
         })
     });
     let values = use_form_values(&form);
-    form.render(values)
+    form.render(&super::markup_ctx(values))
 }

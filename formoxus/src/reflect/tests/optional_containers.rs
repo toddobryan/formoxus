@@ -318,7 +318,7 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
 fn EmptyContactForm() -> Element {
     let form = use_hook(empty_form::<Contact>);
     let values = use_form_values(&form);
-    form.render(values)
+    form.render(&super::markup_ctx(values))
 }
 
 /// The attribute list of the `<input>` named `name`, cut at the first `>` so a

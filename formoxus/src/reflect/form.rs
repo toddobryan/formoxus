@@ -110,15 +110,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
         self.edit(&Edit::new_choose_variant(path, variant))
     }
 
-    pub fn render(&self, values: ValuesByPath) -> Element {
+    pub fn render(&self, ctx: &RenderCtx) -> Element {
         let title = self.title.as_ref().map(|t| {
             rsx! {
                 h2 { class: "form-title", "{t}" }
             }
         });
-           
-        let ctx = RenderCtx::root(values);
-        let members_rendered = self.members.iter().map(|m| m.render(&ctx));
+        let members_rendered = self.members.iter().map(|m| m.render(ctx));
         
         rsx! {
             { title }

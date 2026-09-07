@@ -168,13 +168,14 @@ pub struct RenderCtx {
     pub prefix: String,
     pub values: ValuesByPath,
     pub required: bool,
+    pub on_edit: Callback<Edit>,
 }
 
 impl RenderCtx {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionMember` says otherwise.
-    pub fn root(values: ValuesByPath) -> Self {
-        Self { prefix: String::new(), values, required: true }
+    pub fn root(values: ValuesByPath, on_edit: Callback<Edit>) -> Self {
+        Self { prefix: String::new(), values, required: true, on_edit }
     }
 
     /// Descend into a named child — the `qualify` every container already does.
@@ -183,6 +184,7 @@ impl RenderCtx {
             prefix: qualify(&self.prefix, name),
             values: self.values,
             required: self.required,
+            on_edit: self.on_edit,
         }
     }
 
@@ -193,6 +195,7 @@ impl RenderCtx {
             prefix: self.prefix.clone(),
             values: self.values,
             required: false,
+            on_edit: self.on_edit,
         }
     }
 
