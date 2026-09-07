@@ -1,4 +1,4 @@
-//! End-to-end round trips through `Form<T>`: populate, collect, apply, validate.
+//! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
 use super::render_to_html;
 use crate::reflect::*;
@@ -276,7 +276,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 
 #[gtest]
 fn empty_event_form_is_invalid() {
-    let mut form: Form<Event> = Form {
+    let mut form: FormState<Event> = FormState {
         title: Some("New Event".to_string()),
         members: vec![
             text_field("title", FieldValue::Empty),
@@ -295,7 +295,7 @@ fn location_form_round_trips_to_model() {
     // `Location` has no uncollected fields, so this exercises the core
     // `FormField::write_into` -> `Partial::build` -> `materialize` path
     // with nothing else in the way.
-    let mut form: Form<Location> = Form {
+    let mut form: FormState<Location> = FormState {
         title: None,
         members: location_members(
             FieldValue::Valid("123 Main St".to_string()),
@@ -319,7 +319,7 @@ fn location_form_round_trips_to_model() {
 
 #[gtest]
 fn event_for_create_form_round_trips_to_model() {
-    let mut form: Form<EventForCreate> = Form {
+    let mut form: FormState<EventForCreate> = FormState {
         title: Some("New Event".to_string()),
         members: vec![
             text_field(

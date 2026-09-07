@@ -1,4 +1,4 @@
-//! `Form<T>` and the three public constructors — one per mode, so the illegal
+//! `FormState<T>` and the three public constructors — one per mode, so the illegal
 //! combination (a value AND variant choices) cannot be written.
 
 use facet::{Facet, Partial, Peek};
@@ -9,7 +9,7 @@ use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::members::{Edit, FormMember, no_such_path, owns};
 
-pub fn use_form_values<T>(form: &Form<T>) -> ValuesByPath
+pub fn use_form_values<T>(form: &FormState<T>) -> ValuesByPath
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
@@ -18,7 +18,7 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct Form<T: Clone + Debug + Facet<'static>> {
+pub struct FormState<T: Clone + Debug + Facet<'static>> {
     pub title: Option<String>,
     pub members: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FormError>,
@@ -26,7 +26,7 @@ pub struct Form<T: Clone + Debug + Facet<'static>> {
     pub _type: PhantomData<T>,
 }
 
-impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
+impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors())
     }
@@ -127,20 +127,20 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Form<T> {
 
 /// Edit mode. Infallible: the value itself pins every variant, so there is
 /// nothing left for a caller to choose.
-pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(value: &T) -> Form<T> {
+pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(value: &T) -> FormState<T> {
     form_for_impl(Some(value))
 }
 
 /// Create mode with no choices supplied — fails with [`MissingVariants`] if `T`
 /// contains any enum at all.
 pub fn empty_form<T: Clone + Debug + PartialEq + Facet<'static>>()
--> Form<T> {
+-> FormState<T> {
     form_for_impl(None)
 }
 
 fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
     value: Option<&T>,
-) -> Form<T> {
+) -> FormState<T> {
     // The mode is fixed HERE, once, by which constructor the caller reached for —
     // and threaded down untouched. Deriving it further down from whether some
     // peek happens to be present is the bug `FormMode`'s docs describe.
@@ -149,7 +149,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         None => FormMode::Blank,
     };
 
-    Form {
+    FormState {
         title: None,
         members: members_for(T::SHAPE, value.map(Peek::new), mode, ""),
         errors: Vec::new(),

@@ -13,10 +13,17 @@ Two things, with clearly separated jobs:
 
 | | holds | changes | reactivity |
 |---|---|---|---|
-| `Form<T>` | members, structure, typed values, errors | rarely — only on a **structural** edit | `Signal<Form<T>>`, coarse |
+| `FormState<T>` | members, structure, typed values, errors | rarely — only on a **structural** edit | `Signal<FormState<T>>`, coarse |
 | `Store<HashMap<String, String>>` | live edited raw strings, keyed by qualified path | on every keystroke | per-path, fine-grained |
 
-`Form<T>` is **unchanged** — plain data, `FieldValue::Valid(T)` still typed,
+**Renamed 2026-09-07:** this plain-data type was called `Form<T>` when the plan
+was written. `Form<T>` is now the *reactive* thing a page holds — a
+`Signal<FormState<T>>` plus the value store plus the edit callback — and the
+plain data underneath is `FormState<T>`, matching what the derive path already
+calls the same concept. It is state rather than schema because variant choices
+live nowhere else: a fieldless variant contributes nothing to `leaves()`.
+
+`FormState<T>` is **unchanged** — plain data, `FieldValue::Valid(T)` still typed,
 serializable, testable with no Dioxus runtime. Signals stay at the widget
 boundary; a `Store` wraps plain data rather than putting signals inside it.
 
@@ -61,7 +68,7 @@ put and stay inert; see the retired destructive-switch section below.
 ### Destructive-switch warning — RETIRED 2026-09-06
 
 Two earlier answers, both now moot. The DOM-scan existed only because the
-in-memory `Form` was stale under the uncontrolled design. Its replacement — "does
+in-memory `FormState` was stale under the uncontrolled design. Its replacement — "does
 any key under this prefix have a non-empty value, and wipe the subtree on switch"
 — assumed switching a variant destroys work.
 
@@ -82,7 +89,7 @@ field name. Strip the `$` segments and a leaf path is the model path again;
 `model_path()` does exactly that, so the rule is executable rather than a comment.
 Note this is NOT the rejected `$variant`-marker idea below: that one made the
 variant a submitted *value* to be parsed back, and every objection to it was about
-parsing names *in*. A descriptor segment is output only — the `Form` still owns
+parsing names *in*. A descriptor segment is output only — the `FormState` still owns
 the choice, and nothing ever reads it back out of a name.
 
 ## What still has to be built
@@ -128,8 +135,8 @@ trust boundary. Worth remembering if a non-Dioxus/plain-HTML target ever matters
 since it needs no client-side state at all.
 
 **Raw-canonical `FieldValue::Valid(String)`.** Considered as the prerequisite for
-lensing *into* `Form` with `SelectorScope::hash_child`. Unnecessary — the values
-live beside the Form, not inside it, so no lens into `Form` is needed. Also
+lensing *into* `FormState` with `SelectorScope::hash_child`. Unnecessary — the values
+live beside the `FormState`, not inside it, so no lens into `FormState` is needed. Also
 actively worse: `Valid(T)` keeps `form_for(&m).validate() == Some(m)` true **by
 construction**, never passing through a string. Raw-canonical would convert that
 structural guarantee into a dependency on `T -> String -> T` fidelity, which is
@@ -138,7 +145,7 @@ for a user's custom type.
 
 ## Open questions
 
-1. **Where does the value map live relative to the `Form`?** Two hooks side by
+1. **Where does the value map live relative to the `FormState`?** Two hooks side by
    side, or one wrapper type owning both? A wrapper can keep them from drifting
    (a rebuilt schema with a stale map is the obvious bug) at the cost of putting
    a `Store` next to plain data.
@@ -149,5 +156,5 @@ for a user's custom type.
 3. **Server-side rendering / no-JS.** The uncontrolled path needed no client
    state; this one does. Does that matter for this app? Probably not, but it is
    the thing the road-not-taken buys.
-4. **Does `Form<T>` still need `T`?** Yes — `Partial::alloc::<T>()` and
+4. **Does `FormState<T>` still need `T`?** Yes — `Partial::alloc::<T>()` and
    `materialize::<T>()` still need a concrete type.

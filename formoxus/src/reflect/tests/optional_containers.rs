@@ -78,7 +78,7 @@ fn applied(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         .collect()
 }
 
-fn paths<T: Clone + Debug + PartialEq + Facet<'static>>(form: &Form<T>) -> Vec<String> {
+fn paths<T: Clone + Debug + PartialEq + Facet<'static>>(form: &FormState<T>) -> Vec<String> {
     form.leaves().into_iter().map(|(p, _)| p).collect()
 }
 

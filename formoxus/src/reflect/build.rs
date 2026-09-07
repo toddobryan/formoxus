@@ -135,7 +135,7 @@ pub(crate) fn variant_members(
         .collect()
 }
 
-/// Members for a top-level enum model (the whole `Form<T>` is an enum). Enum
+/// Members for a top-level enum model (the whole `FormState<T>` is an enum). Enum
 /// *fields* don't come through here — `member_for` builds a `VariantSet` for
 /// those; this is only the `members_for` dispatch for a bare-enum `T`.
 fn fields_from_enum(

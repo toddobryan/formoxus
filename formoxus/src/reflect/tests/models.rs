@@ -10,10 +10,10 @@ pub struct Event {
     pub location: Location,
 }
 
-/// What a `Form<T>` actually validates into: every field here is genuinely
+/// What a `FormState<T>` actually validates into: every field here is genuinely
 /// collected by some `FormMember`, so `Partial::build()` never hits an
 /// uninitialized field. Surreal assigns `id` on create; on edit, the caller
-/// re-attaches the `id` it already had from the original fetch — `Form`
+/// re-attaches the `id` it already had from the original fetch — `FormState`
 /// itself never needs to know about it.
 #[derive(Facet, Clone, Debug, PartialEq)]
 pub struct EventForCreate {

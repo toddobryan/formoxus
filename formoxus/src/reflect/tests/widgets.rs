@@ -24,7 +24,7 @@ use googletest::prelude::*;
 /// hook call can mint N signals, and the *hook count* stays 1 no matter
 /// how many fields the shape turned out to have.
 fn use_field_signals<T: Clone + Debug + PartialEq + Facet<'static>>(
-    form: &Form<T>,
+    form: &FormState<T>,
 ) -> HashMap<String, Signal<String>> {
     let leaves = form.leaves();
     use_hook(|| {
@@ -68,7 +68,7 @@ fn EventFormView() -> Element {
 
 /// No signals at all: every input is uncontrolled, named by its qualified
 /// path, and the browser holds the editing state. On submit, `values()`
-/// hands the whole form back and we shuffle it into a `Form<T>` once.
+/// hands the whole form back and we shuffle it into a `FormState<T>` once.
 #[component]
 fn UncontrolledEventForm() -> Element {
     let form = use_hook(empty_form::<EventForCreate>);

@@ -17,7 +17,7 @@ struct Required {
 
 /// Push a form's own leaves back through the widget boundary and revalidate —
 /// the path a real submit takes, as opposed to validating the populated form.
-fn through_the_dom<T>(form: &Form<T>, mut reloaded: Form<T>) -> Option<T>
+fn through_the_dom<T>(form: &FormState<T>, mut reloaded: FormState<T>) -> Option<T>
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {

@@ -19,7 +19,7 @@
 //! form. That is the whole point of the change.
 //!
 //! The RED set that drove this rewrite — `validate()` reporting `Unchosen`, and
-//! `Form::choose_variant` — all passes as of the same commit, and now stands as
+//! `FormState::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
 use super::render_to_html;
@@ -150,7 +150,7 @@ fn an_untouched_optional_enum_validates_as_none() {
 
 /// A form has to be rendered inside a live runtime now — see
 /// [`super::render_to_html`]. Each render test owns a tiny component like this
-/// one because `Form<T>` isn't `PartialEq` and so can't be a component prop.
+/// one because `FormState<T>` isn't `PartialEq` and so can't be a component prop.
 #[component]
 fn UnchosenSketchForm() -> Element {
     let form = use_hook(empty_form::<Sketch>);
@@ -301,7 +301,7 @@ fn switching_a_variant_replaces_the_subtree() {
 // ── Reaching the enum through other containers ──
 //
 // The tests above all reach a `VariantSet` that is either a direct member of the
-// `Form` or nested in another `VariantSet`. These cover the two remaining
+// `FormState` or nested in another `VariantSet`. These cover the two remaining
 // dispatchers, which are otherwise never exercised.
 
 #[derive(Facet, Clone, Debug, PartialEq)]
