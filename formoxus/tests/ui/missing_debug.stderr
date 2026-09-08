@@ -5,7 +5,7 @@ error[E0277]: `NoDebug` doesn't implement `Debug`
   |        ^^^^^^^ the trait `Debug` is not implemented for `NoDebug`
   |
   = note: add `#[derive(Debug)]` to `NoDebug` or manually `impl Debug for NoDebug`
-note: required by a bound in `Form`
+note: required by a bound in `formoxus::form::Form`
  --> src/form.rs
   |
   | pub trait Form: std::fmt::Debug {
@@ -26,8 +26,8 @@ error[E0277]: `NoDebug` doesn't implement `Debug`
 note: required by a bound in `formoxus::form::FormState::Model`
  --> src/form.rs
   |
-  |     type Model: std::fmt::Debug;
-  |                 ^^^^^^^^^^^^^^^ required by this bound in `FormState::Model`
+  |     type Model: Debug;
+  |                 ^^^^^ required by this bound in `FormState::Model`
 help: consider annotating `NoDebug` with `#[derive(Debug)]`
   |
 8 + #[derive(Debug)]

@@ -93,18 +93,22 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
 /// Make a [`FormState`] live.
 ///
-///     use_form(empty_form::<Question>())   // create
-///     use_form(form_for(&question))        // edit
+/// ```ignore
+/// use_form(empty_form::<Question>())   // create
+/// use_form(form_for(&question))        // edit
+/// ```
 ///
 /// One hook rather than a create/edit pair, because taking the state as a
 /// *value* lets one component serve both modes — the branch happens while
 /// building the argument, which isn't a hook call, so the rules of hooks don't
 /// care:
 ///
-///     let form = use_form(match existing.as_ref() {
-///         Some(model) => form_for(model),
-///         None => empty_form::<Question>(),
-///     });
+/// ```ignore
+/// let form = use_form(match existing.as_ref() {
+///     Some(model) => form_for(model),
+///     None => empty_form::<Question>(),
+/// });
+/// ```
 ///
 /// **The argument is rebuilt on every render and dropped after the first**,
 /// since `use_signal`'s initializer runs once. How often that is depends on what
