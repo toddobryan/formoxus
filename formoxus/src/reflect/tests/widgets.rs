@@ -158,7 +158,7 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarInput` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use crate::reflect::widgets::ScalarInput;
+use crate::reflect::widgets::{InputKind, ScalarInput};
 
 #[component]
 fn PopulatedInput() -> Element {
@@ -169,6 +169,7 @@ fn PopulatedInput() -> Element {
         ScalarInput {
             path: "title".to_string(),
             label: Some("Title".to_string()),
+            input_kind: InputKind::Text,
             errors: Vec::new(),
             required: true,
             values,
@@ -186,6 +187,7 @@ fn EmptyInput() -> Element {
             path: "shape.radius".to_string(),
             label: None,
             errors: Vec::new(),
+            input_kind: InputKind::Text,
             required: true,
             values,
         }

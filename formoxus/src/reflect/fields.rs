@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
 use crate::reflect::members::{Edit, FormMember, default_label, qualify};
-use crate::reflect::widgets::ScalarInput;
+use crate::reflect::widgets::{InputKind, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -20,6 +20,7 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
 pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
+    pub input_kind: InputKind,
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }
@@ -78,6 +79,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             ScalarInput {
                 path: ctx.path(&self.name),
                 label: self.label(),
+                input_kind: self.input_kind.clone(),
                 errors: self.errors.clone(),
                 required: ctx.required,
                 values: ctx.values,

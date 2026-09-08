@@ -1,7 +1,7 @@
 //! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
 use super::render_to_html;
-use crate::reflect::*;
+use crate::reflect::{widgets::InputKind, *};
 use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, marker::PhantomData};
@@ -12,6 +12,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
     Box::new(FormField {
         name: name.to_string(),
         label: None,
+        input_kind: InputKind::Text,
         value,
         errors: Vec::new(),
     })
@@ -391,4 +392,21 @@ fn QuizForm() -> Element {
         answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
     }));
     form.render()
+}
+
+/// A model using a scalar with no built-in widget. `usize` is the realistic
+/// case — it is excluded deliberately, for being a target-dependent width.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Unsupported {
+    count: usize,
+}
+
+#[gtest]
+#[should_panic(expected = "scalar type USize is not supported in FormField")]
+fn an_unsupported_scalar_fails_loudly_at_construction() {
+    // Loud rather than silent: the alternative to panicking is rendering the
+    // field as something it isn't, and a form that quietly mis-handles a value
+    // is worse than one that refuses to build. Construction is also the right
+    // moment — it happens once, in a hook initialiser, not per render.
+    let _ = empty_form::<Unsupported>();
 }

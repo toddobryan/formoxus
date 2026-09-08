@@ -15,6 +15,9 @@
 //! for `f32`/`f64` emits the shortest decimal string that parses back to the
 //! identical value.
 //!
+//! `usize`/`isize` are absent because a `FormField` cannot hold them — see
+//! `scalar_member`, which excludes them for being target-dependent widths.
+//!
 //! **Custom scalars cannot be checked here.** A user-supplied type reaching a
 //! `FormField` must uphold the same property in its own `Facet` display/parse
 //! vtables; nothing in the type system enforces it. [`round_trips`] is public to
@@ -75,7 +78,6 @@ fn signed_integers_round_trip_at_their_limits() {
     round_trips(&[i16::MIN, 0, i16::MAX]);
     round_trips(&[i32::MIN, 0, i32::MAX]);
     round_trips(&[i64::MIN, 0, i64::MAX]);
-    round_trips(&[isize::MIN, 0, isize::MAX]);
 }
 
 #[gtest]
@@ -84,7 +86,6 @@ fn unsigned_integers_round_trip_at_their_limits() {
     round_trips(&[0u16, u16::MAX]);
     round_trips(&[0u32, u32::MAX]);
     round_trips(&[0u64, u64::MAX]);
-    round_trips(&[0usize, usize::MAX]);
 }
 
 #[gtest]

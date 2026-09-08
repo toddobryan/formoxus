@@ -17,6 +17,34 @@ use crate::label_case::{LabelCase, ToCase};
 use crate::reflect::{Edit, ValuesByPath};
 use crate::widgets::FieldErrors;
 
+/// Which control a scalar leaf renders as.
+///
+/// Assigned in `scalar_member`'s `dispatch!` macro, where the concrete type is
+/// still known — `FormField<T>::render` can't reach a `DefaultWidget`-style
+/// trait without bounding every `Facet` type in the crate.
+///
+/// **`ScalarInput` does not branch on this yet**: every kind still renders as
+/// `type="text"`, so a `bool` shows the literal `true`. That branch is the next
+/// piece of work.
+///
+/// `Int`'s bounds are for the error message ("must be between 0 and 255"), not
+/// for HTML `min`/`max`, which do nothing on a text input — `parse_scalar`
+/// already rejects out-of-range values. They are also where a user-specified
+/// `#[form(min = …)]` would land. `Int`/`Float` stay `type="text"` deliberately:
+/// `type="number"` hands back `""` for anything the browser dislikes, so a
+/// half-typed value disappears.
+#[derive(Clone, Debug, PartialEq)]
+pub enum InputKind {
+    Text,
+    Checkbox,
+    Select,
+    Int {
+        min: i128,
+        max: i128,
+    },
+    Float,
+}
+
 /// A single-line text input bound to one path in the value map.
 ///
 /// `values` + `path` rather than a pre-lensed child store, because a path that
@@ -28,6 +56,7 @@ use crate::widgets::FieldErrors;
 pub fn ScalarInput(
     path: String,
     label: Option<String>,
+    input_kind: InputKind,
     errors: Vec<FieldError>,
     /// A presentation hint only. It is deliberately false for every leaf under
     /// an `Option`, including the leaves of an optional *struct* — HTML5

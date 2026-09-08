@@ -8,6 +8,7 @@ use crate::reflect::fields::{FormField, populate};
 use crate::reflect::members::{
     FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify, row_segment,
 };
+use crate::reflect::widgets::InputKind;
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -182,9 +183,7 @@ pub(crate) fn member_for_shape(
         return option_member(option_def, name, peek, mode, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
         return scalar_member(scalar, name, peek).unwrap_or_else(|| {
-            panic!(
-                "field {name} has scalar type {scalar:?}, which isn't in the built-in widget set"
-            )
+            panic!("scalar type {scalar:?} is not supported in FormField (field {name})")
         });
     } else if let Ok(list_def) = shape.def.into_list() {
         // SEAM: `list_member(_list_def.t, name, inner_peek, variants, prefix)`,
@@ -219,19 +218,35 @@ fn option_member(
 } 
 
 /// The closed set of scalar types with a built-in widget. Anything else needs
-/// a custom widget and returns `None` here.
+/// a custom widget and returns `None` here, which `member_for_shape` turns into
+/// a panic naming the type.
+///
+/// **`usize` and `isize` are left out on purpose, not by oversight.** Their
+/// width is target-dependent — 32 bits on the wasm client, 64 on the server —
+/// so the same field would carry different bounds on each side of the wire, and
+/// a value the server accepts could be unparseable in the browser. Use a fixed
+/// width (`u32`, `u64`) in a form model and convert at the edges. Adding the
+/// arms back would compile and look fine; the disagreement only shows up at
+/// runtime, on one target.
+///
+/// Integer bounds come from the type itself via `int_kind!` rather than being
+/// written out, so they cannot drift from the `$ty` in the same arm. They are
+/// stored as `i128` because that is the only std integer holding both
+/// `i64::MIN` and `u64::MAX` — note this breaks if `u128` is ever added, since
+/// `u128::MAX` would silently truncate through the `as` cast.
 fn scalar_member(
     scalar: ScalarType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
 ) -> Option<Box<dyn FormMember>> {
     macro_rules! dispatch {
-        ($( $variant:ident => $ty:ty ),* $(,)?) => {
+        ($( $variant:ident => ($ty:ty, $kind:expr) ),* $(,)?) => {
             match scalar {
                 $(
                     ScalarType::$variant => Some(Box::new(FormField::<$ty> {
                         name: name.to_string(),
                         label: None,
+                        input_kind: $kind,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
                     }) as Box<dyn FormMember>),
@@ -241,12 +256,23 @@ fn scalar_member(
         };
     }
 
+    macro_rules! int_kind {
+        ($t:ty) => { InputKind::Int { min: <$t>::MIN as i128, max: <$t>::MAX as i128 } };
+    }
+
     dispatch! {
-        String => String,
-        Bool => bool,
-        I8 => i8, I16 => i16, I32 => i32, I64 => i64, ISize => isize,
-        U8 => u8, U16 => u16, U32 => u32, U64 => u64, USize => usize,
-        F32 => f32, F64 => f64,
+        String => (String, InputKind::Text),
+        Bool => (bool, InputKind::Checkbox),
+        I8 => (i8, int_kind!(i8)),
+        I16 => (i16, int_kind!(i16)), 
+        I32 => (i32, int_kind!(i32)), 
+        I64 => (i64, int_kind!(i64)),
+        U8 => (u8, int_kind!(u8)),
+        U16 => (u16, int_kind!(u16)),
+        U32 => (u32, int_kind!(u32)),
+        U64 => (u64, int_kind!(u64)),
+        F32 => (f32, InputKind::Float),
+        F64 => (f64, InputKind::Float),
     }
 }
 
