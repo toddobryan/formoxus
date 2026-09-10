@@ -56,15 +56,37 @@ pub fn render_default<T: DefaultWidget>(field: Store<FormField<T>>, props: Field
     <T::Widget as FieldWidget<T>>::render(field, props)
 }
 
-/// A field's current errors as a list (renders nothing when there are none).
+/// A field's current errors (renders nothing when there are none).
 /// Shared by every built-in widget.
+///
+/// **The `small` is a DEFAULT, not a commitment.** It is chosen so that Pico
+/// styles this for free: Pico is classless, and its validation rule is
+/// `input[aria-invalid="true"] + small`, which colours the message with the
+/// theme's own `--pico-del-color` in light and dark alike. Meeting that rule is
+/// why the element is a `small`, why it must be the control's IMMEDIATE next
+/// sibling, and why several errors share ONE `small` as spans rather than
+/// getting a `small` apiece — only the first sibling would match, and the rest
+/// would render as ordinary body text.
+///
+/// Anyone not using Pico pays almost nothing for that choice. Formoxus ships no
+/// stylesheet at all; `field-errors`/`field-error` are its own class names, so a
+/// Bootstrap or Tailwind user styles them like any other markup. What they
+/// inherit is the element name, and the only real cost is semantic — `small`
+/// means "fine print", which an error message arguably is not. **When
+/// error rendering becomes overridable (the same mechanism as custom widgets),
+/// this is the component to swap**, and this choice stops being global.
+///
+/// The `aria-invalid` half lives on each widget's control and is NOT a Pico
+/// dependency: it is the W3C ARIA attribute assistive technology reads to
+/// announce a field as errored. Set it whatever CSS the consumer brings —
+/// leaving it off is an accessibility defect, not a styling preference.
 #[component]
 pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
     rsx! {
         if !errors.is_empty() {
-            ul { class: "field-errors",
+            small { class: "field-errors",
                 for error in errors.iter() {
-                    li { class: "field-error", "{error.0}" }
+                    span { class: "field-error", "{error.0}" }
                 }
             }
         }

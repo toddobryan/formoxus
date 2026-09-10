@@ -274,3 +274,85 @@ fn typing_into_a_never_populated_path_inserts_it() {
     let html = type_into(EmptyInput, "3.5");
     expect_that!(html, contains_substring(r#"value="3.5""#));
 }
+
+// ── An unparseable value has to SAY so ───────────────────────────────────
+
+/// One `f64`, so a single unparseable entry is the whole story. `Grading::
+/// AllowTwoChances { second_try_credit }` on `/form-demo` is where this was
+/// spotted: typing "abc" refused the form with nothing shown under the field.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Score {
+    credit: f64,
+}
+
+#[component]
+fn ScoreFormWithBadInput() -> Element {
+    let mut state = empty_form::<Score>();
+    state.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
+    // Validating BEFORE mounting is what makes this a pure render assertion —
+    // errors are populated by `validate`, and blur-time validation doesn't
+    // exist yet, so there is no interaction to drive here.
+    let _ = state.validate();
+    let form = use_form(state);
+    form.render()
+}
+
+#[gtest]
+fn an_unparseable_value_renders_its_error() {
+    // The regression that motivated this: `FieldValue::Invalid` carries the parse
+    // error INSIDE the value, `has_errors` reads it there, and `validate` used to
+    // leave `self.errors` empty. So the form correctly refused to submit using
+    // evidence the widget could not see, and the field rendered clean.
+    //
+    // Asserted on the wrapper class rather than the message text, because the
+    // wording is deliberately still the raw shape name and is expected to change.
+    let html = super::render_to_html(ScoreFormWithBadInput);
+    expect_that!(
+        html,
+        contains_substring("field-error"),
+        "an invalid field must render an error, not just fail the form:\n{html}"
+    );
+    // What the user typed has to survive, or the error names a value that is no
+    // longer on screen.
+    expect_that!(html, contains_substring(r#"value="abc""#));
+}
+
+#[gtest]
+fn an_unparseable_value_does_not_also_claim_to_be_required() {
+    // `Empty` and `Invalid` are different failures and only one message belongs
+    // on the field. This is the invariant the derive path spelled out in
+    // `tests/signup.rs` and got by leaving `errors` empty entirely — which is
+    // precisely why its error never rendered either.
+    let mut form = empty_form::<Score>();
+    form.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
+    expect_that!(form.validate(), none());
+
+    let html = super::render_to_html(ScoreFormWithBadInput);
+    expect_that!(html, not(contains_substring("This field is required.")));
+    expect_that!(html.matches("field-error\"").count(), eq(1));
+}
+
+// ── Pico's validation styling is markup, not a class we invented ─────────
+
+#[gtest]
+fn an_errored_field_marks_its_control_aria_invalid() {
+    // `aria-invalid="true"` on the control is half of Pico's classless idiom
+    // (the other half is the adjacent `small` in `FieldErrors`), and it is the
+    // half a screen reader announces. Styling the message alone would serve the
+    // sighted case and leave the other unserved.
+    let html = super::render_to_html(ScoreFormWithBadInput);
+    expect_that!(html, contains_substring(r#"aria-invalid="true""#));
+    // The error message must be an immediate `small` sibling of the input, or
+    // Pico's `input[aria-invalid="true"] + small` rule never matches and the
+    // message renders as ordinary body text — the bug this whole change fixes.
+    expect_that!(html, contains_substring(r#"/><small class="field-errors">"#));
+}
+
+#[gtest]
+fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
+    // NOT `aria-invalid="false"`: Pico reads that as "checked and passed" and
+    // paints it green with a tick, so an untouched form would claim to have
+    // validated every field. Absent is the only neutral value.
+    let html = super::render_to_html(EmptyInput);
+    expect_that!(html, not(contains_substring("aria-invalid")));
+}

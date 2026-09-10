@@ -113,10 +113,22 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 
     fn validate(&mut self) {
         self.errors.clear();
-        if matches!(self.value, FieldValue::Empty) && !self.is_unticked_checkbox() {
-            self.errors
-                .push(FieldError("This field is required.".to_string()));
-        }
+        // An `Invalid` value carries its own parse error, and this is the only
+        // route that error has to the screen: the widget boundary is
+        // `(path, label, required, errors)`, so a widget cannot reach into
+        // `FieldValue` to find it. Hoisting here rather than merging in
+        // `render` also keeps one answer to "what is wrong with this field".
+        //
+        // The `match` is what keeps a parse error from collecting a spurious
+        // "required" on top of it — exactly one error either way.
+        let error = match &self.value {
+            FieldValue::Empty if !self.is_unticked_checkbox() => {
+                Some(FieldError("This field is required.".to_string()))
+            }
+            FieldValue::Invalid { error, .. } => Some(error.clone()),
+            _ => None,
+        };
+        self.errors.extend(error);
     }
 
     fn clone_box(&self) -> Box<dyn FormMember> {

@@ -23,9 +23,19 @@ use crate::widgets::FieldErrors;
 /// still known — `FormField<T>::render` can't reach a `DefaultWidget`-style
 /// trait without bounding every `Facet` type in the crate.
 ///
-/// **`ScalarInput` does not branch on this yet**: every kind still renders as
-/// `type="text"`, so a `bool` shows the literal `true`. That branch is the next
-/// piece of work.
+/// `ScalarInput` dispatches on this, one widget per kind: `Text` and the two
+/// numeric kinds to `TextInput`/`NumericInput`, `Boolean` to `BooleanInput` —
+/// a checkbox for a plain `bool`, the tri-state `SelectInput` for an
+/// `Option<bool>`, since a checkbox has two states and `Option<bool>` has three.
+///
+/// **There is deliberately no `Select` variant.** A select needs OPTIONS, and a
+/// shape cannot carry them — a picker's choices are render-time data, usually
+/// fetched. The only select a shape can imply is the tri-state for
+/// `Option<bool>`, which `Boolean { optional: true }` already says. Data-driven
+/// pickers therefore belong to the widget registry, chosen at the call site
+/// where a provider can be supplied. (A `Select` variant existed briefly, with a
+/// `todo!()` arm; it was removed once that argument was made, because a closed
+/// enum is a commitment that gets harder to unwind the longer it stands.)
 ///
 /// `Int`'s bounds are for the error message ("must be between 0 and 255"), not
 /// for HTML `min`/`max`, which do nothing on a text input — `parse_scalar`
@@ -39,7 +49,6 @@ pub enum InputKind {
     Boolean {
         optional: bool,
     },
-    Select,
     Int {
         min: i128,
         max: i128,
@@ -89,7 +98,6 @@ pub fn ScalarInput(
     match input_kind {
         InputKind::Text => rsx! { TextInput { values, props } },
         InputKind::Boolean { optional } => rsx! { BooleanInput { values, optional, props } },
-        InputKind::Select => todo!(),
         InputKind::Int { .. } => rsx! { NumericInput { input_kind, values, props }},
         InputKind::Float => rsx! { NumericInput { input_kind, values, props }},
     }
@@ -101,9 +109,21 @@ pub fn TextInput(
     props: FieldProps,
 ) -> Element {
     let FieldProps { path, label: label_text, required, errors } = props;
-    
+
     let current = get_current(&path, values);
-    
+
+    // Present ONLY when there is an error. `aria-invalid="false"` is NOT the
+    // neutral value — it asserts "checked, and passed", which Pico duly paints
+    // green with a tick, so an untouched form would claim to have validated
+    // every field. Absent is the only neutral state. Dioxus omits an attribute
+    // whose value is `None`, which is what makes absence expressible at all.
+    //
+    // Unlike the `small` in `FieldErrors`, this is not a styling choice with a
+    // framework behind it: `aria-invalid` is the W3C ARIA attribute assistive
+    // technology reads to announce a field as errored, so it belongs here
+    // whatever CSS the consumer brings.
+    let invalid = (!errors.is_empty()).then_some("true");
+
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
@@ -117,6 +137,7 @@ pub fn TextInput(
                 name: "{path}",
                 value: "{current}",
                 required,
+                aria_invalid: invalid,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);
@@ -148,11 +169,17 @@ pub fn BooleanInput(
     // on a checkbox means "must be ticked", which is not what a required `bool`
     // field asks for — unticked is a complete answer. For the same reason there
     // is no ` *` marker: it would promise a rule nothing enforces.
+    // See `TextInput`. Pico skips a checkbox for the invalid *icon* (there is
+    // nowhere to put one), but the border and the adjacent `small` still key off
+    // this, and it is what a screen reader announces either way.
+    let invalid = (!errors.is_empty()).then_some("true");
+
     let input_element = rsx! {
         input {
             name: "{path}",
             r#type: "checkbox",
             checked: get_current(&path, values) == "true",
+            aria_invalid: invalid,
             onchange: move |e: FormEvent| write_value(&path, values, e.value())
         }
         FieldErrors { errors: errors.clone() }
@@ -177,9 +204,12 @@ pub fn NumericInput(
     props: FieldProps,
 ) -> Element {
     let FieldProps { path, label: label_text, required, errors } = props;
-    
+
     let current = get_current(&path, values);
-    
+
+    // See `TextInput` for why this is `Option` rather than a plain bool.
+    let invalid = (!errors.is_empty()).then_some("true");
+
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
@@ -193,6 +223,7 @@ pub fn NumericInput(
                 name: "{path}",
                 value: "{current}",
                 required,
+                aria_invalid: invalid,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);
@@ -253,6 +284,9 @@ pub fn SelectInput(
 
     let current = get_current(&path, values);
 
+    // See `TextInput` for why this is `Option` rather than a plain bool.
+    let invalid = (!errors.is_empty()).then_some("true");
+
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
@@ -262,6 +296,7 @@ pub fn SelectInput(
                 span { class: "required", " *" }
             }
             select {
+                aria_invalid: invalid,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `apply_form_values` would never see it.
                 name: "{path}",
