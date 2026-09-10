@@ -276,7 +276,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
 
     FormState {
         title: None,
-        members: members_for(T::SHAPE, value.map(Peek::new), mode, ""),
+        members: members_for(T::SHAPE, value.map(Peek::new), mode, "", /* optional */ false),
         errors: Vec::new(),
         _type: PhantomData,
     }

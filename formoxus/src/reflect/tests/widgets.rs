@@ -158,7 +158,7 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarInput` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use crate::reflect::widgets::{InputKind, ScalarInput};
+use crate::reflect::widgets::{FieldProps, InputKind, ScalarInput};
 
 #[component]
 fn PopulatedInput() -> Element {
@@ -167,12 +167,14 @@ fn PopulatedInput() -> Element {
     });
     rsx! {
         ScalarInput {
-            path: "title".to_string(),
-            label: Some("Title".to_string()),
             input_kind: InputKind::Text,
-            errors: Vec::new(),
-            required: true,
             values,
+            props: FieldProps {
+                path: "title".to_string(),
+                label: Some("Title".to_string()),
+                required: true,
+                errors: Vec::new(),
+            },
         }
     }
 }
@@ -184,12 +186,14 @@ fn EmptyInput() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
         ScalarInput {
-            path: "shape.radius".to_string(),
-            label: None,
-            errors: Vec::new(),
             input_kind: InputKind::Text,
-            required: true,
             values,
+            props: FieldProps {
+                path: "shape.radius".to_string(),
+                label: None,
+                required: true,
+                errors: Vec::new(),
+            },
         }
     }
 }

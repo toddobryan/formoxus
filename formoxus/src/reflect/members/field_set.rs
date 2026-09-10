@@ -12,6 +12,7 @@ use crate::reflect::members::{
 #[derive(Clone, Debug)]
 pub struct FieldSet {
     pub name: String,
+    pub optional: bool,
     pub label: Option<String>,
     pub members: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FormError>,

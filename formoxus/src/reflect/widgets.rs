@@ -36,7 +36,9 @@ use crate::widgets::FieldErrors;
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputKind {
     Text,
-    Checkbox,
+    Boolean {
+        optional: bool,
+    },
     Select,
     Int {
         min: i128,
@@ -44,6 +46,32 @@ pub enum InputKind {
     },
     Float,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldProps {
+    pub path: String,
+    pub label: Option<String>,
+    // whether the field(s) below are considered required in the form,
+    // modulo weird things like not being able to mark checkboxes required
+    pub required: bool,
+    pub errors: Vec<FieldError>,
+}
+
+fn get_current(path: &str, values: ValuesByPath) -> String {
+    let slot = values.get_unchecked(path.to_string());
+    slot.try_read().map(|v| v.clone()).unwrap_or_default()
+}
+
+fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
+    let populated = values.peek().contains_key(path);
+    if populated {
+        values.get_unchecked(path.to_string()).set(raw);
+    } else {
+        values.insert(path.to_string(), raw);
+    }
+}
+
+
 
 /// A single-line text input bound to one path in the value map.
 ///
@@ -54,30 +82,28 @@ pub enum InputKind {
 /// already follows when a path is absent from submitted values.
 #[component]
 pub fn ScalarInput(
-    path: String,
-    label: Option<String>,
     input_kind: InputKind,
-    errors: Vec<FieldError>,
-    /// A presentation hint only. It is deliberately false for every leaf under
-    /// an `Option`, including the leaves of an optional *struct* — HTML5
-    /// `required` is per-input and can't express "all of these or none", so
-    /// marking them would block a deliberately blank one. `validate()` stays
-    /// the authority on the all-or-nothing rule. See [`crate::reflect::RenderCtx`].
-    required: bool,
     values: ValuesByPath,
+    props: FieldProps,
 ) -> Element {
-    // `get_unchecked`, not `get`: `get` calls `contains_key`, which tracks the
-    // map *shallowly* — this input would then re-render whenever any key is
-    // added anywhere. `get_unchecked` builds the child selector without
-    // reading, so the only subscription is the `try_read` below, on this key
-    // alone. It never panics here because we never `read()` it directly.
-    let slot = values.get_unchecked(path.clone());
-    let current = slot.try_read().map(|v| v.clone()).unwrap_or_default();
+    match input_kind {
+        InputKind::Text => rsx! { TextInput { values, props } },
+        InputKind::Boolean { optional } => rsx! { BooleanInput { values, optional, props } },
+        InputKind::Select => todo!(),
+        InputKind::Int { .. } => rsx! { NumericInput { input_kind, values, props }},
+        InputKind::Float => rsx! { NumericInput { input_kind, values, props }},
+    }
+}
 
-    let label_text = label;
-    let write_path = path.clone();
-    let mut values = values;
-
+#[component]
+pub fn TextInput(
+    values: ValuesByPath,
+    props: FieldProps,
+) -> Element {
+    let FieldProps { path, label: label_text, required, errors } = props;
+    
+    let current = get_current(&path, values);
+    
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
@@ -93,23 +119,173 @@ pub fn ScalarInput(
                 required,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
-                    // Write *through the child store* when the key exists: that
-                    // marks only this key dirty. `insert` would call
-                    // `mark_dirty_shallow` and re-render every other input, so
-                    // it's the fallback for a never-populated path only — one
-                    // coarse re-render on the first keystroke into a freshly
-                    // revealed field, fine-grained from then on.
-                    // `peek`, not `contains_key`: the store's own
-                    // `contains_key` tracks shallowly, and an event handler has
-                    // no business adding subscriptions. Bound to a `let` so the
-                    // read guard is definitely released before the write below.
-                    let populated = values.peek().contains_key(&write_path);
-                    if populated {
-                        values.get_unchecked(write_path.clone()).set(raw);
-                    } else {
-                        values.insert(write_path.clone(), raw);
-                    }
+                    write_value(&path, values, raw);
                 },
+            }
+            FieldErrors { errors }
+        }
+    }
+}
+
+#[component]
+pub fn BooleanInput(
+    mut values: ValuesByPath,
+    optional: bool,
+    props: FieldProps,
+) -> Element {
+    // An `Option<bool>` has three states and a checkbox has two, so it needs a
+    // select. Delegating rather than inlining one keeps a single implementation
+    // of the "no value" option and the required/optional asymmetry.
+    if optional {
+        return rsx! {
+            SelectInput { values, choices: bool_choices(), props }
+        };
+    }
+
+    let FieldProps { path, label, errors, .. } = props;
+
+    // `required` is deliberately dropped rather than forwarded. HTML `required`
+    // on a checkbox means "must be ticked", which is not what a required `bool`
+    // field asks for — unticked is a complete answer. For the same reason there
+    // is no ` *` marker: it would promise a rule nothing enforces.
+    let input_element = rsx! {
+        input {
+            name: "{path}",
+            r#type: "checkbox",
+            checked: get_current(&path, values) == "true",
+            onchange: move |e: FormEvent| write_value(&path, values, e.value())
+        }
+        FieldErrors { errors: errors.clone() }
+    };
+
+    if let Some(label_text) = label.clone() {
+        rsx! {
+            label {
+                "{label_text}"
+                { input_element }
+            }
+        }
+    } else {
+        input_element
+    }
+}
+
+#[component]
+pub fn NumericInput(
+    input_kind: InputKind,
+    values: ValuesByPath,
+    props: FieldProps,
+) -> Element {
+    let FieldProps { path, label: label_text, required, errors } = props;
+    
+    let current = get_current(&path, values);
+    
+    rsx! {
+        label { class: "form-field",
+            if let Some(text) = label_text {
+                span { class: "field-label", "{text}" }
+            }
+            if required {
+                span { class: "required", " *" }
+            }
+            input {
+                r#type: "text",
+                name: "{path}",
+                value: "{current}",
+                required,
+                oninput: move |e: FormEvent| {
+                    let raw = e.value();
+                    write_value(&path, values, raw);
+                },
+            }
+            FieldErrors { errors }
+        }
+    }
+}
+
+/// One option in a [`SelectInput`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectChoice {
+    /// The raw string written into the value map, so it has to be exactly what
+    /// `parse_scalar` expects for this field's type — `"true"`, not `"True"`.
+    /// That the two can differ at all is why this isn't just a `Vec<String>`.
+    pub value: String,
+    /// What the user reads.
+    pub display: String,
+}
+
+impl SelectChoice {
+    pub fn new(value: impl Into<String>, display: impl Into<String>) -> Self {
+        Self { value: value.into(), display: display.into() }
+    }
+}
+
+/// The three states of an `Option<bool>`, minus the absent one — that comes
+/// from `SelectInput`'s own "no value" option, so it is spelled in exactly one
+/// place rather than once per caller.
+fn bool_choices() -> Vec<SelectChoice> {
+    vec![SelectChoice::new("true", "True"), SelectChoice::new("false", "False")]
+}
+
+/// A `<select>` over a fixed set of choices, bound to one path in the value map.
+///
+/// Reads its current value from `values` like every other leaf widget rather
+/// than taking it as a prop. That is not just consistency: computing `selected`
+/// for a prop would mean reading the store in `FormField::render`, a plain
+/// function with no scope of its own, which subscribes *the caller* — so one
+/// change here would re-render the whole form. [`VariantSelect`] takes its
+/// selection as a prop precisely because a variant choice is NOT a leaf and has
+/// no path to read.
+///
+/// Unlike the derive path's `SelectWidget`, an option's value is the raw string
+/// itself rather than an index into `choices`. That path stores an index because
+/// its `T` might not survive a round trip through a string; here `T -> String ->
+/// T` is a guaranteed identity (see the `roundtrip` tests), so the indirection —
+/// and its silent `unwrap_or_default()` when an index doesn't match — is pure
+/// loss.
+#[component]
+pub fn SelectInput(
+    values: ValuesByPath,
+    choices: Vec<SelectChoice>,
+    props: FieldProps,
+) -> Element {
+    let FieldProps { path, label: label_text, required, errors } = props;
+
+    let current = get_current(&path, values);
+
+    rsx! {
+        label { class: "form-field",
+            if let Some(text) = label_text {
+                span { class: "field-label", "{text}" }
+            }
+            if required {
+                span { class: "required", " *" }
+            }
+            select {
+                // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
+                // `name` or `apply_form_values` would never see it.
+                name: "{path}",
+                required,
+                // No branch on emptiness: the "no value" option's value is `""`,
+                // and `""` IS absence at both boundaries, so the same write does
+                // for every option.
+                onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+                // Required and unanswered: an unselectable placeholder, so the
+                // browser's own validation blocks submit and the user can't
+                // choose their way back to "unanswered". Optional: a real
+                // selectable entry, because absent is a legitimate answer.
+                if required && current.is_empty() {
+                    option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
+                } else if !required {
+                    option { value: "", selected: current.is_empty(), "{ABSENT_DISPLAY}" }
+                }
+                for choice in choices {
+                    option {
+                        value: "{choice.value}",
+                        selected: choice.value == current,
+                        "{choice.display}"
+                    }
+                }
             }
             FieldErrors { errors }
         }
@@ -126,6 +302,10 @@ pub fn ScalarInput(
 /// with a genuine `None` variant would otherwise be indistinguishable from an
 /// unanswered optional field. What the select actually emits is `""`, which
 /// `VariantSelect` turns into `ChooseVariant { variant: None }`.
+///
+/// [`SelectInput`] shows the same text, and it *does* carry a `name` — but it is
+/// safe there for the same reason by a different route: the option's value is
+/// `""`, never this text, and `""` is absence at both boundaries.
 pub(crate) const ABSENT_DISPLAY: &str = "--none--";
 
 #[component]

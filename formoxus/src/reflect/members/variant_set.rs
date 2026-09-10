@@ -38,6 +38,7 @@ pub struct VariantSet {
     pub name: String,
     pub label: Option<String>,
     pub enum_type: &'static EnumType,
+    pub optional: bool,
     pub choice: VariantChoice,
     pub members: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FieldError>,
@@ -93,6 +94,7 @@ impl VariantSet {
             None,
             FormMode::Blank,
             &qualify(my_path, &variant_segment(chosen.name)),
+            self.optional,
         );
         self.errors.clear();
         Ok(())

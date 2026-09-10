@@ -37,6 +37,7 @@ fn location_field_set(
 ) -> Box<dyn FormMember> {
     Box::new(FieldSet {
         name: "location".to_string(),
+        optional: false,
         label: Some("Location".to_string()),
         members: location_members(street, city, zip),
         errors: Vec::new(),

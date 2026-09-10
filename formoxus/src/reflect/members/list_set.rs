@@ -20,6 +20,7 @@ pub struct ListSet {
     pub name: String,
     pub label: Option<String>,
     pub shape: &'static Shape,
+    pub optional: bool,
     pub rows: Vec<Box<dyn FormMember>>,
     pub errors: Vec<FormError>,
     pub next_key: usize,
@@ -33,7 +34,7 @@ impl ListSet {
     /// members. The row's prefix has to match what `list_member` produces at
     /// construction, or the row would render fine and write to store keys
     /// nobody reads.
-    fn add_row(&mut self, my_path: &str, before: Option<usize>) -> Result<(), FormAccessError> {
+    fn add_row(&mut self, my_path: &str, before: Option<usize>, optional: bool) -> Result<(), FormAccessError> {
         let at = before.unwrap_or(self.rows.len());
         if at > self.rows.len() {
             return Err(FormAccessError(format!(
@@ -49,6 +50,7 @@ impl ListSet {
             None,
             FormMode::Blank,
             &qualify(my_path, &name),
+            optional,
         );
         self.rows.insert(at, row);
         Ok(())
@@ -171,7 +173,7 @@ impl FormMember for ListSet {
         ensure_owned(&my_path, path)?;
         if path == my_path {
             return match edit {
-                Edit::AddRow { before, .. } => self.add_row(&my_path, *before),
+                Edit::AddRow { before, .. } => self.add_row(&my_path, *before, self.optional),
                 Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
                 _ => Err(FormAccessError(format!("{my_path} is a list, not an enum"))),
             };

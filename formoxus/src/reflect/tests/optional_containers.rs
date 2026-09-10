@@ -25,6 +25,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
 use super::models::{Location, Mode};
+use super::Harness;
 use googletest::prelude::*;
 
 /// `Option<Struct>` — the case that used to panic one way and lie the other.
@@ -357,5 +358,145 @@ fn an_optional_structs_leaves_are_still_rendered() {
     let html = super::render_to_html(EmptyContactForm);
     for leaf in ["address.street", "address.city", "address.zip"] {
         expect_that!(html, contains_substring(format!(r#"name="{leaf}""#)));
+    }
+}
+
+// ── `optional` describes ONE member, not a subtree ───────────────────────
+//
+// Three flags now travel through the build walk and they behave differently on
+// purpose. `FormMode` is fixed at the root and threaded down unchanged.
+// `RenderCtx::required` is set once by `OptionMember` and INHERITED by every
+// descendant — deliberately, because it is only a presentation hint and an
+// optional struct's leaves must not be individually marked required. The build
+// walk's `optional` is neither: it decides which *widget* a `bool` gets, so it
+// has to be consumed by the member it describes and reset for that member's
+// children.
+//
+// These two tests pin both directions, so a fix can't be "stop setting it".
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Venue {
+    open: bool,
+}
+
+/// One model carrying all three cases at once, so a single render distinguishes
+/// them: a plain `bool`, a plain `bool` whose *ancestor* is optional, and a
+/// `bool` that is itself optional.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Event {
+    published: bool,
+    venue: Option<Venue>,
+    subscribed: Option<bool>,
+}
+
+#[component]
+fn BooleanKindsForm() -> Element {
+    let form = use_form(empty_form::<Event>());
+    form.render()
+}
+
+#[gtest]
+fn a_plain_bool_inside_an_optional_struct_still_renders_a_checkbox() {
+    // `Event.venue` is optional; `Venue.open` is a plain `bool` that can never
+    // be absent, so it must render exactly as `published` does. Leaking
+    // `optional` down into the struct's fields would offer "No Value" for a
+    // state the type cannot hold.
+    //
+    // Counted rather than matched by `name`, so this stays honest about what it
+    // checks: it is the number of checkboxes that is wrong when `optional`
+    // leaks, and that holds whatever the surrounding markup does.
+    let html = super::render_to_html(BooleanKindsForm);
+    expect_that!(
+        html.matches(r#"type="checkbox""#).count(),
+        eq(2),
+        "`published` and `venue.open` are both plain bools, so both are checkboxes:\n{html}"
+    );
+}
+
+#[gtest]
+fn an_optional_bool_renders_a_tri_state_control_instead() {
+    // The other direction. A checkbox has two states and `Option<bool>` has
+    // three, so `subscribed` is the one bool here that genuinely needs the
+    // select — which is why the flag can't simply be dropped.
+    let html = super::render_to_html(BooleanKindsForm);
+    expect_that!(
+        html.matches("<select").count(),
+        eq(1),
+        "only `subscribed` is an Option<bool>:\n{html}"
+    );
+}
+
+// ── The tri-state select ─────────────────────────────────────────────────
+
+/// A single `Option<bool>` and nothing else, so `only_listener("change")` is
+/// unambiguous — `BooleanKindsForm`'s checkboxes register `change` too.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Prefs {
+    subscribed: Option<bool>,
+}
+
+#[component]
+fn PrefsForm() -> Element {
+    let form = use_form(empty_form::<Prefs>());
+    form.render()
+}
+
+#[gtest]
+fn an_optional_bool_offers_all_three_of_its_states() {
+    // A checkbox can express two of the three, which is the whole reason this
+    // control exists. "Absent" is a real answer here, so it is a selectable
+    // option rather than the unselectable placeholder a required select gets.
+    let html = super::render_to_html(PrefsForm);
+    expect_that!(
+        html,
+        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#))
+    );
+    expect_that!(html, contains_substring(r#"<option value="true">True</option>"#));
+    expect_that!(html, contains_substring(r#"<option value="false">False</option>"#));
+    // It IS a leaf, unlike a variant picker, so it has to be findable by name.
+    expect_that!(html, contains_substring(r#"name="subscribed""#));
+}
+
+#[gtest]
+fn choosing_a_value_and_choosing_none_both_round_trip_through_the_dom() {
+    let mut app = Harness::mount(PrefsForm);
+    let select = app.only_listener("change");
+
+    app.fire("change", select, "true");
+    expect_that!(
+        app.html(),
+        contains_substring(r#"<option value="true" selected=true>True</option>"#)
+    );
+
+    // Back to absent. The option's value is `""`, so this takes the same write
+    // path as any other choice — there is no "clear" branch to get wrong.
+    app.fire("change", select, "");
+    expect_that!(
+        app.html(),
+        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#))
+    );
+    expect_that!(app.html(), not(contains_substring(r#"value="true" selected=true"#)));
+}
+
+#[gtest]
+fn a_choices_value_has_to_be_what_parse_scalar_expects() {
+    // Pins the other end of the contract `SelectChoice::value` has to meet: what
+    // `parse_scalar` actually accepts for an `Option<bool>`. This does NOT check
+    // that `bool_choices()` matches — it feeds raw strings directly, so
+    // `SelectChoice::new("True", ..)` would still pass here and fail in the two
+    // render tests above. The pair is what covers it: this says what the raw
+    // strings must be, those say the widget emits them.
+    for (raw, expected) in [
+        ("true", Some(true)),
+        ("false", Some(false)),
+        ("", None),
+    ] {
+        let mut form = empty_form::<Prefs>();
+        form.apply_form_values(&[("subscribed".to_string(), raw.to_string())]);
+        expect_that!(
+            form.validate(),
+            some(eq(&Prefs { subscribed: expected })),
+            "raw {raw:?} should validate as {expected:?}"
+        );
     }
 }
