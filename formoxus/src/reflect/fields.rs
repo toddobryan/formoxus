@@ -25,6 +25,28 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub errors: Vec<FieldError>,
 }
 
+impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
+    /// A required `bool` that nothing was supplied for.
+    ///
+    /// The one input whose blank is an ANSWER rather than an omission: a
+    /// checkbox posts nothing when unticked, and `false` is complete. The
+    /// substitution deliberately does NOT happen in `apply_leaves`, where it
+    /// would be a one-line change — writing `Valid(false)` there makes the field
+    /// permanently [present](FormMember::is_present), and `FieldSet::is_present`
+    /// is `any` over its members, so an `Option<Struct>` whose only field is a
+    /// checkbox would build `Some(..)` for a section the user never opened.
+    /// Keeping `Empty` meaning "nothing supplied" everywhere costs two
+    /// consumers knowing about checkboxes, and buys one meaning for absence.
+    ///
+    /// `Boolean { optional: true }` is excluded on purpose: an `Option<bool>`
+    /// renders a tri-state select whose blank really is absence, and there
+    /// `Empty` must survive all the way to `None`.
+    fn is_unticked_checkbox(&self) -> bool {
+        matches!(self.value, FieldValue::Empty)
+            && matches!(self.input_kind, InputKind::Boolean { optional: false })
+    }
+}
+
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for FormField<T> {
     fn name(&self) -> String {
         self.name.clone()
@@ -91,7 +113,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 
     fn validate(&mut self) {
         self.errors.clear();
-        if matches!(self.value, FieldValue::Empty) {
+        if matches!(self.value, FieldValue::Empty) && !self.is_unticked_checkbox() {
             self.errors
                 .push(FieldError("This field is required.".to_string()));
         }
@@ -108,6 +130,17 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         let partial = match &self.value {
             FieldValue::Valid(t) => partial.set(t.clone())?,
+            // An unticked checkbox is `Empty` like any other unfilled input, and
+            // stays that way so `is_present` keeps one meaning. `false` is
+            // synthesised here instead, at the last possible moment. Going
+            // through `parse_scalar` rather than `partial.set(false)` is what
+            // keeps this generic: nothing in scope can prove `T == bool`, but
+            // the parse vtable resolves the real shape at runtime and doesn't
+            // need to be told.
+            FieldValue::Empty if self.is_unticked_checkbox() => partial.set(
+                parse_scalar::<T>("false")
+                    .expect("`Boolean` input kind is only ever derived from a `bool` shape"),
+            )?,
             // Required-vs-optional was decided from the Model's own shape at
             // construction time (`Def::Option` — see the earlier discussion):
             // `required == false` means the Model's field is really

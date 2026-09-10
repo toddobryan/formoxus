@@ -500,3 +500,81 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
         );
     }
 }
+
+// ── An unticked box is an answer, not an absence ─────────────────────────
+//
+// `""` means "unfilled" everywhere else, but a checkbox posts nothing when it is
+// unticked and `false` is a complete answer. The obvious fix — read `""` as
+// `"false"` in `apply_leaves` — was TRIED and reverted: it makes the field
+// permanently present, and since `FieldSet::is_present` is `any` over its
+// members, an `Option<Struct>` whose only field is a checkbox then builds
+// `Some(..)` for a section the user never opened. The second test below is that
+// bug, and it was red against exactly that version.
+//
+// So `Empty` keeps one meaning everywhere and the two CONSUMERS know about
+// checkboxes instead: `validate` doesn't call one required, and
+// `write_value_into` synthesises `false` at the last moment. Both go through
+// `FormField::is_unticked_checkbox`, so the rule is stated once.
+//
+// The two directions pull against each other, which is why both are pinned: the
+// first says a required `bool` must still SUBMIT, the second says that must not
+// cost an absent ancestor its absence.
+
+/// A required `bool` beside a field the user actually fills, so this reproduces
+/// the reported symptom rather than a `bool` in isolation: a correctly completed
+/// form that refuses to submit because one box was left alone.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Signup {
+    email: String,
+    subscribed: bool,
+}
+
+#[gtest]
+fn an_untouched_checkbox_submits_as_false() {
+    let mut form = empty_form::<Signup>();
+
+    // The real submit path — `leaves()` out, edits in, `apply()` back — because
+    // that is where the `""` came from. Feeding `("subscribed", "false")`
+    // straight in would test the parse and skip the bug entirely.
+    let mut values: HashMap<String, String> = form.leaves().into_iter().collect();
+    expect_that!(
+        values.get("subscribed"),
+        some(eq("")),
+        "an untouched checkbox stays empty the whole way through — nothing on \
+         the leaf path reinterprets it, and `false` appears only at write time"
+    );
+    values.insert("email".to_string(), "ada@example.com".to_string());
+
+    form.apply(&values);
+    expect_that!(form.validate(), some(eq(&Signup {
+        email: "ada@example.com".to_string(),
+        subscribed: false,
+    })));
+    expect_that!(form.has_errors(), eq(false));
+}
+
+#[gtest]
+fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
+    // The other direction, and the trap. `venue.open` stays `Empty` through
+    // `apply`, so `venue` reports itself absent and builds `None` — a user who
+    // never opened the venue section doesn't silently create one. Synthesise
+    // `false` any earlier than `write_value_into` and this goes red: `open`
+    // becomes present, `FieldSet::is_present` is `any` over its members, and out
+    // comes `Some(Venue { open: false })`.
+    //
+    // `published` proves the same run still submits its top-level `bool`, so a
+    // "fix" that just stopped synthesising can't pass this on its own.
+    //
+    // `subscribed` is the third case: an `Option<bool>` renders a tri-state
+    // select whose blank really is absence, so `Empty` must reach `None`
+    // untouched. `is_unticked_checkbox` excludes `optional: true` for this.
+    let mut form = empty_form::<Event>();
+    let values: HashMap<String, String> = form.leaves().into_iter().collect();
+
+    form.apply(&values);
+    expect_that!(form.validate(), some(eq(&Event {
+        published: false,
+        venue: None,
+        subscribed: None,
+    })));
+}
