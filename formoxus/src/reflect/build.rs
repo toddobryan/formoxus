@@ -8,7 +8,6 @@ use crate::reflect::fields::{FormField, populate};
 use crate::reflect::members::{
     FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify, row_segment,
 };
-use crate::reflect::widgets::InputKind;
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.

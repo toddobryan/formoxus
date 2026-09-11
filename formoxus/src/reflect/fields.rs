@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
 use crate::reflect::members::{Edit, FormMember, default_label, qualify};
-use crate::reflect::widgets::{FieldProps, InputKind, ScalarInput};
+use crate::reflect::widgets::{ControlType, FieldProps, InputKind, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -20,7 +20,8 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
 pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
-    pub input_kind: InputKind,
+    pub optional: bool,
+    pub custom_control: Option<ControlType>,
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }

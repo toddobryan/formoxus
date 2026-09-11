@@ -17,43 +17,35 @@ use crate::label_case::{LabelCase, ToCase};
 use crate::reflect::{Edit, ValuesByPath};
 use crate::widgets::FieldErrors;
 
-/// Which control a scalar leaf renders as.
-///
-/// Assigned in `scalar_member`'s `dispatch!` macro, where the concrete type is
-/// still known — `FormField<T>::render` can't reach a `DefaultWidget`-style
-/// trait without bounding every `Facet` type in the crate.
-///
-/// `ScalarInput` dispatches on this, one widget per kind: `Text` and the two
-/// numeric kinds to `TextInput`/`NumericInput`, `Boolean` to `BooleanInput` —
-/// a checkbox for a plain `bool`, the tri-state `SelectInput` for an
-/// `Option<bool>`, since a checkbox has two states and `Option<bool>` has three.
-///
-/// **There is deliberately no `Select` variant.** A select needs OPTIONS, and a
-/// shape cannot carry them — a picker's choices are render-time data, usually
-/// fetched. The only select a shape can imply is the tri-state for
-/// `Option<bool>`, which `Boolean { optional: true }` already says. Data-driven
-/// pickers therefore belong to the widget registry, chosen at the call site
-/// where a provider can be supplied. (A `Select` variant existed briefly, with a
-/// `todo!()` arm; it was removed once that argument was made, because a closed
-/// enum is a commitment that gets harder to unwind the longer it stands.)
-///
-/// `Int`'s bounds are for the error message ("must be between 0 and 255"), not
-/// for HTML `min`/`max`, which do nothing on a text input — `parse_scalar`
-/// already rejects out-of-range values. They are also where a user-specified
-/// `#[form(min = …)]` would land. `Int`/`Float` stay `type="text"` deliberately:
-/// `type="number"` hands back `""` for anything the browser dislikes, so a
-/// half-typed value disappears.
 #[derive(Clone, Debug, PartialEq)]
-pub enum InputKind {
+pub enum ControlType {
+    Input(InputType),
+    Textarea,
+    Select,
+    SelectMultiple,
+    Checkbox,
+    CheckboxMultiple,
+    RadioGroup,
+    File,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InputType {
     Text,
-    Boolean {
-        optional: bool,
-    },
-    Int {
-        min: i128,
-        max: i128,
-    },
+    Password,
+    Hidden,
+    Integer,
     Float,
+    Email,
+    Telephone,
+    Url,
+    Search,
+    Color,
+    Date,
+    Time,
+    DatetimeLocal,
+    Month,
+    Week,
 }
 
 #[derive(Clone, Debug, PartialEq)]
