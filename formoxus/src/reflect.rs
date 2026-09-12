@@ -20,7 +20,9 @@ pub mod widgets;
 // each name lives in.
 pub use crate::error::{FieldError, FormError};
 pub use fields::{FieldValue, FormField};
-pub use form::{Form, FormState, empty_form, form_for, use_form, use_form_values};
+pub use form::{
+    FieldSpec, Form, FormSpec, FormState, empty_form, form_for, use_form, use_form_values,
+};
 pub use members::{
     Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
     model_path,

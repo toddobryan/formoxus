@@ -94,7 +94,7 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
     //
     // Also pins that `Option` contributes no path segment of its own:
     // `address.street`, never `address.some.street`.
-    let form = form_for(&contact(None));
+    let form = form_for(&contact(None), FormSpec::default());
     expect_that!(
         paths(&form),
         elements_are![eq("name"), eq("address.street"), eq("address.city"), eq("address.zip")]
@@ -115,7 +115,7 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
 #[gtest]
 fn a_present_optional_struct_round_trips() {
     let value = contact(Some(springfield()));
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -126,7 +126,7 @@ fn an_absent_optional_struct_round_trips() {
     // absent optional struct simply cannot be expressed. The wrapper has to
     // intercept `validate`, not just the write path.
     let value = contact(None);
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -134,7 +134,7 @@ fn an_absent_optional_struct_round_trips() {
 fn create_mode_leaves_an_untouched_optional_struct_absent() {
     // Same rule arriving through the DOM path rather than through populating —
     // the two boundaries have to agree, as they now do for `""`.
-    let mut form = empty_form::<Contact>();
+    let mut form = empty_form::<Contact>(FormSpec::default());
     form.apply(&applied(&[("name", "Ada")]));
     expect_that!(form.validate(), some(eq(&contact(None))));
 }
@@ -144,7 +144,7 @@ fn filling_in_an_absent_optional_struct_makes_it_present() {
     // `present` is DERIVED, never asked: the user typing into the inner
     // inputs is what makes the container `Some`. No third construction
     // question, and no "is there an address?" checkbox.
-    let mut form = form_for(&contact(None));
+    let mut form = form_for(&contact(None), FormSpec::default());
     form.apply(&applied(&[
         ("address.street", "123 Main St"),
         ("address.city", "Springfield"),
@@ -157,7 +157,7 @@ fn filling_in_an_absent_optional_struct_makes_it_present() {
 fn blanking_a_present_optional_struct_makes_it_absent() {
     // The inverse, and the same rule one level up from `""` IS absence:
     // every leaf underneath empty ⟺ the container is absent.
-    let mut form = form_for(&contact(Some(springfield())));
+    let mut form = form_for(&contact(Some(springfield())), FormSpec::default());
     form.apply(&applied(&[
         ("address.street", ""),
         ("address.city", ""),
@@ -179,7 +179,7 @@ fn a_partly_filled_optional_struct_is_an_error() {
     // again. "Optional" is about the whole address, not about each line of
     // it — a street with no city is a half-answered address, not an absent
     // one.
-    let mut form = form_for(&contact(None));
+    let mut form = form_for(&contact(None), FormSpec::default());
     form.apply(&applied(&[("address.street", "123 Main St")]));
     expect_that!(form.validate(), none());
     expect_that!(form.has_errors(), eq(true));
@@ -192,14 +192,14 @@ fn a_present_optional_list_round_trips() {
     let value = Tagged {
         tags: Some(vec!["x".to_string()]),
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
 #[gtest]
 fn an_absent_optional_list_round_trips() {
     let value = Tagged { tags: None };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -217,7 +217,7 @@ fn an_empty_optional_list_collapses_to_absent() {
     // the *length choice* rather than from emptiness.
     let mut form = form_for(&Tagged {
         tags: Some(Vec::new()),
-    });
+    }, FormSpec::default());
     expect_that!(form.validate(), some(eq(&Tagged { tags: None })));
 }
 
@@ -229,7 +229,7 @@ fn an_optional_list_of_structs_round_trips() {
     let value = Roster {
         members: Some(vec![springfield()]),
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -245,7 +245,7 @@ fn option_peels_one_layer_at_a_time() {
     let value = Matrix {
         cells: Some(vec![Some("a".to_string()), None]),
     };
-    let form = form_for(&value);
+    let form = form_for(&value, FormSpec::default());
     expect_that!(paths(&form), elements_are![eq("cells.#0"), eq("cells.#1")]);
 
     let mut form = form;
@@ -283,7 +283,7 @@ fn a_chosen_unit_variant_survives_behind_an_option() {
         name: "nightly".to_string(),
         mode: Some(Mode::Fast),
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -296,7 +296,7 @@ fn an_absent_optional_unit_variant_stays_absent() {
         name: "nightly".to_string(),
         mode: None,
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -308,7 +308,7 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
     let value = Schedule {
         modes: Some(vec![Mode::Fast, Mode::Slow]),
     };
-    let form = form_for(&value);
+    let form = form_for(&value, FormSpec::default());
     expect_that!(form.leaves(), eq(&Vec::new()), "fieldless variants have no leaves");
 
     let mut form = form;
@@ -317,7 +317,7 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
 
 #[component]
 fn EmptyContactForm() -> Element {
-    let form = use_form(empty_form::<Contact>());
+    let form = use_form(empty_form::<Contact>(FormSpec::default()));
     form.render()
 }
 
@@ -391,7 +391,7 @@ struct Event {
 
 #[component]
 fn BooleanKindsForm() -> Element {
-    let form = use_form(empty_form::<Event>());
+    let form = use_form(empty_form::<Event>(FormSpec::default()));
     form.render()
 }
 
@@ -437,7 +437,7 @@ struct Prefs {
 
 #[component]
 fn PrefsForm() -> Element {
-    let form = use_form(empty_form::<Prefs>());
+    let form = use_form(empty_form::<Prefs>(FormSpec::default()));
     form.render()
 }
 
@@ -491,7 +491,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
         ("false", Some(false)),
         ("", None),
     ] {
-        let mut form = empty_form::<Prefs>();
+        let mut form = empty_form::<Prefs>(FormSpec::default());
         form.apply_form_values(&[("subscribed".to_string(), raw.to_string())]);
         expect_that!(
             form.validate(),
@@ -531,7 +531,7 @@ struct Signup {
 
 #[gtest]
 fn an_untouched_checkbox_submits_as_false() {
-    let mut form = empty_form::<Signup>();
+    let mut form = empty_form::<Signup>(FormSpec::default());
 
     // The real submit path — `leaves()` out, edits in, `apply()` back — because
     // that is where the `""` came from. Feeding `("subscribed", "false")`
@@ -568,7 +568,7 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     // `subscribed` is the third case: an `Option<bool>` renders a tri-state
     // select whose blank really is absence, so `Empty` must reach `None`
     // untouched. `is_unticked_checkbox` excludes `optional: true` for this.
-    let mut form = empty_form::<Event>();
+    let mut form = empty_form::<Event>(FormSpec::default());
     let values: HashMap<String, String> = form.leaves().into_iter().collect();
 
     form.apply(&values);

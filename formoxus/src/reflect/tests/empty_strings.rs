@@ -32,7 +32,7 @@ fn populating_some_empty_collapses_to_none() {
     // `Some("")` while the DOM path returned `None` for the same model.
     let mut form = form_for(&Optional {
         body: Some(String::new()),
-    });
+    }, FormSpec::default());
     expect_that!(form.validate(), some(eq(&Optional { body: None })));
 }
 
@@ -41,9 +41,9 @@ fn some_empty_agrees_on_both_paths() {
     let value = Optional {
         body: Some(String::new()),
     };
-    let form = form_for(&value);
-    let populated = form_for(&value).validate();
-    let dom = through_the_dom(&form, empty_form::<Optional>());
+    let form = form_for(&value, FormSpec::default());
+    let populated = form_for(&value, FormSpec::default()).validate();
+    let dom = through_the_dom(&form, empty_form::<Optional>(FormSpec::default()));
 
     expect_that!(populated, eq(&dom));
     expect_that!(populated, some(eq(&Optional { body: None })));
@@ -58,9 +58,9 @@ fn a_required_empty_string_fails_on_both_paths() {
     let value = Required {
         body: String::new(),
     };
-    let form = form_for(&value);
-    let populated = form_for(&value).validate();
-    let dom = through_the_dom(&form, empty_form::<Required>());
+    let form = form_for(&value, FormSpec::default());
+    let populated = form_for(&value, FormSpec::default()).validate();
+    let dom = through_the_dom(&form, empty_form::<Required>(FormSpec::default()));
 
     expect_that!(populated, none());
     expect_that!(dom, none());
@@ -70,10 +70,10 @@ fn a_required_empty_string_fails_on_both_paths() {
 fn none_and_some_empty_are_indistinguishable() {
     // Both directions of the same coin: populating with `None` and `Some("")`
     // produce the same form, so nothing downstream can tell them apart.
-    let from_none = form_for(&Optional { body: None });
+    let from_none = form_for(&Optional { body: None }, FormSpec::default());
     let from_empty = form_for(&Optional {
         body: Some(String::new()),
-    });
+    }, FormSpec::default());
     expect_that!(from_none.leaves(), eq(&from_empty.leaves()));
 }
 
@@ -84,13 +84,13 @@ fn non_empty_strings_are_untouched() {
     let value = Optional {
         body: Some("   ".to_string()),
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 
     let value = Required {
         body: "hello".to_string(),
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }
 
@@ -111,6 +111,6 @@ fn zero_valued_scalars_are_not_empty() {
         ratio: 0.0,
         flag: false,
     };
-    let mut form = form_for(&value);
+    let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
 }

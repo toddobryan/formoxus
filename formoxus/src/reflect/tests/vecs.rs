@@ -55,7 +55,7 @@ fn venues() -> Venues {
 
 #[gtest]
 fn scalar_rows_round_trip() {
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&quiz())));
 }
 
@@ -68,7 +68,7 @@ fn an_empty_list_round_trips() {
         title: "Unit 1".to_string(),
         answers: Vec::new(),
     };
-    let mut form = form_for(&empty);
+    let mut form = form_for(&empty, FormSpec::default());
     expect_that!(form.validate(), some(eq(&empty)));
 }
 
@@ -77,13 +77,13 @@ fn struct_rows_round_trip() {
     // The case that proves the `write_value_into` split: a row is a
     // `FieldSet`, so this nests `begin_list_item` → `begin_field` per struct
     // field. Confusing the two halves fails exactly here.
-    let mut form = form_for(&venues());
+    let mut form = form_for(&venues(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&venues())));
 }
 
 #[gtest]
 fn rows_are_named_by_key() {
-    let form = form_for(&quiz());
+    let form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.leaves(),
         eq(&vec![
@@ -96,7 +96,7 @@ fn rows_are_named_by_key() {
 
 #[gtest]
 fn struct_rows_qualify_through_their_key() {
-    let form = form_for(&venues());
+    let form = form_for(&venues(), FormSpec::default());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
@@ -119,7 +119,7 @@ fn nested_lists_nest_their_keys() {
             vec!["c".to_string()],
         ],
     };
-    let form = form_for(&grid);
+    let form = form_for(&grid, FormSpec::default());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(paths, elements_are![eq("rows.#0.#0"), eq("rows.#0.#1"), eq("rows.#1.#0")]);
 
@@ -141,7 +141,7 @@ fn enum_rows_are_pinned_by_the_value() {
             },
         ],
     };
-    let form = form_for(&drawings);
+    let form = form_for(&drawings, FormSpec::default());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
@@ -158,7 +158,7 @@ fn enum_rows_are_pinned_by_the_value() {
 
 #[gtest]
 fn editing_one_row_leaves_the_others_alone() {
-    let mut form = form_for(&venues());
+    let mut form = form_for(&venues(), FormSpec::default());
     form.apply(&HashMap::from([(
         "places.#1.city".to_string(),
         "Ogdenville".to_string(),
@@ -176,10 +176,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     // test does): create mode yields zero rows today, so an `empty_form`
     // here would drop every row on the floor. Swap it once step 4 lands —
     // that substitution is a good check that lengths really are plumbed.
-    let form = form_for(&venues());
+    let form = form_for(&venues(), FormSpec::default());
     let collected: HashMap<String, String> = form.leaves().into_iter().collect();
 
-    let mut reloaded = form_for(&venues());
+    let mut reloaded = form_for(&venues(), FormSpec::default());
     reloaded.apply(&collected);
     expect_that!(reloaded.validate(), some(eq(&venues())));
 }
@@ -190,7 +190,7 @@ fn create_mode_yields_no_rows_yet() {
     // work from without a value, so it builds an empty `ListSet` and
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
-    let mut form = empty_form::<Quiz>();
+    let mut form = empty_form::<Quiz>(FormSpec::default());
     form.apply(&HashMap::from([("title".to_string(), "Unit 1".to_string())]));
     expect_that!(
         form.validate(),
@@ -216,7 +216,7 @@ fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
 
 #[gtest]
 fn adding_a_row_appends_by_default() {
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
         .expect("answers is a list");
 
@@ -231,7 +231,7 @@ fn a_new_row_is_blank_and_buildable() {
     // The row is built from the ELEMENT shape with no value to peek at, so it
     // has to come out as a working member rather than a placeholder: fill it and
     // the model builds.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
         .expect("answers is a list");
     form.apply_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
@@ -252,7 +252,7 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
     // different key in the value store, and the store (which deliberately
     // survives structural edits) would hand row 1 the text the user typed into
     // row 0. Keys make the insert a pure addition: nobody else is touched.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(0) })
         .expect("answers is a list");
 
@@ -275,7 +275,7 @@ fn the_list_builds_in_row_order_not_key_order() {
     // The other half of the split: `write_value_into` walks `rows` and never
     // reads a row's name, so a row inserted at the front lands at the front of
     // the model even though its key is the highest.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(0) })
         .expect("answers is a list");
     form.apply_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
@@ -294,7 +294,7 @@ fn removing_a_row_leaves_the_survivors_keys_untouched() {
     // The mirror of the insert test. Index names would shift row 2 down into
     // row 1's paths; keys mean the survivor is still `#1` and still owns the
     // values already sitting under `places.#1.*` in the store.
-    let mut form = form_for(&venues());
+    let mut form = form_for(&venues(), FormSpec::default());
     form.edit(&Edit::RemoveRow { path: "places".to_string(), index: 0 })
         .expect("places is a list");
 
@@ -313,7 +313,7 @@ fn a_key_is_never_reused() {
     // Remove the last row and add one: the new row must NOT inherit the dead
     // row's key, or the value store's leftovers from the removed row would
     // silently populate the new one.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::RemoveRow { path: "answers".to_string(), index: 1 })
         .expect("places is a list");
     form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
@@ -331,7 +331,7 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
     // A row built by `AddRow` has to be indistinguishable from one built at
     // construction — including being reachable by the containment walk, which
     // means its prefix has to match what `list_member` would have produced.
-    let mut form = form_for(&Drawings { shapes: Vec::new() });
+    let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
     form.edit(&Edit::AddRow { path: "shapes".to_string(), before: None })
         .expect("shapes is a list");
     form.choose_variant("shapes.#0", Some("Circle"))
@@ -344,7 +344,7 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
 fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     // `Vec::insert`/`Vec::remove` both panic out of range, and on wasm a panic
     // aborts instead of reaching an `ErrorBoundary` — so these are checked.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(9) }),
         err(anything())
@@ -365,7 +365,7 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     // Regression: before `ListSet::edit` grew an "is it me?" branch, an edit
     // addressed to the list itself fell through the row loop and came back as
     // `no such path: answers` — a lie, since the list is precisely what owns it.
-    let mut form = form_for(&quiz());
+    let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddRow { path: "answers".to_string(), before: None }),
         ok(anything())
@@ -374,7 +374,7 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
 
 #[component]
 fn QuizForm() -> Element {
-    let form = use_form(form_for(&quiz()));
+    let form = use_form(form_for(&quiz(), FormSpec::default()));
     form.render()
 }
 
@@ -407,7 +407,7 @@ fn each_row_renders_inside_its_own_wrapper() {
 
 #[component]
 fn BlankQuizForm() -> Element {
-    let form = use_form(empty_form::<Quiz>());
+    let form = use_form(empty_form::<Quiz>(FormSpec::default()));
     form.render()
 }
 

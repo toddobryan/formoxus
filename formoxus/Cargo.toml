@@ -7,6 +7,7 @@ edition = "2024"
 dioxus = { workspace = true }
 facet = { workspace = true }
 heck = { workspace = true }
+indexmap = { workspace = true }
 serde = { workspace = true }
 formoxus-macros = { workspace = true, optional = true }
 paste = "1.0.15"

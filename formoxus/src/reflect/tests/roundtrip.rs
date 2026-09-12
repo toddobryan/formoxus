@@ -5,7 +5,7 @@
 //!
 //! **Where this does and does not bite today.** `FieldValue::Valid(T)` holds the
 //! *typed* value and `write_value_into` does `partial.set(t.clone())`, so
-//! `form_for(&m).validate() == Some(m)` holds by construction — that path never
+//! `form_for(&m, FormSpec::default()).validate() == Some(m)` holds by construction — that path never
 //! passes through a string at all. Only the DOM path depends on this. If
 //! `FieldValue` ever becomes raw-canonical (`Valid(String)`), the model path
 //! starts depending on it too, and these tests become the only thing standing

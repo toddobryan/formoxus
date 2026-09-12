@@ -68,7 +68,7 @@ fn member_names(members: &[Box<dyn FormMember>]) -> Vec<String> {
 
 #[gtest]
 fn repeated_struct_types_get_distinct_paths() {
-    let form = empty_form::<Trip>();
+    let form = empty_form::<Trip>(FormSpec::default());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
 
     expect_that!(
@@ -86,13 +86,13 @@ fn repeated_struct_types_get_distinct_paths() {
 
 #[component]
 fn EmptyEventForm() -> Element {
-    let form = use_form(empty_form::<EventForCreate>());
+    let form = use_form(empty_form::<EventForCreate>(FormSpec::default()));
     form.render()
 }
 
 #[gtest]
 fn form_for_none_walks_the_shape_into_empty_members() {
-    let form = empty_form::<EventForCreate>();
+    let form = empty_form::<EventForCreate>(FormSpec::default());
 
     expect_that!(member_names(&form.members), elements_are![eq("title"), eq("location")]);
 
@@ -109,9 +109,36 @@ fn form_for_none_walks_the_shape_into_empty_members() {
     expect_that!(rendered, not(contains_substring(r#"value="Board Game Night""#)));
 }
 
+#[component]
+fn TitledEventForm() -> Element {
+    let form = use_form(empty_form::<EventForCreate>(
+        FormSpec::default().with_title("New Event"),
+    ));
+    form.render()
+}
+
+#[gtest]
+fn a_specs_title_reaches_the_rendered_form() {
+    // Until `FormSpec` existed there was no way to set a title at all, so the
+    // `h2.form-title` in `FormState::render` was unreachable — rendered by code
+    // no caller could trigger. This is the first test that gets there.
+    let rendered = render_to_html(TitledEventForm);
+    expect_that!(rendered, contains_substring("New Event"));
+    expect_that!(rendered, contains_substring(r#"class="form-title""#));
+}
+
+#[gtest]
+fn a_form_with_no_title_renders_no_heading() {
+    // The other half, and the one that would catch a stray default: an absent
+    // title must produce no element at all, not an empty heading that still
+    // takes vertical space and gets announced by a screen reader.
+    let rendered = render_to_html(EmptyEventForm);
+    expect_that!(rendered, not(contains_substring("form-title")));
+}
+
 #[gtest]
 fn form_for_none_is_invalid_until_filled() {
-    let mut form = empty_form::<EventForCreate>();
+    let mut form = empty_form::<EventForCreate>(FormSpec::default());
     expect_that!(form.validate(), none());
     expect_that!(form.has_errors(), eq(true));
 }
@@ -127,14 +154,14 @@ fn form_for_some_round_trips_the_model() {
         },
     };
 
-    let mut form = form_for(&event);
+    let mut form = form_for(&event, FormSpec::default());
     expect_that!(form.has_errors(), eq(false));
     expect_that!(form.validate(), some(eq(&event)));
 }
 
 #[gtest]
 fn option_fields_are_not_required() {
-    let mut form = empty_form::<Rsvp>();
+    let mut form = empty_form::<Rsvp>(FormSpec::default());
 
     // `note: Option<String>` is optional, so an empty form only complains
     // about `name` and `guests`.
@@ -157,14 +184,14 @@ fn option_fields_round_trip_both_ways() {
         guests: 2,
         note: Some("bringing dessert".to_string()),
     };
-    expect_that!(form_for(&with_note).validate(), some(eq(&with_note)));
+    expect_that!(form_for(&with_note, FormSpec::default()).validate(), some(eq(&with_note)));
 
     let without_note = Rsvp {
         name: "Ada".to_string(),
         guests: 2,
         note: None,
     };
-    expect_that!(form_for(&without_note).validate(), some(eq(&without_note)));
+    expect_that!(form_for(&without_note, FormSpec::default()).validate(), some(eq(&without_note)));
 }
 
 fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
@@ -178,7 +205,7 @@ fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
 fn applying_widget_values_round_trips_to_a_model() {
     // The full loop: shape-walk an empty form, take raw strings back in
     // the way a submit handler would, then validate into a model.
-    let mut form = empty_form::<EventForCreate>();
+    let mut form = empty_form::<EventForCreate>(FormSpec::default());
     form.apply(&values(&[
         ("title", "Board Game Night"),
         ("location.street", "123 Main St"),
@@ -202,7 +229,7 @@ fn applying_widget_values_round_trips_to_a_model() {
 #[gtest]
 fn non_string_scalars_parse_through_the_shape_vtable() {
     // `u32` here never touches `FromStr` — facet parses it from the shape.
-    let mut form = empty_form::<Rsvp>();
+    let mut form = empty_form::<Rsvp>(FormSpec::default());
     form.apply(&values(&[
         ("name", "Ada"),
         ("guests", "2"),
@@ -221,7 +248,7 @@ fn non_string_scalars_parse_through_the_shape_vtable() {
 
 #[gtest]
 fn unparseable_input_becomes_invalid_not_a_panic() {
-    let mut form = empty_form::<Rsvp>();
+    let mut form = empty_form::<Rsvp>(FormSpec::default());
     form.apply(&values(&[("name", "Ada"), ("guests", "not a number")]));
 
     expect_that!(form.validate(), none());
@@ -242,7 +269,7 @@ fn blanking_a_field_makes_it_empty_again() {
         name: "Ada".to_string(),
         guests: 2,
         note: Some("bringing dessert".to_string()),
-    });
+    }, FormSpec::default());
     // Clearing an optional field is legal; clearing a required one isn't.
     form.apply(&values(&[("note", ""), ("name", "")]));
 
@@ -267,10 +294,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
         note: Some("bringing dessert".to_string()),
     };
 
-    let form = form_for(&rsvp);
+    let form = form_for(&rsvp, FormSpec::default());
     let round_tripped: HashMap<String, String> = form.leaves().into_iter().collect();
 
-    let mut reloaded = empty_form::<Rsvp>();
+    let mut reloaded = empty_form::<Rsvp>(FormSpec::default());
     reloaded.apply(&round_tripped);
 
     expect_that!(reloaded.validate(), some(eq(&rsvp)));
@@ -279,7 +306,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 #[gtest]
 fn empty_event_form_is_invalid() {
     let mut form: FormState<Event> = FormState {
-        title: Some("New Event".to_string()),
+        spec: FormSpec::new().with_title("New Event"),
         members: vec![
             text_field("title", FieldValue::Empty),
             location_field_set(FieldValue::Empty, FieldValue::Empty, FieldValue::Empty),
@@ -298,7 +325,7 @@ fn location_form_round_trips_to_model() {
     // `FormField::write_into` -> `Partial::build` -> `materialize` path
     // with nothing else in the way.
     let mut form: FormState<Location> = FormState {
-        title: None,
+        spec: FormSpec::default(),
         members: location_members(
             FieldValue::Valid("123 Main St".to_string()),
             FieldValue::Valid("Springfield".to_string()),
@@ -322,7 +349,7 @@ fn location_form_round_trips_to_model() {
 #[gtest]
 fn event_for_create_form_round_trips_to_model() {
     let mut form: FormState<EventForCreate> = FormState {
-        title: Some("New Event".to_string()),
+        spec: FormSpec::new().with_title("New Event"),
         members: vec![
             text_field(
                 "title",
@@ -356,7 +383,7 @@ fn a_label_defaults_to_the_humanized_field_name() {
         name: String,
     }
 
-    let form = empty_form::<Settings>();
+    let form = empty_form::<Settings>(FormSpec::default());
     let labels: Vec<Option<String>> = form.members.iter().map(|m| m.label()).collect();
     expect_that!(labels, elements_are![some(eq("Can Shuffle")), some(eq("Name"))]);
 }
@@ -372,7 +399,7 @@ fn a_list_row_gets_no_label() {
 
     let form = form_for(&Quiz {
         answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
-    });
+    }, FormSpec::default());
     let list = &form.members[0];
     expect_that!(list.label(), some(eq("Answer Choices")));
 
@@ -392,7 +419,7 @@ fn QuizForm() -> Element {
     }
     let form = use_form(form_for(&Quiz {
         answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
-    }));
+    }, FormSpec::default()));
     form.render()
 }
 
@@ -410,5 +437,5 @@ fn an_unsupported_scalar_fails_loudly_at_construction() {
     // field as something it isn't, and a form that quietly mis-handles a value
     // is worse than one that refuses to build. Construction is also the right
     // moment — it happens once, in a hook initialiser, not per render.
-    let _ = empty_form::<Unsupported>();
+    let _ = empty_form::<Unsupported>(FormSpec::default());
 }

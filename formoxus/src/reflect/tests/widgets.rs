@@ -45,7 +45,7 @@ fn EventFormView() -> Element {
                 city: "Springfield".to_string(),
                 zip: "12345".to_string(),
             },
-        })
+        }, FormSpec::default())
     });
     let signals = use_field_signals(&form);
 
@@ -71,7 +71,7 @@ fn EventFormView() -> Element {
 /// hands the whole form back and we shuffle it into a `FormState<T>` once.
 #[component]
 fn UncontrolledEventForm() -> Element {
-    let form = use_hook(empty_form::<EventForCreate>);
+    let form = use_hook(|| empty_form::<EventForCreate>(FormSpec::default()));
     let leaves = form.leaves();
 
     rsx! {
@@ -87,7 +87,7 @@ fn UncontrolledEventForm() -> Element {
                         FormValue::File(_) => None,
                     })
                     .collect();
-                let mut form = empty_form::<EventForCreate>();
+                let mut form = empty_form::<EventForCreate>(FormSpec::default());
                 form.apply_form_values(&values);
                 let _model = form.validate();
             },
@@ -119,7 +119,7 @@ fn submitted_values_shuffle_into_a_model() {
         ("location.zip".to_string(), "12345".to_string()),
     ];
 
-    let mut form = empty_form::<EventForCreate>();
+    let mut form = empty_form::<EventForCreate>(FormSpec::default());
     form.apply_form_values(&submitted);
 
     expect_that!(
@@ -302,7 +302,7 @@ struct Score {
 
 #[component]
 fn ScoreFormWithBadInput() -> Element {
-    let mut state = empty_form::<Score>();
+    let mut state = empty_form::<Score>(FormSpec::default());
     state.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
     // Validating BEFORE mounting is what makes this a pure render assertion —
     // errors are populated by `validate`, and blur-time validation doesn't
@@ -338,7 +338,7 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
     // on the field. This is the invariant the derive path spelled out in
     // `tests/signup.rs` and got by leaving `errors` empty entirely — which is
     // precisely why its error never rendered either.
-    let mut form = empty_form::<Score>();
+    let mut form = empty_form::<Score>(FormSpec::default());
     form.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
     expect_that!(form.validate(), none());
 
