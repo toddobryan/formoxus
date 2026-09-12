@@ -14,6 +14,7 @@ use dioxus::prelude::*;
 
 use crate::error::FieldError;
 use crate::label_case::{LabelCase, ToCase};
+use crate::reflect::fields::ValueKind;
 use crate::reflect::{Edit, ValuesByPath};
 use crate::widgets::FieldErrors;
 
@@ -83,15 +84,25 @@ fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
 /// already follows when a path is absent from submitted values.
 #[component]
 pub fn ScalarInput(
-    input_kind: InputKind,
+    value_kind: ValueKind,
+    control: ControlType,
     values: ValuesByPath,
     props: FieldProps,
 ) -> Element {
-    match input_kind {
-        InputKind::Text => rsx! { TextInput { values, props } },
-        InputKind::Boolean { optional } => rsx! { BooleanInput { values, optional, props } },
-        InputKind::Int { .. } => rsx! { NumericInput { input_kind, values, props }},
-        InputKind::Float => rsx! { NumericInput { input_kind, values, props }},
+    match (&value_kind, &control) {
+        (ValueKind::Text { .. }, ControlType::Input(InputType::Text)) => {
+            rsx! { TextInput { values, props } }
+        }
+        (ValueKind::Bool, ControlType::Checkbox) => {
+            rsx! { BooleanInput { values, props } }
+        }
+        (ValueKind::Bool, ControlType::Select) => {
+            rsx! { SelectInput { values, choices: bool_choices(), props } }
+        }
+        (ValueKind::Int { .. } | ValueKind::Float, ControlType::Input(InputType::Text)) => {
+            rsx! { NumericInput { value_kind, values, props } }
+        }
+        _ => panic!("{control:?} cannot render a {value_kind:?} (field {})", props.path),
     }
 }
 
@@ -143,17 +154,11 @@ pub fn TextInput(
 #[component]
 pub fn BooleanInput(
     mut values: ValuesByPath,
-    optional: bool,
     props: FieldProps,
 ) -> Element {
     // An `Option<bool>` has three states and a checkbox has two, so it needs a
     // select. Delegating rather than inlining one keeps a single implementation
     // of the "no value" option and the required/optional asymmetry.
-    if optional {
-        return rsx! {
-            SelectInput { values, choices: bool_choices(), props }
-        };
-    }
 
     let FieldProps { path, label, errors, .. } = props;
 
@@ -191,7 +196,7 @@ pub fn BooleanInput(
 
 #[component]
 pub fn NumericInput(
-    input_kind: InputKind,
+    value_kind: ValueKind,
     values: ValuesByPath,
     props: FieldProps,
 ) -> Element {

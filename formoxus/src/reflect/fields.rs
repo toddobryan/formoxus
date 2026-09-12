@@ -2,12 +2,12 @@
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 
 use dioxus::prelude::*;
-use facet::{Facet, Partial, Peek, ReflectError};
+use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
 use crate::reflect::members::{Edit, FormMember, default_label, qualify};
-use crate::reflect::widgets::{ControlType, FieldProps, InputKind, ScalarInput};
+use crate::reflect::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -26,25 +26,94 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub errors: Vec<FieldError>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueKind {
+    Text { min_length: Option<usize>, max_length: Option<usize>, pattern: Option<&'static str> },
+    Int { min: i128, max: i128 },   // from the type; author bounds join later as separate Options
+    Float,
+    Bool,
+    /*Temporal,
+    Choice,
+    MultiChoice,
+    File,*/
+}
+
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
-    /// A required `bool` that nothing was supplied for.
+    /// The value family this field carries, and the constraints that apply to it.
     ///
-    /// The one input whose blank is an ANSWER rather than an omission: a
-    /// checkbox posts nothing when unticked, and `false` is complete. The
-    /// substitution deliberately does NOT happen in `apply_leaves`, where it
-    /// would be a one-line change — writing `Valid(false)` there makes the field
-    /// permanently [present](FormMember::is_present), and `FieldSet::is_present`
-    /// is `any` over its members, so an `Option<Struct>` whose only field is a
-    /// checkbox would build `Some(..)` for a section the user never opened.
-    /// Keeping `Empty` meaning "nothing supplied" everywhere costs two
-    /// consumers knowing about checkboxes, and buys one meaning for absence.
+    /// Derived from `T` on every read rather than stored, so it cannot go stale
+    /// and nothing about presentation is committed during the SHAPE walk. The
+    /// constraint fields are all `None` for now — this is where an author's
+    /// `#[facet(formoxus::max_length(…))]` will merge in, and the reason they
+    /// live on the *value* kind rather than on `ControlType` is that overriding
+    /// a `Text` control to `Textarea` or `Password` must not discard validation.
     ///
-    /// `Boolean { optional: true }` is excluded on purpose: an `Option<bool>`
-    /// renders a tri-state select whose blank really is absence, and there
-    /// `Empty` must survive all the way to `None`.
+    /// Bounds come from the type itself rather than being written out, so they
+    /// can't drift from `T`. They're `i128` because that's the only std integer
+    /// holding both `i64::MIN` and `u64::MAX` — **this silently breaks if `u128`
+    /// is ever added**, since `u128::MAX` would truncate through the `as` cast.
+    fn value_kind(&self) -> ValueKind {
+        macro_rules! int {
+            ($t:ty) => {
+                ValueKind::Int { min: <$t>::MIN as i128, max: <$t>::MAX as i128 }
+            };
+        }
+
+        // `None` is unreachable: `scalar_member` only builds a `FormField` for
+        // the scalars it recognises, and `member_for_shape` panics on the rest.
+        let scalar = T::SHAPE
+            .scalar_type()
+            .expect("FormField is only constructed for scalar shapes");
+
+        match scalar {
+            ScalarType::String => ValueKind::Text {
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            },
+            ScalarType::Bool => ValueKind::Bool,
+            ScalarType::I8 => int!(i8),
+            ScalarType::I16 => int!(i16),
+            ScalarType::I32 => int!(i32),
+            ScalarType::I64 => int!(i64),
+            ScalarType::U8 => int!(u8),
+            ScalarType::U16 => int!(u16),
+            ScalarType::U32 => int!(u32),
+            ScalarType::U64 => int!(u64),
+            ScalarType::F32 | ScalarType::F64 => ValueKind::Float,
+            other => panic!(
+                "scalar type {other:?} is not supported in FormField (field {})",
+                self.name
+            ),
+        }
+    }
+
+    /// What this field renders as absent any override.
+    ///
+    /// `optional` is the one input here that `T` cannot supply: `Option` peeling
+    /// wraps rather than parameterizes, so `bool` and `Option<bool>` both arrive
+    /// as `FormField<bool>`. A checkbox has two states and an `Option<bool>` has
+    /// three, which is the whole reason that flag has to travel from the walk.
+    fn default_control(&self) -> ControlType {
+        match self.value_kind() {
+            ValueKind::Text { .. } => ControlType::Input(InputType::Text),
+            // Deliberately `text`, not `number`: `type="number"` hands back `""`
+            // for anything the browser dislikes, so a half-typed value vanishes.
+            ValueKind::Int { .. } | ValueKind::Float => ControlType::Input(InputType::Text),
+            ValueKind::Bool if self.optional => ControlType::Select,
+            ValueKind::Bool => ControlType::Checkbox,
+        }
+    }
+
+    /// The control to render: an override if one was set, else the derived default.
+    fn control(&self) -> ControlType {
+        self.custom_control
+            .clone()
+            .unwrap_or_else(|| self.default_control())
+    }
+
     fn is_unticked_checkbox(&self) -> bool {
-        matches!(self.value, FieldValue::Empty)
-            && matches!(self.input_kind, InputKind::Boolean { optional: false })
+        matches!(self.value, FieldValue::Empty) && matches!(self.control(), ControlType::Checkbox)
     }
 }
 
@@ -100,7 +169,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn render(&self, ctx: &RenderCtx) -> Element {
         rsx! {
             ScalarInput {
-                input_kind: self.input_kind.clone(),
+                value_kind: self.value_kind(),
+                control: self.control(),
                 values: ctx.values,
                 props: FieldProps {
                     path: ctx.path(&self.name),

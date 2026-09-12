@@ -158,7 +158,20 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarInput` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use crate::reflect::widgets::{FieldProps, InputKind, ScalarInput};
+use crate::reflect::fields::ValueKind;
+use crate::reflect::widgets::{ControlType, FieldProps, InputType, ScalarInput};
+
+/// What a `String` field derives. Spelled out because these tests drive
+/// `ScalarInput` directly rather than through `FormField::render`, so nothing
+/// upstream is computing it for them — which is the point: they pin the widget
+/// boundary independently of how the members happen to wire it up.
+fn text_kind() -> ValueKind {
+    ValueKind::Text {
+        min_length: None,
+        max_length: None,
+        pattern: None,
+    }
+}
 
 #[component]
 fn PopulatedInput() -> Element {
@@ -167,7 +180,8 @@ fn PopulatedInput() -> Element {
     });
     rsx! {
         ScalarInput {
-            input_kind: InputKind::Text,
+            value_kind: text_kind(),
+            control: ControlType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "title".to_string(),
@@ -186,7 +200,8 @@ fn EmptyInput() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
         ScalarInput {
-            input_kind: InputKind::Text,
+            value_kind: text_kind(),
+            control: ControlType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "shape.radius".to_string(),

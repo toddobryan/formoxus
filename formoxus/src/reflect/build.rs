@@ -222,7 +222,7 @@ fn option_member(
     Box::new(OptionMember { inner })
 } 
 
-/// The closed set of scalar types with a built-in widget. Anything else needs
+/// The closed set of scalar types with a built-in control. Anything else needs
 /// a custom widget and returns `None` here, which `member_for_shape` turns into
 /// a panic naming the type.
 ///
@@ -234,25 +234,32 @@ fn option_member(
 /// arms back would compile and look fine; the disagreement only shows up at
 /// runtime, on one target.
 ///
-/// Integer bounds come from the type itself via `int_kind!` rather than being
-/// written out, so they cannot drift from the `$ty` in the same arm. They are
-/// stored as `i128` because that is the only std integer holding both
-/// `i64::MIN` and `u64::MAX` — note this breaks if `u128` is ever added, since
-/// `u128::MAX` would silently truncate through the `as` cast.
+/// **This walk no longer decides anything about presentation.** It used to
+/// assign an `InputKind` per arm; the control is now derived on the read side
+/// from `T::SHAPE`, with `custom_control` beside it as the override slot. So the
+/// only thing the shape contributes here is *which concrete `T`* the field
+/// carries, and the only thing the walk contributes is `optional` — a
+/// structural fact (`Option` peeling) that no later reader can recover,
+/// because `bool` and `Option<bool>` both arrive as `FormField<bool>`.
 fn scalar_member(
     scalar: ScalarType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     optional: bool,
 ) -> Option<Box<dyn FormMember>> {
+    // The variant and the type can't be collapsed into one token: `ScalarType`
+    // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
+    // has no way to change an identifier's case. So each arm names both, and the
+    // pairing is the one thing to get right when adding a type.
     macro_rules! dispatch {
-        ($( $variant:ident => ($ty:ty, $kind:expr) ),* $(,)?) => {
+        ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
                 $(
                     ScalarType::$variant => Some(Box::new(FormField::<$ty> {
                         name: name.to_string(),
                         label: None,
-                        input_kind: $kind,
+                        optional,
+                        custom_control: None,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
                     }) as Box<dyn FormMember>),
@@ -262,23 +269,19 @@ fn scalar_member(
         };
     }
 
-    macro_rules! int_kind {
-        ($t:ty) => { InputKind::Int { min: <$t>::MIN as i128, max: <$t>::MAX as i128 } };
-    }
-
     dispatch! {
-        String => (String, InputKind::Text),
-        Bool => (bool, InputKind::Boolean { optional }),
-        I8 => (i8, int_kind!(i8)),
-        I16 => (i16, int_kind!(i16)), 
-        I32 => (i32, int_kind!(i32)), 
-        I64 => (i64, int_kind!(i64)),
-        U8 => (u8, int_kind!(u8)),
-        U16 => (u16, int_kind!(u16)),
-        U32 => (u32, int_kind!(u32)),
-        U64 => (u64, int_kind!(u64)),
-        F32 => (f32, InputKind::Float),
-        F64 => (f64, InputKind::Float),
+        String => String,
+        Bool => bool,
+        I8 => i8,
+        I16 => i16,
+        I32 => i32,
+        I64 => i64,
+        U8 => u8,
+        U16 => u16,
+        U32 => u32,
+        U64 => u64,
+        F32 => f32,
+        F64 => f64,
     }
 }
 

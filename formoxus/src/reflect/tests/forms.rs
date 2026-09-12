@@ -1,7 +1,7 @@
 //! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
 use super::render_to_html;
-use crate::reflect::{widgets::InputKind, *};
+use crate::reflect::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, marker::PhantomData};
@@ -12,7 +12,8 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
     Box::new(FormField {
         name: name.to_string(),
         label: None,
-        input_kind: InputKind::Text,
+        optional: false,
+        custom_control: None,
         value,
         errors: Vec::new(),
     })
