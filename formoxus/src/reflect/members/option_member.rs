@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::core::Element;
 
-use crate::reflect::members::Edit;
+use crate::reflect::members::{Edit, FieldSpecs};
 use crate::reflect::{FormMember, RenderCtx};
 use crate::error::FormAccessError;
 
@@ -78,5 +78,9 @@ impl FormMember for OptionMember {
 
     fn clear_errors(&mut self) {
         self.inner.clear_errors();
+    }
+
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+        self.inner.apply_specs(prefix, fields);
     }
 }

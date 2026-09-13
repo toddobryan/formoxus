@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::RenderCtx;
 use crate::reflect::members::{
-    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
 };
 
 #[derive(Clone, Debug)]
@@ -106,6 +106,27 @@ impl FormMember for FieldSet {
         self.errors.clear();
         for m in self.members.iter_mut() {
             m.clear_errors();
+        }
+    }
+
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+        let my_path = qualify(prefix, &self.name);
+        if let Some(spec) = fields.get(&my_path) {
+            // Checked before anything is written, so a rejected spec leaves the
+            // member untouched — which matters the day this becomes a `Result`.
+            assert!(
+                spec.custom_control.is_none(),
+                "{my_path} is a field set, which has no single control to \
+                 override (a composite widget for one isn't supported yet) — \
+                 did you mean `label`?"
+            );
+            self.label = spec.label.clone().or(self.label.take());
+        }
+        // Unlike `edit`, which finds the one member owning a path and stops, a
+        // spec may speak about any number of descendants — so every child is
+        // visited, with this member's path as their prefix.
+        for m in self.members.iter_mut() {
+            m.apply_specs(&my_path, fields);
         }
     }
 }

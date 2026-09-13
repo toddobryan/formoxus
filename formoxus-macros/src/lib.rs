@@ -61,6 +61,7 @@ mod field_meta;
 mod field_set;
 mod field_set_meta;
 mod form;
+mod form2;
 mod form_meta;
 
 /// Derive `Form`. See the module docs — currently a compiling no-op skeleton,
@@ -79,4 +80,9 @@ pub fn derive_form(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FieldSet, attributes(field_set, form))]
 pub fn derive_fieldset(input: TokenStream) -> TokenStream {
     field_set::derive_field_set(input.into()).into()
+}
+
+#[proc_macro]
+pub fn form2(input: TokenStream) -> TokenStream {
+    form2::impl_form2(input.into()).into()
 }

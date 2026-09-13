@@ -3,6 +3,7 @@
 
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
+use indexmap::IndexMap;
 use std::{collections::HashMap, fmt::Debug};
 
 mod field_set;
@@ -17,7 +18,10 @@ pub use variant_set::{VariantChoice, VariantSet};
 
 use crate::error::FormAccessError;
 use crate::label_case::{LabelCase, ToCase};
+use crate::reflect::FieldSpec;
 use dioxus::stores::Store;
+
+pub type FieldSpecs = IndexMap<String, FieldSpec>;
 
 pub trait FormMember: Debug {
     fn name(&self) -> String;
@@ -56,6 +60,8 @@ pub trait FormMember: Debug {
     /// member that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
+
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs);
 }
 
 impl Clone for Box<dyn FormMember> {

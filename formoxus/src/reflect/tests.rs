@@ -12,6 +12,7 @@ mod optional_containers;
 mod vecs;
 mod widgets;
 mod roundtrip;
+mod specs;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///

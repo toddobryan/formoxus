@@ -12,7 +12,7 @@ use crate::reflect::RenderCtx;
 use crate::reflect::widgets::{AddRowButton, RemoveRowButton};
 use crate::reflect::build::{FormMode, member_for_shape};
 use crate::reflect::members::{
-    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, row_segment,
+    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, row_segment,
 };
 
 #[derive(Clone, Debug)]
@@ -199,6 +199,43 @@ impl FormMember for ListSet {
         self.errors.clear();
         for r in self.rows.iter_mut() {
             r.clear_errors();
+        }
+    }
+
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+        let my_path = qualify(prefix, &self.name);
+        if let Some(spec) = fields.get(&my_path) {
+            // Checked before anything is written — see `FieldSet::apply_specs`.
+            assert!(
+                spec.custom_control.is_none(),
+                "{my_path} is a list, which has no single control to override — \
+                 write `{}[]` to give every ROW a control, or did you mean `label`?",
+                self.name
+            );
+            self.label = spec.label.clone().or(self.label.take());
+        }
+
+        // `venues[]` and `venues[].city` name every row and every row's field.
+        // They are resolved HERE, by substituting each row's actual segment, so
+        // the rows themselves are then visited by the ordinary traversal and need
+        // to know nothing about `[]`.
+        //
+        // Substitution rather than a second lookup path because it composes:
+        // `rows[].cells[]` rewrites one bracket per level as the recursion
+        // descends, and a nested `ListSet` resolves its own without special
+        // casing. Unrelated keys pass through untouched.
+        let marker = format!("{my_path}[]");
+        for m in self.rows.iter_mut() {
+            // `my_path`, NOT the row's own path: a row qualifies its own name
+            // onto whatever prefix it is handed, so passing the full path
+            // double-qualifies it into `shapes.#1.#1` — the trap `edit`
+            // documents above.
+            let row_path = qualify(&my_path, &m.name());
+            let row_fields: FieldSpecs = fields
+                .iter()
+                .map(|(k, v)| (k.replace(&marker, &row_path), v.clone()))
+                .collect();
+            m.apply_specs(&my_path, &row_fields);
         }
     }
 }

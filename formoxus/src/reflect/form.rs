@@ -206,6 +206,21 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors())
     }
 
+    /// Lay the spec's per-field overrides onto the built tree.
+    ///
+    /// Every member is visited and asks the map about itself — unlike
+    /// [`edit`](FormMember::edit), which dispatches to the single member owning a
+    /// path. A spec is a set of statements, not an instruction.
+    ///
+    /// The prefix starts empty because each member qualifies its own name onto
+    /// whatever it is handed.
+    pub(crate) fn apply_specs(&mut self) {
+        let fields = &self.spec.fields;
+        for m in self.members.iter_mut() {
+            m.apply_specs("", fields);
+        }
+    }
+
     pub fn title(&self) -> Option<String> {
         self.spec.title.clone()
     }
@@ -266,12 +281,25 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub fn edit(&mut self, edit: &Edit) -> Result<(), FormAccessError> {
         let path = edit.path();
-        for m in self.members.iter_mut() {
-            if owns(&m.name(), path) {
-                return m.edit("", edit);
-            }
-        }
-        Err(no_such_path(path))
+        // The owner is located before anything is mutated, so the spec can be
+        // re-applied afterwards without holding a borrow of `members`.
+        let Some(idx) = self.members.iter().position(|m| owns(&m.name(), path)) else {
+            return Err(no_such_path(path));
+        };
+        self.members[idx].edit("", edit)?;
+
+        // A structural edit can CREATE members that did not exist when the spec
+        // was first applied: `AddRow` builds a fresh row from the shape alone,
+        // and choosing a variant reveals that variant's fields. Without this, a
+        // row added after mount renders with derived labels and controls while
+        // its siblings carry the spec's — visibly inconsistent, and only for the
+        // rows the user happened to add.
+        //
+        // Re-applying wholesale is safe because `apply_specs` is idempotent, and
+        // that is precisely why `Edit` is NOT a variant of the spec: an edit
+        // replayed twice would add two rows.
+        self.apply_specs();
+        Ok(())
     }
 
     /// Answer the enum at `path`, rebuilding that subtree from the chosen
@@ -329,10 +357,16 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         None => FormMode::Blank,
     };
 
-    FormState {
+    let mut state = FormState {
         spec,
         members: members_for(T::SHAPE, value.map(Peek::new), mode, "", /* optional */ false),
         errors: Vec::new(),
         _type: PhantomData,
-    }
+    };
+    // The walk builds the tree from the SHAPE alone; the spec's per-field
+    // overrides are laid on afterwards. Separating the two is what lets one spec
+    // serve both constructors, and what keeps the walk from taking a seventh
+    // parameter.
+    state.apply_specs();
+    state
 }

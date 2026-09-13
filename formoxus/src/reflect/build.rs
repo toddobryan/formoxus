@@ -378,6 +378,7 @@ fn enum_member(
     Box::new(VariantSet {
         name: name.to_string(),
         label: None,
+        custom_control: None,
         enum_type,
         optional,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it

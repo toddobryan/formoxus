@@ -6,7 +6,7 @@ use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{Edit, FormMember, default_label, qualify};
+use crate::reflect::members::{Edit, FieldSpecs, FormMember, default_label, qualify};
 use crate::reflect::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -254,8 +254,14 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             FormAccessError(format!("{path} is a field, so edits cannot be applied"))
         })
     }
-    
 
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+        if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
+            self.custom_control = spec.custom_control.clone().or(self.custom_control.take());
+            self.label = spec.label.clone().or(self.label.take());
+        }
+    }
+    
     fn clear_errors(&mut self) {
         self.errors.clear();
     }

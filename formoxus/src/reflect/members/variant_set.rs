@@ -7,10 +7,9 @@ use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::members::{
-    Edit, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
-    variant_segment,
+    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, variant_segment,
 };
-use crate::reflect::widgets::VariantSelect;
+use crate::reflect::widgets::{ControlType, VariantSelect};
 
 /// The enum variant at a particular point
 ///
@@ -37,6 +36,7 @@ pub enum VariantChoice {
 pub struct VariantSet {
     pub name: String,
     pub label: Option<String>,
+    pub custom_control: Option<ControlType>,
     pub enum_type: &'static EnumType,
     pub optional: bool,
     pub choice: VariantChoice,
@@ -273,5 +273,23 @@ impl FormMember for VariantSet {
             VariantChoice::Unchosen => unreachable!("A VariantChoice::Unchosen is handled by OptionMember")
         }
         Ok(partial)
+    }
+
+    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+        if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
+            self.label = spec.label.clone().or(self.label.take());
+            // A variant chooser is the one container that DOES have a control of
+            // its own — the `<select>` — so an override here is meaningful (a
+            // radio group), even though nothing renders one yet.
+            self.custom_control = spec.custom_control.clone().or(self.custom_control.take());
+        }
+        // Two paths again, exactly as in `edit`: this member sits at `my_path`,
+        // but its children sit one segment deeper under the chosen variant's
+        // descriptor. `Unchosen` means there are none to visit.
+        if let Some(child_prefix) = self.child_prefix(prefix) {
+            for m in self.members.iter_mut() {
+                m.apply_specs(&child_prefix, fields);
+            }
+        }
     }
 }
