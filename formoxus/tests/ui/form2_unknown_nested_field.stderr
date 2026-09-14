@@ -1,0 +1,7 @@
+error[E0609]: no field `zipcode` on type `Venue`
+  --> tests/ui/form2_unknown_nested_field.rs:19:19
+   |
+19 |             venue.zipcode => { label: "ZIP" },
+   |                   ^^^^^^^ unknown field
+   |
+   = note: available field is: `city`

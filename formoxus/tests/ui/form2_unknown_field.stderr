@@ -1,0 +1,10 @@
+error[E0609]: no field `headlne` on type `&Article`
+  --> tests/ui/form2_unknown_field.rs:18:13
+   |
+18 |             headlne => { label: "Headline" },
+   |             ^^^^^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+18 |             headline => { label: "Headline" },
+   |                  +

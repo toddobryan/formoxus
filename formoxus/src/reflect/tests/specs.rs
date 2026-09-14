@@ -8,7 +8,7 @@
 
 use super::models::{EventForCreate, Location};
 use super::render_to_html;
-use crate::reflect::widgets::{ControlType, InputType};
+use crate::reflect::widgets::ControlType;
 use crate::reflect::*;
 use dioxus::prelude::*;
 use facet::Facet;

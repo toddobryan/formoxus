@@ -29,3 +29,8 @@ derive = ["dep:formoxus-macros"]
 [[test]]
 name = "derive"
 required-features = ["derive"]
+
+# Same reason: this target invokes `form2!`.
+[[test]]
+name = "reflect"
+required-features = ["derive"]

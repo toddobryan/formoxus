@@ -17,6 +17,14 @@ pub use formoxus_macros::Form;
 #[cfg(feature = "derive")]
 pub use formoxus_macros::FieldSet;
 
+/// `form2! { Model { … } }` — builds a [`reflect::form::FormSpec`] for `Model`.
+///
+/// A function-like macro, not a derive: it expands in the *consuming* crate, so
+/// it can name the model's own type and capture runtime values from the scope it
+/// sits in.
+#[cfg(feature = "derive")]
+pub use formoxus_macros::form2;
+
 /// The common surface. `use formoxus::prelude::*;` brings in the derive, the trait
 /// vocabulary, and the built-in field widgets — the one blessed glob. For precise
 /// imports, reach into the modules directly (`formoxus::fields::FormField`, …); the

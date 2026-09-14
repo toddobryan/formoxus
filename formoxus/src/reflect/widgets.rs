@@ -35,8 +35,7 @@ pub enum InputType {
     Text,
     Password,
     Hidden,
-    Integer,
-    Float,
+    Number,
     Email,
     Telephone,
     Url,
@@ -47,6 +46,38 @@ pub enum InputType {
     DatetimeLocal,
     Month,
     Week,
+}
+
+impl InputType {
+    /// The `type=` attribute this renders as.
+    ///
+    /// HTML's spelling, which is not always the variant's: `tel`, and
+    /// `datetime-local` with the hyphen an ident could not carry. `form2!`'s
+    /// vocabulary spells these `tel` and `datetime_local`, so `InputType` is the
+    /// pivot with HTML's names on both sides of it.
+    pub fn html_type(&self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Password => "password",
+            Self::Hidden => "hidden",
+            // Selectable, but NOT the default for a numeric field — see
+            // `FormField::default_control`. `type="number"` hands back `""` for
+            // anything the browser dislikes, so a half-typed value vanishes
+            // mid-keystroke. A numeric renders as text and `ValueKind` parses it.
+            // Anyone who wants the spinner and the mobile keypad can ask.
+            Self::Number => "number",
+            Self::Email => "email",
+            Self::Telephone => "tel",
+            Self::Url => "url",
+            Self::Search => "search",
+            Self::Color => "color",
+            Self::Date => "date",
+            Self::Time => "time",
+            Self::DatetimeLocal => "datetime-local",
+            Self::Month => "month",
+            Self::Week => "week",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -90,8 +121,19 @@ pub fn ScalarInput(
     props: FieldProps,
 ) -> Element {
     match (&value_kind, &control) {
-        (ValueKind::Text { .. }, ControlType::Input(InputType::Text)) => {
-            rsx! { TextInput { values, props } }
+        // One arm for every `<input type=…>`, over any value kind that is a
+        // single scalar. The value crosses as a string either way — `ValueKind`
+        // is what parses it back, and it is NOT consulted here on purpose, so
+        // that a presentational override cannot change how a value is read.
+        //
+        // `Int`/`Float` land here too: their default control is `Text`, because
+        // `type="number"` would eat a half-typed value — but `number` is a
+        // perfectly good override, and so is `text` on a numeric.
+        (
+            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float,
+            ControlType::Input(input_type),
+        ) => {
+            rsx! { HtmlInput { input_type: input_type.clone(), values, props } }
         }
         (ValueKind::Bool, ControlType::Checkbox) => {
             rsx! { BooleanInput { values, props } }
@@ -99,21 +141,36 @@ pub fn ScalarInput(
         (ValueKind::Bool, ControlType::Select) => {
             rsx! { SelectInput { values, choices: bool_choices(), props } }
         }
-        (ValueKind::Int { .. } | ValueKind::Float, ControlType::Input(InputType::Text)) => {
-            rsx! { NumericInput { value_kind, values, props } }
-        }
         _ => panic!("{control:?} cannot render a {value_kind:?} (field {})", props.path),
     }
 }
 
 #[component]
-pub fn TextInput(
+pub fn HtmlInput(
+    input_type: InputType,
     values: ValuesByPath,
     props: FieldProps,
 ) -> Element {
     let FieldProps { path, label: label_text, required, errors } = props;
 
     let current = get_current(&path, values);
+
+    // A password is NOT re-rendered into `value=`. `type="password"` only masks
+    // the glyphs on screen; the value would still sit in the page source, so a
+    // form that failed validation would ship the cleartext back to the browser
+    // and into every view-source, proxy log and cache along the way. Django
+    // spells this `render_value=False` and defaults it off for the same reason.
+    //
+    // DERIVED from the type rather than carried as a flag, so a caller cannot
+    // add a password field and forget it.
+    //
+    // The cost is real and accepted: a user who fails validation retypes the
+    // password. Every framework that gets this right makes the same trade.
+    let shown = if matches!(input_type, InputType::Password) {
+        String::new()
+    } else {
+        current
+    };
 
     // Present ONLY when there is an error. `aria-invalid="false"` is NOT the
     // neutral value — it asserts "checked, and passed", which Pico duly paints
@@ -127,6 +184,24 @@ pub fn TextInput(
     // whatever CSS the consumer brings.
     let invalid = (!errors.is_empty()).then_some("true");
 
+    // A hidden input renders BARE. The wrapper below is a `label` with a caption
+    // and a required marker, which for `type="hidden"` would put visible text
+    // and an asterisk on screen beside a control nobody can see — and label an
+    // unlabelable element for a screen reader.
+    if matches!(input_type, InputType::Hidden) {
+        return rsx! {
+            input {
+                r#type: "hidden",
+                name: "{path}",
+                value: "{shown}",
+                oninput: move |e: FormEvent| {
+                    let raw = e.value();
+                    write_value(&path, values, raw);
+                },
+            }
+        };
+    }
+
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
@@ -136,9 +211,9 @@ pub fn TextInput(
                 span { class: "required", " *" }
             }
             input {
-                r#type: "text",
+                r#type: input_type.html_type(),
                 name: "{path}",
-                value: "{current}",
+                value: "{shown}",
                 required,
                 aria_invalid: invalid,
                 oninput: move |e: FormEvent| {
@@ -191,43 +266,6 @@ pub fn BooleanInput(
         }
     } else {
         input_element
-    }
-}
-
-#[component]
-pub fn NumericInput(
-    value_kind: ValueKind,
-    values: ValuesByPath,
-    props: FieldProps,
-) -> Element {
-    let FieldProps { path, label: label_text, required, errors } = props;
-
-    let current = get_current(&path, values);
-
-    // See `TextInput` for why this is `Option` rather than a plain bool.
-    let invalid = (!errors.is_empty()).then_some("true");
-
-    rsx! {
-        label { class: "form-field",
-            if let Some(text) = label_text {
-                span { class: "field-label", "{text}" }
-            }
-            if required {
-                span { class: "required", " *" }
-            }
-            input {
-                r#type: "text",
-                name: "{path}",
-                value: "{current}",
-                required,
-                aria_invalid: invalid,
-                oninput: move |e: FormEvent| {
-                    let raw = e.value();
-                    write_value(&path, values, raw);
-                },
-            }
-            FieldErrors { errors }
-        }
     }
 }
 

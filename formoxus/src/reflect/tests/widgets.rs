@@ -371,3 +371,146 @@ fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
     let html = super::render_to_html(EmptyInput);
     expect_that!(html, not(contains_substring("aria-invalid")));
 }
+
+// ── `type=` reaching the rendered input ──────────────────────────────────
+//
+// `HtmlInput` renders every `<input type=…>` there is, so the type has to travel
+// from the spec's `ControlType` all the way to the attribute. Before these, both
+// leaves hardcoded `type="text"` and a `password` override rendered a visible
+// text box.
+
+/// A one-`String` model, so a rendered `input` is unambiguous.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct OneString {
+    secret: String,
+}
+
+/// One `u32`, to pin that a numeric still renders as text.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct OneNumber {
+    count: u32,
+}
+
+fn rendered_with(control: ControlType) -> String {
+    // A thread-local rather than a prop, because `render_to_html` takes a plain
+    // `fn() -> Element` — there is nowhere to thread an argument through.
+    CONTROL.replace(Some(control));
+    render_to_html(WithControl)
+}
+
+thread_local! {
+    static CONTROL: std::cell::RefCell<Option<ControlType>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[component]
+fn WithControl() -> Element {
+    let control = CONTROL.with_borrow(|c| c.clone().expect("set by rendered_with"));
+    let form = use_form(empty_form(
+        FormSpec::<OneString>::default().with_custom_control("secret", control),
+    ));
+    form.render()
+}
+
+#[gtest]
+fn every_input_type_reaches_the_type_attribute() {
+    // Every variant that is selectable, with the `type=` HTML actually wants.
+    // `tel` and `datetime-local` are the two where the variant name and the
+    // attribute diverge, which is the whole reason `html_type` exists.
+    let cases = [
+        (InputType::Text, "text"),
+        (InputType::Password, "password"),
+        (InputType::Number, "number"),
+        (InputType::Email, "email"),
+        (InputType::Telephone, "tel"),
+        (InputType::Url, "url"),
+        (InputType::Search, "search"),
+        (InputType::Color, "color"),
+        (InputType::Date, "date"),
+        (InputType::Time, "time"),
+        (InputType::DatetimeLocal, "datetime-local"),
+        (InputType::Month, "month"),
+        (InputType::Week, "week"),
+    ];
+    for (input_type, expected) in cases {
+        let html = rendered_with(ControlType::Input(input_type.clone()));
+        let wanted = format!("type=\"{expected}\"");
+        expect_that!(html, contains_substring(wanted.as_str()), "for {input_type:?}");
+    }
+}
+
+#[gtest]
+fn a_numeric_field_still_renders_as_text() {
+    // Deliberate, and easy to "fix" by accident: `type="number"` hands back `""`
+    // for anything the browser dislikes, so a half-typed value vanishes
+    // mid-keystroke. `ValueKind::Int` is what parses the string back.
+    #[component]
+    fn NumberForm() -> Element {
+        let form = use_form(empty_form(FormSpec::<OneNumber>::default()));
+        form.render()
+    }
+    let html = render_to_html(NumberForm);
+    expect_that!(html, contains_substring("type=\"text\""));
+    expect_that!(html, not(contains_substring("type=\"number\"")));
+}
+
+#[gtest]
+fn a_numeric_field_can_still_ask_for_a_number_input() {
+    // The override half of `a_numeric_field_still_renders_as_text`: text is the
+    // DEFAULT, not the only option. Someone who wants the spinner and the mobile
+    // numeric keypad, and accepts that the browser may hand back `""`, can say so.
+    let html = rendered_with(ControlType::Input(InputType::Number));
+    expect_that!(html, contains_substring("type=\"number\""));
+}
+
+// ── A password does not come back ─────────────────────────────────────────
+
+#[gtest]
+fn a_password_value_is_never_rendered_back() {
+    // `type="password"` masks glyphs on screen; it does nothing about the value
+    // sitting in the page source. Re-rendering it would ship cleartext to the
+    // browser on every failed validation, and into view-source, proxy logs and
+    // caches with it. Django's `render_value=False`, and off by default there too.
+    #[component]
+    fn FilledPassword() -> Element {
+        let form = use_form(form_for(
+            &OneString { secret: "hunter2".to_string() },
+            FormSpec::<OneString>::default()
+                .with_custom_control("secret", ControlType::Input(InputType::Password)),
+        ));
+        form.render()
+    }
+    let html = render_to_html(FilledPassword);
+    expect_that!(html, contains_substring("type=\"password\""));
+    expect_that!(html, not(contains_substring("hunter2")));
+}
+
+#[gtest]
+fn a_non_password_value_is_rendered_back() {
+    // The control half of the test above: the value IS echoed for every other
+    // type, so `not(contains_substring("hunter2"))` above is evidence about
+    // passwords and not about `form_for` failing to populate anything.
+    #[component]
+    fn FilledText() -> Element {
+        let form = use_form(form_for(
+            &OneString { secret: "hunter2".to_string() },
+            FormSpec::<OneString>::default(),
+        ));
+        form.render()
+    }
+    expect_that!(render_to_html(FilledText), contains_substring("hunter2"));
+}
+
+// ── A hidden input has no chrome ──────────────────────────────────────────
+
+#[gtest]
+fn a_hidden_input_renders_without_a_label_or_marker() {
+    // The wrapper every other leaf uses is a `label` with a caption and a
+    // required marker. Around `type="hidden"` that puts visible text and an
+    // asterisk on screen beside a control nobody can see.
+    let html = rendered_with(ControlType::Input(InputType::Hidden));
+    expect_that!(html, contains_substring("type=\"hidden\""));
+    expect_that!(html, not(contains_substring("<label")));
+    expect_that!(html, not(contains_substring("field-label")));
+    expect_that!(html, not(contains_substring("required")));
+}
