@@ -154,7 +154,7 @@ fn an_untouched_optional_enum_validates_as_none() {
 /// can be a component prop.
 #[component]
 fn UnchosenSketchForm() -> Element {
-    let form = use_form(empty_form::<Sketch>(FormSpec::default()));
+    let form = use_form(|| empty_form::<Sketch>(FormSpec::default()));
     form.render()
 }
 
@@ -175,7 +175,7 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
 
 #[component]
 fn UnchosenDrawingForm() -> Element {
-    let form = use_form(empty_form::<Drawing>(FormSpec::default()));
+    let form = use_form(|| empty_form::<Drawing>(FormSpec::default()));
     form.render()
 }
 
@@ -212,7 +212,7 @@ fn the_select_and_the_fields_it_reveals_render_as_one_group() {
 
 #[component]
 fn DocWithChosenOuter() -> Element {
-    let form = use_form({
+    let form = use_form(|| {
         let mut state = empty_form::<Doc>(FormSpec::default());
         state.choose_variant("outer", Some("First")).expect("First is a variant of Outer2");
         state
@@ -243,7 +243,7 @@ fn choosing_a_variant_in_the_select_reveals_its_fields() {
 
 #[component]
 fn UnchosenDocForm() -> Element {
-    let form = use_form(empty_form::<Doc>(FormSpec::default()));
+    let form = use_form(|| empty_form::<Doc>(FormSpec::default()));
     form.render()
 }
 
@@ -556,7 +556,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
 
 #[component]
 fn PlotForm() -> Element {
-    let form = use_form(empty_form::<Plot>(FormSpec::default()));
+    let form = use_form(|| empty_form::<Plot>(FormSpec::default()));
     form.render()
 }
 

@@ -28,7 +28,7 @@ struct Flags {
 
 #[component]
 fn RelabelledField() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("title", "Event name"),
     ));
     form.render()
@@ -44,7 +44,7 @@ fn a_label_override_beats_the_humanized_field_name() {
 
 #[component]
 fn RelabelledNestedField() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("location.city", "Town"),
     ));
     form.render()
@@ -64,7 +64,7 @@ fn a_nested_path_reaches_exactly_one_field() {
 
 #[component]
 fn RelabelledFieldSet() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("location", "Where"),
     ));
     form.render()
@@ -82,7 +82,7 @@ fn a_field_sets_own_label_becomes_its_legend() {
 
 #[component]
 fn UntouchedFlags() -> Element {
-    let form = use_form(empty_form(FormSpec::<Flags>::default()));
+    let form = use_form(|| empty_form(FormSpec::<Flags>::default()));
     form.render()
 }
 
@@ -97,7 +97,7 @@ fn the_derived_controls_are_what_the_override_has_to_beat() {
 
 #[component]
 fn OptionalBoolForcedToCheckbox() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<Flags>::default().with_custom_control("subscribed", ControlType::Checkbox),
     ));
     form.render()
@@ -119,7 +119,7 @@ fn an_override_beats_a_derived_control() {
 
 #[component]
 fn BoolForcedToSelect() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<Flags>::default().with_custom_control("enabled", ControlType::Select),
     ));
     form.render()
@@ -178,7 +178,7 @@ struct Drawing {
 
 #[component]
 fn ChooserWithAControl() -> Element {
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<Drawing>::default().with_custom_control("shape", ControlType::RadioGroup),
     ));
     form.render()
@@ -228,7 +228,7 @@ fn trip() -> Trip {
 
 #[component]
 fn RowsWithLabels() -> Element {
-    let form = use_form(form_for(
+    let form = use_form(|| form_for(
         &quiz(),
         FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
     ));
@@ -249,7 +249,7 @@ fn a_bracket_selector_reaches_every_row() {
 
 #[component]
 fn RowFieldsWithLabels() -> Element {
-    let form = use_form(form_for(
+    let form = use_form(|| form_for(
         &trip(),
         FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
     ));
@@ -269,7 +269,7 @@ fn a_bracket_selector_composes_with_a_field_below_it() {
 
 #[component]
 fn ListWithItsOwnLabel() -> Element {
-    let form = use_form(form_for(
+    let form = use_form(|| form_for(
         &trip(),
         FormSpec::<Trip>::default().with_label("venues", "Where we went"),
     ));
@@ -291,7 +291,7 @@ struct Answers {
 
 #[component]
 fn RowControlsOverridden() -> Element {
-    let form = use_form(form_for(
+    let form = use_form(|| form_for(
         &Answers { correct: vec![true, false] },
         FormSpec::<Answers>::default().with_custom_control("correct[]", ControlType::Select),
     ));
@@ -324,7 +324,7 @@ fn a_control_on_the_list_itself_now_suggests_the_bracket() {
 fn RowAddedAfterTheSpec() -> Element {
     // The edit runs on the state before `use_form` takes it, which is the same
     // funnel a button click goes through — `FormState::edit`.
-    let form = use_form({
+    let form = use_form(|| {
         let mut state = form_for(
             &quiz(),
             FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
@@ -351,7 +351,7 @@ fn a_row_added_after_mount_still_gets_the_spec() {
 
 #[component]
 fn RowFieldAddedAfterTheSpec() -> Element {
-    let form = use_form({
+    let form = use_form(|| {
         let mut state = form_for(
             &trip(),
             FormSpec::<Trip>::default().with_label("venues[].city", "Town"),

@@ -4,6 +4,12 @@ use super::render_to_html;
 use crate::reflect::*;
 use dioxus::prelude::*;
 use facet::Facet;
+use dioxus::core::Mutation;
+use dioxus_html::{
+    PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData, set_event_converter,
+};
+use std::any::Any;
+use std::rc::Rc;
 use std::{collections::HashMap, marker::PhantomData};
 use super::models::{Event, EventForCreate, Location};
 use googletest::prelude::*;
@@ -86,7 +92,7 @@ fn repeated_struct_types_get_distinct_paths() {
 
 #[component]
 fn EmptyEventForm() -> Element {
-    let form = use_form(empty_form::<EventForCreate>(FormSpec::default()));
+    let form = use_form(|| empty_form::<EventForCreate>(FormSpec::default()));
     form.render()
 }
 
@@ -111,7 +117,7 @@ fn form_for_none_walks_the_shape_into_empty_members() {
 
 #[component]
 fn TitledEventForm() -> Element {
-    let form = use_form(empty_form::<EventForCreate>(
+    let form = use_form(|| empty_form::<EventForCreate>(
         FormSpec::default().with_title("New Event"),
     ));
     form.render()
@@ -417,7 +423,7 @@ fn QuizForm() -> Element {
     struct Quiz {
         answer_choices: Vec<String>,
     }
-    let form = use_form(form_for(&Quiz {
+    let form = use_form(|| form_for(&Quiz {
         answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
     }, FormSpec::default()));
     form.render()
@@ -438,4 +444,95 @@ fn an_unsupported_scalar_fails_loudly_at_construction() {
     // is worse than one that refuses to build. Construction is also the right
     // moment — it happens once, in a hook initialiser, not per render.
     let _ = empty_form::<Unsupported>(FormSpec::default());
+}
+
+// ══ Form-level errors ════════════════════════════════════════════════════
+//
+// An error that belongs to the form rather than to a field: "invalid
+// credentials", "that name is taken" — answers only the server has, which no
+// field validator can produce because nothing local is wrong.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Credentials {
+    username: String,
+}
+
+/// Click the app's first `click` listener and return the re-rendered HTML.
+///
+/// The sibling of `type_into` in `tests::widgets`: the listener's `ElementId`
+/// comes out of the rebuild's mutations rather than being hard-coded, so the
+/// markup around the button can change freely.
+fn click_button(app: fn() -> Element) -> String {
+    set_event_converter(Box::new(SerializedHtmlEventConverter));
+
+    let mut dom = VirtualDom::new(app);
+    let mutations = dom.rebuild_to_vec();
+    let button_id = mutations
+        .edits
+        .iter()
+        .find_map(|m| match m {
+            Mutation::NewEventListener { name, id } if name == "click" => Some(*id),
+            _ => None,
+        })
+        .expect("the test component should have registered an `onclick` listener");
+
+    let payload = PlatformEventData::new(Box::new(SerializedMouseData::default()));
+    // Fully qualified: this module imports `models::Event`, which shadows the
+    // Dioxus one.
+    let event: dioxus::prelude::Event<dyn Any> =
+        dioxus::prelude::Event::new(Rc::new(payload), true);
+    dom.runtime().handle_event("click", event, button_id);
+
+    dom.render_immediate_to_vec();
+    dioxus_ssr::render(&dom)
+}
+
+#[component]
+fn PushesAnErrorOnClick() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Credentials>::default()));
+    rsx! {
+        { form.render() }
+        button {
+            onclick: move |_| form.push_error(FormError("invalid credentials".to_string())),
+            "Sign in"
+        }
+    }
+}
+
+#[gtest]
+fn a_pushed_error_renders() {
+    // Through a real event handler, because that is the only way a page can push
+    // one — and because it is what proves `push_error` can take `&self` on a
+    // `Copy` handle inside a closure.
+    let html = click_button(PushesAnErrorOnClick);
+    expect_that!(html, contains_substring("invalid credentials"));
+    expect_that!(html, contains_substring("form-error"));
+}
+
+#[gtest]
+fn a_form_starts_with_no_error_markup() {
+    // The control for the test above: without it, `contains_substring` proves
+    // only that the string appears somewhere, not that the click put it there.
+    #[component]
+    fn Untouched() -> Element {
+        use_form(|| empty_form(FormSpec::<Credentials>::default())).render()
+    }
+    expect_that!(render_to_html(Untouched), not(contains_substring("form-error")));
+}
+
+#[gtest]
+fn validate_clears_a_pushed_error() {
+    // The intended lifetime, and the reason `push_error` needs no `clear`: an
+    // error from the last round trip must not outlive the next submit. It also
+    // means a pushed error never BLOCKS validate, since the clear happens first —
+    // which this proves by getting a model back out.
+    let mut state = empty_form(FormSpec::<Credentials>::default());
+    state.errors.push(FormError("invalid credentials".to_string()));
+    expect_that!(state.has_errors(), eq(true));
+
+    state.apply(&HashMap::from([("username".to_string(), "bob".to_string())]));
+    let model = state.validate();
+
+    expect_that!(model, some(eq(&Credentials { username: "bob".to_string() })));
+    expect_that!(state.has_errors(), eq(false));
 }

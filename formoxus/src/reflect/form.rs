@@ -77,6 +77,26 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .render(&RenderCtx::root(self.values, self.on_edit))
     }
 
+    /// Add a form-level error — one that belongs to the form as a whole rather
+    /// than to any field.
+    ///
+    /// The case this exists for is an answer that only the server has: "invalid
+    /// credentials", "that username is taken". A field validator cannot produce
+    /// it, because nothing local is wrong.
+    ///
+    /// **Cleared by the next [`validate`](Self::validate).** That is the intended
+    /// lifetime, not a caveat: an error from the last round trip should not
+    /// outlive the next submit. It also means a pushed error never blocks
+    /// `validate`, since the clear happens first.
+    ///
+    /// Writing through a copy of the `Signal` for the same reason `validate`
+    /// does: it keeps `&self` here, which is what lets `Form` stay `Copy` and
+    /// drop into an event handler.
+    pub fn push_error(&self, error: FormError) {
+        let mut state = self.state;
+        state.write().errors.push(error);
+    }
+
     /// Push the live values into the state, then build the model.
     ///
     /// Lives here because this is the only place that knows both halves — a
@@ -96,37 +116,35 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 /// Make a [`FormState`] live.
 ///
 /// ```ignore
-/// use_form(empty_form::<Question>())   // create
-/// use_form(form_for(&question))        // edit
+/// use_form(|| empty_form(question_form()))       // create
+/// use_form(|| form_for(&question, question_form()))  // edit
 /// ```
 ///
-/// One hook rather than a create/edit pair, because taking the state as a
-/// *value* lets one component serve both modes — the branch happens while
-/// building the argument, which isn't a hook call, so the rules of hooks don't
-/// care:
+/// **A thunk, not a value.** Building a `FormState` means walking `T`'s facet
+/// shape and allocating a `Vec<Box<dyn FormMember>>`, and `use_signal`'s
+/// initializer runs exactly once — so a value argument would be constructed on
+/// every render of the calling component and thrown away every time but the
+/// first. Deferring it costs one `||` and means the walk happens once.
+///
+/// One hook rather than a create/edit pair, because the branch happens *inside*
+/// the closure, which isn't a hook call, so the rules of hooks don't care:
 ///
 /// ```ignore
-/// let form = use_form(match existing.as_ref() {
-///     Some(model) => form_for(model),
-///     None => empty_form::<Question>(),
+/// let form = use_form(|| match existing.as_ref() {
+///     Some(model) => form_for(model, question_form()),
+///     None => empty_form(question_form()),
 /// });
 /// ```
 ///
-/// **The argument is rebuilt on every render and dropped after the first**,
-/// since `use_signal`'s initializer runs once. How often that is depends on what
-/// the calling component reads: reading only the state (via [`Form::render`])
-/// means structural edits alone, which are rare; reading the whole value map
-/// subscribes deeply and so means every keystroke.
-///
-/// **The state is read once and never tracked.** Passing a value looks like the
-/// form follows it, and it does not. For a model arriving from a
+/// **The state is built once and never tracked.** The closure running once looks
+/// like the form follows its input, and it does not. For a model arriving from a
 /// `use_server_future`, put the form in its own component that takes the model
 /// as a prop — it then can't mount before the data exists — and give it a `key:`
 /// so a *different* model remounts it.
 pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
-    state: FormState<T>,
+    state: impl FnOnce() -> FormState<T>,
 ) -> Form<T> {
-    let state = use_signal(|| state);
+    let state = use_signal(state);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
@@ -225,29 +243,52 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.title.clone()
     }
 
+    /// Validate every field, build the model, then run the form-wide check.
+    ///
+    /// Returns `None` if anything failed, having left the reasons where they
+    /// render: field errors on their own members, form-wide ones in
+    /// [`errors`](Self::errors).
+    ///
+    /// **The spec's validator runs LAST, on the built model.** It cannot run
+    /// sooner: a cross-field check is a statement about the whole value ("new and
+    /// confirm must match", "the end date follows the start"), which does not
+    /// exist until every field has parsed. So a form whose fields are individually
+    /// fine is built, then judged, and a rejected model is discarded — the work is
+    /// wasted only on the path that was going to fail anyway.
+    ///
+    /// Also why it cannot be a member: a member sees one subtree, and the whole
+    /// point of this check is that it sees across them.
     pub fn validate(&mut self) -> Option<T> {
         self.errors.clear();
         for m in self.members.iter_mut() {
             m.validate();
         }
         if self.has_errors() {
-            None
-        } else {
-            let mut partial =
-                Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
-            for m in self.members.iter() {
-                partial = m
-                    .write_into(partial)
-                    .expect("write_into should succeed once validate() found no errors");
-            }
-            Some(
-                partial
-                    .build()
-                    .expect("build should succeed once every field was written")
-                    .materialize::<T>()
-                    .expect("materialized shape should match T — write_into wrote the wrong thing if not"),
-            )
+            return None;
         }
+
+        let mut partial =
+            Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
+        for m in self.members.iter() {
+            partial = m
+                .write_into(partial)
+                .expect("write_into should succeed once validate() found no errors");
+        }
+        let model = partial
+            .build()
+            .expect("build should succeed once every field was written")
+            .materialize::<T>()
+            .expect("materialized shape should match T — write_into wrote the wrong thing if not");
+
+        // Copied out rather than borrowed: `Option<fn(..)>` is `Copy`, so this
+        // holds no borrow of `self.spec` while `self.errors` is extended.
+        if let Some(check) = self.spec.validator {
+            self.errors.extend(check(&model));
+        }
+
+        // One exit for both kinds of failure, so a form-wide error cannot be
+        // recorded and then returned as success.
+        if self.has_errors() { None } else { Some(model) }
     }
 
     /// Every leaf input in the form, as `(qualified_path, raw_value)` — the
@@ -324,10 +365,27 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             }
         });
         let members_rendered = self.members.iter().map(|m| m.render(ctx));
+        let errors: Element = if !self.errors.is_empty() {
+            rsx! {
+                ul {
+                    class: "form-errors",
+                    for e in self.errors.clone() {
+                        li {
+                            class: "form-error",
+                            "{e.0}"
+                        }
+                    }
+                }
+            } 
+        } else {
+            rsx! {}
+        };
         
         rsx! {
             { title }
             { members_rendered.into_iter() }
+            { errors }
+            
         }
     }
 }

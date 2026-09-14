@@ -308,7 +308,7 @@ fn ScoreFormWithBadInput() -> Element {
     // errors are populated by `validate`, and blur-time validation doesn't
     // exist yet, so there is no interaction to drive here.
     let _ = state.validate();
-    let form = use_form(state);
+    let form = use_form(|| state);
     form.render()
 }
 
@@ -406,7 +406,7 @@ thread_local! {
 #[component]
 fn WithControl() -> Element {
     let control = CONTROL.with_borrow(|c| c.clone().expect("set by rendered_with"));
-    let form = use_form(empty_form(
+    let form = use_form(|| empty_form(
         FormSpec::<OneString>::default().with_custom_control("secret", control),
     ));
     form.render()
@@ -446,7 +446,7 @@ fn a_numeric_field_still_renders_as_text() {
     // mid-keystroke. `ValueKind::Int` is what parses the string back.
     #[component]
     fn NumberForm() -> Element {
-        let form = use_form(empty_form(FormSpec::<OneNumber>::default()));
+        let form = use_form(|| empty_form(FormSpec::<OneNumber>::default()));
         form.render()
     }
     let html = render_to_html(NumberForm);
@@ -473,7 +473,7 @@ fn a_password_value_is_never_rendered_back() {
     // caches with it. Django's `render_value=False`, and off by default there too.
     #[component]
     fn FilledPassword() -> Element {
-        let form = use_form(form_for(
+        let form = use_form(|| form_for(
             &OneString { secret: "hunter2".to_string() },
             FormSpec::<OneString>::default()
                 .with_custom_control("secret", ControlType::Input(InputType::Password)),
@@ -492,7 +492,7 @@ fn a_non_password_value_is_rendered_back() {
     // passwords and not about `form_for` failing to populate anything.
     #[component]
     fn FilledText() -> Element {
-        let form = use_form(form_for(
+        let form = use_form(|| form_for(
             &OneString { secret: "hunter2".to_string() },
             FormSpec::<OneString>::default(),
         ));
