@@ -155,22 +155,24 @@ pub fn HtmlInput(
 
     let current = get_current(&path, values);
 
-    // A password is NOT re-rendered into `value=`. `type="password"` only masks
-    // the glyphs on screen; the value would still sit in the page source, so a
-    // form that failed validation would ship the cleartext back to the browser
-    // and into every view-source, proxy log and cache along the way. Django
-    // spells this `render_value=False` and defaults it off for the same reason.
+    // A PASSWORD IS AN ORDINARY CONTROLLED INPUT HERE. `type="password"` masks the
+    // glyphs; nothing else about it is special, and `value` is bound like every
+    // other field's.
     //
-    // DERIVED from the type rather than carried as a flag, so a caller cannot
-    // add a password field and forget it.
+    // Django's `render_value=False` and Rails' non-echoing `password_field` are
+    // real conventions, but they are SERVER-RENDERING ones: there the value would
+    // land in an HTTP response body, and so in proxy logs, shared caches, browser
+    // history and view-source. No response body carries it here — the value goes
+    // keystroke -> DOM -> a wasm-side store in the user's own browser, and binding
+    // it back writes to the very node they typed into. The only viewer is the
+    // person who just typed it. A server-rendered response with a populated
+    // password would bring the concern back; this architecture produces none,
+    // because the SSR pass renders an empty form and every later re-render is
+    // client-side.
     //
-    // The cost is real and accepted: a user who fails validation retypes the
-    // password. Every framework that gets this right makes the same trade.
-    let shown = if matches!(input_type, InputType::Password) {
-        String::new()
-    } else {
-        current
-    };
+    // Withholding it cost more than it bought: a field nothing could CLEAR
+    // programmatically (so "reset after a successful change" became impossible),
+    // and the only asymmetric widget in the set.
 
     // Present ONLY when there is an error. `aria-invalid="false"` is NOT the
     // neutral value — it asserts "checked, and passed", which Pico duly paints
@@ -193,7 +195,7 @@ pub fn HtmlInput(
             input {
                 r#type: "hidden",
                 name: "{path}",
-                value: "{shown}",
+                value: current,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);
@@ -213,7 +215,7 @@ pub fn HtmlInput(
             input {
                 r#type: input_type.html_type(),
                 name: "{path}",
-                value: "{shown}",
+                value: "{current}",
                 required,
                 aria_invalid: invalid,
                 oninput: move |e: FormEvent| {

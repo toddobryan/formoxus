@@ -463,42 +463,38 @@ fn a_numeric_field_can_still_ask_for_a_number_input() {
     expect_that!(html, contains_substring("type=\"number\""));
 }
 
-// ── A password does not come back ─────────────────────────────────────────
+// ── A password is an ordinary controlled input ───────────────────────────
+//
+// It WAS special — `value` withheld, per Django's `render_value=False`. That
+// convention is about an HTTP response body carrying the secret into proxy logs
+// and view-source, which is a server-rendering concern with no analogue here: the
+// value goes keystroke -> DOM -> a wasm-side store in the same browser. Withholding
+// it made the field impossible to clear programmatically and impossible to type
+// into, twice, in two different ways. See `a_keystroke_writes_the_value_attribute`
+// for the mechanism that made "just omit it" fail.
 
 #[gtest]
-fn a_password_value_is_never_rendered_back() {
-    // `type="password"` masks glyphs on screen; it does nothing about the value
-    // sitting in the page source. Re-rendering it would ship cleartext to the
-    // browser on every failed validation, and into view-source, proxy logs and
-    // caches with it. Django's `render_value=False`, and off by default there too.
+fn a_password_round_trips_its_value_like_any_other_field() {
     #[component]
     fn FilledPassword() -> Element {
-        let form = use_form(|| form_for(
-            &OneString { secret: "hunter2".to_string() },
-            FormSpec::<OneString>::default()
-                .with_custom_control("secret", ControlType::Input(InputType::Password)),
-        ));
+        let form = use_form(|| {
+            form_for(
+                &OneString { secret: "hunter2".to_string() },
+                FormSpec::<OneString>::default()
+                    .with_custom_control("secret", ControlType::Input(InputType::Password)),
+            )
+        });
         form.render()
     }
     let html = render_to_html(FilledPassword);
     expect_that!(html, contains_substring("type=\"password\""));
-    expect_that!(html, not(contains_substring("hunter2")));
+    expect_that!(html, contains_substring("value=\"hunter2\""));
 }
 
 #[gtest]
-fn a_non_password_value_is_rendered_back() {
-    // The control half of the test above: the value IS echoed for every other
-    // type, so `not(contains_substring("hunter2"))` above is evidence about
-    // passwords and not about `form_for` failing to populate anything.
-    #[component]
-    fn FilledText() -> Element {
-        let form = use_form(|| form_for(
-            &OneString { secret: "hunter2".to_string() },
-            FormSpec::<OneString>::default(),
-        ));
-        form.render()
-    }
-    expect_that!(render_to_html(FilledText), contains_substring("hunter2"));
+fn typing_into_a_password_reaches_the_value_map() {
+    let html = type_into(PasswordWithEcho, "hunter2");
+    expect_that!(html, contains_substring("<p class=\"echo\">hunter2</p>"));
 }
 
 // ── A hidden input has no chrome ──────────────────────────────────────────
@@ -513,4 +509,70 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
     expect_that!(html, not(contains_substring("<label")));
     expect_that!(html, not(contains_substring("field-label")));
     expect_that!(html, not(contains_substring("required")));
+}
+
+/// A password input beside a plain readout of what the store holds for its path.
+///
+/// The echo is the only way to observe the write: the input itself must NOT show
+/// the value, so the rendered `value=` attribute cannot be the evidence.
+#[component]
+fn PasswordWithEcho() -> Element {
+    let values = use_store(HashMap::<String, String>::new);
+    let stored = values.read().get("secret").cloned().unwrap_or_default();
+    rsx! {
+        ScalarInput {
+            value_kind: text_kind(),
+            control: ControlType::Input(InputType::Password),
+            values,
+            props: FieldProps {
+                path: "secret".to_string(),
+                label: Some("Secret".to_string()),
+                required: true,
+                errors: Vec::new(),
+            },
+        }
+        p { class: "echo", "{stored}" }
+    }
+}
+
+/// The mutations a keystroke produces, for asserting on what Dioxus TOUCHES
+/// rather than on what the HTML happens to say.
+fn mutations_after_typing(app: fn() -> Element, text: &str) -> String {
+    set_event_converter(Box::new(SerializedHtmlEventConverter));
+    let mut dom = VirtualDom::new(app);
+    let mounted = dom.rebuild_to_vec();
+    let input_id = mounted
+        .edits
+        .iter()
+        .find_map(|e| match e {
+            Mutation::NewEventListener { name, id } if name == "input" => Some(*id),
+            _ => None,
+        })
+        .expect("an `oninput` listener");
+    let payload = PlatformEventData::new(Box::new(SerializedFormData::new(
+        text.to_string(),
+        Vec::new(),
+    )));
+    let event: dioxus::prelude::Event<dyn Any> =
+        dioxus::prelude::Event::new(Rc::new(payload), true);
+    dom.runtime().handle_event("input", event, input_id);
+    format!("{:?}", dom.render_immediate_to_vec().edits)
+}
+
+#[gtest]
+fn a_keystroke_writes_the_value_attribute() {
+    // Every input here is CONTROLLED: the store is the source of truth and `value`
+    // is reasserted from it on each re-render. Worth pinning, because the mechanism
+    // is what defeated two attempts to withhold a password's value.
+    //
+    // `value=""` failed the obvious way — the empty attribute was reasserted and
+    // wiped each keystroke. `value: None` failed less obviously: the rendered HTML
+    // omitted the attribute, but Dioxus RE-EMITS an unchanged `None` attribute on
+    // every re-render, and `None` for `value` is not "leave it alone" — the
+    // interpreter runs `node.value = ""; node.removeAttribute("value")`. Same wipe,
+    // one layer down. `aria_invalid` survives `None` only because no DOM state
+    // hangs off it.
+    let edits = mutations_after_typing(PopulatedInput, "Trivia Night");
+    expect_that!(edits, contains_substring("SetAttribute"));
+    expect_that!(edits, contains_substring("Trivia Night"));
 }

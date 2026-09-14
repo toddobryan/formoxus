@@ -258,11 +258,9 @@ fn PasswordSecret() -> Element {
 fn a_control_from_the_macro_changes_the_rendered_input() {
     let html = render_to_html(PasswordSecret);
     expect_that!(html, contains_substring("type=\"password\""));
-    // And the whole reason a password is a distinct control: the value it was
-    // built from does not come back. This is the end-to-end version of the unit
-    // test in `reflect::tests::widgets` — proof that `control: password` in a
-    // macro invocation is what selected the behaviour.
-    expect_that!(html, not(contains_substring("hunter2")));
+    // The value round-trips like any other field's — `control: password` changes
+    // the masking, not the binding.
+    expect_that!(html, contains_substring("hunter2"));
     // A sibling scalar keeps its default, so the override landed on one field.
     expect_that!(html, contains_substring("Spring tour"));
 }
@@ -408,7 +406,6 @@ fn every_entry_kind_coexists_in_one_spec() {
     expect_that!(html, contains_substring("<legend>Stops</legend>"));
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
     expect_that!(html, contains_substring("type=\"password\""));
-    expect_that!(html, not(contains_substring("hunter2")));
 }
 
 // ── The rest of the validator's contract ─────────────────────────────────
