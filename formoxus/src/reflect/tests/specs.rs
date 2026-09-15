@@ -31,7 +31,7 @@ fn RelabelledField() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("title", "Event name"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -47,7 +47,7 @@ fn RelabelledNestedField() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("location.city", "Town"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -67,7 +67,7 @@ fn RelabelledFieldSet() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<EventForCreate>::default().with_label("location", "Where"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -83,7 +83,7 @@ fn a_field_sets_own_label_becomes_its_legend() {
 #[component]
 fn UntouchedFlags() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Flags>::default()));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -100,7 +100,7 @@ fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<Flags>::default().with_custom_control("subscribed", ControlType::Checkbox),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -122,7 +122,7 @@ fn BoolForcedToSelect() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<Flags>::default().with_custom_control("enabled", ControlType::Select),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -181,7 +181,7 @@ fn ChooserWithAControl() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<Drawing>::default().with_custom_control("shape", ControlType::RadioGroup),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -232,7 +232,7 @@ fn RowsWithLabels() -> Element {
         &quiz(),
         FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -253,7 +253,7 @@ fn RowFieldsWithLabels() -> Element {
         &trip(),
         FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -273,7 +273,7 @@ fn ListWithItsOwnLabel() -> Element {
         &trip(),
         FormSpec::<Trip>::default().with_label("venues", "Where we went"),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -295,7 +295,7 @@ fn RowControlsOverridden() -> Element {
         &Answers { correct: vec![true, false] },
         FormSpec::<Answers>::default().with_custom_control("correct[]", ControlType::Select),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -334,7 +334,7 @@ fn RowAddedAfterTheSpec() -> Element {
             .expect("appending to `answers` should succeed");
         state
     });
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -361,7 +361,7 @@ fn RowFieldAddedAfterTheSpec() -> Element {
             .expect("appending to `venues` should succeed");
         state
     });
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]

@@ -8,6 +8,7 @@ pub mod models;
 mod empty_strings;
 mod enums;
 mod forms;
+mod into_slot;
 mod optional_containers;
 mod vecs;
 mod widgets;

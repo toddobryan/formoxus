@@ -21,7 +21,8 @@ pub mod widgets;
 pub use crate::error::{FieldError, FormError};
 pub use fields::{FieldValue, FormField};
 pub use form::{
-    FieldSpec, Form, FormSpec, FormState, empty_form, form_for, use_form, use_form_values,
+    FieldSpec, Form, FormSpec, FormState, Handler, IntoSlot, Provider, UncheckedHandler,
+    empty_form, form_for, handler, provider, unchecked_handler, use_form, use_form_values,
 };
 pub use members::{
     Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,

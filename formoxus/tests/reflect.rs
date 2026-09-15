@@ -14,6 +14,9 @@ use formoxus::form2;
 use formoxus::reflect::{empty_form, form_for, use_form};
 use googletest::prelude::*;
 
+#[path = "reflect/buttons.rs"]
+mod buttons;
+
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Article {
     headline: String,
@@ -227,7 +230,7 @@ fn LabelledName() -> Element {
             name => { label: "Trip name" },
         }
     }))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -251,7 +254,7 @@ fn PasswordSecret() -> Element {
             }
         },
     ))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -275,7 +278,7 @@ fn SelectedBool() -> Element {
             }
         },
     ))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -297,7 +300,7 @@ fn BothKeys() -> Element {
             secret => { control: password, label: "Passphrase" },
         }
     }))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -319,7 +322,7 @@ fn NestedLabel() -> Element {
             venue.city => { label: "Town" },
         }
     }))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -349,7 +352,7 @@ fn ListLabelAndRowControls() -> Element {
             }
         },
     ))
-    .render()
+    .render_fragment()
 }
 
 #[gtest]
@@ -382,7 +385,7 @@ fn EverythingAtOnce() -> Element {
             }
         },
     ))
-    .render()
+    .render_fragment()
 }
 
 fn trip_has_a_name(t: &Trip) -> Vec<formoxus::error::FormError> {

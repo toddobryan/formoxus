@@ -14,6 +14,7 @@ pub fn impl_form2(input: TokenStream2) -> TokenStream2 {
 mod kw {
     syn::custom_keyword!(title);
     syn::custom_keyword!(validator);
+    syn::custom_keyword!(buttons);
 }
 
 #[derive(Debug)]
@@ -27,12 +28,13 @@ struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
     validator: Option<Expr>,
+    buttons: Vec<ButtonInfo>,
     field_specs: Vec<FieldSpec>,
 }
 
 impl FormSpecMeta {
     fn new(model_type: Path) -> Self {
-        Self { model_type, title: None, validator: None, field_specs: Vec::new(), }
+        Self { model_type, title: None, validator: None, buttons: Vec::new(), field_specs: Vec::new(), }
     }
 }
 
@@ -145,6 +147,7 @@ impl Parse for FormSpecInput {
                         ));
                     }
                 }
+                _ => (),
             }
         }
         Ok(FormSpecInput { target, entries })
@@ -156,6 +159,7 @@ enum Entry {
     Title(Expr),
     Validator(Expr),
     Field { path: SpecPath, body: FieldBody },
+    Buttons(Vec<ButtonInfo>),
 }
 
 impl Entry {
@@ -183,6 +187,24 @@ impl Entry {
         let body: FieldBody = input.parse()?;
         Ok(Entry::Field { path, body })
     }
+
+    fn parse_buttons(input: ParseStream<'_>) -> Result<Self> {
+        let _buttons: kw::buttons = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        let body;
+        let braces = braced!(body in input);
+
+        let buttons: Vec<ButtonInfo> = Vec::new();
+        while !body.is_empty() {
+            let name: Ident = body.parse()?;
+            let _colon: Token![:] = input.parse()?;
+            let button_body;
+            let button_braces = braced!(button_body in body);
+            
+        }
+
+         
+    }
 }
 
 impl Parse for Entry {
@@ -193,6 +215,8 @@ impl Parse for Entry {
             Entry::parse_validator(input)
         } else if input.peek(syn::Ident) {
             Entry::parse_field(input)
+        } else if input.peek(kw::buttons) {
+            Entry::parse_buttons(input)
         } else {
             Err(input.error("expected a form attribute or a field specifier"))
         }
@@ -527,6 +551,29 @@ fn edit_distance(a: &str, b: &str) -> usize {
         std::mem::swap(&mut prev, &mut cur);
     }
     prev[b.len()]
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ButtonInfo {
+    pub name: syn::Ident,
+    pub ty: ButtonType,
+    pub text: Option<String>,
+    pub invocation: Option<Invocation>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Invocation {
+    IfModelValidates,
+    Unconditional,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ButtonType {
+    Destructive,
+    Reset,
+    Cancel,
+    Button,
+    Submit,
 }
 
 

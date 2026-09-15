@@ -155,7 +155,7 @@ fn an_untouched_optional_enum_validates_as_none() {
 #[component]
 fn UnchosenSketchForm() -> Element {
     let form = use_form(|| empty_form::<Sketch>(FormSpec::default()));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -176,7 +176,7 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
 #[component]
 fn UnchosenDrawingForm() -> Element {
     let form = use_form(|| empty_form::<Drawing>(FormSpec::default()));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -217,7 +217,7 @@ fn DocWithChosenOuter() -> Element {
         state.choose_variant("outer", Some("First")).expect("First is a variant of Outer2");
         state
     });
-    form.render()
+    form.render_fragment()
 }
 
 // ── The whole loop: a DOM event that rebuilds the schema ─────────────────
@@ -244,7 +244,7 @@ fn choosing_a_variant_in_the_select_reveals_its_fields() {
 #[component]
 fn UnchosenDocForm() -> Element {
     let form = use_form(|| empty_form::<Doc>(FormSpec::default()));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -557,7 +557,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
 #[component]
 fn PlotForm() -> Element {
     let form = use_form(|| empty_form::<Plot>(FormSpec::default()));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]

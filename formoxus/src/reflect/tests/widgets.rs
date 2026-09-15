@@ -309,7 +309,7 @@ fn ScoreFormWithBadInput() -> Element {
     // exist yet, so there is no interaction to drive here.
     let _ = state.validate();
     let form = use_form(|| state);
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -409,7 +409,7 @@ fn WithControl() -> Element {
     let form = use_form(|| empty_form(
         FormSpec::<OneString>::default().with_custom_control("secret", control),
     ));
-    form.render()
+    form.render_fragment()
 }
 
 #[gtest]
@@ -447,7 +447,7 @@ fn a_numeric_field_still_renders_as_text() {
     #[component]
     fn NumberForm() -> Element {
         let form = use_form(|| empty_form(FormSpec::<OneNumber>::default()));
-        form.render()
+        form.render_fragment()
     }
     let html = render_to_html(NumberForm);
     expect_that!(html, contains_substring("type=\"text\""));
@@ -484,7 +484,7 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                     .with_custom_control("secret", ControlType::Input(InputType::Password)),
             )
         });
-        form.render()
+        form.render_fragment()
     }
     let html = render_to_html(FilledPassword);
     expect_that!(html, contains_substring("type=\"password\""));

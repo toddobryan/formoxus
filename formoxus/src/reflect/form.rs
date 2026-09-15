@@ -11,12 +11,143 @@
 use facet::{Facet, Partial, Peek};
 use indexmap::IndexMap;
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
+use std::{future::Future, pin::Pin, rc::Rc};
 use dioxus::prelude::*;
 use crate::reflect::widgets::ControlType;
 use crate::reflect::{RenderCtx, ValuesByPath};
 use crate::reflect::build::{FormMode, members_for};
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::members::{Edit, FormMember, no_such_path, owns};
+
+// ── Button/provider slots ────────────────────────────────────────────────
+//
+// Fresh copies of the derive path's `Handler`/`UncheckedHandler`/`Provider`
+// (`crate::form`), not a reuse — same reasoning as `reflect::fields::FormField`
+// being its own type: the derive path is slated for deletion, so nothing in
+// `reflect` should depend on it, and copying now means that deletion stays a
+// clean one later.
+
+/// A button handler that receives the form's validated `Model` — only called
+/// once [`FormState::validate`] succeeds. `Rc`, not `Box`: the generated
+/// `onclick`/`onsubmit` closures run on every click, and each run needs to
+/// move an owned copy into a fresh `async move` block, so the handler itself
+/// must be cheaply `Clone`. Single-threaded (WASM), so `Rc` over `Arc`.
+pub type Handler<M> = Rc<dyn Fn(M) -> Pin<Box<dyn Future<Output = ()>>>>;
+
+/// A button handler that runs unconditionally — no validation attempt, no
+/// access to the model. For buttons like Cancel that must work even while the
+/// form is invalid.
+pub type UncheckedHandler = Rc<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>;
+
+/// A re-invokable async fetch a widget calls when it needs external data —
+/// e.g. a picker's list of choices — supplied at the render call site rather
+/// than baked into the form's declaration.
+///
+/// **A newtype, not a type alias — this is load-bearing, not stylistic.**
+/// `UncheckedHandler` and a bare `Rc<dyn Fn() -> Pin<Box<dyn Future<Output =
+/// C>>>>` are both zero-argument closures; the only difference is what the
+/// future resolves to. As a type ALIAS (which is what the derive path's
+/// `Provider` still is), `Provider<()>` would be the exact same type as
+/// `UncheckedHandler`, and the blanket impls `IntoSlot<UncheckedHandler> for
+/// F` / `IntoSlot<Provider<C>> for F` below would then be the *same impl* at
+/// `C = ()` — a hard `E0119` conflicting-implementation error, caught at the
+/// two `impl` blocks themselves, not at any call site that might use `C = ()`.
+/// Verified directly: writing both impls against the type-alias version fails
+/// to compile at all. The newtype makes `Provider<C>` a distinct nominal type
+/// regardless of `C`, so the two impls never unify.
+pub struct Provider<C>(Rc<dyn Fn() -> Pin<Box<dyn Future<Output = C>>>>);
+
+// Hand-written, not derived: `#[derive(Clone)]` on a generic newtype adds a
+// spurious `C: Clone` bound — the same trap `Form`'s hand-written `Clone`
+// documents — even though `Rc` is `Clone` regardless of what it wraps.
+impl<C> Clone for Provider<C> {
+    fn clone(&self) -> Self {
+        Provider(self.0.clone())
+    }
+}
+
+impl<C> Provider<C> {
+    /// Call the provider. Returns the future directly rather than being
+    /// `async fn`, so a caller still writes `provide.call().await` — the same
+    /// shape as calling the wrapped `Rc<dyn Fn() -> ...>` directly, which a
+    /// plain struct can't support: implementing the `Fn` traits by hand isn't
+    /// available on stable.
+    pub fn call(&self) -> Pin<Box<dyn Future<Output = C>>> {
+        (self.0)()
+    }
+}
+
+/// Wrap a plain async closure as a [`Handler`].
+pub fn handler<M, F, Fut>(f: F) -> Handler<M>
+where
+    F: Fn(M) -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    Rc::new(move |m| Box::pin(f(m)))
+}
+
+/// Wrap a plain async closure as an [`UncheckedHandler`].
+pub fn unchecked_handler<F, Fut>(f: F) -> UncheckedHandler
+where
+    F: Fn() -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    Rc::new(move || Box::pin(f()))
+}
+
+/// Wrap a plain async closure as a [`Provider`].
+pub fn provider<C, F, Fut>(f: F) -> Provider<C>
+where
+    F: Fn() -> Fut + 'static,
+    Fut: Future<Output = C> + 'static,
+{
+    Provider(Rc::new(move || Box::pin(f())))
+}
+
+/// Converts a bare closure into whichever slot type a generated slot struct's
+/// field asks for, so the macro building that struct never has to know, per
+/// field, whether it's a validated handler, an unchecked one, or a provider.
+/// The macro emits `IntoSlot::into_slot(expr)` for every slot, and the
+/// FIELD'S OWN TYPE — known from the struct definition the macro also
+/// generated — selects which blanket impl below applies. The author writes a
+/// bare closure and never names a wrapper.
+///
+/// `impl From<F> for Handler<M>` can't do this instead: `Handler<M>` is
+/// `Rc<dyn Fn…>`, foreign on both sides of `From`, so coherence rejects it. A
+/// local trait sidesteps that.
+pub trait IntoSlot<T> {
+    fn into_slot(self) -> T;
+}
+
+impl<F, M, Fut> IntoSlot<Handler<M>> for F
+where
+    F: Fn(M) -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    fn into_slot(self) -> Handler<M> {
+        handler(self)
+    }
+}
+
+impl<F, Fut> IntoSlot<UncheckedHandler> for F
+where
+    F: Fn() -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+{
+    fn into_slot(self) -> UncheckedHandler {
+        unchecked_handler(self)
+    }
+}
+
+impl<F, C, Fut> IntoSlot<Provider<C>> for F
+where
+    F: Fn() -> Fut + 'static,
+    Fut: Future<Output = C> + 'static,
+{
+    fn into_slot(self) -> Provider<C> {
+        provider(self)
+    }
+}
 
 /// The value store on its own, seeded from a state's leaves.
 ///
@@ -72,9 +203,25 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     pub fn render(&self) -> Element {
+        self.state.read().render(&RenderCtx::root(self.values, self.on_edit))
+    }
+
+    pub fn render_fragment(&self) -> Element {
         self.state
             .read()
-            .render(&RenderCtx::root(self.values, self.on_edit))
+            .render_fragment(&RenderCtx::root(self.values, self.on_edit))
+    }
+
+    pub fn render_title(&self) -> Element {
+        self.state.read().render_title()
+    }
+
+    pub fn render_fields(&self) -> Element {
+        self.state.read().render_fields(&RenderCtx::root(self.values, self.on_edit))
+    }
+
+    pub fn render_errors(&self) -> Element {
+        self.state.read().render_errors()
     }
 
     /// Add a form-level error — one that belongs to the form as a whole rather
@@ -359,13 +506,45 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn render(&self, ctx: &RenderCtx) -> Element {
-        let title = self.title().as_ref().map(|t| {
+        rsx! {
+            div {
+                class: "form",
+                { self.render_title() }
+                form {
+                    { self.render_fields(ctx) }
+                    { self.render_errors() }
+                    // place for buttons
+                }
+            }
+        }
+    }
+
+    pub fn render_fragment(&self, ctx: &RenderCtx) -> Element {        
+        rsx! {
+            { self.render_title() }
+            { self.render_fields(ctx) }
+            { self.render_errors() }
+            
+        }
+    }
+
+    pub fn render_title(&self) -> Element {
+        self.title().as_ref().map(|t| {
             rsx! {
                 h2 { class: "form-title", "{t}" }
             }
-        });
+        }).unwrap_or_else(|| rsx! {})
+    }
+
+    pub fn render_fields(&self, ctx: &RenderCtx) -> Element {
         let members_rendered = self.members.iter().map(|m| m.render(ctx));
-        let errors: Element = if !self.errors.is_empty() {
+        rsx! {
+            { members_rendered.into_iter() }
+        }
+    }
+
+    pub fn render_errors(&self) -> Element {
+        if !self.errors.is_empty() {
             rsx! {
                 ul {
                     class: "form-errors",
@@ -379,13 +558,6 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             } 
         } else {
             rsx! {}
-        };
-        
-        rsx! {
-            { title }
-            { members_rendered.into_iter() }
-            { errors }
-            
         }
     }
 }
