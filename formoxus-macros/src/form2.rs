@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
-use syn::{Expr, Ident, Path, Result, Token, braced, parenthesized, parse::{Parse, ParseStream}, punctuated::Punctuated};
+use syn::{Expr, Ident, Path, Result, Token, braced, ext::IdentExt, parenthesized, parse::{Parse, ParseStream}, punctuated::Punctuated};
 
 pub fn impl_form2(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FormSpecInput>(input) {
@@ -28,6 +28,10 @@ struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
     validator: Option<Expr>,
+    /// Collected but not yet emitted — the button row is the second half of
+    /// step 5 in `BUTTONS_PLAN.md`. Parsed ahead of the renderer so the grammar
+    /// and its diagnostics can be pinned by tests first.
+    #[allow(dead_code)]
     buttons: Vec<ButtonInfo>,
     field_specs: Vec<FieldSpec>,
 }
@@ -48,6 +52,7 @@ impl FormSpecInput {
                 Entry::Field { path, body } => fsm.field_specs.push(
                     FieldSpec { path, label: body.label, control: body.control }
                 ),
+                Entry::Buttons(buttons) => fsm.buttons = buttons,
             }
         };
 
@@ -129,7 +134,7 @@ impl Parse for FormSpecInput {
         let entries: Vec<Entry> = 
             Punctuated::<Entry, Token![,]>::parse_terminated(&body)?.into_iter().collect();
         let mut seen: HashMap<String, ()> = HashMap::new();
-        let (mut had_title, mut had_validator) = (false, false);
+        let (mut had_title, mut had_validator, mut had_buttons) = (false, false, false);
         for e in &entries {
             match e {
                 Entry::Title(_) if had_title =>
@@ -138,6 +143,9 @@ impl Parse for FormSpecInput {
                 Entry::Validator(_) if had_validator =>
                     return Err(body.error("`validator` is given twice")),
                 Entry::Validator(_) => had_validator = true,
+                Entry::Buttons(_) if had_buttons =>
+                    return Err(body.error("`buttons` is given twice")),
+                Entry::Buttons(_) => had_buttons = true,
                 Entry::Field { path, .. } => {
                     let key = path.key();
                     if seen.insert(key.clone(), ()).is_some() {
@@ -147,7 +155,6 @@ impl Parse for FormSpecInput {
                         ));
                     }
                 }
-                _ => (),
             }
         }
         Ok(FormSpecInput { target, entries })
@@ -188,39 +195,84 @@ impl Entry {
         Ok(Entry::Field { path, body })
     }
 
+    /// `buttons: { save: { type: submit, text: "Save" }, … }`
+    ///
+    /// **Static knowledge only** — which buttons exist, in what order, how each
+    /// one renders, and whether it validates first. What a button *does* is
+    /// supplied at the render call site instead; `BUTTONS_PLAN.md` §2 records
+    /// why that split is forced rather than chosen.
+    ///
+    /// Source order is display order, so this collects a `Vec` and not a map —
+    /// the author's order is the only ordering information there is.
     fn parse_buttons(input: ParseStream<'_>) -> Result<Self> {
         let _buttons: kw::buttons = input.parse()?;
         let _colon: Token![:] = input.parse()?;
+        if !input.peek(syn::token::Brace) {
+            return Err(input.error("expected a buttons block surrounded by braces"));
+        }
         let body;
         let braces = braced!(body in input);
 
-        let buttons: Vec<ButtonInfo> = Vec::new();
+        let mut buttons: Vec<ButtonInfo> = Vec::new();
         while !body.is_empty() {
             let name: Ident = body.parse()?;
-            let _colon: Token![:] = input.parse()?;
-            let button_body;
-            let button_braces = braced!(button_body in body);
-            
+            let _colon: Token![:] = body.parse()?;
+            // Each name becomes one slot in the generated handler struct, so a
+            // repeat is a duplicate field rather than anything an author could
+            // have meant by it.
+            if buttons.iter().any(|b| b.name == name) {
+                return Err(syn::Error::new_spanned(
+                    &name,
+                    format!("`{name}` is specified twice — merge the two bodies into one"),
+                ));
+            }
+            buttons.push(ButtonInfo::parse_body(name, &body)?);
+            if body.peek(Token![,]) {
+                body.parse::<Token![,]>()?;
+            }
         }
 
-         
+        if buttons.is_empty() {
+            return Err(syn::Error::new(braces.span.join(), "empty buttons block"));
+        }
+        Ok(Entry::Buttons(buttons))
     }
 }
 
 impl Parse for Entry {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        if input.peek(kw::title) {
+        if attribute(input, kw::title) {
             Entry::parse_title(input)
-        } else if input.peek(kw::validator) {
+        } else if attribute(input, kw::validator) {
             Entry::parse_validator(input)
+        } else if attribute(input, kw::buttons) {
+            Entry::parse_buttons(input)
         } else if input.peek(syn::Ident) {
             Entry::parse_field(input)
-        } else if input.peek(kw::buttons) {
-            Entry::parse_buttons(input)
         } else {
             Err(input.error("expected a form attribute or a field specifier"))
         }
     }
+}
+
+/// Is this entry the attribute `kw`, rather than a field whose name happens to
+/// be that word?
+///
+/// A `custom_keyword!` is still an `Ident`, so `title` on its own cannot tell
+/// the two apart — and a model with a `title` field is not a corner case, it is
+/// most of them. The second token settles it: an attribute is `name:` and a
+/// field spec is `name =>`, so a following `:` means attribute and anything
+/// else means field.
+///
+/// **Testing for `:` rather than against `=>`.** The `=>` does not have to be
+/// the second token — `title.text => …` and `titles[] => …` are both legal
+/// paths rooted at a keyword, with `.` and `[` sitting where the `=>` would be.
+/// Only `:` is guaranteed to be in this position, and only for an attribute.
+fn attribute<K: syn::parse::Peek>(input: ParseStream<'_>, kw: K) -> bool
+where
+    K::Token: syn::token::Token,
+{
+    input.peek(kw) && input.peek2(Token![:])
 }
 
 /// A dotted path, where any segment may be followed by `[]` to mean "each
@@ -553,6 +605,9 @@ fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
+// Read only by the tests until the button row is emitted — see
+// `FormSpecMeta::buttons`.
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ButtonInfo {
     pub name: syn::Ident,
@@ -561,10 +616,91 @@ pub(crate) struct ButtonInfo {
     pub invocation: Option<Invocation>,
 }
 
+impl ButtonInfo {
+    /// The braced body after `name:`. `type` is the only required key; `text`
+    /// falls back to the name run through the form's label casing, and
+    /// `invocation` to whatever the type implies.
+    fn parse_body(name: Ident, input: ParseStream<'_>) -> Result<Self> {
+        if !input.peek(syn::token::Brace) {
+            return Err(input.error("expected a button body surrounded by braces"));
+        }
+        let body;
+        let braces = braced!(body in input);
+
+        let mut ty: Option<ButtonType> = None;
+        let mut text: Option<String> = None;
+        let mut invocation: Option<Invocation> = None;
+        while !body.is_empty() {
+            // `parse_any`, not the plain `Ident` parse: `type` is a reserved
+            // word, so the ordinary parse rejects the one key that is required.
+            // HTML spells the attribute `type` and so does this — `kind` would
+            // be a second name for a thing the author already knows.
+            let key = Ident::parse_any(&body)?;
+            let _colon: Token![:] = body.parse()?;
+            match key.to_string().as_str() {
+                "type" if ty.is_some() =>
+                    return Err(syn::Error::new_spanned(&key, "duplicate type")),
+                "type" => ty = Some(body.parse()?),
+                "text" if text.is_some() =>
+                    return Err(syn::Error::new_spanned(&key, "duplicate text")),
+                // A literal, not an `Expr`: the text is baked into the spec, and
+                // `ButtonInfo::text` on the derive path is a `String` too.
+                "text" => text = Some(body.parse::<syn::LitStr>()?.value()),
+                "invocation" if invocation.is_some() =>
+                    return Err(syn::Error::new_spanned(&key, "duplicate invocation")),
+                "invocation" => invocation = Some(body.parse()?),
+                other => return Err(syn::Error::new_spanned(
+                    &key,
+                    format!("unknown key {other}, expected type, text, or invocation"),
+                )),
+            }
+            if body.peek(Token![,]) {
+                body.parse::<Token![,]>()?;
+            }
+        }
+
+        let Some(ty) = ty else {
+            // Nothing sensible to default to: every other key describes a
+            // button that already exists, and the type is what decides whether
+            // it submits, resets, or merely runs a handler.
+            return Err(syn::Error::new(
+                braces.span.join(),
+                format!(
+                    "`{name}` needs a `type` — one of {}",
+                    BUTTON_TYPE_NAMES.join(", ")
+                ),
+            ));
+        };
+        Ok(ButtonInfo { name, ty, text, invocation })
+    }
+}
+
+/// When the button's handler runs, overriding what its type implies.
+///
+/// Spelled out rather than borrowed from the derive path's
+/// `handler: validated | unchecked`: `validated` names the *handler*, and what
+/// is actually being chosen is whether the model has to pass validation before
+/// the handler is reached at all.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Invocation {
     IfModelValidates,
     Unconditional,
+}
+
+impl Parse for Invocation {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let name: Ident = input.parse()?;
+        match name.to_string().as_str() {
+            "if_model_validates" => Ok(Invocation::IfModelValidates),
+            "unconditional" => Ok(Invocation::Unconditional),
+            other => Err(syn::Error::new(
+                name.span(),
+                format!(
+                    "unknown invocation `{other}` — expected if_model_validates or unconditional"
+                ),
+            )),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -574,6 +710,59 @@ pub(crate) enum ButtonType {
     Cancel,
     Button,
     Submit,
+}
+
+/// The author-facing button-type vocabulary, same shape and same reasoning as
+/// [`controls!`]: one table generates both the parse and the list the error
+/// message reads from, so the two cannot drift apart.
+///
+/// Lowercase for the same reason control names are — three of these five are
+/// literally the HTML `type` attribute, and the author is writing HTML's word.
+macro_rules! button_types {
+    ( $( $name:ident => $variant:ident ),* $(,)? ) => {
+        impl Parse for ButtonType {
+            fn parse(input: ParseStream<'_>) -> Result<Self> {
+                let name: Ident = input.parse()?;
+                match name.to_string().as_str() {
+                    $( stringify!($name) => Ok(ButtonType::$variant), )*
+                    _ => Err(syn::Error::new(name.span(), unknown_button_type(&name))),
+                }
+            }
+        }
+
+        const BUTTON_TYPE_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
+    };
+}
+
+button_types! {
+    submit      => Submit,
+    reset       => Reset,
+    cancel      => Cancel,
+    destructive => Destructive,
+    button      => Button,
+}
+
+/// The message for a button type that is not in the table — the same three
+/// cases, in the same order, as [`unknown_control`].
+fn unknown_button_type(name: &Ident) -> String {
+    let written = name.to_string();
+    let lowered = to_snake(&written);
+    if lowered != written && BUTTON_TYPE_NAMES.contains(&lowered.as_str()) {
+        return format!(
+            "unknown button type `{written}` — type names are lowercase, write `{lowered}`"
+        );
+    }
+    match BUTTON_TYPE_NAMES
+        .iter()
+        .filter(|n| edit_distance(&lowered, n) <= 2)
+        .min_by_key(|n| edit_distance(&lowered, n))
+    {
+        Some(near) => format!("unknown button type `{written}` — did you mean `{near}`?"),
+        None => format!(
+            "unknown button type `{written}` — expected one of {}",
+            BUTTON_TYPE_NAMES.join(", ")
+        ),
+    }
 }
 
 
@@ -596,6 +785,7 @@ mod tests {
                 Entry::Title(_) => "title",
                 Entry::Validator(_) => "validator",
                 Entry::Field { .. } => "field",
+                Entry::Buttons(_) => "buttons",
             })
             .collect()
     }
@@ -622,6 +812,27 @@ mod tests {
                     },
                 )),
                 _ => None,
+            })
+            .collect()
+    }
+
+    /// Buttons as `("name", "Type", "text")`, in source order, with `""` for
+    /// absent text. Flattened across entries, though the parser allows only one
+    /// `buttons` block.
+    fn buttons(spec: &FormSpecInput) -> Vec<(String, String, String)> {
+        spec.entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Buttons(bs) => Some(bs),
+                _ => None,
+            })
+            .flatten()
+            .map(|b| {
+                (
+                    b.name.to_string(),
+                    format!("{:?}", b.ty),
+                    b.text.clone().unwrap_or_default(),
+                )
             })
             .collect()
     }
@@ -877,6 +1088,283 @@ mod tests {
                 }
             }),
             contains_substring("venues[].city")
+        );
+    }
+
+    // ── Keyword-named fields ─────────────────────────────────────────────
+    //
+    // `title`, `validator` and `buttons` are `custom_keyword!`s and therefore
+    // also idents, so a model field with one of those names collides with the
+    // attribute of the same name. The second token disambiguates: `:` is an
+    // attribute, anything else is a field path.
+
+    #[gtest]
+    fn a_field_may_be_named_title() {
+        // Not a corner case — most models with prose in them have a `title`.
+        let spec = parse(quote! { Article { title => { label: "Headline" } } })
+            .expect("a field named `title` should parse as a field");
+        expect_that!(kinds(&spec), elements_are![eq(&"field")]);
+        expect_that!(fields(&spec)[0].0, eq("title"));
+    }
+
+    #[gtest]
+    fn a_field_may_be_named_validator_or_buttons() {
+        let spec = parse(quote! {
+            Weird {
+                validator => { label: "Validator" },
+                buttons => { control: textarea },
+            }
+        })
+        .expect("fields named after the other two attributes should parse too");
+        expect_that!(kinds(&spec), elements_are![eq(&"field"), eq(&"field")]);
+    }
+
+    #[gtest]
+    fn an_attribute_and_a_field_of_the_same_name_coexist() {
+        // The form is titled "Article" and also HAS a title. Nothing about one
+        // should consume the other.
+        let spec = parse(quote! {
+            Article {
+                title: "Article",
+                title => { label: "Headline" },
+            }
+        })
+        .expect("a `title:` attribute and a `title` field are different entries");
+        expect_that!(kinds(&spec), elements_are![eq(&"title"), eq(&"field")]);
+        expect_that!(fields(&spec)[0].2, eq("\"Headline\""));
+    }
+
+    #[gtest]
+    fn a_path_rooted_at_a_keyword_is_a_field() {
+        // Why the test is for `:` rather than against `=>`: here the second
+        // token is `.`, so "not a fat arrow" would have sent this to
+        // `parse_title` and failed on the missing colon.
+        let spec = parse(quote! { Page { title.text => { control: textarea } } })
+            .expect("a dotted path rooted at a keyword should parse as a field");
+        expect_that!(fields(&spec)[0].0, eq("title.text"));
+    }
+
+    #[gtest]
+    fn a_row_selector_on_a_keyword_name_is_a_field() {
+        // Same hazard with `[` in the second position instead of `.`.
+        let spec = parse(quote! { Deck { buttons[].text => { control: text } } })
+            .expect("a row selector rooted at a keyword should parse as a field");
+        expect_that!(fields(&spec)[0].0, eq("buttons[].text"));
+    }
+
+    // ── Buttons ──────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_buttons_block_parses() {
+        // The shape `tests/reflect/buttons.rs` asks for, verbatim. Also the
+        // regression test for dispatch order: `buttons` is a custom keyword and
+        // therefore also an `Ident`, so if the field arm is tried first this
+        // never reaches `parse_buttons` and dies on the missing `=>`.
+        let spec = parse(quote! {
+            FakeFormWithButtons {
+                some_data => { control: textarea },
+                buttons: {
+                    delete: { type: destructive, text: "Drop" },
+                    reload: { type: reset },
+                    update: { type: submit, text: "Save to Db" },
+                }
+            }
+        })
+        .expect("a buttons block should parse");
+
+        expect_that!(kinds(&spec), elements_are![eq(&"field"), eq(&"buttons")]);
+        expect_that!(
+            buttons(&spec),
+            elements_are![
+                eq(&("delete".to_string(), "Destructive".to_string(), "Drop".to_string())),
+                eq(&("reload".to_string(), "Reset".to_string(), String::new())),
+                eq(&("update".to_string(), "Submit".to_string(), "Save to Db".to_string())),
+            ]
+        );
+    }
+
+    #[gtest]
+    fn button_order_is_source_order() {
+        // Display order is the only thing the author can say about layout, so
+        // the parser must not sort or dedup into a map.
+        let spec = parse(quote! {
+            Source {
+                buttons: {
+                    zebra: { type: cancel },
+                    apple: { type: submit },
+                }
+            }
+        })
+        .unwrap();
+        expect_that!(
+            buttons(&spec).iter().map(|b| b.0.clone()).collect::<Vec<_>>(),
+            elements_are![eq("zebra"), eq("apple")]
+        );
+    }
+
+    #[gtest]
+    fn every_button_type_is_accepted() {
+        let spec = parse(quote! {
+            Source {
+                buttons: {
+                    a: { type: submit },
+                    b: { type: reset },
+                    c: { type: cancel },
+                    d: { type: destructive },
+                    e: { type: button },
+                }
+            }
+        })
+        .unwrap();
+        expect_that!(
+            buttons(&spec).iter().map(|b| b.1.clone()).collect::<Vec<_>>(),
+            elements_are![
+                eq("Submit"),
+                eq("Reset"),
+                eq("Cancel"),
+                eq("Destructive"),
+                eq("Button")
+            ]
+        );
+    }
+
+    #[gtest]
+    fn an_invocation_overrides_what_the_type_implies() {
+        let spec = parse(quote! {
+            Source {
+                buttons: { preview: { type: button, invocation: if_model_validates } }
+            }
+        })
+        .unwrap();
+        let Entry::Buttons(bs) = &spec.entries[0] else {
+            panic!("expected a buttons entry");
+        };
+        expect_that!(bs[0].invocation, some(eq(&Invocation::IfModelValidates)));
+    }
+
+    #[gtest]
+    fn an_absent_invocation_stays_none() {
+        // `None` means "whatever the type implies", which is a different fact
+        // from either variant — the renderer needs to be able to tell.
+        let spec = parse(quote! { Source { buttons: { go: { type: submit } } } }).unwrap();
+        let Entry::Buttons(bs) = &spec.entries[0] else {
+            panic!("expected a buttons entry");
+        };
+        expect_that!(bs[0].invocation, none());
+    }
+
+    #[gtest]
+    fn trailing_commas_are_allowed_in_both_button_braces() {
+        parse(quote! {
+            Source {
+                buttons: {
+                    go: { type: submit, text: "Go", },
+                },
+            }
+        })
+        .expect("trailing commas in a buttons block should parse");
+    }
+
+    // ── Button errors ────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_button_needs_a_type() {
+        let msg = err_of(quote! { Source { buttons: { go: { text: "Go" } } } });
+        expect_that!(msg, contains_substring("go"));
+        expect_that!(msg, contains_substring("type"));
+    }
+
+    #[gtest]
+    fn an_unknown_button_type_suggests_a_near_miss() {
+        expect_that!(
+            err_of(quote! { Source { buttons: { go: { type: submitt } } } }),
+            contains_substring("did you mean `submit`")
+        );
+    }
+
+    #[gtest]
+    fn a_capitalized_button_type_is_told_to_lowercase() {
+        // The spelling an author copies off the `ButtonType` enum.
+        expect_that!(
+            err_of(quote! { Source { buttons: { go: { type: Submit } } } }),
+            contains_substring("write `submit`")
+        );
+    }
+
+    #[gtest]
+    fn an_unknown_button_key_names_itself() {
+        let msg = err_of(quote! { Source { buttons: { go: { type: submit, clas: "x" } } } });
+        expect_that!(msg, contains_substring("clas"));
+        expect_that!(msg, contains_substring("expected type, text, or invocation"));
+    }
+
+    #[gtest]
+    fn a_duplicate_button_key_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { buttons: { go: { type: submit, type: reset } } } }),
+            contains_substring("duplicate")
+        );
+    }
+
+    #[gtest]
+    fn a_repeated_button_name_is_rejected() {
+        // Two slots of the same name in the generated handler struct.
+        let msg = err_of(quote! {
+            Source {
+                buttons: {
+                    go: { type: submit },
+                    go: { type: reset },
+                }
+            }
+        });
+        expect_that!(msg, contains_substring("go"));
+        expect_that!(msg, contains_substring("twice"));
+    }
+
+    #[gtest]
+    fn two_buttons_blocks_are_rejected() {
+        expect_that!(
+            err_of(quote! {
+                Source {
+                    buttons: { go: { type: submit } },
+                    buttons: { stop: { type: cancel } },
+                }
+            }),
+            contains_substring("`buttons` is given twice")
+        );
+    }
+
+    #[gtest]
+    fn an_empty_buttons_block_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { buttons: {} } }),
+            contains_substring("empty buttons block")
+        );
+    }
+
+    #[gtest]
+    fn a_buttons_block_must_be_braced() {
+        expect_that!(
+            err_of(quote! { Source { buttons: submit } }),
+            contains_substring("braces")
+        );
+    }
+
+    #[gtest]
+    fn a_button_body_must_be_braced() {
+        expect_that!(
+            err_of(quote! { Source { buttons: { go: submit } } }),
+            contains_substring("braces")
+        );
+    }
+
+    #[gtest]
+    fn button_text_must_be_a_literal() {
+        // An `Expr` would let a `const` through and make the spec non-constant;
+        // the derive path's `text` is a `String` for the same reason.
+        expect_that!(
+            err_of(quote! { Source { buttons: { go: { type: submit, text: SAVE } } } }).len(),
+            gt(0)
         );
     }
 
