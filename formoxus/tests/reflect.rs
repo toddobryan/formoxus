@@ -291,6 +291,31 @@ fn a_control_can_replace_a_derived_checkbox_with_a_select() {
     expect_that!(html, not(contains_substring("type=\"checkbox\"")));
 }
 
+#[component]
+fn TextareaSecret() -> Element {
+    use_form(|| form_for(
+        &a_trip(),
+        form2! {
+            Trip {
+                secret => { control: textarea },
+            }
+        },
+    ))
+    .render_fragment()
+}
+
+#[gtest]
+fn a_control_can_override_text_to_a_textarea() {
+    // `render_control`'s panic is survivable under SSR — a sibling field's
+    // markup keeps showing up even when this one fails to render — so this
+    // asserts directly on the overridden field rather than on the page as a
+    // whole. See `.claude/memory/next_up_two_todos.md`.
+    let html = render_to_html(TextareaSecret);
+    expect_that!(html, contains_substring("<textarea"));
+    expect_that!(html, contains_substring("hunter2"));
+    expect_that!(html, not(contains_substring("type=\"password\"")));
+}
+
 // ── Both keys at once ────────────────────────────────────────────────────
 
 #[component]

@@ -135,6 +135,9 @@ pub fn ScalarInput(
         ) => {
             rsx! { HtmlInput { input_type: input_type.clone(), values, props } }
         }
+        (ValueKind::Text { .. }, ControlType::Textarea) => {
+            rsx! { TextareaInput { values, props } }
+        }
         (ValueKind::Bool, ControlType::Checkbox) => {
             rsx! { BooleanInput { values, props } }
         }
@@ -214,6 +217,47 @@ pub fn HtmlInput(
             }
             input {
                 r#type: input_type.html_type(),
+                name: "{path}",
+                value: "{current}",
+                required,
+                aria_invalid: invalid,
+                oninput: move |e: FormEvent| {
+                    let raw = e.value();
+                    write_value(&path, values, raw);
+                },
+            }
+            FieldErrors { errors }
+        }
+    }
+}
+
+/// A multi-line text input bound to one path in the value map.
+///
+/// Otherwise identical to [`HtmlInput`] — same controlled-value binding, same
+/// `aria-invalid` rule, same label layout. There is no hidden-input branch to
+/// mirror: `Textarea` is only ever chosen as an override on a `Text` field, and
+/// nothing here needs the extra `InputType` cases (`Password`'s masking,
+/// `Hidden`'s bare markup) that make `HtmlInput` carry one.
+#[component]
+pub fn TextareaInput(
+    values: ValuesByPath,
+    props: FieldProps,
+) -> Element {
+    let FieldProps { path, label: label_text, required, errors } = props;
+
+    let current = get_current(&path, values);
+
+    let invalid = (!errors.is_empty()).then_some("true");
+
+    rsx! {
+        label { class: "form-field",
+            if let Some(text) = label_text {
+                span { class: "field-label", "{text}" }
+            }
+            if required {
+                span { class: "required", " *" }
+            }
+            textarea {
                 name: "{path}",
                 value: "{current}",
                 required,
