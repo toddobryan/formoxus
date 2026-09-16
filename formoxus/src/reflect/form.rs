@@ -16,6 +16,7 @@ use dioxus::prelude::*;
 use crate::reflect::widgets::ControlType;
 use crate::reflect::{RenderCtx, ValuesByPath};
 use crate::reflect::build::{FormMode, members_for};
+use crate::reflect::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FormAccessError, FormError};
 use crate::reflect::members::{Edit, FormMember, no_such_path, owns};
 
@@ -202,8 +203,103 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         self.state.into()
     }
 
-    pub fn render(&self) -> Element {
-        self.state.read().render(&RenderCtx::root(self.values, self.on_edit))
+    /// The whole form — title, fields, errors, button row — with the handlers
+    /// for this render.
+    ///
+    /// Handlers come in here rather than living in the `FormSpec` because they
+    /// need what only the call site has: the `Form` itself (for `push_error`),
+    /// current props, a `Navigator`. A form with no buttons passes
+    /// `Fns::new()`.
+    ///
+    /// The shell lives here rather than on [`FormState`] because every button
+    /// needs this handle to validate — `FormState` has the button *specs* but
+    /// no way to run one.
+    pub fn render(&self, fns: Fns<T>) -> Element {
+        let ctx = RenderCtx::root(self.values, self.on_edit);
+        let state = self.state.read();
+        let buttons = state.buttons().to_vec();
+        let problems = fns.reconcile(&buttons);
+
+        // The submit button gets no `onclick`: native `type="submit"` already
+        // routes both a click on it AND Enter-in-a-field through the form's
+        // `onsubmit`, so one handler covers both. Wiring a click as well would
+        // run it twice.
+        let on_submit = buttons
+            .iter()
+            .find(|b| b.ty == ButtonType::Submit)
+            .and_then(|b| fns.get(&b.name).cloned());
+        let handle = *self;
+
+        let rendered_buttons = self.render_buttons(&buttons, &fns);
+
+        rsx! {
+            div {
+                class: "form",
+                { state.render_title() }
+                form {
+                    onsubmit: move |e: FormEvent| {
+                        // Without this the browser navigates and the handler's
+                        // future is dropped mid-flight.
+                        e.prevent_default();
+                        let on_submit = on_submit.clone();
+                        async move {
+                            if let Some(f) = on_submit {
+                                run_button(handle, f).await;
+                            }
+                        }
+                    },
+                    { state.render_fields(&ctx) }
+                    { state.render_errors() }
+                    { render_problems(&problems) }
+                    { rendered_buttons }
+                }
+            }
+        }
+    }
+
+    /// The button row, in declaration order. Nothing at all when the form
+    /// declares none, so a view that hand-writes its own buttons is unaffected.
+    fn render_buttons(&self, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
+        if buttons.is_empty() {
+            return rsx! {};
+        }
+        let handle = *self;
+        let rendered = buttons
+            .iter()
+            .map(|b| {
+                let f = fns.get(&b.name).cloned();
+                let is_submit = b.ty == ButtonType::Submit;
+                rsx! {
+                    button {
+                        key: "{b.name}",
+                        r#type: "{b.ty.html_type()}",
+                        class: "{b.ty.default_class()}",
+                        // A button with nothing behind it is inert rather than
+                        // absent: omitting it would hide the mistake, and a
+                        // live `submit` with no handler would reload the page.
+                        disabled: f.is_none(),
+                        onclick: move |_| {
+                            let f = f.clone();
+                            async move {
+                                if let Some(f) = f
+                                    && !is_submit
+                                {
+                                    run_button(handle, f).await;
+                                }
+                            }
+                        },
+                        "{b.label()}"
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+        rsx! {
+            // Pico stretches `button[type=submit]` to the full field width to
+            // match its form controls; this wrapper opts back out and
+            // right-aligns the row. Same class the derive path emits, so the
+            // existing rule covers both.
+            div { class: "formoxus-buttons", { rendered.into_iter() } }
+        }
     }
 
     pub fn render_fragment(&self) -> Element {
@@ -257,6 +353,48 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let mut state = state.write();
         state.apply(&self.values.read().clone());
         state.validate()
+    }
+}
+
+/// Run one button's handler.
+///
+/// **The `ButtonFn` variant decides how it is called, not the spec's
+/// `invocation`** — it is the only thing that *can* decide, since a validated
+/// handler takes a model and an unchecked one takes nothing, and no amount of
+/// declared intent conjures the right arity at runtime. A spec that disagrees
+/// with the closure it was given is reported by [`Fns::reconcile`] instead, so
+/// the disagreement is visible rather than silently resolved.
+async fn run_button<T>(form: Form<T>, f: ButtonFn<T>)
+where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    match f {
+        ButtonFn::Validated(h) => {
+            // No model, no call: the errors `validate` just wrote are already
+            // on the fields, so the page explains itself.
+            if let Some(model) = form.validate() {
+                h(model).await;
+            }
+        }
+        ButtonFn::Unchecked(h) => h().await,
+    }
+}
+
+/// Handler/spec mismatches, rendered beside the form's own errors and marked
+/// apart from them — these are a programming mistake, not something the person
+/// filling in the form did.
+fn render_problems(problems: &[String]) -> Element {
+    if problems.is_empty() {
+        return rsx! {};
+    }
+    let problems = problems.to_vec();
+    rsx! {
+        ul {
+            class: "form-errors formoxus-button-problems",
+            for p in problems {
+                li { class: "form-error", "{p}" }
+            }
+        }
     }
 }
 
@@ -314,6 +452,9 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     title: Option<String>,
     fields: IndexMap<String, FieldSpec>,
     validator: Option<fn(&T) -> Vec<FormError>>,
+    /// Declaration order, which is display order — `form2!` collects a `Vec`
+    /// for exactly this reason.
+    buttons: Vec<ButtonSpec>,
     _type: PhantomData<T>,
 }
 
@@ -325,7 +466,13 @@ pub struct FieldSpec {
 
 impl<T:  Clone + Debug + Facet<'static>> FormSpec<T> {
     pub fn new() -> Self {
-        Self { title: None, fields: IndexMap::new(), validator: None, _type: PhantomData }
+        Self {
+            title: None,
+            fields: IndexMap::new(),
+            validator: None,
+            buttons: Vec::new(),
+            _type: PhantomData,
+        }
     }
 
     pub fn with_title(mut self, title: &str) -> Self {
@@ -346,6 +493,17 @@ impl<T:  Clone + Debug + Facet<'static>> FormSpec<T> {
     pub fn with_validator(mut self, f: fn(&T) -> Vec<FormError>) -> Self {
         self.validator = Some(f);
         self
+    }
+
+    /// Replaces rather than appends: `form2!` allows one `buttons:` block, so
+    /// a second call is a caller changing its mind, not adding to a list.
+    pub fn with_buttons(mut self, buttons: Vec<ButtonSpec>) -> Self {
+        self.buttons = buttons;
+        self
+    }
+
+    pub fn buttons(&self) -> &[ButtonSpec] {
+        &self.buttons
     }
 
     fn field(&mut self, path: &str) -> &mut FieldSpec {
@@ -505,18 +663,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.edit(&Edit::new_choose_variant(path, variant))
     }
 
-    pub fn render(&self, ctx: &RenderCtx) -> Element {
-        rsx! {
-            div {
-                class: "form",
-                { self.render_title() }
-                form {
-                    { self.render_fields(ctx) }
-                    { self.render_errors() }
-                    // place for buttons
-                }
-            }
-        }
+    pub fn buttons(&self) -> &[ButtonSpec] {
+        self.spec.buttons()
     }
 
     pub fn render_fragment(&self, ctx: &RenderCtx) -> Element {        

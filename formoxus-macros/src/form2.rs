@@ -28,10 +28,6 @@ struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
     validator: Option<Expr>,
-    /// Collected but not yet emitted — the button row is the second half of
-    /// step 5 in `BUTTONS_PLAN.md`. Parsed ahead of the renderer so the grammar
-    /// and its diagnostics can be pinned by tests first.
-    #[allow(dead_code)]
     buttons: Vec<ButtonInfo>,
     field_specs: Vec<FieldSpec>,
 }
@@ -67,6 +63,12 @@ impl FormSpecInput {
                 .with_validator(#v)
             }
         });
+        // Omitted entirely when there are none, so a spec without buttons
+        // expands to exactly what it did before they existed.
+        let buttons: Option<TokenStream2> = (!fsm.buttons.is_empty()).then(|| {
+            let specs = fsm.buttons.iter().map(ButtonInfo::spec_tokens);
+            quote! { .with_buttons(::std::vec![ #(#specs),* ]) }
+        });
         let fields: Vec<TokenStream2> = fsm.field_specs.iter().map(|f| {
             let key = f.path.key();
             let label = f.label.as_ref().map(|l| quote! { .with_label(#key, &#l) });
@@ -92,6 +94,7 @@ impl FormSpecInput {
                 ::formoxus::reflect::form::FormSpec::<#model_type>::new()
                 #title
                 #validator
+                #buttons
                 #(#fields)*         
             }
         }
@@ -605,9 +608,6 @@ fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-// Read only by the tests until the button row is emitted — see
-// `FormSpecMeta::buttons`.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ButtonInfo {
     pub name: syn::Ident,
@@ -617,6 +617,24 @@ pub(crate) struct ButtonInfo {
 }
 
 impl ButtonInfo {
+    /// The `ButtonSpec` this declares, fully qualified.
+    ///
+    /// The name goes across as a string because it is a map key at render, not
+    /// an identifier — the reflection path has no per-form type to hang a field
+    /// on, which is the whole reason handlers are reconciled at runtime.
+    fn spec_tokens(&self) -> TokenStream2 {
+        let name = self.name.to_string();
+        let ty = self.ty.tokens();
+        let text = self.text.as_ref().map(|t| quote! { .with_text(#t) });
+        let invocation = self.invocation.as_ref().map(|i| {
+            let i = i.tokens();
+            quote! { .with_invocation(#i) }
+        });
+        quote! {
+            ::formoxus::reflect::buttons::ButtonSpec::new(#name, #ty) #text #invocation
+        }
+    }
+
     /// The braced body after `name:`. `type` is the only required key; `text`
     /// falls back to the name run through the form's label casing, and
     /// `invocation` to whatever the type implies.
@@ -687,6 +705,16 @@ pub(crate) enum Invocation {
     Unconditional,
 }
 
+impl Invocation {
+    fn tokens(&self) -> TokenStream2 {
+        let variant = match self {
+            Invocation::IfModelValidates => quote!(IfModelValidates),
+            Invocation::Unconditional => quote!(Unconditional),
+        };
+        quote! { ::formoxus::reflect::buttons::Invocation::#variant }
+    }
+}
+
 impl Parse for Invocation {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name: Ident = input.parse()?;
@@ -726,6 +754,19 @@ macro_rules! button_types {
                 match name.to_string().as_str() {
                     $( stringify!($name) => Ok(ButtonType::$variant), )*
                     _ => Err(syn::Error::new(name.span(), unknown_button_type(&name))),
+                }
+            }
+        }
+
+        impl ButtonType {
+            /// The `ButtonType` variant this names, fully qualified. Generated
+            /// from the same table as the parse, so a new type cannot be
+            /// accepted and then fail to expand.
+            fn tokens(&self) -> TokenStream2 {
+                match self {
+                    $( ButtonType::$variant => quote! {
+                        ::formoxus::reflect::buttons::ButtonType::$variant
+                    }, )*
                 }
             }
         }

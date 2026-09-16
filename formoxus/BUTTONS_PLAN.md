@@ -1,7 +1,8 @@
 # Buttons on the reflection path
 
-Design settled 2026-09-14, not yet built. Sibling to `REFLECT_PLAN.md`, which
-covers the shape walk; this covers what wraps it.
+Design settled 2026-09-14; **built 2026-09-16, with §3 overturned on the
+reflection path** — see "What §3 ran into" below before reading it. Sibling to
+`REFLECT_PLAN.md`, which covers the shape walk; this covers what wraps it.
 
 The reflection path renders fields and nothing else. `FormState::render`
 (`src/reflect/form.rs`) emits title -> members -> errors as a bare fragment, the
@@ -180,26 +181,63 @@ field.
 
 Struct-plus-macro gets the builder's ergonomics with the struct's error messages.
 
-## Open: the macro's name
+## What §3 ran into
 
-`wire!` was proposed and rejected. Two candidates that come from the codebase's
-own vocabulary rather than from nowhere:
+§3's slot struct is right for the derive path and **impossible on the reflection
+path**. Three findings, each verified rather than reasoned about:
 
-- **`supply!`** — the verb already used in the prose this design comes from
-  ("supplied at the `store.render(...)` call site"). Names the act.
-- **`slots!`** — `slot` is already the code's noun for these fields
-  (`FieldMeta::providers_slot`, "a provided-data slot" in `container.rs`). Names
-  the destination.
+1. **Nothing to name.** `form2!` is an *expression* macro producing a runtime
+   `FormSpec` value, so at the `render` call site — usually another function —
+   there is no per-form type in scope. `<T as FormState>::Handlers { … }` does
+   not rescue it: qualified paths in struct-literal position are still unstable
+   (rust#86935), so a macro must name a concrete struct.
+2. **`IntoSlot` cannot replace the field type.** A map has no field type to
+   select an impl from, and one target type cannot carry impls for both `Fn(M)`
+   and `Fn()` — coherence cannot prove a type implements only one, so it is a
+   hard `E0119`.
+3. **Moving `form2!` to item position would cost more than it bought.**
+   `title:` takes an `Expr` that captures locals, which is the property that
+   motivated `Expr` in the first place ("a fetched resource, a route parameter,
+   a signal" — `tests/reflect.rs`, nine tests). An item cannot capture a local.
 
-Used `supply!` in the examples above as a placeholder. Still Todd's call.
+So the reflection path trades the compile-time check for a render-time one,
+which is the trade the rest of that path already makes — an unwired control
+fails at render too.
+
+- `using_fns!` builds a `Fns<T>` map, reading each closure's **arity**
+  syntactically: `|m| …` validates first, `|| …` runs unconditionally. A macro
+  can see what no trait can. A non-closure is rejected, since its arity is
+  invisible and guessing picks the wrong variant silently.
+- `Fns::reconcile` replaces `missing field 'cancel'`, checking both directions
+  plus two things the struct never could: that a closure's arity agrees with the
+  button's declared `invocation`, and that a form declares at most one submit
+  button.
+- Mismatches render as form errors and leave the button `disabled`, rather than
+  panicking — on wasm a panic aborts instead of reaching an `ErrorBoundary`.
+
+The derive path is untouched and is being retired, so §3 stays as written for
+the record rather than as work to do.
+
+## Settled: the macro's name
+
+`using_fns!`. `wire!`, `supply!` and `slots!` were the earlier candidates;
+`slots!` in particular stopped fitting once the slot struct went away on this
+path, since what the macro builds is a map of fns and not a set of slots.
 
 ## Build order
 
-1. Split `render()` / fields-only, move the 41 call sites, no behavior change.
-2. `render()` emits the `<form>`, still with no buttons.
-3. `IntoSlot` plus the compile test that decides whether one generic macro is
-   possible.
-4. The slot struct and the macro, on the **derive** path first — it already has
-   buttons and providers, so it is the real test, and the two generated structs
-   disappear from the public API.
-5. `buttons:` in `form2!`, and the reflection path's button row.
+1. ~~Split `render()` / fields-only, move the 41 call sites, no behavior
+   change.~~ Done.
+2. ~~`render()` emits the `<form>`, still with no buttons.~~ Done — and the
+   shell has since moved from `FormState` to `Form`, because every button needs
+   the live handle to validate.
+3. ~~`IntoSlot` plus the compile test.~~ Done, and it works — but only where a
+   field type selects the impl, which the reflection path has nowhere to put.
+4. ~~The slot struct and the macro, on the **derive** path first.~~ **Dropped.**
+   The derive path is being retired, so nothing new goes into it.
+5. ~~`buttons:` in `form2!`, and the reflection path's button row.~~ Done:
+   the `buttons:` grammar, `ButtonSpec`/`ButtonType`/`Invocation`,
+   `FormSpec::with_buttons`, the row, `using_fns!`, and `Fns::reconcile`.
+
+Still open: `login.rs` and `form_demo.rs` still hand-write their `<form>` and
+their buttons, and could now declare them instead.

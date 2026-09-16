@@ -25,6 +25,17 @@ pub use formoxus_macros::FieldSet;
 #[cfg(feature = "derive")]
 pub use formoxus_macros::form2;
 
+/// `using_fns! { save: |m| async move { … }, … }` — the handlers for one
+/// [`reflect::Form::render`], keyed by button name.
+///
+/// Which closures validate first is read from their **arity**: `|m| …` receives
+/// the model and only runs once it validates, `|| …` takes nothing and runs
+/// regardless. Names are checked against the form's declared buttons at render,
+/// not at compile time — the reflection path has no per-form type to hang a
+/// struct literal on.
+#[cfg(feature = "derive")]
+pub use formoxus_macros::using_fns;
+
 /// The common surface. `use formoxus::prelude::*;` brings in the derive, the trait
 /// vocabulary, and the built-in field widgets — the one blessed glob. For precise
 /// imports, reach into the modules directly (`formoxus::fields::FormField`, …); the

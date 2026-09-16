@@ -641,7 +641,7 @@ fn WrappedTitledEventForm() -> Element {
     let form = use_form(|| {
         empty_form::<EventForCreate>(FormSpec::default().with_title("New Event"))
     });
-    form.render()
+    form.render(Fns::new())
 }
 
 #[gtest]

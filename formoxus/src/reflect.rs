@@ -10,6 +10,7 @@
 //! replaces the other is still undecided — see `REFLECT_PLAN.md`.
 
 pub mod build;
+pub mod buttons;
 pub mod fields;
 pub mod form;
 pub mod members;
@@ -19,6 +20,7 @@ pub mod widgets;
 // crate::reflect::*`) reaches the whole vocabulary without knowing which module
 // each name lives in.
 pub use crate::error::{FieldError, FormError};
+pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
 pub use fields::{FieldValue, FormField};
 pub use form::{
     FieldSpec, Form, FormSpec, FormState, Handler, IntoSlot, Provider, UncheckedHandler,

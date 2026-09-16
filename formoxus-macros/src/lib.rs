@@ -63,6 +63,7 @@ mod field_set_meta;
 mod form;
 mod form2;
 mod form_meta;
+mod using_fns;
 
 /// Derive `Form`. See the module docs — currently a compiling no-op skeleton,
 /// ready for the real codegen. The trait `formoxus::Form` and this derive share a
@@ -80,6 +81,13 @@ pub fn derive_form(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FieldSet, attributes(field_set, form))]
 pub fn derive_fieldset(input: TokenStream) -> TokenStream {
     field_set::derive_field_set(input.into()).into()
+}
+
+/// The handlers for one `render`, keyed by button name — see
+/// [`using_fns`](crate::using_fns) for why this is a map and not a struct.
+#[proc_macro]
+pub fn using_fns(input: TokenStream) -> TokenStream {
+    using_fns::impl_using_fns(input.into()).into()
 }
 
 #[proc_macro]
