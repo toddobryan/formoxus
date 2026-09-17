@@ -16,9 +16,10 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::error::FormAccessError;
+use crate::error::{FieldError, FormAccessError};
 use crate::label_case::{LabelCase, ToCase};
 use crate::reflect::FieldSpec;
+use crate::reflect::form::FieldErrors;
 use dioxus::stores::Store;
 
 pub type FieldSpecs = IndexMap<String, FieldSpec>;
@@ -53,6 +54,8 @@ pub trait FormMember: Debug {
     fn is_present(&self) -> bool;
     fn clear_errors(&mut self);
 
+    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors);
+
     /// Apply a structural edit — choose a variant, add or remove a row.
     ///
     /// One method rather than one per edit kind because the containment walk
@@ -60,6 +63,8 @@ pub trait FormMember: Debug {
     /// member that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
+
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError>;
 
     fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs);
 }

@@ -3,8 +3,9 @@
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use std::collections::HashMap;
-use crate::error::{FormAccessError, FormError};
+use crate::error::{FieldError, FormAccessError, FormError};
 use crate::reflect::RenderCtx;
+use crate::reflect::form::FieldErrors;
 use crate::reflect::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
 };
@@ -67,6 +68,13 @@ impl FormMember for FieldSet {
         }
     }
 
+    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+        let nested = qualify(prefix, &self.name);
+        for m in self.members.iter() {
+            m.collect_errors(&nested, out);
+        }
+    }
+
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
         let nested = qualify(prefix, &self.name);
         for m in self.members.iter_mut() {
@@ -96,6 +104,17 @@ impl FormMember for FieldSet {
         for m in self.members.iter_mut() {
             if owns(&qualify(&nested, &m.name()), path) {
                 return m.edit(&nested, edit);
+            }
+        }
+        Err(no_such_path(path))
+    }
+
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+        let nested = qualify(prefix, &self.name);
+        ensure_owned(&nested, path)?;
+        for m in self.members.iter_mut() {
+            if owns(&qualify(&nested, &m.name()), path) {
+                return m.push_field_error(&nested, path, error);
             }
         }
         Err(no_such_path(path))

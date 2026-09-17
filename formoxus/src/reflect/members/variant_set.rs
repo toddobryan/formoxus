@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use crate::reflect::RenderCtx;
 use crate::reflect::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
+use crate::reflect::form::FieldErrors;
 use crate::reflect::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, variant_segment,
 };
@@ -216,6 +217,30 @@ impl FormMember for VariantSet {
         }
     }
 
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+        // Unlike `edit`, `path == my_path` IS meaningful here: `self.errors` is
+        // already `Vec<FieldError>` — it's what renders beside the `<select>` —
+        // so a server complaint about the CHOICE itself ("pick a grading
+        // scheme") belongs right there, not forwarded to a child.
+        let my_path = qualify(prefix, &self.name);
+        ensure_owned(&my_path, path)?;
+        if path == my_path {
+            self.errors.push(error);
+            return Ok(());
+        }
+        // Otherwise it's about a field inside the chosen variant — same
+        // containment walk as `forward_to_child`.
+        let Some(child_prefix) = self.child_prefix(prefix) else {
+            return Err(no_such_path(path)); // unchosen: no children to be inside
+        };
+        for m in self.members.iter_mut() {
+            if owns(&qualify(&child_prefix, &m.name()), path) {
+                return m.push_field_error(&child_prefix, path, error);
+            }
+        }
+        Err(no_such_path(path))
+    }
+
 
     fn clear_errors(&mut self) {
         self.errors.clear();
@@ -243,6 +268,15 @@ impl FormMember for VariantSet {
         };
         for m in self.members.iter() {
             m.collect_leaves(&nested, out);
+        }
+    }
+
+    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+        let Some(nested) = self.child_prefix(prefix) else {
+            return;
+        };
+        for m in self.members.iter() {
+            m.collect_errors(&nested, out);
         }
     }
 

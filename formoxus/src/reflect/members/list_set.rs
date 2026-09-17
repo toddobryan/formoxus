@@ -7,8 +7,9 @@
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use std::collections::HashMap;
-use crate::error::{FormAccessError, FormError};
+use crate::error::{FieldError, FormAccessError, FormError};
 use crate::reflect::RenderCtx;
+use crate::reflect::form::FieldErrors;
 use crate::reflect::widgets::{AddRowButton, RemoveRowButton};
 use crate::reflect::build::{FormMode, member_for_shape};
 use crate::reflect::members::{
@@ -131,6 +132,13 @@ impl FormMember for ListSet {
         }
     }
 
+    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+        let nested = qualify(prefix, &self.name);
+        for r in self.rows.iter() {
+            r.collect_errors(&nested, out);
+        }
+    }
+
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
         let nested = qualify(prefix, &self.name);
         for r in self.rows.iter_mut() {
@@ -193,7 +201,23 @@ impl FormMember for ListSet {
         }
         Err(no_such_path(path))
     }
-    
+
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+        // No `path == my_path` case, unlike `edit`: a list has no field of its
+        // own to attach a `FieldError` to (`self.errors` holds `FormError`s, a
+        // different type) — only a row can be the field a server complained
+        // about. `my_path`, not a row's own path, for the same reason `edit`
+        // qualifies against it: a row qualifies its own name onto whatever
+        // prefix it's handed.
+        let my_path = qualify(prefix, &self.name);
+        ensure_owned(&my_path, path)?;
+        for m in self.rows.iter_mut() {
+            if owns(&qualify(&my_path, &m.name()), path) {
+                return m.push_field_error(&my_path, path, error);
+            }
+        }
+        Err(no_such_path(path))
+    }
 
     fn clear_errors(&mut self) {
         self.errors.clear();

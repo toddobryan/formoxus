@@ -4,7 +4,7 @@ use dioxus::core::Element;
 
 use crate::reflect::members::{Edit, FieldSpecs};
 use crate::reflect::{FormMember, RenderCtx};
-use crate::error::FormAccessError;
+use crate::error::{FieldError, FormAccessError};
 
 
 #[derive(Clone, Debug)]
@@ -34,6 +34,10 @@ impl FormMember for OptionMember {
 
     fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         self.inner.collect_leaves(prefix, out);
+    }
+
+    fn collect_errors(&self, prefix: &str, out: &mut crate::reflect::form::FieldErrors) {
+        self.inner.collect_errors(prefix, out);
     }
 
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
@@ -73,6 +77,12 @@ impl FormMember for OptionMember {
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
         self.inner.edit(prefix, edit)
+    }
+
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+        // Same pass-through as `edit`, for the same reason: a decorator, not a
+        // path segment.
+        self.inner.push_field_error(prefix, path, error)
     }
 
 

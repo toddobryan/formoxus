@@ -6,7 +6,7 @@ use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
 use crate::error::{FieldError, FormAccessError};
 use crate::reflect::RenderCtx;
-use crate::reflect::members::{Edit, FieldSpecs, FormMember, default_label, qualify};
+use crate::reflect::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
 use crate::reflect::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -255,6 +255,15 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         })
     }
 
+    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+        if path == qualify(prefix, &self.name) {
+            self.errors.push(error);
+            Ok(())
+        } else {
+            Err(no_such_path(path))
+        }
+    }
+
     fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
             self.custom_control = spec.custom_control.clone().or(self.custom_control.take());
@@ -264,6 +273,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     
     fn clear_errors(&mut self) {
         self.errors.clear();
+    }
+    
+    fn collect_errors(&self, prefix: &str, out: &mut super::form::FieldErrors) {
+        let path = qualify(prefix, &self.name);
+        out.push((path.clone(), self.errors.clone()));
     }
 
 }
