@@ -272,8 +272,30 @@ impl FormMember for VariantSet {
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+        // The inverse of `push_field_error`, NOT of `collect_leaves` above —
+        // which is why this does NOT early-return when unchosen, and why it
+        // reports `my_path` rather than only recursing.
+        //
+        // `self.errors` sits at `my_path`, where the `<select>` is, one segment
+        // SHALLOWER than `child_prefix`'s `$Variant` — the same two-paths trap
+        // `edit` documents. Reporting them under `nested` would name a path no
+        // widget renders.
+        //
+        // Three writers put errors there and all three have to come back out:
+        // `validate` (unchosen), `lookup_variant` (a stale name from a live
+        // select), and `push_field_error` (a server verdict about the choice
+        // itself). The first fires PRECISELY when there are no children to
+        // recurse into, so an early return would drop the one error this
+        // member reliably produces.
+        //
+        // Emitted before recursing so the collected order matches `render`,
+        // which puts `VariantSelect` above `members`.
+        let my_path = qualify(prefix, &self.name);
+        if !self.errors.is_empty() {
+            out.push((my_path, self.errors.clone()));
+        }
         let Some(nested) = self.child_prefix(prefix) else {
-            return;
+            return; // unchosen: no children, and my own errors are already out
         };
         for m in self.members.iter() {
             m.collect_errors(&nested, out);

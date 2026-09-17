@@ -54,6 +54,28 @@ pub trait FormMember: Debug {
     fn is_present(&self) -> bool;
     fn clear_errors(&mut self);
 
+    /// Flatten this member's errors into `(qualified_path, errors)` pairs — the
+    /// read counterpart to [`push_field_error`](Self::push_field_error), and
+    /// what turns a validated tree into something that crosses a server fn.
+    ///
+    /// **Only members that actually have errors appear.** A clean member pushes
+    /// nothing, so an empty result means the subtree passed — which is what
+    /// lets a caller branch on `fields.is_empty()` instead of scanning for a
+    /// non-empty `Vec`. Every impl has to honour this or the shape stops
+    /// meaning that.
+    ///
+    /// **A container reports its OWN path too, when it has errors of its own.**
+    /// The rule is `push_field_error`'s, mirrored: whatever can be pushed at a
+    /// path has to be collectable from it. `VariantSet` is the one member where
+    /// that bites today — its `errors` render beside the `<select>` at its own
+    /// path, not under a child.
+    ///
+    /// Container-level [`FormError`](crate::error::FormError)s (`FieldSet` and
+    /// `ListSet` each hold a `Vec<FormError>`) have no home in `FieldErrors`,
+    /// which is `FieldError`-typed, and so are NOT collected. Latent rather
+    /// than live: nothing pushes to either today — `validate` only clears them
+    /// — but a future `ListSet` min/max-rows check would be the first writer
+    /// and would need `FormErrors` to grow somewhere to put it.
     fn collect_errors(&self, prefix: &str, out: &mut FieldErrors);
 
     /// Apply a structural edit — choose a variant, add or remove a row.

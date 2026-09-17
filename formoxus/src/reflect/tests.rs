@@ -7,6 +7,7 @@ pub mod models;
 
 mod empty_strings;
 mod enums;
+mod errors;
 mod forms;
 mod into_slot;
 mod optional_containers;
