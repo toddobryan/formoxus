@@ -18,7 +18,7 @@ use crate::reflect::fields::ValueKind;
 use crate::reflect::{Edit, ValuesByPath};
 use crate::widgets::FieldErrors;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub enum ControlType {
     Input(InputType),
     Textarea,
@@ -28,6 +28,80 @@ pub enum ControlType {
     CheckboxMultiple,
     RadioGroup,
     File,
+    /// A widget the author supplied, via `form2!`'s `custom(MyWidget)`.
+    ///
+    /// The escape hatch for a value kind the built-in controls cannot serve —
+    /// `Markdown` needs a live preview, a `Ref<Source>` needs an async-fed
+    /// combobox. Neither is expressible as an `<input type=…>`, and neither
+    /// belongs in `ValueKind`: they are presentation, not value family.
+    ///
+    /// **`fn` pointer, NOT `Box<dyn Fn>` — the derives force it.** `ControlType`
+    /// is `Clone + Debug + PartialEq`, and a boxed closure supplies none of the
+    /// three. A non-capturing closure coerces to a plain `fn`, which is `Copy`,
+    /// clones trivially, and compares by address. That is what lets this variant
+    /// exist without disturbing anything that already holds a `ControlType`.
+    ///
+    /// The cost is `Debug`: a fn pointer prints as an address. Hence `name`,
+    /// which `form2!` fills in from the widget's own path so panics and test
+    /// assertions read `custom(MarkdownWidget)` rather than `0x7f…`.
+    Custom {
+        name: &'static str,
+        render: fn(ControlProps) -> Element,
+    },
+}
+
+// `Debug` and `PartialEq` are hand-written rather than derived, and only because
+// of `Custom`'s `fn` pointer. Both impls reproduce the derive exactly for every
+// other variant.
+impl std::fmt::Debug for ControlType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Input(t) => write!(f, "Input({t:?})"),
+            Self::Textarea => f.write_str("Textarea"),
+            Self::Select => f.write_str("Select"),
+            Self::SelectMultiple => f.write_str("SelectMultiple"),
+            Self::Checkbox => f.write_str("Checkbox"),
+            Self::CheckboxMultiple => f.write_str("CheckboxMultiple"),
+            Self::RadioGroup => f.write_str("RadioGroup"),
+            Self::File => f.write_str("File"),
+            // `form2!`'s own spelling, so the panic in `ScalarInput` quotes back
+            // what the author wrote. Deriving this would print the fn pointer's
+            // address beside the name, which is noise in every message it
+            // appears in.
+            Self::Custom { name, .. } => write!(f, "custom({name})"),
+        }
+    }
+}
+
+impl PartialEq for ControlType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Input(a), Self::Input(b)) => a == b,
+            // Two custom controls are the same control when they name the same
+            // widget. Comparing the `fn` pointers is what rustc warns about and
+            // is genuinely meaningless here: identical functions may be merged
+            // to one address, and one function may be duplicated across codegen
+            // units, so neither equality nor inequality tells you anything about
+            // which widget you have.
+            (Self::Custom { name: a, .. }, Self::Custom { name: b, .. }) => a == b,
+            _ => std::mem::discriminant(self) == std::mem::discriminant(other),
+        }
+    }
+}
+
+/// What a custom widget is handed: the same pair every built-in control gets.
+///
+/// One struct rather than two parameters because `render` is a `fn` pointer and
+/// a single argument keeps that signature stable as the boundary grows.
+///
+/// Note this is the widget boundary the design notes fix — `(path, label,
+/// required, errors)` in `props`, plus the value store — and NOT a
+/// `FormField<T>`. A widget never sees the typed field: it reads and writes raw
+/// strings through `values`, exactly as `HtmlInput` does.
+#[derive(Clone, PartialEq)]
+pub struct ControlProps {
+    pub values: ValuesByPath,
+    pub props: FieldProps,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -90,12 +164,26 @@ pub struct FieldProps {
     pub errors: Vec<FieldError>,
 }
 
-fn get_current(path: &str, values: ValuesByPath) -> String {
+/// This path's current raw value, or `""` if the map has no entry for it.
+///
+/// `pub` because a `custom(…)` widget lives in the CONSUMING crate and needs
+/// exactly what the built-in controls use — without it, every custom widget
+/// would reimplement the missing-key rule and get it subtly wrong. A path the
+/// schema has but the map doesn't is normal, not an error: a variant chosen
+/// after mount reveals leaves that were never populated, and an absent key
+/// reads as empty, which is the same "empty IS absence" rule `apply_leaves`
+/// follows.
+pub fn get_current(path: &str, values: ValuesByPath) -> String {
     let slot = values.get_unchecked(path.to_string());
     slot.try_read().map(|v| v.clone()).unwrap_or_default()
 }
 
-fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
+/// Write this path's raw value back, inserting the key if it wasn't there.
+///
+/// `pub` for the same reason as [`get_current`]: a custom widget has to be able
+/// to write, and the insert-vs-set distinction is not something each one should
+/// have to rediscover.
+pub fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
     let populated = values.peek().contains_key(path);
     if populated {
         values.get_unchecked(path.to_string()).set(raw);
@@ -144,6 +232,12 @@ pub fn ScalarInput(
         (ValueKind::Bool, ControlType::Select) => {
             rsx! { SelectInput { values, choices: bool_choices(), props } }
         }
+        // Matches ANY value kind, deliberately. A custom widget exists precisely
+        // because the built-in controls can't serve its type, so gating it on
+        // the kinds we happen to enumerate would defeat it — `Markdown` and
+        // `Ref<Source>` are `Text` to the parser and nothing to a `<select>`.
+        // The author named this widget for this field; that IS the evidence.
+        (_, ControlType::Custom { render, .. }) => render(ControlProps { values, props }),
         _ => panic!("{control:?} cannot render a {value_kind:?} (field {})", props.path),
     }
 }

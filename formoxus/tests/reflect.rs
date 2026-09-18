@@ -520,3 +520,85 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
         eq(0)
     );
 }
+
+// ── `custom(Widget)` ─────────────────────────────────────────────────────
+//
+// The escape hatch for a value kind no built-in control can serve. These are
+// here rather than in `src/reflect/tests/` for the usual reason: a custom
+// widget is a component in the CONSUMING crate, which is exactly what the macro
+// has to expand against.
+
+/// Stands in for `ui::MarkdownInput` and the source picker — a component taking
+/// the `(values, props)` pair every built-in control gets.
+///
+/// It reads `props` to prove the boundary arrives intact, and calls `use_hook`
+/// to prove the widget gets a component scope of its own. That second part is
+/// the load-bearing one: the real widgets need `use_resource` (to fetch a
+/// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
+/// function call from `render_control` could not provide.
+#[component]
+fn ShoutyWidget(
+    values: formoxus::reflect::ValuesByPath,
+    props: formoxus::reflect::widgets::FieldProps,
+) -> Element {
+    let _ = values;
+    let marker = use_hook(|| "scope-ok");
+    let label = props.label.clone().unwrap_or_default();
+    rsx! {
+        div { class: "shouty", "data-marker": "{marker}", "data-path": "{props.path}",
+            "{label.to_uppercase()}"
+        }
+    }
+}
+
+#[component]
+fn CustomSecret() -> Element {
+    use_form(|| form_for(
+        &a_trip(),
+        form2! {
+            Trip {
+                secret => { control: custom(ShoutyWidget) },
+            }
+        },
+    ))
+    .render_fragment()
+}
+
+#[gtest]
+fn a_custom_control_replaces_the_default_widget_entirely() {
+    let html = render_to_html(CustomSecret);
+    expect_that!(html, contains_substring(r#"class="shouty""#));
+    expect_that!(
+        html,
+        not(contains_substring(r#"name="secret""#)),
+        "the custom widget replaces the input, it doesn't render alongside it"
+    );
+}
+
+#[gtest]
+fn a_custom_widget_receives_the_field_props() {
+    // `path` is what the widget writes back through, and `label` is the derived
+    // Title Case one — so this pins that the boundary arrives populated, not
+    // defaulted.
+    let html = render_to_html(CustomSecret);
+    expect_that!(html, contains_substring(r#"data-path="secret""#));
+    expect_that!(html, contains_substring("SECRET"));
+}
+
+#[gtest]
+fn a_custom_widget_gets_its_own_component_scope() {
+    // `use_hook` panics outside a component. Rendering at all is the assertion;
+    // the marker just makes the failure legible if the mechanism ever changes to
+    // calling the widget as a plain function.
+    let html = render_to_html(CustomSecret);
+    expect_that!(html, contains_substring(r#"data-marker="scope-ok""#));
+}
+
+#[gtest]
+fn sibling_fields_still_render_their_normal_controls() {
+    // A custom control is per-field. Nothing about naming one for `secret`
+    // should disturb how `name` or `confirmed` render.
+    let html = render_to_html(CustomSecret);
+    expect_that!(html, contains_substring(r#"name="name""#));
+    expect_that!(html, contains_substring(r#"type="checkbox""#));
+}
