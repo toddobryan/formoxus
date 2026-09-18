@@ -14,6 +14,7 @@ pub mod buttons;
 pub mod fields;
 pub mod form;
 pub mod members;
+pub mod submission;
 pub mod widgets;
 
 // A flat root, so `use formoxus::reflect::*` (and the test modules' `use
@@ -27,6 +28,7 @@ pub use form::{
     UncheckedHandler, empty_form, form_for, handler, provider, unchecked_handler, use_form,
     use_form_values,
 };
+pub use submission::Submission;
 pub use members::{
     Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
     model_path,

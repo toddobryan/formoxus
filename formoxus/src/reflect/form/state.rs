@@ -226,6 +226,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             fields: field_errors,
         }
     }
+
+    pub fn as_hash_map(&self) -> HashMap<String, String> {
+        self.leaves().into_iter().collect()
+    }
 }
 
 /// Edit mode. Infallible: the value itself pins every variant, so there is

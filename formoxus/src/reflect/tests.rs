@@ -15,6 +15,7 @@ mod vecs;
 mod widgets;
 mod roundtrip;
 mod specs;
+mod submissions;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///
