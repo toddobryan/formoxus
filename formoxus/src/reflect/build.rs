@@ -2,7 +2,7 @@
 //! from) into a tree of `FormMember`s. One `*_member` helper per kind of thing
 //! a shape can be.
 
-use facet::{EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructType, Type, UserType, Variant};
+use facet::{EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind, StructType, Type, UserType, Variant};
 
 use crate::reflect::fields::{FormField, populate};
 use crate::reflect::members::{
@@ -187,8 +187,17 @@ pub(crate) fn member_for_shape(
     if let Ok(option_def) = shape.def.into_option() {
         return option_member(option_def, name, peek, mode, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_member(scalar, name, peek, optional).unwrap_or_else(|| {
+        return scalar_member(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(|| {
             panic!("scalar type {scalar:?} is not supported in FormField (field {name})")
+        });
+    } else if let Some(inner) = newtype_inner(shape) {
+        // A newtype is ONE input, not a fieldset around a field called "0".
+        // The peek descends with it: the field holds the inner scalar, so
+        // `populate` must see the inner value, not the wrapper.
+        let scalar = inner.scalar_type().expect("newtype_inner only returns scalars");
+        let inner_peek = peek.and_then(|p| p.into_struct().ok()).and_then(|s| s.field(0).ok());
+        return scalar_member(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
+            panic!("newtype {shape} wraps {scalar:?}, which is not supported in FormField (field {name})")
         });
     } else if let Ok(list_def) = shape.def.into_list() {
         // SEAM: `list_member(_list_def.t, name, inner_peek, variants, prefix)`,
@@ -222,6 +231,37 @@ fn option_member(
     Box::new(OptionMember { inner })
 } 
 
+/// The inner shape of a newtype wrapper — `String` for `struct Markdown(String)`.
+///
+/// `None` for anything else, which leaves the walk exactly as it was.
+///
+/// **A ONE-FIELD TUPLE STRUCT, not any one-field struct.** `Markdown(String)` is
+/// Rust's newtype idiom and means "this IS a string, with a type attached";
+/// `struct Config { name: String }` is an ordinary struct that happens to have
+/// one field today. Flattening the latter would rename its leaf from
+/// `config.name` to `config` — and leaf paths ARE the wire format now, the
+/// thing a server-side rebuild keys on. The day someone adds a second field the
+/// paths would silently change back, and every stored or in-flight payload
+/// would mean something different. A tuple struct cannot grow that way without
+/// the author rewriting it as a named struct, which is a visible act.
+///
+/// The inner must itself be a scalar: `struct Wrapper(SomeStruct)` stays a
+/// struct, because there is no single input that could carry it.
+///
+/// Note this needs NO `#[facet(transparent)]`. That attribute would also work
+/// (it populates `shape.inner`), but requiring it would mean a newtype in a
+/// crate we don't control could never be a form field.
+pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
+    let Type::User(UserType::Struct(st)) = &shape.ty else {
+        return None;
+    };
+    if st.kind != StructKind::TupleStruct || st.fields.len() != 1 {
+        return None;
+    }
+    let inner = st.fields[0].shape();
+    inner.scalar_type().map(|_| inner)
+}
+
 /// The closed set of scalar types with a built-in control. Anything else needs
 /// a custom widget and returns `None` here, which `member_for_shape` turns into
 /// a panic naming the type.
@@ -246,6 +286,11 @@ fn scalar_member(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     optional: bool,
+    // The newtype this scalar is wrapped in, if any. The field carries the
+    // INNER type (`FormField<String>` for a `Markdown`), because a concrete `T`
+    // cannot be recovered from a runtime `Shape` — so the wrapper is remembered
+    // here and re-applied when the value is written back.
+    wrapper: Option<&'static Shape>,
 ) -> Option<Box<dyn FormMember>> {
     // The variant and the type can't be collapsed into one token: `ScalarType`
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
@@ -260,6 +305,7 @@ fn scalar_member(
                         label: None,
                         optional,
                         custom_control: None,
+                        wrapper,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
                     }) as Box<dyn FormMember>),

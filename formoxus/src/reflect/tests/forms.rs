@@ -20,6 +20,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
         label: None,
         optional: false,
         custom_control: None,
+        wrapper: None,
         value,
         errors: Vec::new(),
     })

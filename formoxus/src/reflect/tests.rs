@@ -10,6 +10,7 @@ mod enums;
 mod errors;
 mod forms;
 mod into_slot;
+mod newtypes;
 mod optional_containers;
 mod vecs;
 mod widgets;

@@ -22,6 +22,20 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub label: Option<String>,
     pub optional: bool,
     pub custom_control: Option<ControlType>,
+    /// The newtype this field's value is wrapped in — `Markdown` for a
+    /// `FormField<String>` standing in for a `Markdown` field. `None` for an
+    /// ordinary scalar.
+    ///
+    /// **The field carries the INNER type, not the newtype**, because a
+    /// concrete `T` cannot be recovered from a runtime `&'static Shape`: the
+    /// shape walk only ever has a shape in hand, and `FormField<T>` needs a
+    /// type at compile time. So a `Markdown` field becomes a
+    /// `FormField<String>` that remembers what to re-wrap it in, and every
+    /// string-facing operation — parsing, display, `ValueKind`, the control —
+    /// goes on working unchanged against the inner scalar.
+    ///
+    /// Only [`write_value_into`](FormMember::write_value_into) consults it.
+    pub wrapper: Option<&'static facet::Shape>,
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }
@@ -211,8 +225,18 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
+        // The one place `wrapper` matters. The slot the parent opened is the
+        // NEWTYPE's, so a bare `set` of the inner scalar would be a type error;
+        // descending into field 0, setting there, and coming back up builds the
+        // wrapper around it. `None` is the ordinary case and stays a plain set.
+        let set = |p: Partial<'p>, t: T| -> Result<Partial<'p>, ReflectError> {
+            match self.wrapper {
+                None => p.set(t),
+                Some(_) => p.begin_nth_field(0)?.set(t)?.end(),
+            }
+        };
         let partial = match &self.value {
-            FieldValue::Valid(t) => partial.set(t.clone())?,
+            FieldValue::Valid(t) => set(partial, t.clone())?,
             // An unticked checkbox is `Empty` like any other unfilled input, and
             // stays that way so `is_present` keeps one meaning. `false` is
             // synthesised here instead, at the last possible moment. Going
@@ -220,7 +244,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // keeps this generic: nothing in scope can prove `T == bool`, but
             // the parse vtable resolves the real shape at runtime and doesn't
             // need to be told.
-            FieldValue::Empty if self.is_unticked_checkbox() => partial.set(
+            FieldValue::Empty if self.is_unticked_checkbox() => set(
+                partial,
                 parse_scalar::<T>("false")
                     .expect("`Boolean` input kind is only ever derived from a `bool` shape"),
             )?,
