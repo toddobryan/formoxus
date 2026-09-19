@@ -5,7 +5,7 @@
 //! if it ever points at the macro instead, the witness has stopped being useful.
 use facet::Facet;
 use formoxus::form2;
-use formoxus::reflect::empty_form;
+use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Article {

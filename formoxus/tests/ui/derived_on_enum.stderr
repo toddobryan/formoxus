@@ -1,5 +1,0 @@
-error: Form can only be derived for structs
- --> tests/ui/derived_on_enum.rs:5:6
-  |
-5 | enum Question {
-  |      ^^^^^^^^

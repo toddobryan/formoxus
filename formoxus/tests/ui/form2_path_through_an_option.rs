@@ -9,7 +9,7 @@
 //! test is the one to delete.
 use facet::Facet;
 use formoxus::form2;
-use formoxus::reflect::empty_form;
+use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Venue {

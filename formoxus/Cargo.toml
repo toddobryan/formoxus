@@ -9,28 +9,14 @@ facet = { workspace = true }
 heck = { workspace = true }
 indexmap = { workspace = true }
 serde = { workspace = true }
-formoxus-macros = { workspace = true, optional = true }
-paste = "1.0.15"
+# Not optional: `form2!` is the way a form is declared, so a build without the
+# macros would be missing the crate's primary entry point rather than merely
+# trading convenience for compile time. The old `derive` feature existed to make
+# `#[derive(Form)]` skippable; that path no longer exists.
+formoxus-macros = { workspace = true }
 
 [dev-dependencies]
 dioxus-html = { workspace = true }
 dioxus-ssr = { workspace = true }
 googletest = { workspace = true }
 trybuild = { workspace = true }
-
-[features]
-# The derive is the whole point of the crate, so it's on by default. Anyone who
-# wants only the runtime types can opt out with `default-features = false`.
-default = ["derive"]
-derive = ["dep:formoxus-macros"]
-
-# Gated so `--no-default-features` skips the derive tests cleanly rather than
-# failing to find the macro. With `derive` in `default`, plain `cargo test` runs them.
-[[test]]
-name = "derive"
-required-features = ["derive"]
-
-# Same reason: this target invokes `form2!`.
-[[test]]
-name = "reflect"
-required-features = ["derive"]

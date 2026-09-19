@@ -2,7 +2,7 @@
 //! iterable. On a `String` the witness's `.iter()` is what catches it.
 use facet::Facet;
 use formoxus::form2;
-use formoxus::reflect::empty_form;
+use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Article {

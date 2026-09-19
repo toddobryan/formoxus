@@ -110,20 +110,20 @@ impl FnSet {
             let name = e.name.to_string();
             let slot = match &e.body {
                 FnBody::Validated(f) => quote! {
-                    ::formoxus::reflect::buttons::ButtonFn::Validated(
-                        ::formoxus::reflect::form::handler(#f)
+                    ::formoxus::buttons::ButtonFn::Validated(
+                        ::formoxus::form::handler(#f)
                     )
                 },
                 FnBody::Unchecked(f) => quote! {
-                    ::formoxus::reflect::buttons::ButtonFn::Unchecked(
-                        ::formoxus::reflect::form::unchecked_handler(#f)
+                    ::formoxus::buttons::ButtonFn::Unchecked(
+                        ::formoxus::form::unchecked_handler(#f)
                     )
                 },
             };
             quote! { .with(#name, #slot) }
         });
         quote! {
-            ::formoxus::reflect::buttons::Fns::new()
+            ::formoxus::buttons::Fns::new()
             #(#entries)*
         }
     }

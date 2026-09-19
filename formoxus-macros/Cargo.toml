@@ -7,11 +7,13 @@ edition = "2024"
 proc-macro = true
 
 [dependencies]
-syn = { version = "3", features = ["full"] }
+# `extra-traits` for `Debug` on syn types: form2.rs derives Debug across its
+# parsed spec types, and its 78 parser tests assert on that output. It used to
+# arrive transitively through darling; with darling gone it has to be declared.
+syn = { version = "3", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
 heck = { workspace = true }
-darling = "0.24.0"
 
 [dev-dependencies]
 googletest = { workspace = true }

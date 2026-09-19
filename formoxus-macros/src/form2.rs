@@ -91,7 +91,7 @@ impl FormSpecInput {
                     #(#witnesses)*
                 }
 
-                ::formoxus::reflect::form::FormSpec::<#model_type>::new()
+                ::formoxus::form::FormSpec::<#model_type>::new()
                 #title
                 #validator
                 #buttons
@@ -424,8 +424,8 @@ macro_rules! controls {
         fn control_tokens(name: &Ident) -> Option<TokenStream2> {
             match name.to_string().as_str() {
                 $( stringify!($name) => Some(quote! {
-                    ::formoxus::reflect::widgets::ControlType::$variant
-                    $( ( ::formoxus::reflect::widgets::InputType::$input ) )?
+                    ::formoxus::widgets::ControlType::$variant
+                    $( ( ::formoxus::widgets::InputType::$input ) )?
                 }), )*
                 _ => None,
             }
@@ -499,7 +499,7 @@ impl ControlRef {
             Self::Custom(widget) => {
                 let name = last_segment_string(widget);
                 quote! {
-                    ::formoxus::reflect::widgets::ControlType::Custom {
+                    ::formoxus::widgets::ControlType::Custom {
                         name: #name,
                         render: |__p| ::dioxus::prelude::rsx! {
                             #widget { values: __p.values, props: __p.props }
@@ -631,7 +631,7 @@ impl ButtonInfo {
             quote! { .with_invocation(#i) }
         });
         quote! {
-            ::formoxus::reflect::buttons::ButtonSpec::new(#name, #ty) #text #invocation
+            ::formoxus::buttons::ButtonSpec::new(#name, #ty) #text #invocation
         }
     }
 
@@ -661,8 +661,7 @@ impl ButtonInfo {
                 "type" => ty = Some(body.parse()?),
                 "text" if text.is_some() =>
                     return Err(syn::Error::new_spanned(&key, "duplicate text")),
-                // A literal, not an `Expr`: the text is baked into the spec, and
-                // `ButtonInfo::text` on the derive path is a `String` too.
+                // A literal, not an `Expr`: the text is baked into the spec.
                 "text" => text = Some(body.parse::<syn::LitStr>()?.value()),
                 "invocation" if invocation.is_some() =>
                     return Err(syn::Error::new_spanned(&key, "duplicate invocation")),
@@ -695,10 +694,10 @@ impl ButtonInfo {
 
 /// When the button's handler runs, overriding what its type implies.
 ///
-/// Spelled out rather than borrowed from the derive path's
-/// `handler: validated | unchecked`: `validated` names the *handler*, and what
-/// is actually being chosen is whether the model has to pass validation before
-/// the handler is reached at all.
+/// Spelled `invocation` rather than `handler: validated | unchecked`, which was
+/// the obvious alternative: `validated` names the *handler*, and what is
+/// actually being chosen is whether the model has to pass validation before the
+/// handler is reached at all.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Invocation {
     IfModelValidates,
@@ -711,7 +710,7 @@ impl Invocation {
             Invocation::IfModelValidates => quote!(IfModelValidates),
             Invocation::Unconditional => quote!(Unconditional),
         };
-        quote! { ::formoxus::reflect::buttons::Invocation::#variant }
+        quote! { ::formoxus::buttons::Invocation::#variant }
     }
 }
 
@@ -765,7 +764,7 @@ macro_rules! button_types {
             fn tokens(&self) -> TokenStream2 {
                 match self {
                     $( ButtonType::$variant => quote! {
-                        ::formoxus::reflect::buttons::ButtonType::$variant
+                        ::formoxus::buttons::ButtonType::$variant
                     }, )*
                 }
             }
@@ -1197,7 +1196,7 @@ mod tests {
 
     #[gtest]
     fn a_buttons_block_parses() {
-        // The shape `tests/reflect/buttons.rs` asks for, verbatim. Also the
+        // The shape `tests/consumer/buttons.rs` asks for, verbatim. Also the
         // regression test for dispatch order: `buttons` is a custom keyword and
         // therefore also an `Ident`, so if the field arm is tried first this
         // never reaches `parse_buttons` and dies on the missing `=>`.
@@ -1401,8 +1400,7 @@ mod tests {
 
     #[gtest]
     fn button_text_must_be_a_literal() {
-        // An `Expr` would let a `const` through and make the spec non-constant;
-        // the derive path's `text` is a `String` for the same reason.
+        // An `Expr` would let a `const` through and make the spec non-constant.
         expect_that!(
             err_of(quote! { Source { buttons: { go: { type: submit, text: SAVE } } } }).len(),
             gt(0)
@@ -1487,7 +1485,7 @@ mod tests {
             let tokens = control_of(&spec).path().to_string();
             expect_that!(
                 &tokens,
-                contains_substring(":: formoxus :: reflect :: widgets :: ControlType ::"),
+                contains_substring(":: formoxus :: widgets :: ControlType ::"),
                 "for control `{name}`"
             );
         }

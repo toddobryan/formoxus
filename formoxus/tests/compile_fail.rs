@@ -1,10 +1,11 @@
-//! Compile-fail tests for `#[derive(Form)]`'s diagnostics.
+//! Compile-fail tests for `form2!`'s diagnostics.
 //!
 //! Each `tests/ui/*.rs` is a deliberately-broken input; the matching `.stderr`
 //! pins the exact compiler output — **including the span**. That's the point:
-//! these guard the `syn::Error::new_spanned` shape checks and the `Debug` trait
-//! bounds, so a refactor that quietly degrades an error (wrong span, lost
-//! message) fails here instead of slipping through.
+//! `form2!` checks every field path it names against the model's real shape by
+//! emitting a witness expression per path, so a typo fails at compile time
+//! rather than as a runtime `no_such_path`. These tests guard that the failure
+//! stays *legible* — pointing at the offending path, in the caller's source.
 //!
 //! To regenerate after an intentional change:
 //!
@@ -13,12 +14,9 @@
 //! ```
 //!
 //! then *read the diff* before committing — an accidentally-worsened diagnostic
-//! looks exactly like an intentional one to the tool.
-//!
-//! `missing_debug` and `unknown_attribute` take their text from rustc / darling
-//! rather than from us, so they're the ones that will need regenerating on a
-//! toolchain or `darling` bump. They're still worth pinning: `missing_debug` is
-//! the only guard that the `Debug` bounds actually fire on the user's own struct.
+//! looks exactly like an intentional one to the tool. The goldens quote rustc's
+//! own wording for a bad field access, so they're the ones that will need
+//! regenerating on a toolchain bump.
 
 #[test]
 fn ui() {

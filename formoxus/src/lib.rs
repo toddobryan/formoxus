@@ -1,91 +1,96 @@
+//! Reflection-based forms for Dioxus: build a form at runtime from a model's
+//! [`facet`] shape, instead of from a hand-written form struct.
+//!
+//! A model needs only `#[derive(Facet)]`. [`form2!`](macro@form2) declares the
+//! form over it — title, labels, controls, validators, buttons — and
+//! [`use_form`] turns that declaration into a live, reactive form. Values
+//! convert through facet's own vtables, so there is no `FromStr`/`Display`
+//! bound to satisfy and no per-form type to write.
+//!
+//! ```ignore
+//! #[derive(Facet)]
+//! struct Signup { email: String, password: String }
+//!
+//! let spec = form2! { Signup { title: "Sign up", password: { control: password } } };
+//! let form = use_form(spec);
+//! rsx! { {form.render(using_fns! { submit: |model| async move { … } })} }
+//! ```
+//!
+//! # How the pieces fit
+//!
+//! - [`FormSpec`] is the **declaration** — what `form2!` produces. It is a
+//!   schema, not state, and it never crosses a server-fn boundary.
+//! - [`FormState`] is the **built tree**: plain data, no signals, testable with
+//!   no Dioxus runtime. [`Form`] is the reactive handle over it.
+//! - Leaf paths (`x.y`, `x.y[]`, `x.y[].z`) are the wire format. A form submits
+//!   `(path, value)` pairs and the server rebuilds against the same
+//!   [`FormSpec`] — see [`Submission`], which packages that side.
+//!
+//! The design reasoning behind all of this — including the parts that were
+//! tried and abandoned — lives in `.claude/memory/`, starting from its
+//! `MEMORY.md` index.
+
+pub mod build;
+pub mod buttons;
 pub mod error;
 pub mod fields;
 pub mod form;
 pub mod label_case;
-pub mod reflect;
-pub mod validators;
+pub mod members;
+pub mod submission;
 pub mod widgets;
 
-/// `#[derive(Form)]`. The trait [`form::Form`] and the derive share a name but live
-/// in different namespaces (type vs. macro), so importing `Form` brings whichever the
-/// context needs.
-#[cfg(feature = "derive")]
-pub use formoxus_macros::Form;
-
-/// `#[derive(FieldSet)]`. Same shared-name trick as `Form`: the trait
-/// [`form::FieldSet`] and this derive live in different namespaces.
-#[cfg(feature = "derive")]
-pub use formoxus_macros::FieldSet;
-
-/// `form2! { Model { … } }` — builds a [`reflect::form::FormSpec`] for `Model`.
+/// `form2! { Model { … } }` — build a [`FormSpec`] for `Model`.
 ///
 /// A function-like macro, not a derive: it expands in the *consuming* crate, so
-/// it can name the model's own type and capture runtime values from the scope it
-/// sits in.
-#[cfg(feature = "derive")]
+/// it can name the model's own type and capture runtime values from the scope
+/// it sits in. Every field path it names is checked against the model's real
+/// shape at compile time.
 pub use formoxus_macros::form2;
 
 /// `using_fns! { save: |m| async move { … }, … }` — the handlers for one
-/// [`reflect::Form::render`], keyed by button name.
+/// [`Form::render`], keyed by button name.
 ///
 /// Which closures validate first is read from their **arity**: `|m| …` receives
 /// the model and only runs once it validates, `|| …` takes nothing and runs
 /// regardless. Names are checked against the form's declared buttons at render,
-/// not at compile time — the reflection path has no per-form type to hang a
-/// struct literal on.
-#[cfg(feature = "derive")]
+/// not at compile time — there is no per-form type to hang a struct literal on.
 pub use formoxus_macros::using_fns;
 
-/// The common surface. `use formoxus::prelude::*;` brings in the derive, the trait
-/// vocabulary, and the built-in field widgets — the one blessed glob. For precise
-/// imports, reach into the modules directly (`formoxus::fields::FormField`, …); the
-/// crate root deliberately does *not* re-export everything.
+// A flat root, so `use formoxus::*` (and the test modules' `use crate::*`)
+// reaches the whole vocabulary without knowing which module each name lives in.
+pub use crate::error::{FieldError, FormError};
+pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
+pub use fields::{FieldValue, FormField};
+pub use form::{
+    FieldErrors, FieldSpec, Form, FormErrors, FormSpec, FormState, Handler, IntoSlot, Provider,
+    UncheckedHandler, empty_form, form_for, handler, provider, unchecked_handler, use_form,
+    use_form_values,
+};
+pub use members::{
+    Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
+    model_path,
+};
+pub use submission::Submission;
+
+/// The common surface: `use formoxus::prelude::*;`.
+///
+/// The crate root re-exports the same vocabulary flat, so the prelude is a
+/// convenience rather than a separate contract. For precise imports, reach into
+/// the defining module (`formoxus::form::FormSpec`, …).
 pub mod prelude {
-    // The derive macros. The traits of the same names are re-exported from `form`
-    // below; they share names across namespaces, so a single glob import brings both.
-    #[cfg(feature = "derive")]
-    pub use crate::{FieldSet, Form};
-
     pub use crate::error::{FieldError, FormError};
-    pub use crate::fields::{FormField, FormFieldStoreExt};
     pub use crate::form::{
-        FieldSet, FieldSetState, FieldSetStoreExt, Form, FormState, FormStoreExt, FromModel,
-        Handler, Provider, UncheckedHandler, ValidateForm, handler, provider, unchecked_handler,
-        use_field_set, use_field_set_from, use_form, use_form_from,
+        Form, FormSpec, FormState, Provider, empty_form, form_for, handler, provider,
+        unchecked_handler, use_form, use_form_values,
     };
-    pub use crate::label_case::{LabelCase, ToCase};
-    pub use crate::widgets::{
-        CheckboxInput, DefaultWidget, FieldErrors, FieldProps, FieldWidget, PasswordInput,
-        ProvidedWidget, SelectChoice, SelectWidget, TextInput, UnsetBooleanSelect, render_default,
-    };
+    pub use crate::submission::Submission;
+    pub use crate::{form2, using_fns};
 }
 
-/// Re-exports for macro-generated code — NOT a public API. The `Form` derive emits
-/// fully-qualified `::formoxus::__private::…` paths (e.g. the `Store` derive) so a
-/// consumer needs only `formoxus` in its `Cargo.toml`, never `dioxus` under that
-/// exact name. Mirrors surreal-table's `__private` pattern.
-#[doc(hidden)]
-pub mod __private {
-    pub use dioxus;
+// The one crate-internal item the test modules reach for directly.
+#[cfg(test)]
+pub(crate) use widgets::ABSENT_DISPLAY;
 
-    /// A single-name scope that generated `Store`-derived structs glob-import, so
-    /// the bare `dioxus_stores::…` paths that dioxus's `Store` derive emits resolve
-    /// — without pulling the whole dioxus prelude into the caller's module. Glob
-    /// import (not `use … as`) so multiple `#[derive(Form)]` in one module don't
-    /// collide on the name.
-    pub mod store_scope {
-        pub use ::dioxus::stores as dioxus_stores;
-    }
-
-    /// Same trick as `store_scope`, for the generated `FormState::render`: `rsx!`
-    /// emits bare `dioxus_core::…` / `dioxus_signals::…` / `dioxus_elements::…`
-    /// paths, which normally resolve only because an app's own `use
-    /// dioxus::prelude::*;` re-exports the crates under those names. Generated
-    /// code can't rely on the caller's module having that glob import (formoxus's
-    /// own tests don't), so it glob-imports this instead.
-    pub mod component_scope {
-        pub use ::dioxus::core as dioxus_core;
-        pub use ::dioxus::prelude::dioxus_elements;
-        pub use ::dioxus::signals as dioxus_signals;
-    }
-}
+#[cfg(test)]
+mod tests;

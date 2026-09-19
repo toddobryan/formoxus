@@ -1,5 +1,0 @@
-error: a field can't be named `errors` — that name is reserved for the form-level errors formoxus adds to every generated state struct
-  --> tests/ui/reserved_field_name.rs:11:5
-   |
-11 |     errors: String,
-   |     ^^^^^^
