@@ -13,6 +13,7 @@ use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FormErrors;
+use crate::label_case::LabelCase;
 use crate::members::{Edit, FormMember, no_such_path, owns};
 
 use super::FormSpec;
@@ -44,6 +45,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         for m in self.members.iter_mut() {
             m.apply_specs("", fields);
         }
+    }
+
+    /// The casing derived labels use, with the built-in default applied.
+    ///
+    /// The single place the cascade bottoms out, so an app-level tier read from
+    /// context can be added here without every caller learning about it.
+    pub fn label_case(&self) -> LabelCase {
+        self.spec.label_case.unwrap_or(LabelCase::Title)
     }
 
     pub fn title(&self) -> Option<String> {

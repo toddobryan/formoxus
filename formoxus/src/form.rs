@@ -15,6 +15,7 @@
 
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FieldError, FormAccessError, FormError};
+use crate::label_case::LabelCase;
 use crate::members::Edit;
 use crate::{RenderCtx, ValuesByPath};
 use dioxus::prelude::*;
@@ -202,6 +203,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Copy for Form<T> {
 
 impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// The live value store, keyed by qualified path.
+    /// `peek`, not `read`: the casing is fixed for the life of the form, so
+    /// subscribing a render scope to the whole state for it would re-render on
+    /// every unrelated structural edit.
+    fn label_case(&self) -> LabelCase {
+        self.state.peek().label_case()
+    }
+
     pub fn values(&self) -> ValuesByPath {
         self.values
     }
@@ -224,7 +232,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// needs this handle to validate — `FormState` has the button *specs* but
     /// no way to run one.
     pub fn render(&self, fns: Fns<T>) -> Element {
-        let ctx = RenderCtx::root(self.values, self.on_edit);
+        let ctx = RenderCtx::root(self.values, self.on_edit, self.label_case());
         let state = self.state.read();
         let buttons = state.buttons().to_vec();
         let problems = fns.reconcile(&buttons);
@@ -312,9 +320,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     pub fn render_fragment(&self) -> Element {
-        self.state
-            .read()
-            .render_fragment(&RenderCtx::root(self.values, self.on_edit))
+        self.state.read().render_fragment(&RenderCtx::root(
+            self.values,
+            self.on_edit,
+            self.label_case(),
+        ))
     }
 
     pub fn render_title(&self) -> Element {
@@ -322,9 +332,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     pub fn render_fields(&self) -> Element {
-        self.state
-            .read()
-            .render_fields(&RenderCtx::root(self.values, self.on_edit))
+        self.state.read().render_fields(&RenderCtx::root(
+            self.values,
+            self.on_edit,
+            self.label_case(),
+        ))
     }
 
     pub fn render_errors(&self) -> Element {

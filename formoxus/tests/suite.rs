@@ -35,6 +35,8 @@ mod form_macro;
 mod forms;
 #[path = "suite/into_slot.rs"]
 mod into_slot;
+#[path = "suite/label_case.rs"]
+mod label_case;
 #[path = "suite/newtypes.rs"]
 mod newtypes;
 #[path = "suite/optional_containers.rs"]

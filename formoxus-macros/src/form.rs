@@ -17,7 +17,32 @@ pub fn impl_form(input: TokenStream2) -> TokenStream2 {
     }
 }
 
+/// Every label casing, keyed by a string that IS what that casing does to the
+/// words "label case".
+///
+/// That is the whole trick: `"Label-Case"` does not *describe* Train case, it
+/// *demonstrates* it, so nobody has to remember whether "Title Case" means
+/// spaces or whether camel is upper or lower. It also means the table is
+/// checkable rather than merely documented — `the_key_is_what_the_case_does`
+/// in the consumer suite asserts that every string here really is
+/// `"label_case".to_case(variant)`, so an edit to either side that breaks the
+/// correspondence fails rather than quietly turning a key into a lie.
+const LABEL_CASES: [(&str, &str); 11] = [
+    ("labelCase", "CamelLower"),
+    ("LabelCase", "CamelCapitalized"),
+    ("label-case", "KebabLower"),
+    ("Label-Case", "KebabCapitalized"),
+    ("LABEL-CASE", "KebabAllCaps"),
+    ("label_case", "SnakeLower"),
+    ("Label_Case", "SnakeCapitalized"),
+    ("LABEL_CASE", "SnakeAllCaps"),
+    ("Label Case", "Title"),
+    ("label case", "Lower"),
+    ("LABEL CASE", "AllCaps"),
+];
+
 mod kw {
+    syn::custom_keyword!(label_case);
     syn::custom_keyword!(title);
     syn::custom_keyword!(validator);
     syn::custom_keyword!(buttons);
@@ -33,6 +58,7 @@ struct FormSpecInput {
 struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
+    label_case: Option<Ident>,
     validator: Option<Expr>,
     buttons: Vec<ButtonInfo>,
     field_specs: Vec<FieldSpec>,
@@ -43,6 +69,7 @@ impl FormSpecMeta {
         Self {
             model_type,
             title: None,
+            label_case: None,
             validator: None,
             buttons: Vec::new(),
             field_specs: Vec::new(),
@@ -56,6 +83,7 @@ impl FormSpecInput {
         for e in self.entries {
             match e {
                 Entry::Title(expr) => fsm.title = Some(expr),
+                Entry::LabelCase(ident) => fsm.label_case = Some(ident),
                 Entry::Validator(expr) => fsm.validator = Some(expr),
                 Entry::Field { path, body } => fsm.field_specs.push(FieldSpec {
                     path,
@@ -70,6 +98,11 @@ impl FormSpecInput {
         let title: Option<TokenStream2> = fsm.title.map(|t| {
             quote! {
                 .with_title(&#t)
+            }
+        });
+        let label_case: Option<TokenStream2> = fsm.label_case.map(|c| {
+            quote! {
+                .with_label_case(::formoxus::label_case::LabelCase::#c)
             }
         });
         let validator: Option<TokenStream2> = fsm.validator.map(|v| {
@@ -111,6 +144,7 @@ impl FormSpecInput {
 
                 ::formoxus::form::FormSpec::<#model_type>::new()
                 #title
+                #label_case
                 #validator
                 #buttons
                 #(#fields)*
@@ -157,10 +191,15 @@ impl Parse for FormSpecInput {
             .collect();
         let mut seen: HashMap<String, ()> = HashMap::new();
         let (mut had_title, mut had_validator, mut had_buttons) = (false, false, false);
+        let mut had_label_case = false;
         for e in &entries {
             match e {
                 Entry::Title(_) if had_title => return Err(body.error("`title` is given twice")),
                 Entry::Title(_) => had_title = true,
+                Entry::LabelCase(_) if had_label_case => {
+                    return Err(body.error("`label_case` is given twice"));
+                }
+                Entry::LabelCase(_) => had_label_case = true,
                 Entry::Validator(_) if had_validator => {
                     return Err(body.error("`validator` is given twice"));
                 }
@@ -187,12 +226,45 @@ impl Parse for FormSpecInput {
 #[derive(Debug)]
 enum Entry {
     Title(Expr),
+    /// The resolved `LabelCase` variant, already looked up — a bad string is a
+    /// parse error, so nothing downstream has to handle one.
+    LabelCase(Ident),
     Validator(Expr),
-    Field { path: SpecPath, body: FieldBody },
+    Field {
+        path: SpecPath,
+        body: FieldBody,
+    },
     Buttons(Vec<ButtonInfo>),
 }
 
 impl Entry {
+    /// `label_case: "Label Case"` — the string is an example of itself.
+    fn parse_label_case(input: ParseStream<'_>) -> Result<Self> {
+        let _kw: kw::label_case = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        let lit: syn::LitStr = input
+            .parse()
+            .map_err(|_| input.error("`label_case` takes a string literal, e.g. \"Label Case\""))?;
+        let written = lit.value();
+        match LABEL_CASES.iter().find(|(k, _)| *k == written) {
+            Some((_, variant)) => Ok(Entry::LabelCase(Ident::new(variant, lit.span()))),
+            None => {
+                // Every valid spelling, listed in full. There are only eleven,
+                // and each one shows what it does, so the list IS the
+                // documentation — better than naming the ones that are close.
+                let all = LABEL_CASES
+                    .iter()
+                    .map(|(k, _)| format!("{k:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(syn::Error::new_spanned(
+                    &lit,
+                    format!("unknown label case {written:?} — write one of: {all}"),
+                ))
+            }
+        }
+    }
+
     fn parse_title(input: ParseStream<'_>) -> Result<Self> {
         let _title: kw::title = input.parse()?;
         let _colon: Token![:] = input.parse()?;
@@ -264,7 +336,9 @@ impl Entry {
 
 impl Parse for Entry {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
-        if attribute(input, kw::title) {
+        if attribute(input, kw::label_case) {
+            Entry::parse_label_case(input)
+        } else if attribute(input, kw::title) {
             Entry::parse_title(input)
         } else if attribute(input, kw::validator) {
             Entry::parse_validator(input)
@@ -869,6 +943,7 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Entry::Title(_) => "title",
+                Entry::LabelCase(_) => "label_case",
                 Entry::Validator(_) => "validator",
                 Entry::Field { .. } => "field",
                 Entry::Buttons(_) => "buttons",

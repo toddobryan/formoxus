@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use dioxus::core::Element;
 
 use crate::error::{FieldError, FormAccessError};
+use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs};
 use crate::{FormMember, RenderCtx};
 
@@ -16,8 +17,8 @@ impl FormMember for OptionMember {
         self.inner.name()
     }
 
-    fn label(&self) -> Option<String> {
-        self.inner.label()
+    fn label(&self, case: LabelCase) -> Option<String> {
+        self.inner.label(case)
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {

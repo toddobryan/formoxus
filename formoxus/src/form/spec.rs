@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
 use crate::error::FormError;
+use crate::label_case::LabelCase;
 use crate::widgets::ControlType;
 
 #[derive(Clone, Debug)]
@@ -19,6 +20,13 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     /// Declaration order, which is display order — `form!` collects a `Vec`
     /// for exactly this reason.
     pub(super) buttons: Vec<ButtonSpec>,
+    /// How a field's name becomes its label when nothing names one explicitly.
+    ///
+    /// `None` means "not stated at this level", not "Title" — so that a future
+    /// app-level default read from context can fill it in, and an explicit
+    /// per-form setting can still override that. See
+    /// `.claude/memory/config_cascade.md`.
+    pub(super) label_case: Option<LabelCase>,
     _type: PhantomData<T>,
 }
 
@@ -35,8 +43,19 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             fields: IndexMap::new(),
             validator: None,
             buttons: Vec::new(),
+            label_case: None,
             _type: PhantomData,
         }
+    }
+
+    /// Set the casing every derived label in this form uses.
+    ///
+    /// Form-wide and not per-field, following `leptos_form`'s `rename_all`:
+    /// casing is a consistency property of a whole form, and a form whose
+    /// fields disagreed about it would just look broken.
+    pub fn with_label_case(mut self, case: LabelCase) -> Self {
+        self.label_case = Some(case);
+        self
     }
 
     pub fn with_title(mut self, title: &str) -> Self {

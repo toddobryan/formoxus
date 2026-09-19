@@ -26,7 +26,7 @@ pub type FieldSpecs = IndexMap<String, FieldSpec>;
 
 pub trait FormMember: Debug {
     fn name(&self) -> String;
-    fn label(&self) -> Option<String>;
+    fn label(&self, case: LabelCase) -> Option<String>;
     fn render(&self, ctx: &RenderCtx) -> Element;
     /// This member's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
@@ -137,11 +137,11 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
 /// `None` for a `ListSet` row key (`#3`) and for an all-digit name. Neither is
 /// prose: a row key is an identity, and a tuple-struct field's "0" is a
 /// position. The list itself is what carries the label.
-pub(crate) fn default_label(name: &str) -> Option<String> {
+pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
     if name.starts_with(ROW_SIGIL) || name.chars().all(|c| c.is_ascii_digit()) {
         None
     } else {
-        Some(name.to_case(LabelCase::Title))
+        Some(name.to_case(case))
     }
 }
 
@@ -229,17 +229,22 @@ pub struct RenderCtx {
     pub values: ValuesByPath,
     pub required: bool,
     pub on_edit: Callback<Edit>,
+    /// Already resolved — the cascade is settled once, where the ctx is built,
+    /// rather than re-decided at every member. See
+    /// `.claude/memory/config_cascade.md`.
+    pub label_case: LabelCase,
 }
 
 impl RenderCtx {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionMember` says otherwise.
-    pub fn root(values: ValuesByPath, on_edit: Callback<Edit>) -> Self {
+    pub fn root(values: ValuesByPath, on_edit: Callback<Edit>, label_case: LabelCase) -> Self {
         Self {
             prefix: String::new(),
             values,
             required: true,
             on_edit,
+            label_case,
         }
     }
 
@@ -250,6 +255,7 @@ impl RenderCtx {
             values: self.values,
             required: self.required,
             on_edit: self.on_edit,
+            label_case: self.label_case,
         }
     }
 
@@ -261,6 +267,7 @@ impl RenderCtx {
             values: self.values,
             required: false,
             on_edit: self.on_edit,
+            label_case: self.label_case,
         }
     }
 

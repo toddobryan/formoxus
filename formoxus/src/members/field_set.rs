@@ -3,6 +3,7 @@
 use crate::RenderCtx;
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
+use crate::label_case::LabelCase;
 use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
 };
@@ -24,8 +25,10 @@ impl FormMember for FieldSet {
         self.name.clone()
     }
 
-    fn label(&self) -> Option<String> {
-        self.label.clone().or_else(|| default_label(&self.name))
+    fn label(&self, case: LabelCase) -> Option<String> {
+        self.label
+            .clone()
+            .or_else(|| default_label(&self.name, case))
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
@@ -33,7 +36,7 @@ impl FormMember for FieldSet {
         let members_rendered = self.members.iter().map(|m| m.render(&nested));
         rsx! {
             fieldset {
-                if let Some(text) = self.label() {
+                if let Some(text) = self.label(ctx.label_case) {
                     legend { "{text}"}
                 }
                 { members_rendered.into_iter() }

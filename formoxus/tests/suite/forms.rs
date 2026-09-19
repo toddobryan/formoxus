@@ -8,6 +8,7 @@ use dioxus_html::{
     PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData, set_event_converter,
 };
 use facet::Facet;
+use formoxus::label_case::LabelCase;
 use formoxus::*;
 use googletest::prelude::*;
 use std::any::Any;
@@ -402,7 +403,11 @@ fn a_label_defaults_to_the_humanized_field_name() {
     }
 
     let form = empty_form::<Settings>(FormSpec::default());
-    let labels: Vec<Option<String>> = form.members.iter().map(|m| m.label()).collect();
+    let labels: Vec<Option<String>> = form
+        .members
+        .iter()
+        .map(|m| m.label(LabelCase::Title))
+        .collect();
     expect_that!(
         labels,
         elements_are![some(eq("Can Shuffle")), some(eq("Name"))]
@@ -425,7 +430,7 @@ fn a_list_row_gets_no_label() {
         FormSpec::default(),
     );
     let list = &form.members[0];
-    expect_that!(list.label(), some(eq("Answer Choices")));
+    expect_that!(list.label(LabelCase::Title), some(eq("Answer Choices")));
 
     // Rendered, the rows must not pick up "0"/"1" as labels. Note the list's own
     // label doesn't appear either — no container renders one yet, which is the

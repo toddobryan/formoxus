@@ -3,6 +3,7 @@
 
 use crate::RenderCtx;
 use crate::error::{FieldError, FormAccessError};
+use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
 use crate::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 use dioxus::prelude::*;
@@ -146,8 +147,10 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         self.name.clone()
     }
 
-    fn label(&self) -> Option<String> {
-        self.label.clone().or_else(|| default_label(&self.name))
+    fn label(&self, case: LabelCase) -> Option<String> {
+        self.label
+            .clone()
+            .or_else(|| default_label(&self.name, case))
     }
 
     fn raw_value(&self) -> String {
@@ -198,7 +201,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                 values: ctx.values,
                 props: FieldProps {
                     path: ctx.path(&self.name),
-                    label: self.label(),
+                    label: self.label(ctx.label_case),
                     required: ctx.required,
                     errors: self.errors.clone(),
                 },

@@ -4,6 +4,7 @@ use crate::RenderCtx;
 use crate::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
+use crate::label_case::LabelCase;
 use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     variant_segment,
@@ -144,8 +145,10 @@ impl FormMember for VariantSet {
         self.name.clone()
     }
 
-    fn label(&self) -> Option<String> {
-        self.label.clone().or_else(|| default_label(&self.name))
+    fn label(&self, case: LabelCase) -> Option<String> {
+        self.label
+            .clone()
+            .or_else(|| default_label(&self.name, case))
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
@@ -167,7 +170,7 @@ impl FormMember for VariantSet {
         };
         rsx! {
             fieldset {
-                if let Some(text) = self.label() {
+                if let Some(text) = self.label(ctx.label_case) {
                     legend {
                         "{text}"
                         if ctx.required {
