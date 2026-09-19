@@ -16,18 +16,24 @@ use crate::{Edit, ValuesByPath};
 
 /// The per-field error list, rendered under every control.
 ///
-/// `small` is Pico's convention for help text under an input, which is where
-/// this lands; formoxus ships no stylesheet, so `field-errors`/`field-error`
-/// are its own class names and any framework styles them like ordinary markup.
-/// The only real cost is semantic — `small` means "fine print", which an error
-/// message arguably is not. **When error rendering becomes overridable (the
-/// same mechanism as custom widgets), this is the component to swap**, and the
-/// choice stops being global.
+/// **formoxus ships no stylesheet and depends on no CSS framework.**
+/// `field-errors` and `field-error` are its own class names; style them like
+/// any other markup, with whatever you already use.
 ///
-/// The `aria-invalid` half lives on each widget's own control and is NOT a Pico
-/// dependency: it is the W3C ARIA attribute assistive technology reads to
-/// announce a field as errored. Leaving it off is an accessibility defect, not
-/// a styling preference.
+/// Rendered as an immediate sibling of the control rather than somewhere
+/// further out, which is what lets a plain `input[aria-invalid="true"] + *`
+/// sibling selector reach it — no framework required, and no class needed on
+/// the input. It also puts the message next to its field in reading order.
+///
+/// `small` carries one semantic cost worth naming: it means "fine print",
+/// which an error arguably is not. **When error rendering becomes overridable
+/// (the same mechanism as custom widgets), this is the component to swap**,
+/// and the choice stops being global.
+///
+/// The `aria-invalid` half lives on each widget's own control and is not a
+/// styling matter at all: it is the W3C ARIA attribute assistive technology
+/// reads to announce a field as errored. Leaving it off is an accessibility
+/// defect, not a theming preference.
 #[component]
 pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
     rsx! {
@@ -297,10 +303,12 @@ pub fn HtmlInput(input_type: InputType, values: ValuesByPath, props: FieldProps)
     // and the only asymmetric widget in the set.
 
     // Present ONLY when there is an error. `aria-invalid="false"` is NOT the
-    // neutral value — it asserts "checked, and passed", which Pico duly paints
-    // green with a tick, so an untouched form would claim to have validated
-    // every field. Absent is the only neutral state. Dioxus omits an attribute
-    // whose value is `None`, which is what makes absence expressible at all.
+    // neutral value — per ARIA it asserts "checked, and passed", so an
+    // untouched form would claim to have validated every field, and a screen
+    // reader would say so. Stylesheets that paint a validated-and-clean state
+    // key off it too. Absent is the only neutral state. Dioxus omits an
+    // attribute whose value is `None`, which is what makes absence
+    // expressible at all.
     //
     // Unlike the `small` in `FieldErrors`, this is not a styling choice with a
     // framework behind it: `aria-invalid` is the W3C ARIA attribute assistive
@@ -410,9 +418,9 @@ pub fn BooleanInput(mut values: ValuesByPath, props: FieldProps) -> Element {
     // on a checkbox means "must be ticked", which is not what a required `bool`
     // field asks for — unticked is a complete answer. For the same reason there
     // is no ` *` marker: it would promise a rule nothing enforces.
-    // See `TextInput`. Pico skips a checkbox for the invalid *icon* (there is
-    // nowhere to put one), but the border and the adjacent `small` still key off
-    // this, and it is what a screen reader announces either way.
+    // See `TextInput`. A checkbox has nowhere to put an invalid icon, but the
+    // attribute still drives any border or adjacent-message styling a consumer
+    // writes, and it is what a screen reader announces either way.
     let invalid = (!errors.is_empty()).then_some("true");
 
     let input_element = rsx! {

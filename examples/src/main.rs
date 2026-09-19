@@ -20,14 +20,10 @@ fn main() {
 #[component]
 fn App() -> Element {
     rsx! {
-        // Pico, because formoxus's markup is written against its conventions —
-        // `aria-invalid` on an errored control, `small` for the error list under
-        // a field. Everything formoxus emits carries its own class names too, so
-        // any other framework styles it like ordinary markup.
-        document::Link {
-            rel: "stylesheet",
-            href: "https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css",
-        }
+        // One stylesheet, no framework. formoxus ships no CSS and assumes
+        // none; `main.css` is plain rules against the class names it emits,
+        // and doubles as the worked example of theming it with whatever you
+        // already use.
         document::Link { rel: "stylesheet", href: MAIN_CSS }
 
         main { class: "container",
@@ -35,7 +31,9 @@ fn App() -> Element {
                 h1 { "formoxus examples" }
                 p {
                     "Each section below is one thing formoxus can do, rendered by "
-                    "the real library in a real browser."
+                    "the real library in a real browser. The styling is plain CSS "
+                    "against the class names formoxus emits — no framework, and "
+                    "none assumed."
                 }
             }
             examples::Gallery {}

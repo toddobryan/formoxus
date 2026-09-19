@@ -81,7 +81,7 @@ fn each_type_picks_its_html_type_and_class() {
 
 #[gtest]
 fn the_row_is_wrapped_for_the_existing_style_rule() {
-    // The class the Pico full-width override is written against — see the
+    // The hook a consumer's stylesheet lays the button row out with — see the
     // wrapper in `Form::render_buttons`.
     expect_that!(
         render_to_html(FakeForm),

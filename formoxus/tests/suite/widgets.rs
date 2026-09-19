@@ -349,19 +349,19 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
     expect_that!(html.matches("field-error\"").count(), eq(1));
 }
 
-// ── Pico's validation styling is markup, not a class we invented ─────────
+// ── The error state is markup, not a class we invented ───────────────────
 
 #[gtest]
 fn an_errored_field_marks_its_control_aria_invalid() {
-    // `aria-invalid="true"` on the control is half of Pico's classless idiom
-    // (the other half is the adjacent `small` in `FieldErrors`), and it is the
-    // half a screen reader announces. Styling the message alone would serve the
-    // sighted case and leave the other unserved.
+    // The control itself carries the error state, not just the message beside
+    // it — this is the half a screen reader announces. Rendering the message
+    // alone would serve the sighted case and leave the other unserved.
     let html = super::render_to_html(ScoreFormWithBadInput);
     expect_that!(html, contains_substring(r#"aria-invalid="true""#));
-    // The error message must be an immediate `small` sibling of the input, or
-    // Pico's `input[aria-invalid="true"] + small` rule never matches and the
-    // message renders as ordinary body text — the bug this whole change fixes.
+    // Immediately after the input, with no wrapper in between, so a plain
+    // `input[aria-invalid="true"] + *` sibling selector can reach it. Nesting
+    // it any deeper would force every consumer to invent a class on the input
+    // to style the error state.
     expect_that!(
         html,
         contains_substring(r#"/><small class="field-errors">"#)
@@ -370,9 +370,9 @@ fn an_errored_field_marks_its_control_aria_invalid() {
 
 #[gtest]
 fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
-    // NOT `aria-invalid="false"`: Pico reads that as "checked and passed" and
-    // paints it green with a tick, so an untouched form would claim to have
-    // validated every field. Absent is the only neutral value.
+    // NOT `aria-invalid="false"`: per ARIA that asserts "checked and passed",
+    // so an untouched form would claim to have validated every field. Absent
+    // is the only neutral value.
     let html = super::render_to_html(EmptyInput);
     expect_that!(html, not(contains_substring("aria-invalid")));
 }

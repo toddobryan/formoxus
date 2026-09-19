@@ -1,27 +1,104 @@
-/* Pico supplies the form controls; this is only what formoxus's own class
-   names need on top. Kept tiny on purpose — the point of the gallery is to
-   show what formoxus emits, not to dress it up. */
+/* Plain CSS, no framework.
+ *
+ * formoxus ships no stylesheet and assumes none. Everything it renders carries
+ * its own class name, and this file styles the gallery using nothing but those
+ * hooks — which is also the point of it: it is the worked example of how to
+ * theme formoxus with whatever you already use, or with nothing at all.
+ *
+ * The complete vocabulary:
+ *   .form  .form-title  .form-field  .field-label  .required
+ *   .field-errors  .field-error  .form-errors  .form-error
+ *   .form-row  .add-row  .remove-row
+ *   .formoxus-buttons  .formoxus-button-problems
+ */
+
+:root {
+    --fx-text: #1a1a1a;
+    --fx-muted: #666;
+    --fx-border: #ccc;
+    --fx-error: #b3261e;
+    --fx-radius: 0.25rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --fx-text: #e8e8e8;
+        --fx-muted: #a0a0a0;
+        --fx-border: #555;
+        --fx-error: #f2b8b5;
+    }
+    body { background: #161616; }
+}
+
+body {
+    color: var(--fx-text);
+    font-family: system-ui, sans-serif;
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 44rem;
+    margin-inline: auto;
+    padding: 1rem;
+}
+
+/* ── formoxus's own vocabulary ───────────────────────────────────────── */
+
+.form-title { font-size: 1.1rem; font-weight: 600; margin-block: 0 0.75rem; }
+
+.form-field { display: block; margin-block: 0.75rem; }
+
+.field-label { display: block; font-weight: 500; }
+
+.required { color: var(--fx-error); }
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}
+
+/* The error state lives on the control, so a sibling selector reaches the
+   message without either element needing a class of its own. */
+[aria-invalid="true"] { border-color: var(--fx-error); }
+
+.field-errors,
+.form-errors { color: var(--fx-error); }
+
+.field-error { display: block; }
+
 .formoxus-buttons {
     display: flex;
     gap: 0.5rem;
     justify-content: flex-end;
+    margin-block-start: 1rem;
 }
+
 .formoxus-buttons button {
-    width: auto;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
 }
-.field-errors {
-    color: var(--pico-del-color, #b3261e);
-}
+
+.form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+
+/* ── the gallery frame, not formoxus ─────────────────────────────────── */
+
 .example {
-    border: 1px solid var(--pico-muted-border-color, #ccc);
-    border-radius: var(--pico-border-radius, 0.25rem);
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius);
     padding: 1rem 1.25rem;
     margin-block: 2rem;
 }
-.example > h2 {
-    margin-top: 0;
-}
-.example > .note {
-    color: var(--pico-muted-color, #666);
-    font-size: 0.9em;
-}
+.example > h2 { margin-top: 0; font-size: 1.15rem; }
+.example > .note { color: var(--fx-muted); font-size: 0.9em; }

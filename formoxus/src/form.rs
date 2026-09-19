@@ -303,9 +303,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             })
             .collect::<Vec<_>>();
         rsx! {
-            // Pico stretches `button[type=submit]` to the full field width to
-            // match its form controls; this wrapper opts back out and
-            // right-aligns the row.
+            // A grouping element so the button row is addressable as one
+            // thing: `.formoxus-buttons` is the hook for laying it out, and
+            // for opting its buttons out of any full-width rule a consumer's
+            // stylesheet applies to form controls.
             div { class: "formoxus-buttons", { rendered.into_iter() } }
         }
     }
