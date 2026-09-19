@@ -36,7 +36,7 @@ invent.
 
 ## Three traps it sprang, none of them visible from the file tree
 
-1. **Dropping `darling` broke `form2!`.** darling was pulling in `syn`'s
+1. **Dropping `darling` broke `form!`.** darling was pulling in `syn`'s
    `extra-traits` feature, which is what provides `Debug` on syn types —
    and `form2.rs` derives `Debug` across its parsed spec types, with 72 parser
    tests asserting on that output. Removing the derive path's only darling
@@ -44,7 +44,7 @@ invent.
    `syn = { features = ["full", "extra-traits"] }` directly. **A transitive
    feature is an invisible dependency; deleting the crate that pulled it in
    is what exposes it.**
-2. **The macros emit absolute paths, and paths are not code.** `form2!` and
+2. **The macros emit absolute paths, and paths are not code.** `form!` and
    `using_fns!` expanded to `::formoxus::reflect::…` in 12 places. The library
    compiled clean and only the *consumer* test target failed, because that is
    the only place macro output is actually resolved. One assertion also
@@ -61,13 +61,13 @@ invent.
 ## Decisions taken along the way
 
 - **`formoxus-macros` is no longer optional.** The `derive` feature (and
-  `default = ["derive"]`) existed to make `#[derive(Form)]` skippable. `form2!`
+  `default = ["derive"]`) existed to make `#[derive(Form)]` skippable. `form!`
   is how a form is *declared*, so a build without it would be missing the
   crate's primary entry point, not trading convenience for compile time. The
   two `[[test]] required-features` blocks went with it.
 - **`tests/reflect.rs` became `tests/consumer.rs`.** The target exists for
   tests that must be written the way a consumer writes them — anything touching
-  `form2!` has to live where the path `formoxus::` resolves, which rules out
+  `form!` has to live where the path `formoxus::` resolves, which rules out
   formoxus itself. The new name says *why* it exists rather than which path it
   covered.
 - **`error::try_from` was deleted** — the derive path's `FromStr` scalar

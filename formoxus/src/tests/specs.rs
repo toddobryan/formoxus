@@ -2,7 +2,7 @@
 //!
 //! These go through `render_to_html` rather than inspecting members, because the
 //! question is whether an override *arrives* — and the DOM is the only place that
-//! answer is unambiguous. Nothing here constructs a spec through `form2!`; the
+//! answer is unambiguous. Nothing here constructs a spec through `form!`; the
 //! builder is the contract between the macro and the tree, so testing the builder
 //! keeps these honest about which half is being exercised.
 
@@ -136,7 +136,7 @@ fn an_override_works_in_the_other_direction_too() {
 
 #[gtest]
 fn an_unmatched_path_is_a_no_op() {
-    // The witness fn makes this unreachable through `form2!`, but the builder is
+    // The witness fn makes this unreachable through `form!`, but the builder is
     // public and `apply_specs` must not panic on a path it simply doesn't find —
     // a spec is a set of statements about members, not an assertion that each
     // exists.

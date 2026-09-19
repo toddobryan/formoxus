@@ -1,7 +1,7 @@
 //! Reflection-based forms for Dioxus: build a form at runtime from a model's
 //! [`facet`] shape, instead of from a hand-written form struct.
 //!
-//! A model needs only `#[derive(Facet)]`. [`form2!`](macro@form2) declares the
+//! A model needs only `#[derive(Facet)]`. [`form!`](macro@form) declares the
 //! form over it — title, labels, controls, validators, buttons — and
 //! [`use_form`] turns that declaration into a live, reactive form. Values
 //! convert through facet's own vtables, so there is no `FromStr`/`Display`
@@ -11,14 +11,14 @@
 //! #[derive(Facet)]
 //! struct Signup { email: String, password: String }
 //!
-//! let spec = form2! { Signup { title: "Sign up", password: { control: password } } };
+//! let spec = form! { Signup { title: "Sign up", password: { control: password } } };
 //! let form = use_form(spec);
 //! rsx! { {form.render(using_fns! { submit: |model| async move { … } })} }
 //! ```
 //!
 //! # How the pieces fit
 //!
-//! - [`FormSpec`] is the **declaration** — what `form2!` produces. It is a
+//! - [`FormSpec`] is the **declaration** — what `form!` produces. It is a
 //!   schema, not state, and it never crosses a server-fn boundary.
 //! - [`FormState`] is the **built tree**: plain data, no signals, testable with
 //!   no Dioxus runtime. [`Form`] is the reactive handle over it.
@@ -40,13 +40,13 @@ pub mod members;
 pub mod submission;
 pub mod widgets;
 
-/// `form2! { Model { … } }` — build a [`FormSpec`] for `Model`.
+/// `form! { Model { … } }` — build a [`FormSpec`] for `Model`.
 ///
 /// A function-like macro, not a derive: it expands in the *consuming* crate, so
 /// it can name the model's own type and capture runtime values from the scope
 /// it sits in. Every field path it names is checked against the model's real
 /// shape at compile time.
-pub use formoxus_macros::form2;
+pub use formoxus_macros::form;
 
 /// `using_fns! { save: |m| async move { … }, … }` — the handlers for one
 /// [`Form::render`], keyed by button name.
@@ -85,7 +85,11 @@ pub mod prelude {
         unchecked_handler, use_form, use_form_values,
     };
     pub use crate::submission::Submission;
-    pub use crate::{form2, using_fns};
+    // Straight from the macro crate, not `crate::{form, …}`: `crate::form` names
+    // both the module and the macro, so re-exporting it that way would put the
+    // MODULE into every glob import of this prelude too. `formoxus_macros::form`
+    // is only ever the macro.
+    pub use formoxus_macros::{form, using_fns};
 }
 
 // The one crate-internal item the test modules reach for directly.

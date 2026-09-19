@@ -9,7 +9,7 @@
 //! auto-discovers `tests/*.rs` and would otherwise look for `tests/<name>.rs`.
 
 use facet::Facet;
-use formoxus::form2;
+use formoxus::form;
 use formoxus::{empty_form, form_for, use_form};
 use googletest::prelude::*;
 
@@ -22,7 +22,7 @@ struct Article {
     words: u32,
 }
 
-/// The title of a form as `form2!` finally stored it.
+/// The title of a form as `form!` finally stored it.
 ///
 /// Goes through `empty_form` because `FormSpec`'s fields are private — and
 /// that's the right route anyway: it's the one a page takes.
@@ -53,7 +53,7 @@ fn borrowed_title() -> &'static str {
 #[gtest]
 fn a_literal_title_works() {
     expect_that!(
-        title_of(form2! { Article { title: "A literal" } }),
+        title_of(form! { Article { title: "A literal" } }),
         some(eq("A literal"))
     );
 }
@@ -61,7 +61,7 @@ fn a_literal_title_works() {
 #[gtest]
 fn a_const_title_works() {
     expect_that!(
-        title_of(form2! { Article { title: HEADLINE } }),
+        title_of(form! { Article { title: HEADLINE } }),
         some(eq("From a const"))
     );
 }
@@ -69,7 +69,7 @@ fn a_const_title_works() {
 #[gtest]
 fn a_static_title_works() {
     expect_that!(
-        title_of(form2! { Article { title: STATIC_HEADLINE } }),
+        title_of(form! { Article { title: STATIC_HEADLINE } }),
         some(eq("From a static"))
     );
 }
@@ -79,7 +79,7 @@ fn a_fn_returning_string_works() {
     // The `&String -> &str` coercion, and the one whose temporary has the
     // shortest life: it must survive only until `with_title` copies it.
     expect_that!(
-        title_of(form2! { Article { title: owned_title() } }),
+        title_of(form! { Article { title: owned_title() } }),
         some(eq("From a String fn"))
     );
 }
@@ -87,7 +87,7 @@ fn a_fn_returning_string_works() {
 #[gtest]
 fn a_fn_returning_str_works() {
     expect_that!(
-        title_of(form2! { Article { title: borrowed_title() } }),
+        title_of(form! { Article { title: borrowed_title() } }),
         some(eq("From a &str fn"))
     );
 }
@@ -96,7 +96,7 @@ fn a_fn_returning_str_works() {
 fn a_format_call_works() {
     let count = 3;
     expect_that!(
-        title_of(form2! { Article { title: format!("{count} drafts") } }),
+        title_of(form! { Article { title: format!("{count} drafts") } }),
         some(eq("3 drafts"))
     );
 }
@@ -108,7 +108,7 @@ fn a_local_binding_works() {
     // the form is built — a fetched resource, a route parameter, a signal.
     let from_the_page = String::from("Editing “Trees”");
     expect_that!(
-        title_of(form2! { Article { title: from_the_page } }),
+        title_of(form! { Article { title: from_the_page } }),
         some(eq("Editing “Trees”"))
     );
 }
@@ -117,14 +117,14 @@ fn a_local_binding_works() {
 fn a_conditional_expression_works() {
     let creating = false;
     expect_that!(
-        title_of(form2! { Article { title: if creating { "New article" } else { "Edit article" } } }),
+        title_of(form! { Article { title: if creating { "New article" } else { "Edit article" } } }),
         some(eq("Edit article"))
     );
 }
 
 #[gtest]
 fn a_spec_may_have_no_title() {
-    expect_that!(title_of(form2! { Article {} }), none());
+    expect_that!(title_of(form! { Article {} }), none());
 }
 
 // ── `validator:` ─────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ fn a_validator_fn_item_coerces_to_the_fn_pointer() {
     // this pins is that a plain fn item still reaches `with_validator(fn(&T) ->
     // Vec<FormError>)` — the coercion an expanded call depends on.
     expect_that!(
-        title_of(form2! {
+        title_of(form! {
             Article {
                 title: "With a validator",
                 validator: headline_is_not_shouted,
@@ -162,7 +162,7 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
     let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
     let mut state = formoxus::form_for(
         &shouted,
-        form2! { Article { validator: headline_is_not_shouted } },
+        form! { Article { validator: headline_is_not_shouted } },
     );
 
     expect_that!(state.validate(), none());
@@ -175,7 +175,7 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
 // `src/tests/specs.rs` deliberately builds its `FormSpec`s by hand so it
 // stays honest about testing the *builder*. Neither would notice `expand()`
 // emitting a wrong key string, or dropping the field arm of the chain. These go
-// through `form2!` and read the DOM, which is the only unambiguous evidence that
+// through `form!` and read the DOM, which is the only unambiguous evidence that
 // an override arrived.
 
 use dioxus::prelude::*;
@@ -224,7 +224,7 @@ fn a_trip() -> Trip {
 
 #[component]
 fn LabelledName() -> Element {
-    use_form(|| empty_form(form2! {
+    use_form(|| empty_form(form! {
         Trip {
             name => { label: "Trip name" },
         }
@@ -247,7 +247,7 @@ fn a_label_from_the_macro_reaches_the_markup() {
 fn PasswordSecret() -> Element {
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 secret => { control: password },
             }
@@ -271,7 +271,7 @@ fn a_control_from_the_macro_changes_the_rendered_input() {
 fn SelectedBool() -> Element {
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 confirmed => { control: select },
             }
@@ -294,7 +294,7 @@ fn a_control_can_replace_a_derived_checkbox_with_a_select() {
 fn TextareaSecret() -> Element {
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 secret => { control: textarea },
             }
@@ -319,7 +319,7 @@ fn a_control_can_override_text_to_a_textarea() {
 
 #[component]
 fn BothKeys() -> Element {
-    use_form(|| empty_form(form2! {
+    use_form(|| empty_form(form! {
         Trip {
             secret => { control: password, label: "Passphrase" },
         }
@@ -341,7 +341,7 @@ fn a_field_body_may_carry_both_keys() {
 
 #[component]
 fn NestedLabel() -> Element {
-    use_form(|| empty_form(form2! {
+    use_form(|| empty_form(form! {
         Trip {
             venue.city => { label: "Town" },
         }
@@ -369,7 +369,7 @@ fn ListLabelAndRowControls() -> Element {
     // the reason the parser compares on the rendered key rather than on idents.
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 stops => { label: "Stops along the way" },
                 stops[] => { control: email },
@@ -397,7 +397,7 @@ fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
 fn EverythingAtOnce() -> Element {
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 title: "Edit trip",
                 validator: trip_has_a_name,
@@ -444,7 +444,7 @@ fn a_passing_validator_lets_the_model_through() {
     let quiet = Article { headline: "Trees are good".to_string(), words: 400 };
     let mut state = formoxus::form_for(
         &quiet,
-        form2! { Article { validator: headline_is_not_shouted } },
+        form! { Article { validator: headline_is_not_shouted } },
     );
     expect_that!(state.validate(), some(eq(&quiet)));
     expect_that!(state.has_errors(), eq(false));
@@ -459,7 +459,7 @@ fn a_validators_message_lands_where_form_errors_render() {
     let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
     let mut state = formoxus::form_for(
         &shouted,
-        form2! { Article { validator: headline_is_not_shouted } },
+        form! { Article { validator: headline_is_not_shouted } },
     );
     let _ = state.validate();
     expect_that!(
@@ -475,7 +475,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
     let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
     let mut state = formoxus::form_for(
         &shouted,
-        form2! { Article { validator: headline_is_not_shouted } },
+        form! { Article { validator: headline_is_not_shouted } },
     );
     expect_that!(state.validate(), none());
 
@@ -505,7 +505,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
     // well-formed — `words` here never parsed, so no `Article` exists.
     let mut state = formoxus::form_for(
         &Article { headline: "Trees".to_string(), words: 1 },
-        form2! { Article { validator: counting_validator } },
+        form! { Article { validator: counting_validator } },
     );
     state.apply(&std::collections::HashMap::from([
         ("headline".to_string(), "Trees".to_string()),
@@ -554,7 +554,7 @@ fn ShoutyWidget(
 fn CustomSecret() -> Element {
     use_form(|| form_for(
         &a_trip(),
-        form2! {
+        form! {
             Trip {
                 secret => { control: custom(ShoutyWidget) },
             }

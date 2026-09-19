@@ -3,7 +3,7 @@
 //! The two halves are deliberately apart. A [`ButtonSpec`] is **static
 //! knowledge** — which buttons exist, in what order, how each renders, whether
 //! it validates first — and travels inside the [`FormSpec`](crate::FormSpec)
-//! that `form2!` builds. A [`ButtonFn`] is the behaviour, supplied at the
+//! that `form!` builds. A [`ButtonFn`] is the behaviour, supplied at the
 //! `render` call site instead, because a handler needs things (the form handle,
 //! current props, a `Navigator`) that do not exist where the spec is declared.
 //! `BUTTONS_PLAN.md` §2 records why that split is forced rather than chosen.
@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use crate::form::{Handler, UncheckedHandler};
 use crate::label_case::{LabelCase, ToCase};
 
-/// One button, as declared in `form2!`'s `buttons:` block.
+/// One button, as declared in `form!`'s `buttons:` block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ButtonSpec {
     /// The author's name for it, which is also the key a handler is supplied
@@ -57,7 +57,7 @@ impl ButtonSpec {
     }
 }
 
-/// Mirrors the five names `form2!` accepts.
+/// Mirrors the five names `form!` accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ButtonType {
     Submit,
@@ -141,7 +141,7 @@ impl<T> Clone for ButtonFn<T> {
 /// builds.
 ///
 /// A map rather than a struct because the reflection path has no per-form type
-/// to put fields on: `form2!` is an expression macro producing a runtime
+/// to put fields on: `form!` is an expression macro producing a runtime
 /// `FormSpec` value, so at the `render` call site there is nothing to name.
 /// That is also why the completeness check is at render rather than at compile
 /// time; [`Fns::reconcile`] is where it happens.

@@ -11,11 +11,11 @@ stale mirror; this repo is the source of truth.
 
 ```
 formoxus/           — the library
-formoxus-macros/    — proc macros: form2! and using_fns!, nothing else
+formoxus-macros/    — proc macros: form! and using_fns!, nothing else
 ```
 
 **One way to build a form, as of 2026-09-19.** A model derives `Facet` and
-nothing else; `form2!` declares the form over its shape and `use_form` makes it
+nothing else; `form!` declares the form over its shape and `use_form` makes it
 live. The original `#[derive(Form)]`/`#[derive(FieldSet)]` path was deleted that
 day and the `reflect` module it coexisted with was flattened into the crate
 root — so `formoxus::Form`, not `formoxus::reflect::Form`. Anything still
@@ -52,8 +52,8 @@ reach:
 - `formoxus/src/tests/` — the bulk of them, inside the crate, because they
   reach crate-private items.
 - `formoxus/tests/consumer.rs` — tests that must be written the way a
-  *consumer* writes them. Anything exercising `form2!`/`using_fns!` has to
+  *consumer* writes them. Anything exercising `form!`/`using_fns!` has to
   live where the path `formoxus::` resolves, which rules out formoxus itself.
-- `formoxus/tests/ui/` — trybuild goldens pinning `form2!`'s compile-time
+- `formoxus/tests/ui/` — trybuild goldens pinning `form!`'s compile-time
   diagnostics, including spans. Regenerate with `TRYBUILD=overwrite`, then
   *read the diff*.

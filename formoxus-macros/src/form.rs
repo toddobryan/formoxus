@@ -4,7 +4,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{Expr, Ident, Path, Result, Token, braced, ext::IdentExt, parenthesized, parse::{Parse, ParseStream}, punctuated::Punctuated};
 
-pub fn impl_form2(input: TokenStream2) -> TokenStream2 {
+pub fn impl_form(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FormSpecInput>(input) {
         Ok(spec) => spec.expand(),
         Err(err) => err.to_compile_error(),
@@ -117,7 +117,7 @@ fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> TokenStream2
                 let inner = probe(rest, quote!(#row), depth + 1);
                 // `quote_spanned!`, not `quote!`: `.iter()` is the token that
                 // fails when `[]` is put on something that is not a list, and
-                // with a call-site span rustc underlines the whole `form2!`
+                // with a call-site span rustc underlines the whole `form!`
                 // invocation and suggests nonsense. Borrowing the segment's own
                 // span puts the caret on the author's `field[]`.
                 let iter = quote_spanned! { seg.ident.span()=> #next.iter() };
@@ -403,7 +403,7 @@ impl Parse for FieldBody {
 /// under one variant is a dispatch convenience, not a concept an author has. HTML
 /// spells it `type="password"` and so does this. That makes this table the stable
 /// surface: the enum below it can be regrouped, renamed, or split without
-/// touching a single `form2!` call.
+/// touching a single `form!` call.
 ///
 /// Names follow HTML where HTML has one (`tel`, not `telephone`; `datetime_local`
 /// for `datetime-local`, since a hyphen cannot be an ident) and formoxus where it
@@ -986,7 +986,7 @@ mod tests {
 
     #[gtest]
     fn a_spec_may_be_empty() {
-        // `form2! { T {} }` is the "formization with no customization" case —
+        // `form! { T {} }` is the "formization with no customization" case —
         // every struct gets one, so the empty body has to be legal.
         let spec = parse(quote! { Source {} }).expect("an empty spec should parse");
         expect_that!(kinds(&spec), elements_are![]);

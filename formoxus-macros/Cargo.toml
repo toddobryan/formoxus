@@ -7,7 +7,7 @@ edition = "2024"
 proc-macro = true
 
 [dependencies]
-# `extra-traits` for `Debug` on syn types: form2.rs derives Debug across its
+# `extra-traits` for `Debug` on syn types: form.rs derives Debug across its
 # parsed spec types, and its 78 parser tests assert on that output. It used to
 # arrive transitively through darling; with darling gone it has to be declared.
 syn = { version = "3", features = ["full", "extra-traits"] }

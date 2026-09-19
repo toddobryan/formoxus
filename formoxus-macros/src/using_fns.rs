@@ -9,7 +9,7 @@
 //!
 //! **Why a map and not a struct literal.** A struct literal would give the
 //! completeness check for free — forget `cancel` and rustc says `missing field
-//! 'cancel'`. The reflection path has no struct to name: `form2!` is an
+//! 'cancel'`. The reflection path has no struct to name: `form!` is an
 //! *expression* macro producing a runtime `FormSpec` value, so at the `render`
 //! call site, usually in another function, there is no per-form type in scope.
 //! `<T as FormState>::Handlers { … }` does not close the gap either — qualified

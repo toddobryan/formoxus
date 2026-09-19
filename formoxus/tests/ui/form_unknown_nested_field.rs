@@ -1,6 +1,6 @@
 //! A dotted path is checked all the way down, not just at its first segment.
 use facet::Facet;
-use formoxus::form2;
+use formoxus::form;
 use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -14,7 +14,7 @@ struct Event {
 }
 
 fn main() {
-    let _ = empty_form::<Event>(form2! {
+    let _ = empty_form::<Event>(form! {
         Event {
             venue.zipcode => { label: "ZIP" },
         }

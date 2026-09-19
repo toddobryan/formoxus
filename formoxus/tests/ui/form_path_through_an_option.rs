@@ -8,7 +8,7 @@
 //! If the witness ever learns to see through an `Option` (an `if let`, say), this
 //! test is the one to delete.
 use facet::Facet;
-use formoxus::form2;
+use formoxus::form;
 use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -22,7 +22,7 @@ struct Event {
 }
 
 fn main() {
-    let _ = empty_form::<Event>(form2! {
+    let _ = empty_form::<Event>(form! {
         Event {
             notes.city => { label: "City" },
         }

@@ -51,7 +51,7 @@ pub enum ControlType {
     CheckboxMultiple,
     RadioGroup,
     File,
-    /// A widget the author supplied, via `form2!`'s `custom(MyWidget)`.
+    /// A widget the author supplied, via `form!`'s `custom(MyWidget)`.
     ///
     /// The escape hatch for a value kind the built-in controls cannot serve —
     /// `Markdown` needs a live preview, a `Ref<Source>` needs an async-fed
@@ -65,7 +65,7 @@ pub enum ControlType {
     /// exist without disturbing anything that already holds a `ControlType`.
     ///
     /// The cost is `Debug`: a fn pointer prints as an address. Hence `name`,
-    /// which `form2!` fills in from the widget's own path so panics and test
+    /// which `form!` fills in from the widget's own path so panics and test
     /// assertions read `custom(MarkdownWidget)` rather than `0x7f…`.
     Custom {
         name: &'static str,
@@ -87,7 +87,7 @@ impl std::fmt::Debug for ControlType {
             Self::CheckboxMultiple => f.write_str("CheckboxMultiple"),
             Self::RadioGroup => f.write_str("RadioGroup"),
             Self::File => f.write_str("File"),
-            // `form2!`'s own spelling, so the panic in `ScalarInput` quotes back
+            // `form!`'s own spelling, so the panic in `ScalarInput` quotes back
             // what the author wrote. Deriving this would print the fn pointer's
             // address beside the name, which is noise in every message it
             // appears in.
@@ -149,7 +149,7 @@ impl InputType {
     /// The `type=` attribute this renders as.
     ///
     /// HTML's spelling, which is not always the variant's: `tel`, and
-    /// `datetime-local` with the hyphen an ident could not carry. `form2!`'s
+    /// `datetime-local` with the hyphen an ident could not carry. `form!`'s
     /// vocabulary spells these `tel` and `datetime_local`, so `InputType` is the
     /// pivot with HTML's names on both sides of it.
     pub fn html_type(&self) -> &'static str {

@@ -55,7 +55,7 @@ taxonomy bridge (`schema_of`/`schemas_of` in a new `taxon_bridge.rs`),
 
 `define_attr_grammar!` still exists in 0.50. That was the mechanism
 [[formoxus-control-survey]] records as built, proven, then abandoned. Namespaced
-attributes do NOT reopen that decision — what actually won it for `form2!` was
+attributes do NOT reopen that decision — what actually won it for `form!` was
 the orphan rule dissolving because the macro expands in the CONSUMING crate
 ([[facet-form-design-decisions]]), and namespacing is orthogonal to that. NOT
 checked, if anyone ever revisits: whether the grammar's own limits moved (the

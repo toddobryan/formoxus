@@ -1,8 +1,8 @@
-//! Compile-fail tests for `form2!`'s diagnostics.
+//! Compile-fail tests for `form!`'s diagnostics.
 //!
 //! Each `tests/ui/*.rs` is a deliberately-broken input; the matching `.stderr`
 //! pins the exact compiler output — **including the span**. That's the point:
-//! `form2!` checks every field path it names against the model's real shape by
+//! `form!` checks every field path it names against the model's real shape by
 //! emitting a witness expression per path, so a typo fails at compile time
 //! rather than as a runtime `no_such_path`. These tests guard that the failure
 //! stays *legible* — pointing at the offending path, in the caller's source.

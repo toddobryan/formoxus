@@ -8,7 +8,7 @@
 //! lets a form name a model from one crate and a widget from another without
 //! tripping the orphan rule — see `.claude/memory/facet_form_design_decisions.md`.
 //!
-//! - [`macro@form2`] builds a `FormSpec` for a model from a declarative block:
+//! - [`macro@form`] builds a `FormSpec` for a model from a declarative block:
 //!   title, per-field labels and controls, `[]` row selectors for `Vec` fields,
 //!   a form-wide validator, and a `buttons:` block. Every field path it names is
 //!   checked against the model's real shape at compile time, by emitting a
@@ -26,13 +26,13 @@
 
 use proc_macro::TokenStream;
 
-mod form2;
+mod form;
 mod using_fns;
 
-/// `form2! { Model { … } }` — build a `FormSpec` for `Model`.
+/// `form! { Model { … } }` — build a `FormSpec` for `Model`.
 #[proc_macro]
-pub fn form2(input: TokenStream) -> TokenStream {
-    form2::impl_form2(input.into()).into()
+pub fn form(input: TokenStream) -> TokenStream {
+    form::impl_form(input.into()).into()
 }
 
 /// The handlers for one `render`, keyed by button name — see

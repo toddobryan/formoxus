@@ -5,6 +5,8 @@
 > below of the form `crates/formoxus/src/reflect/x.rs` are now
 > `formoxus/src/x.rs`, and `formoxus::reflect::Y` is now `formoxus::Y`. The
 > reasoning is unchanged and is why this file is kept; only the addresses moved.
+> `form2!` was also renamed to `form!` — the `2` only existed because the
+> derive macro held the name.
 > See `.claude/memory/derive_path_removal.md`.
 
 Decided 2026-09-05 against `ac09b6c` (74 tests green), after prototyping.

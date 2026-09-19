@@ -1,13 +1,13 @@
-//! Buttons on the reflection path: declared in `form2!`, handled at `render`.
+//! Buttons on the reflection path: declared in `form!`, handled at `render`.
 //!
 //! Written from a consumer's position (see `tests/reflect.rs`) because
-//! `form2!` and `using_fns!` both expand to `::formoxus::…` paths, which cannot
+//! `form!` and `using_fns!` both expand to `::formoxus::…` paths, which cannot
 //! resolve inside formoxus itself.
 
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{Fns, FormSpec, empty_form, use_form};
-use formoxus::{form2, using_fns};
+use formoxus::{form, using_fns};
 use googletest::prelude::*;
 
 use super::render_to_html;
@@ -18,7 +18,7 @@ pub struct FakeFormWithButtons {
 }
 
 fn fake_form() -> FormSpec<FakeFormWithButtons> {
-    form2!(
+    form!(
         FakeFormWithButtons {
             some_data => {
                 control: text,
@@ -159,7 +159,7 @@ struct Plain {
 
 #[component]
 fn NoButtons() -> Element {
-    let form = use_form(|| empty_form(form2! { Plain { note => { label: "Note" } } }));
+    let form = use_form(|| empty_form(form! { Plain { note => { label: "Note" } } }));
     form.render(Fns::new())
 }
 

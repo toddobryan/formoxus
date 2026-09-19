@@ -1,5 +1,5 @@
 error[E0609]: no field `city` on type `std::option::Option<Venue>`
-  --> tests/ui/form2_path_through_an_option.rs:27:19
+  --> tests/ui/form_path_through_an_option.rs:27:19
    |
 27 |             notes.city => { label: "City" },
    |                   ^^^^ unknown field

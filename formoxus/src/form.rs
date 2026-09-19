@@ -10,7 +10,7 @@
 //! [`use_form`], defined here.
 //!
 //! [`FormSpec<T>`] is the author's declaration — title, per-field overrides,
-//! validator, buttons — that `form2!` builds and [`FormState::apply_specs`]
+//! validator, buttons — that `form!` builds and [`FormState::apply_specs`]
 //! lays onto the tree. Lives in [`spec`].
 
 use facet::Facet;

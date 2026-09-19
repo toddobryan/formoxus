@@ -1,7 +1,7 @@
 error[E0599]: no method named `iter` found for struct `std::string::String` in the current scope
-  --> tests/ui/form2_brackets_on_a_scalar.rs:15:13
+  --> tests/ui/form_brackets_on_a_scalar.rs:15:13
    |
-13 |       let _ = empty_form::<Article>(form2! {
+13 |       let _ = empty_form::<Article>(form! {
    |  ___________________________________-
 14 | |         Article {
 15 | |             headline[] => { control: textarea },

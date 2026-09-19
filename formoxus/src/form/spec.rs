@@ -1,5 +1,5 @@
 //! [`FormSpec<T>`] — the author's declaration: title, per-field overrides,
-//! validator, and buttons. What `form2!` builds, and what [`super::FormState`]
+//! validator, and buttons. What `form!` builds, and what [`super::FormState`]
 //! applies onto the tree it walks from the model's shape.
 
 use std::{fmt::Debug, marker::PhantomData};
@@ -16,7 +16,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     pub(super) title: Option<String>,
     pub(super) fields: IndexMap<String, FieldSpec>,
     pub(super) validator: Option<fn(&T) -> Vec<FormError>>,
-    /// Declaration order, which is display order — `form2!` collects a `Vec`
+    /// Declaration order, which is display order — `form!` collects a `Vec`
     /// for exactly this reason.
     pub(super) buttons: Vec<ButtonSpec>,
     _type: PhantomData<T>,
@@ -59,7 +59,7 @@ impl<T:  Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    /// Replaces rather than appends: `form2!` allows one `buttons:` block, so
+    /// Replaces rather than appends: `form!` allows one `buttons:` block, so
     /// a second call is a caller changing its mind, not adding to a list.
     pub fn with_buttons(mut self, buttons: Vec<ButtonSpec>) -> Self {
         self.buttons = buttons;
