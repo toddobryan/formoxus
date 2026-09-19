@@ -72,13 +72,35 @@ body {
 .form-errors { color: var(--fx-error); }
 
 /* Both error lists are `ul`s: several messages really are a list, and a screen
-   reader announces the structure and the count. Dropping the marker and the
-   indent here is this gallery's styling choice, not something formoxus imposes. */
+   reader announces the structure and the count.
+ *
+ * The marker is an X rather than a disc, which is what a list-marker string is
+ * for. Putting it in `::marker` rather than in a `::before` matters: a marker
+ * is list decoration, so assistive technology does not read it out as content,
+ * and the message is not prefixed with "times" or "ballot X" on every error.
+ * Old Safari ignores the string and falls back to a disc — a lost flourish,
+ * nothing more.
+ *
+ * All of this is the gallery's choice. formoxus emits the `ul`/`li` and the
+ * class names and imposes no styling of its own. */
 .field-errors,
 .form-errors {
-    list-style: none;
+    list-style-type: "\2715";  /* ✕ MULTIPLICATION X */
     margin-block: 0.35rem;
-    padding-inline-start: 0;
+    padding-inline-start: 1.25rem;
+}
+
+/* Explicit, though the `li` already inherits red from the list above — the
+   marker takes its colour from its own list item, so this only guards against
+   someone later recolouring the text and wondering why the X followed. */
+.field-error::marker,
+.form-error::marker {
+    color: var(--fx-error);
+}
+
+.field-error,
+.form-error {
+    padding-inline-start: 0.35rem;
 }
 
 .form-errors { margin-block: 0.75rem; }
