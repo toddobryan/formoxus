@@ -10,15 +10,22 @@ stale mirror; this repo is the source of truth.
 ## Workspace layout
 
 ```
-formoxus/          — the library: reflect/ (the live path) + derive-path types being retired
-formoxus-macros/    — proc macros: form2!, using_fns!, the retiring #[derive(Form)]/#[derive(FieldSet)]
+formoxus/           — the library
+formoxus-macros/    — proc macros: form2! and using_fns!, nothing else
 ```
 
-Two coexisting form-building approaches, not yet fully merged:
-- **`reflect` module** — the active path. Build a form at runtime from a model's
-  `#[derive(Facet)]` shape via `form2!` + `use_form`. No hand-written form struct.
-- **Everything outside `reflect`** — the original derive-path (`#[derive(Form)]`),
-  being retired. Nothing new should be added to it.
+**One way to build a form, as of 2026-09-19.** A model derives `Facet` and
+nothing else; `form2!` declares the form over its shape and `use_form` makes it
+live. The original `#[derive(Form)]`/`#[derive(FieldSet)]` path was deleted that
+day and the `reflect` module it coexisted with was flattened into the crate
+root — so `formoxus::Form`, not `formoxus::reflect::Form`. Anything still
+saying "the derive path" or `formoxus::reflect::` is stale; see
+`.claude/memory/derive_path_removal.md`.
+
+The macros are function-like, never derives, and that is load-bearing rather
+than stylistic: a derive can only expand in the crate that *defines* the type,
+while these expand at the call site, which is what lets a form name a model from
+one crate and a widget from another without tripping the orphan rule.
 
 ## `.claude/memory/`
 
@@ -28,6 +35,10 @@ found the hard way probing `facet`'s API, things tried and abandoned and
 why. Check it at the start of substantial work; update it (and its index)
 when something durable and non-obvious is learned.
 
+Note that `.claude/memory/` (committed, authoritative) and the session
+auto-memory under `~/.claude/projects/` have drifted; the committed copy is
+ahead. Prefer it, and write new memories to both.
+
 ## Testing
 
 Uses [`googletest`](https://docs.rs/googletest) throughout — `expect_that!`/
@@ -35,3 +46,14 @@ Uses [`googletest`](https://docs.rs/googletest) throughout — `expect_that!`/
 memory files for the reasoning that shaped specific tests; there isn't yet a
 CLAUDE.md-level testing-tiers section the way `apcsp-dioxus` has one, because
 this repo has no DB/server boundary of its own to tier against.
+
+Three homes, and which one a test belongs in is determined by what it can
+reach:
+- `formoxus/src/tests/` — the bulk of them, inside the crate, because they
+  reach crate-private items.
+- `formoxus/tests/consumer.rs` — tests that must be written the way a
+  *consumer* writes them. Anything exercising `form2!`/`using_fns!` has to
+  live where the path `formoxus::` resolves, which rules out formoxus itself.
+- `formoxus/tests/ui/` — trybuild goldens pinning `form2!`'s compile-time
+  diagnostics, including spans. Regenerate with `TRYBUILD=overwrite`, then
+  *read the diff*.

@@ -1,5 +1,12 @@
 # Plan: Form as schema, Store as live values
 
+> **Status note, 2026-09-19.** The derive path this document contrasts with was
+> deleted, and the `reflect` module was flattened into the crate root. Paths
+> below of the form `crates/formoxus/src/reflect/x.rs` are now
+> `formoxus/src/x.rs`, and `formoxus::reflect::Y` is now `formoxus::Y`. The
+> reasoning is unchanged and is why this file is kept; only the addresses moved.
+> See `.claude/memory/derive_path_removal.md`.
+
 Decided 2026-09-05 against `ac09b6c` (74 tests green), after prototyping.
 Supersedes two earlier drafts of this file; what they got wrong is recorded
 under "Roads not taken", because that reasoning is the expensive part.

@@ -1,5 +1,12 @@
 # Buttons on the reflection path
 
+> **Status note, 2026-09-19.** The derive path this document contrasts with was
+> deleted, and the `reflect` module was flattened into the crate root. Paths
+> below of the form `crates/formoxus/src/reflect/x.rs` are now
+> `formoxus/src/x.rs`, and `formoxus::reflect::Y` is now `formoxus::Y`. The
+> reasoning is unchanged and is why this file is kept; only the addresses moved.
+> See `.claude/memory/derive_path_removal.md`.
+
 Design settled 2026-09-14; **built 2026-09-16, with §3 overturned on the
 reflection path** — see "What §3 ran into" below before reading it. Sibling to
 `REFLECT_PLAN.md`, which covers the shape walk; this covers what wraps it.
