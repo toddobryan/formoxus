@@ -47,13 +47,17 @@ memory files for the reasoning that shaped specific tests; there isn't yet a
 CLAUDE.md-level testing-tiers section the way `apcsp-dioxus` has one, because
 this repo has no DB/server boundary of its own to tier against.
 
-Three homes, and which one a test belongs in is determined by what it can
-reach:
-- `formoxus/src/tests/` — the bulk of them, inside the crate, because they
-  reach crate-private items.
-- `formoxus/tests/consumer.rs` — tests that must be written the way a
-  *consumer* writes them. Anything exercising `form!`/`using_fns!` has to
-  live where the path `formoxus::` resolves, which rules out formoxus itself.
+Three homes:
+- `formoxus/tests/suite.rs` + `formoxus/tests/suite/` — nearly all of them, as
+  modules of ONE integration target. They run against the public surface a
+  dependent crate gets, so an item that is unreachable or un-nameable from
+  outside fails here instead of passing quietly. One target rather than one
+  per file because the modules share `render_to_html`, the `Harness` and the
+  models, and cargo turns every `tests/*.rs` into a separate binary — which is
+  also why each `mod` needs a `#[path]`.
+- **Inline `#[cfg(test)] mod tests`** — fine, and the right home for tests of a
+  pure function that need no form, model or runtime (see `label_case.rs`). What
+  the repo does NOT want is a *file that is only tests* sitting in `src/`.
 - `formoxus/tests/ui/` — trybuild goldens pinning `form!`'s compile-time
   diagnostics, including spans. Regenerate with `TRYBUILD=overwrite`, then
-  *read the diff*.
+  *read the diff*. A toolchain bump is what invalidates these.
