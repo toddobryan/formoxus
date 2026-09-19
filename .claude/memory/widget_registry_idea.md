@@ -133,3 +133,14 @@ building.**
   *different* problem (that one's about server-error wire shape, this one's
   about default widget selection) — don't conflate them when picking either
   back up.
+
+## UPDATE 2026-09-19: the open fork is answered elsewhere
+
+The "global `OnceLock` vs threaded through `RenderCtx`" question above is
+superseded. It turned out to be one instance of a general problem — `novalidate`
+and `label_case` want the same mechanism — and the answer is a third option
+neither bullet considered: **Dioxus context**, provided at the app root and read
+with `try_use_context` inside the leaf component, which is where rendering
+already happens. It needs no signature changes (the objection to `RenderCtx`)
+and is properly scoped with no static mutable state (the objection to the
+global). See [[config-cascade]]; read it before picking this back up.
