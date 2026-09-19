@@ -23,7 +23,7 @@
 //! the regression net for both.
 
 use super::{Harness, new_since, render_to_html};
-use crate::*;
+use formoxus::*;
 use std::collections::HashMap;
 use dioxus::prelude::*;
 use facet::Facet;

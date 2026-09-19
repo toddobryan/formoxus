@@ -23,7 +23,7 @@
 //! vtables; nothing in the type system enforces it. [`round_trips`] is public to
 //! the test suite so such a type can be held to the same standard.
 
-use crate::fields::parse_scalar;
+use formoxus::fields::parse_scalar;
 use facet::{Facet, Peek};
 use googletest::prelude::*;
 use std::fmt::Debug;

@@ -4,7 +4,7 @@
 // name to win the glob-import ambiguity.
 use super::models::{EventForCreate, Location as ModelLocation};
 use super::render_to_html;
-use crate::*;
+use formoxus::*;
 use dioxus::core::Mutation;
 use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
@@ -158,8 +158,8 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarInput` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use crate::fields::ValueKind;
-use crate::widgets::{ControlType, FieldProps, InputType, ScalarInput};
+use formoxus::fields::ValueKind;
+use formoxus::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 /// What a `String` field derives. Spelled out because these tests drive
 /// `ScalarInput` directly rather than through `FormField::render`, so nothing

@@ -539,7 +539,13 @@ pub fn SelectInput(
 /// [`SelectInput`] shows the same text, and it *does* carry a `name` — but it is
 /// safe there for the same reason by a different route: the option's value is
 /// `""`, never this text, and `""` is absence at both boundaries.
-pub(crate) const ABSENT_DISPLAY: &str = "--none--";
+/// **Not localizable yet, and it should be.** This is English punctuation baked
+/// into a library: a form rendered in French or Japanese still reads
+/// `--none--`. The eventual shape is configuration — most likely alongside
+/// whatever mechanism makes error rendering overridable, since both are "text
+/// formoxus emits on the consumer's behalf" — rather than a second const.
+/// Deliberately deferred; nothing depends on it being fixed soon.
+pub const ABSENT_DISPLAY: &str = "--none--";
 
 #[component]
 pub fn VariantSelect(

@@ -21,7 +21,7 @@
 //! stops compiling. (Verified by hand against the type-alias version before
 //! writing the newtype.)
 
-use crate::*;
+use formoxus::*;
 use googletest::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;

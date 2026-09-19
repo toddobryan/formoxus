@@ -1,21 +1,53 @@
-//! The test suite, one module per concern. These live inside the crate rather
-//! than in `tests/` because several reach crate-private items.
+//! The test suite, one module per concern.
+//!
+//! One integration target rather than one file per concern, which cargo would
+//! turn into a dozen separate binaries: the modules share `render_to_html`, the
+//! `Harness`, and the models in [`models`], and a dozen binaries would each
+//! link dioxus to compile the same helpers again.
+//!
+//! Everything here is written from a *consumer's* position — `formoxus::`, not
+//! `crate::` — which is the point of it living in `tests/`: it exercises the
+//! same public surface a dependent crate gets, so an item that is unreachable
+//! or un-nameable from outside fails here rather than passing quietly.
+//!
+//! Every `mod` needs `#[path]`. This file is the test binary's crate ROOT, and
+//! a root resolves `mod foo;` to `foo.rs` beside itself — `tests/foo.rs`, which
+//! cargo would then also auto-discover as a target of its own. The submodules
+//! live in `tests/suite/` to stay out of that way, which costs one attribute
+//! each.
 
 use dioxus::prelude::*;
 
+#[path = "suite/models.rs"]
 pub mod models;
 
+#[path = "suite/buttons.rs"]
+mod buttons;
+#[path = "suite/empty_strings.rs"]
 mod empty_strings;
+#[path = "suite/form_macro.rs"]
+mod form_macro;
+#[path = "suite/enums.rs"]
 mod enums;
+#[path = "suite/errors.rs"]
 mod errors;
+#[path = "suite/forms.rs"]
 mod forms;
+#[path = "suite/into_slot.rs"]
 mod into_slot;
+#[path = "suite/newtypes.rs"]
 mod newtypes;
+#[path = "suite/optional_containers.rs"]
 mod optional_containers;
+#[path = "suite/vecs.rs"]
 mod vecs;
+#[path = "suite/widgets.rs"]
 mod widgets;
+#[path = "suite/roundtrip.rs"]
 mod roundtrip;
+#[path = "suite/specs.rs"]
 mod specs;
+#[path = "suite/submissions.rs"]
 mod submissions;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.

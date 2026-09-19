@@ -315,7 +315,13 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —
 /// the runtime equivalent of the `T: FromStr` bound the macro-based version
 /// leaned on.
-pub(crate) fn parse_scalar<X>(raw: &str) -> Result<X, FieldError>
+///
+/// **`pub` only so the test suite can reach it from `tests/`, and `doc(hidden)`
+/// because that is the whole reason.** It is an implementation detail of how a
+/// leaf converts, not a service this crate offers; treat its signature as
+/// unstable.
+#[doc(hidden)]
+pub fn parse_scalar<X>(raw: &str) -> Result<X, FieldError>
 where
     X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
 {

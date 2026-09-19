@@ -13,8 +13,7 @@ use formoxus::form;
 use formoxus::{empty_form, form_for, use_form};
 use googletest::prelude::*;
 
-#[path = "consumer/buttons.rs"]
-mod buttons;
+use super::render_to_html;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Article {
@@ -182,15 +181,6 @@ use dioxus::prelude::*;
 
 /// Render a component to HTML with a real Dioxus runtime behind it.
 ///
-/// The crate's own `tests::render_to_html` is `#[cfg(test)]`, so it is
-/// invisible from an integration test; this is the same three lines. A runtime is
-/// needed because `FormState::render` wants a `ValuesByPath`, which only
-/// `use_store` can mint, and that is a hook.
-fn render_to_html(app: fn() -> Element) -> String {
-    let mut dom = VirtualDom::new(app);
-    dom.rebuild_in_place();
-    dioxus_ssr::render(&dom)
-}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Venue {

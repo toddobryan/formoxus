@@ -8,8 +8,8 @@
 
 use super::models::{EventForCreate, Location};
 use super::render_to_html;
-use crate::widgets::ControlType;
-use crate::*;
+use formoxus::widgets::ControlType;
+use formoxus::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use googletest::prelude::*;

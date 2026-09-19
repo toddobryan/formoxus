@@ -1,6 +1,6 @@
 //! `""` IS absence, at both boundaries.
 
-use crate::*;
+use formoxus::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
 use googletest::prelude::*;

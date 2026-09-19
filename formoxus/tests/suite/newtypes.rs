@@ -7,7 +7,7 @@
 //! halves of that: the string-facing side behaves exactly like the bare scalar,
 //! and the value still rebuilds as the wrapper.
 
-use crate::*;
+use formoxus::*;
 use facet::Facet;
 use googletest::prelude::*;
 

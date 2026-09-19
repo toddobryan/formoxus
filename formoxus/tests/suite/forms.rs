@@ -1,7 +1,7 @@
 //! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
 use super::render_to_html;
-use crate::*;
+use formoxus::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use dioxus::core::Mutation;

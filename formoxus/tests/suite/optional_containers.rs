@@ -20,7 +20,7 @@
 //! deliberately survives: a chosen unit variant has no leaves, so presence there
 //! cannot be derived the way it is for structs and lists.
 
-use crate::*;
+use formoxus::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};

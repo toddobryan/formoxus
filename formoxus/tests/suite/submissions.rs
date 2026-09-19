@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use crate::*;
+use formoxus::*;
 use facet::Facet;
 use googletest::prelude::*;
 

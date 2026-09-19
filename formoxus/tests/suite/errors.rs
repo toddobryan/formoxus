@@ -3,11 +3,11 @@
 //!
 //! The counterpart to `roundtrip`/`forms`, which cover values going out and
 //! back. These cover *verdicts* coming out. The contract under test is stated
-//! on [`FormMember::collect_errors`](crate::FormMember::collect_errors):
+//! on [`FormMember::collect_errors`](formoxus::FormMember::collect_errors):
 //! only members with errors appear, and a container that can be *pushed* an
 //! error at its own path must be able to hand it back from there.
 
-use crate::*;
+use formoxus::*;
 use facet::Facet;
 use googletest::prelude::*;
 use super::models::{EventForCreate, Location, Shape};

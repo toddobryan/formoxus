@@ -72,6 +72,7 @@ pub use members::{
     model_path,
 };
 pub use submission::Submission;
+pub use widgets::ABSENT_DISPLAY;
 
 /// The common surface: `use formoxus::prelude::*;`.
 ///
@@ -91,10 +92,3 @@ pub mod prelude {
     // is only ever the macro.
     pub use formoxus_macros::{form, using_fns};
 }
-
-// The one crate-internal item the test modules reach for directly.
-#[cfg(test)]
-pub(crate) use widgets::ABSENT_DISPLAY;
-
-#[cfg(test)]
-mod tests;

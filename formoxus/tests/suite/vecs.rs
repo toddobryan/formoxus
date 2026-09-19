@@ -1,6 +1,6 @@
 //! `Vec`/`Def::List` in edit mode.
 
-use crate::*;
+use formoxus::*;
 use dioxus::prelude::*;
 use facet::Facet;
 use std::collections::HashMap;
