@@ -209,10 +209,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub fn render_errors(&self) -> Element {
         if !self.errors.is_empty() {
             rsx! {
-                ul {
+                div {
                     class: "form-errors",
                     for e in self.errors.clone() {
-                        li {
+                        div {
                             class: "form-error",
                             "{e.0}"
                         }

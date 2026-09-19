@@ -71,7 +71,12 @@ body {
 .field-errors,
 .form-errors { color: var(--fx-error); }
 
-.field-error { display: block; }
+/* Both error lists are plain divs with a class — no element carries meaning
+   of its own, so a consumer decides entirely how they read. */
+.field-error,
+.form-error { display: block; }
+
+.form-errors { margin-block: 0.75rem; }
 
 .formoxus-buttons {
     display: flex;

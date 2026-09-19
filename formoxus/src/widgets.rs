@@ -25,10 +25,12 @@ use crate::{Edit, ValuesByPath};
 /// sibling selector reach it — no framework required, and no class needed on
 /// the input. It also puts the message next to its field in reading order.
 ///
-/// `small` carries one semantic cost worth naming: it means "fine print",
-/// which an error arguably is not. **When error rendering becomes overridable
-/// (the same mechanism as custom widgets), this is the component to swap**,
-/// and the choice stops being global.
+/// A `div`, deliberately. This was a `small` for a while, which reads as "fine
+/// print" — wrong for an error, and chosen back when one framework's stylesheet
+/// was in mind. A neutral block element with a class carries no meaning of its
+/// own and leaves the presentation entirely to the consumer. **When error
+/// rendering becomes overridable (the same mechanism as custom widgets), this
+/// is the component to swap**, and the choice stops being global.
 ///
 /// The `aria-invalid` half lives on each widget's own control and is not a
 /// styling matter at all: it is the W3C ARIA attribute assistive technology
@@ -38,7 +40,7 @@ use crate::{Edit, ValuesByPath};
 pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
     rsx! {
         if !errors.is_empty() {
-            small { class: "field-errors",
+            div { class: "field-errors",
                 for error in errors.iter() {
                     span { class: "field-error", "{error.0}" }
                 }
