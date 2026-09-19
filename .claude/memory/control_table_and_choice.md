@@ -81,3 +81,12 @@ it is a large mechanical job needing no decisions, so it is the thing to do
 when tokens are plentiful, and it should end by turning on
 `#![warn(missing_docs)]` so CI stops it regressing. The hard reasoning is
 already documented; it is the ordinary surface that is bare.
+
+## UPDATE 2026-09-19: the fork is partly answered
+
+Todd proposed a design the same day — see [[choice-fields-design]]. In short:
+value-choice stays separate from shape-choice, choices attach to the CONTROL
+rather than the type (so `ValueKind::Choice`/`MultiChoice` get deleted, not
+filled in), and a `Choice { display, raw_value }` reuses the ordinary parse
+path. Still open there: how the choices callback is carried, because a
+`Box<dyn Fn>` cannot live on `ControlType` without killing its derives.
