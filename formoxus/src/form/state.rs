@@ -249,8 +249,9 @@ pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(
     form_for_impl(Some(value), spec)
 }
 
-/// Create mode with no choices supplied — fails with [`MissingVariants`] if `T`
-/// contains any enum at all.
+/// Create mode: no value to seed from, so every field starts empty and any
+/// enum in `T` starts [`VariantChoice::Unchosen`](crate::VariantChoice) until
+/// the user picks.
 pub fn empty_form<T: Clone + Debug + PartialEq + Facet<'static>>(
     spec: FormSpec<T>,
 ) -> FormState<T> {

@@ -9,7 +9,7 @@ pub struct FormError(pub String);
 pub struct FieldError(pub String);
 
 /// A caller reached for a form path that doesn't exist, or a variant name that
-/// isn't in the enum — e.g. [`crate::Form::choose_variant`]. Distinct
+/// isn't in the enum — e.g. [`crate::FormState::choose_variant`]. Distinct
 /// from [`FieldError`]/[`FormError`], which are *validation* results the user
 /// can fix by typing: this one means either a bug or a hand-crafted request, so
 /// it percolates up to an `ErrorBoundary` rather than rendering beside a field.

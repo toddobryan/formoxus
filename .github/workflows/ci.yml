@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to the same branch supersedes the old run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+# ── Why the toolchain is pinned ──────────────────────────────────────────
+#
+# tests/ui/ holds trybuild goldens that pin rustc's exact wording AND spans.
+# A Rust release can change either, so on floating `stable` this repo would
+# go red with no change from anyone — and the failure would look like a
+# regression in form!'s diagnostics rather than like a compiler bump.
+#
+# So the gating jobs pin, and the `latest` job below floats without gating.
+# Bumping PINNED is then a deliberate commit that carries any regenerated
+# goldens with it.
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+      - uses: Swatinem/rust-cache@v2
+      # --workspace, not a bare `cargo test`: the examples crate is a member
+      # but NOT a default member, and building it is the whole point of it
+      # being in the workspace at all.
+      - run: cargo test --workspace
+
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.1"
+      - uses: Swatinem/rust-cache@v2
+      # Denies broken intra-doc links, which is the failure mode that matters
+      # while the crate's ~179 undocumented public items are being written up:
+      # a link that resolves today can break when an item moves.
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    name: msrv 1.90
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90"
+      - uses: Swatinem/rust-cache@v2
+      # The two PUBLISHED crates only, and `check` rather than `test`: what a
+      # consumer needs is that the library builds. Dev-dependencies are ours,
+      # not theirs, and holding them to the same floor would raise the floor
+      # for no one's benefit.
+      - run: cargo check -p formoxus -p formoxus-macros
+
+  latest:
+    name: latest stable (non-gating)
+    runs-on: ubuntu-latest
+    # Early warning that a new Rust breaks us, without turning main red for it.
+    # If this fails and `test` passes, the usual cause is regenerated goldens:
+    #   TRYBUILD=overwrite cargo test -p formoxus --test compile_fail
+    # then READ the diff before committing it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets -- -D warnings

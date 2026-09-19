@@ -184,8 +184,8 @@ pub(crate) fn row_segment(key: usize) -> String {
 /// final segment of a leaf path — it is only ever a prefix.
 ///
 /// A list-row key (`answers.#3.text`) is left alone: it *is* a real element of
-/// the model, just identified by [identity rather than
-/// position](row_segment). Which element it is cannot be read off the string —
+/// the model, just identified by identity rather than position. Which element
+/// it is cannot be read off the string —
 /// only `ListSet::rows` knows that — so the result names the row without
 /// placing it.
 pub fn model_path(path: &str) -> String {

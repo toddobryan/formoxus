@@ -30,7 +30,7 @@ pub enum VariantChoice {
 /// design — variant choice is a construction parameter, not an editable field).
 /// For a [`VariantChoice::Named`] answer it's a `FieldSet` over that variant's
 /// fields, plus the name so `write_into` can replay the choice; for
-/// [`VariantChoice::Absent`] it holds no members at all and writes `None`.
+/// [`VariantChoice::Unchosen`] it holds no members at all and writes `None`.
 /// The choice itself is NOT a leaf — it never appears in a path or a submitted
 /// value.
 #[derive(Clone, Debug)]

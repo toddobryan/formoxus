@@ -8,12 +8,28 @@
 //! bound to satisfy and no per-form type to write.
 //!
 //! ```ignore
-//! #[derive(Facet)]
-//! struct Signup { email: String, password: String }
+//! #[derive(Facet, Clone, Debug, PartialEq)]
+//! struct Signup {
+//!     email: String,
+//!     password: String,
+//! }
 //!
-//! let spec = form! { Signup { title: "Sign up", password: { control: password } } };
-//! let form = use_form(spec);
-//! rsx! { {form.render(using_fns! { submit: |model| async move { … } })} }
+//! #[component]
+//! fn SignupForm() -> Element {
+//!     let form = use_form(|| empty_form(form! {
+//!         Signup {
+//!             title: "Sign up",
+//!             email => { control: email },
+//!             password => { control: password },
+//!             buttons: { create: { type: submit } }
+//!         }
+//!     }));
+//!
+//!     // Arity picks the contract: `|model|` runs only once validation passes.
+//!     form.render(using_fns! {
+//!         create: |model| async move { save(model).await },
+//!     })
+//! }
 //! ```
 //!
 //! # How the pieces fit

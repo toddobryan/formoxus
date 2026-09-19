@@ -2,7 +2,7 @@
 //!
 //! [`FormState<T>`] is the plain data: structure, typed values, errors, and the
 //! variant answers that live nowhere else. No Dioxus runtime, no reactivity —
-//! testable on its own. Lives in [`state`], alongside its constructors
+//! testable on its own. Lives in `state`, alongside its constructors
 //! ([`form_for`]/[`empty_form`]).
 //!
 //! [`Form<T>`] is what a page holds: a `Signal` of that state, the live value
@@ -10,8 +10,8 @@
 //! [`use_form`], defined here.
 //!
 //! [`FormSpec<T>`] is the author's declaration — title, per-field overrides,
-//! validator, buttons — that `form!` builds and [`FormState::apply_specs`]
-//! lays onto the tree. Lives in [`spec`].
+//! validator, buttons — that `form!` builds and `FormState::apply_specs`
+//! lays onto the tree. Lives in `spec`.
 
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FieldError, FormAccessError, FormError};
