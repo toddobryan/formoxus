@@ -71,10 +71,15 @@ body {
 .field-errors,
 .form-errors { color: var(--fx-error); }
 
-/* Both error lists are plain divs with a class — no element carries meaning
-   of its own, so a consumer decides entirely how they read. */
-.field-error,
-.form-error { display: block; }
+/* Both error lists are `ul`s: several messages really are a list, and a screen
+   reader announces the structure and the count. Dropping the marker and the
+   indent here is this gallery's styling choice, not something formoxus imposes. */
+.field-errors,
+.form-errors {
+    list-style: none;
+    margin-block: 0.35rem;
+    padding-inline-start: 0;
+}
 
 .form-errors { margin-block: 0.75rem; }
 

@@ -419,10 +419,10 @@ fn render_problems(problems: &[String]) -> Element {
     }
     let problems = problems.to_vec();
     rsx! {
-        div {
+        ul {
             class: "form-errors formoxus-button-problems",
             for p in problems {
-                div { class: "form-error", "{p}" }
+                li { class: "form-error", "{p}" }
             }
         }
     }
