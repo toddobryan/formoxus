@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.dependencies]
-dioxus = { version = "0.7.9" }
+dioxus = { version = "0.7.10" }
 dioxus-ssr = { version = "0.7" }
 # dev-only: the `serialize` feature ships SerializedHtmlEventConverter, which is
 # what lets a bare VirtualDom dispatch a real DOM event in a test.
