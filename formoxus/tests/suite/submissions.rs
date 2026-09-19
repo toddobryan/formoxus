@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use formoxus::*;
 use facet::Facet;
+use formoxus::*;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -119,7 +119,10 @@ fn the_specs_validator_runs_on_the_server_too() {
     let errors =
         Submission::accept(credentials_spec(), &values).expect_err("the passwords disagree");
 
-    expect_that!(form_messages(&errors), elements_are![eq("Passwords don't match.")]);
+    expect_that!(
+        form_messages(&errors),
+        elements_are![eq("Passwords don't match.")]
+    );
 }
 
 #[gtest]
@@ -133,7 +136,8 @@ fn a_cross_field_failure_arrives_with_no_field_errors_at_all() {
         ("password", "hunter2"),
         ("confirm_password", "hunter3"),
     ]);
-    let errors = Submission::accept(credentials_spec(), &values).expect_err("the passwords disagree");
+    let errors =
+        Submission::accept(credentials_spec(), &values).expect_err("the passwords disagree");
 
     expect_that!(errors.fields, is_empty());
     expect_that!(errors.form, not(is_empty()));

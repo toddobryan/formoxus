@@ -2,7 +2,13 @@ use std::collections::HashMap;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
-use syn::{Expr, Ident, Path, Result, Token, braced, ext::IdentExt, parenthesized, parse::{Parse, ParseStream}, punctuated::Punctuated};
+use syn::{
+    Expr, Ident, Path, Result, Token, braced,
+    ext::IdentExt,
+    parenthesized,
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+};
 
 pub fn impl_form(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FormSpecInput>(input) {
@@ -34,7 +40,13 @@ struct FormSpecMeta {
 
 impl FormSpecMeta {
     fn new(model_type: Path) -> Self {
-        Self { model_type, title: None, validator: None, buttons: Vec::new(), field_specs: Vec::new(), }
+        Self {
+            model_type,
+            title: None,
+            validator: None,
+            buttons: Vec::new(),
+            field_specs: Vec::new(),
+        }
     }
 }
 
@@ -45,12 +57,14 @@ impl FormSpecInput {
             match e {
                 Entry::Title(expr) => fsm.title = Some(expr),
                 Entry::Validator(expr) => fsm.validator = Some(expr),
-                Entry::Field { path, body } => fsm.field_specs.push(
-                    FieldSpec { path, label: body.label, control: body.control }
-                ),
+                Entry::Field { path, body } => fsm.field_specs.push(FieldSpec {
+                    path,
+                    label: body.label,
+                    control: body.control,
+                }),
                 Entry::Buttons(buttons) => fsm.buttons = buttons,
             }
-        };
+        }
 
         let model_type: Path = fsm.model_type;
         let title: Option<TokenStream2> = fsm.title.map(|t| {
@@ -69,15 +83,19 @@ impl FormSpecInput {
             let specs = fsm.buttons.iter().map(ButtonInfo::spec_tokens);
             quote! { .with_buttons(::std::vec![ #(#specs),* ]) }
         });
-        let fields: Vec<TokenStream2> = fsm.field_specs.iter().map(|f| {
-            let key = f.path.key();
-            let label = f.label.as_ref().map(|l| quote! { .with_label(#key, &#l) });
-            let control = f.control.as_ref().map(|c| {
-                let c = c.path();
-                quote! { .with_custom_control(#key, #c) }
-            });
-            quote! { #label #control }
-        }).collect();
+        let fields: Vec<TokenStream2> = fsm
+            .field_specs
+            .iter()
+            .map(|f| {
+                let key = f.path.key();
+                let label = f.label.as_ref().map(|l| quote! { .with_label(#key, &#l) });
+                let control = f.control.as_ref().map(|c| {
+                    let c = c.path();
+                    quote! { .with_custom_control(#key, #c) }
+                });
+                quote! { #label #control }
+            })
+            .collect();
         let witnesses: Vec<TokenStream2> = fsm
             .field_specs
             .iter()
@@ -95,7 +113,7 @@ impl FormSpecInput {
                 #title
                 #validator
                 #buttons
-                #(#fields)*         
+                #(#fields)*
             }
         }
     }
@@ -134,20 +152,22 @@ impl Parse for FormSpecInput {
         let target: Path = input.parse()?;
         let body;
         braced!(body in input);
-        let entries: Vec<Entry> = 
-            Punctuated::<Entry, Token![,]>::parse_terminated(&body)?.into_iter().collect();
+        let entries: Vec<Entry> = Punctuated::<Entry, Token![,]>::parse_terminated(&body)?
+            .into_iter()
+            .collect();
         let mut seen: HashMap<String, ()> = HashMap::new();
         let (mut had_title, mut had_validator, mut had_buttons) = (false, false, false);
         for e in &entries {
             match e {
-                Entry::Title(_) if had_title =>
-                    return Err(body.error("`title` is given twice")),
+                Entry::Title(_) if had_title => return Err(body.error("`title` is given twice")),
                 Entry::Title(_) => had_title = true,
-                Entry::Validator(_) if had_validator =>
-                    return Err(body.error("`validator` is given twice")),
+                Entry::Validator(_) if had_validator => {
+                    return Err(body.error("`validator` is given twice"));
+                }
                 Entry::Validator(_) => had_validator = true,
-                Entry::Buttons(_) if had_buttons =>
-                    return Err(body.error("`buttons` is given twice")),
+                Entry::Buttons(_) if had_buttons => {
+                    return Err(body.error("`buttons` is given twice"));
+                }
                 Entry::Buttons(_) => had_buttons = true,
                 Entry::Field { path, .. } => {
                     let key = path.key();
@@ -307,7 +327,13 @@ impl SpecPath {
     fn key(&self) -> String {
         self.segments
             .iter()
-            .map(|s| if s.each { format!("{}[]", s.ident) } else { s.ident.to_string() })
+            .map(|s| {
+                if s.each {
+                    format!("{}[]", s.ident)
+                } else {
+                    s.ident.to_string()
+                }
+            })
             .collect::<Vec<_>>()
             .join(".")
     }
@@ -370,18 +396,28 @@ impl Parse for FieldBody {
         } else {
             let body;
             let braces = braced!(body in input);
-            let mut fb = FieldBody { control: None, label: None };
+            let mut fb = FieldBody {
+                control: None,
+                label: None,
+            };
             while !body.is_empty() {
                 let key: Ident = body.parse()?;
                 let _colon: Token![:] = body.parse()?;
                 match key.to_string().as_str() {
-                    "control" if fb.control.is_some() =>
-                        return Err(syn::Error::new_spanned(&key, "duplicate control key")),
+                    "control" if fb.control.is_some() => {
+                        return Err(syn::Error::new_spanned(&key, "duplicate control key"));
+                    }
                     "control" => fb.control = Some(body.parse()?),
-                    "label" if fb.label.is_some() =>
-                        return Err(syn::Error::new_spanned(&key, "duplicate label")),
+                    "label" if fb.label.is_some() => {
+                        return Err(syn::Error::new_spanned(&key, "duplicate label"));
+                    }
                     "label" => fb.label = Some(body.parse()?),
-                    other => return Err(syn::Error::new_spanned(&key, format!("unknown key {other}, expected control or label"))),
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            &key,
+                            format!("unknown key {other}, expected control or label"),
+                        ));
+                    }
                 }
                 if body.peek(Token![,]) {
                     body.parse::<Token![,]>()?;
@@ -487,8 +523,9 @@ impl ControlRef {
     /// cannot miss.
     fn path(&self) -> TokenStream2 {
         match self {
-            Self::Named(name) => control_tokens(name)
-                .expect("parse rejects names that are not in the table"),
+            Self::Named(name) => {
+                control_tokens(name).expect("parse rejects names that are not in the table")
+            }
             // A NON-CAPTURING closure, which coerces to `fn(ControlProps) ->
             // Element`. The widget goes inside `rsx!` rather than being called,
             // so it gets a component scope of its own and may use hooks.
@@ -656,20 +693,25 @@ impl ButtonInfo {
             let key = Ident::parse_any(&body)?;
             let _colon: Token![:] = body.parse()?;
             match key.to_string().as_str() {
-                "type" if ty.is_some() =>
-                    return Err(syn::Error::new_spanned(&key, "duplicate type")),
+                "type" if ty.is_some() => {
+                    return Err(syn::Error::new_spanned(&key, "duplicate type"));
+                }
                 "type" => ty = Some(body.parse()?),
-                "text" if text.is_some() =>
-                    return Err(syn::Error::new_spanned(&key, "duplicate text")),
+                "text" if text.is_some() => {
+                    return Err(syn::Error::new_spanned(&key, "duplicate text"));
+                }
                 // A literal, not an `Expr`: the text is baked into the spec.
                 "text" => text = Some(body.parse::<syn::LitStr>()?.value()),
-                "invocation" if invocation.is_some() =>
-                    return Err(syn::Error::new_spanned(&key, "duplicate invocation")),
+                "invocation" if invocation.is_some() => {
+                    return Err(syn::Error::new_spanned(&key, "duplicate invocation"));
+                }
                 "invocation" => invocation = Some(body.parse()?),
-                other => return Err(syn::Error::new_spanned(
-                    &key,
-                    format!("unknown key {other}, expected type, text, or invocation"),
-                )),
+                other => {
+                    return Err(syn::Error::new_spanned(
+                        &key,
+                        format!("unknown key {other}, expected type, text, or invocation"),
+                    ));
+                }
             }
             if body.peek(Token![,]) {
                 body.parse::<Token![,]>()?;
@@ -688,7 +730,12 @@ impl ButtonInfo {
                 ),
             ));
         };
-        Ok(ButtonInfo { name, ty, text, invocation })
+        Ok(ButtonInfo {
+            name,
+            ty,
+            text,
+            invocation,
+        })
     }
 }
 
@@ -804,7 +851,6 @@ fn unknown_button_type(name: &Ident) -> String {
         ),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -936,7 +982,11 @@ mod tests {
         let spec = parse(quote! { Source { notes => { control: textarea } } }).unwrap();
         expect_that!(
             fields(&spec),
-            elements_are![eq(&("notes".to_string(), "textarea".to_string(), String::new()))]
+            elements_are![eq(&(
+                "notes".to_string(),
+                "textarea".to_string(),
+                String::new()
+            ))]
         );
     }
 
@@ -1216,9 +1266,17 @@ mod tests {
         expect_that!(
             buttons(&spec),
             elements_are![
-                eq(&("delete".to_string(), "Destructive".to_string(), "Drop".to_string())),
+                eq(&(
+                    "delete".to_string(),
+                    "Destructive".to_string(),
+                    "Drop".to_string()
+                )),
                 eq(&("reload".to_string(), "Reset".to_string(), String::new())),
-                eq(&("update".to_string(), "Submit".to_string(), "Save to Db".to_string())),
+                eq(&(
+                    "update".to_string(),
+                    "Submit".to_string(),
+                    "Save to Db".to_string()
+                )),
             ]
         );
     }
@@ -1237,7 +1295,10 @@ mod tests {
         })
         .unwrap();
         expect_that!(
-            buttons(&spec).iter().map(|b| b.0.clone()).collect::<Vec<_>>(),
+            buttons(&spec)
+                .iter()
+                .map(|b| b.0.clone())
+                .collect::<Vec<_>>(),
             elements_are![eq("zebra"), eq("apple")]
         );
     }
@@ -1257,7 +1318,10 @@ mod tests {
         })
         .unwrap();
         expect_that!(
-            buttons(&spec).iter().map(|b| b.1.clone()).collect::<Vec<_>>(),
+            buttons(&spec)
+                .iter()
+                .map(|b| b.1.clone())
+                .collect::<Vec<_>>(),
             elements_are![
                 eq("Submit"),
                 eq("Reset"),
@@ -1335,7 +1399,10 @@ mod tests {
     fn an_unknown_button_key_names_itself() {
         let msg = err_of(quote! { Source { buttons: { go: { type: submit, clas: "x" } } } });
         expect_that!(msg, contains_substring("clas"));
-        expect_that!(msg, contains_substring("expected type, text, or invocation"));
+        expect_that!(
+            msg,
+            contains_substring("expected type, text, or invocation")
+        );
     }
 
     #[gtest]
@@ -1421,7 +1488,10 @@ mod tests {
         })
         .expect("a list and its rows are separate targets");
         expect_that!(
-            fields(&spec).iter().map(|f| f.0.clone()).collect::<Vec<_>>(),
+            fields(&spec)
+                .iter()
+                .map(|f| f.0.clone())
+                .collect::<Vec<_>>(),
             elements_are![eq("answers"), eq("answers[]")]
         );
     }
@@ -1579,7 +1649,10 @@ mod tests {
         // `Input(Password)` was the spelling before the table existed. It now
         // fails on `Input`, which is not a name — and `input` is not one either,
         // so the message falls through to the vocabulary list.
-        expect_that!(err_of(quote! { Source { p => { control: Input(Password) } } }).len(), gt(0));
+        expect_that!(
+            err_of(quote! { Source { p => { control: Input(Password) } } }).len(),
+            gt(0)
+        );
     }
 
     // ── `custom(…)` ──────────────────────────────────────────────────────
@@ -1595,8 +1668,9 @@ mod tests {
     fn a_custom_widget_may_be_module_qualified() {
         // The reason it is a `Path` and not an `Ident`: naming a widget should not
         // require importing it.
-        let spec = parse(quote! { Source { notes => { control: custom(widgets::MarkdownWidget) } } })
-            .expect("a qualified widget path should parse");
+        let spec =
+            parse(quote! { Source { notes => { control: custom(widgets::MarkdownWidget) } } })
+                .expect("a qualified widget path should parse");
         expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
     }
 
@@ -1607,7 +1681,8 @@ mod tests {
         // captures nothing (so it coerces to `fn(ControlProps) -> Element`), and
         // the readable name rides along because Debug on a fn pointer is an
         // address.
-        let spec = parse(quote! { Source { notes => { control: custom(MarkdownWidget) } } }).unwrap();
+        let spec =
+            parse(quote! { Source { notes => { control: custom(MarkdownWidget) } } }).unwrap();
         let tokens = control_of(&spec).path().to_string();
         expect_that!(tokens, contains_substring("ControlType :: Custom"));
         expect_that!(tokens, contains_substring("name : \"MarkdownWidget\""));
@@ -1618,8 +1693,8 @@ mod tests {
 
     #[gtest]
     fn a_qualified_custom_widget_keeps_only_the_last_segment_as_its_name() {
-        let spec =
-            parse(quote! { Source { notes => { control: custom(a::b::MarkdownWidget) } } }).unwrap();
+        let spec = parse(quote! { Source { notes => { control: custom(a::b::MarkdownWidget) } } })
+            .unwrap();
         expect_that!(
             control_of(&spec).path().to_string(),
             contains_substring("name : \"MarkdownWidget\"")
@@ -1702,10 +1777,8 @@ mod tests {
         // rustc error pointing at the loop that actually failed.
         expect_that!(
             witness_of(quote! { Grid { rows[].cells[] => { control: textarea } } }),
-            eq(
-                "for __row0 in __s . rows . iter () \
-                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 ; } }"
-            )
+            eq("for __row0 in __s . rows . iter () \
+                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 ; } }")
         );
     }
 
@@ -1713,10 +1786,8 @@ mod tests {
     fn a_field_below_a_nested_row_keeps_walking() {
         expect_that!(
             witness_of(quote! { Grid { rows[].cells[].text => { label: "Text" } } }),
-            eq(
-                "for __row0 in __s . rows . iter () \
-                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 . text ; } }"
-            )
+            eq("for __row0 in __s . rows . iter () \
+                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 . text ; } }")
         );
     }
 
@@ -1732,8 +1803,14 @@ mod tests {
         })
         .unwrap();
         let out = spec.expand().to_string();
-        expect_that!(out, contains_substring("fn __paths_exist (__s : & ChangePasswordForm)"));
-        expect_that!(out, contains_substring("let _ = & __s . current_password ;"));
+        expect_that!(
+            out,
+            contains_substring("fn __paths_exist (__s : & ChangePasswordForm)")
+        );
+        expect_that!(
+            out,
+            contains_substring("let _ = & __s . current_password ;")
+        );
         expect_that!(out, contains_substring("let _ = & __s . new_password ;"));
         // And the builder chain is still there beside it.
         expect_that!(out, contains_substring("with_title"));
@@ -1742,8 +1819,13 @@ mod tests {
 
     #[gtest]
     fn a_spec_with_no_fields_has_an_empty_witness_body() {
-        let out = parse(quote! { Article { title: "A" } }).unwrap().expand().to_string();
-        expect_that!(out, contains_substring("fn __paths_exist (__s : & Article) { }"));
+        let out = parse(quote! { Article { title: "A" } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            out,
+            contains_substring("fn __paths_exist (__s : & Article) { }")
+        );
     }
-
 }

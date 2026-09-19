@@ -1,13 +1,13 @@
 //! Leaf members: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 
+use crate::RenderCtx;
+use crate::error::{FieldError, FormAccessError};
+use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
+use crate::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
-use crate::error::{FieldError, FormAccessError};
-use crate::RenderCtx;
-use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
-use crate::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -42,8 +42,15 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
-    Text { min_length: Option<usize>, max_length: Option<usize>, pattern: Option<&'static str> },
-    Int { min: i128, max: i128 },   // from the type; author bounds join later as separate Options
+    Text {
+        min_length: Option<usize>,
+        max_length: Option<usize>,
+        pattern: Option<&'static str>,
+    },
+    Int {
+        min: i128,
+        max: i128,
+    }, // from the type; author bounds join later as separate Options
     Float,
     Bool,
     /*Temporal,
@@ -69,7 +76,10 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     fn value_kind(&self) -> ValueKind {
         macro_rules! int {
             ($t:ty) => {
-                ValueKind::Int { min: <$t>::MIN as i128, max: <$t>::MAX as i128 }
+                ValueKind::Int {
+                    min: <$t>::MIN as i128,
+                    max: <$t>::MAX as i128,
+                }
             };
         }
 
@@ -254,11 +264,13 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // `required == false` means the Model's field is really
             // `Option<T>`, so the value written back has to be wrapped/`None`
             // to match, not the bare `T` the `required` branch writes.
-            _ => unreachable!("write_into should only run after validate() has confirmed no errors"),
+            _ => {
+                unreachable!("write_into should only run after validate() has confirmed no errors")
+            }
         };
         Ok(partial)
     }
-    
+
     fn is_present(&self) -> bool {
         self.value != FieldValue::Empty
     }
@@ -280,7 +292,12 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         })
     }
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError> {
         if path == qualify(prefix, &self.name) {
             self.errors.push(error);
             Ok(())
@@ -295,11 +312,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             self.label = spec.label.clone().or(self.label.take());
         }
     }
-    
+
     fn clear_errors(&mut self) {
         self.errors.clear();
     }
-    
+
     fn collect_errors(&self, prefix: &str, out: &mut crate::form::FieldErrors) {
         // Clean fields contribute nothing — see the trait's contract. Pushing
         // `(path, [])` here would make `FormErrors.fields` non-empty for a form
@@ -309,7 +326,6 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         }
         out.push((qualify(prefix, &self.name), self.errors.clone()));
     }
-
 }
 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —

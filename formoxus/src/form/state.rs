@@ -8,10 +8,10 @@ use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
 
-use crate::error::{FieldError, FormAccessError, FormError};
 use crate::RenderCtx;
 use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
+use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FormErrors;
 use crate::members::{Edit, FormMember, no_such_path, owns};
 
@@ -74,8 +74,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             return None;
         }
 
-        let mut partial =
-            Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
+        let mut partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
         for m in self.members.iter() {
             partial = m
                 .write_into(partial)
@@ -152,7 +151,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
         let Some(idx) = self.members.iter().position(|m| owns(&m.name(), path)) else {
-            return Err(no_such_path(path))
+            return Err(no_such_path(path));
         };
         self.members[idx].push_field_error("", path, FieldError(message.to_string()))
     }
@@ -168,7 +167,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// aborts instead of reaching an `ErrorBoundary` — dioxus-core notes that
     /// unwinds aren't caught there. The `Result` is the transport; the widget
     /// layer is expected to push it into the boundary rather than recover.
-    pub fn choose_variant(&mut self, path: &str, variant: Option<&str>) -> Result<(), FormAccessError> {
+    pub fn choose_variant(
+        &mut self,
+        path: &str,
+        variant: Option<&str>,
+    ) -> Result<(), FormAccessError> {
         self.edit(&Edit::new_choose_variant(path, variant))
     }
 
@@ -186,11 +189,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn render_title(&self) -> Element {
-        self.title().as_ref().map(|t| {
-            rsx! {
-                h2 { class: "form-title", "{t}" }
-            }
-        }).unwrap_or_else(|| rsx! {})
+        self.title()
+            .as_ref()
+            .map(|t| {
+                rsx! {
+                    h2 { class: "form-title", "{t}" }
+                }
+            })
+            .unwrap_or_else(|| rsx! {})
     }
 
     pub fn render_fields(&self, ctx: &RenderCtx) -> Element {
@@ -220,7 +226,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub fn collect_errors(&self) -> FormErrors {
         let mut field_errors = Vec::new();
-        for m in self.members.iter() { m.collect_errors("", &mut field_errors); }
+        for m in self.members.iter() {
+            m.collect_errors("", &mut field_errors);
+        }
         FormErrors {
             form: self.errors.clone(),
             fields: field_errors,
@@ -234,14 +242,18 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
 /// Edit mode. Infallible: the value itself pins every variant, so there is
 /// nothing left for a caller to choose.
-pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(value: &T, spec: FormSpec<T>) -> FormState<T> {
+pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(
+    value: &T,
+    spec: FormSpec<T>,
+) -> FormState<T> {
     form_for_impl(Some(value), spec)
 }
 
 /// Create mode with no choices supplied — fails with [`MissingVariants`] if `T`
 /// contains any enum at all.
-pub fn empty_form<T: Clone + Debug + PartialEq + Facet<'static>>(spec: FormSpec<T>)
--> FormState<T> {
+pub fn empty_form<T: Clone + Debug + PartialEq + Facet<'static>>(
+    spec: FormSpec<T>,
+) -> FormState<T> {
     form_for_impl(None, spec)
 }
 
@@ -259,7 +271,13 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
 
     let mut state = FormState {
         spec,
-        members: members_for(T::SHAPE, value.map(Peek::new), mode, "", /* optional */ false),
+        members: members_for(
+            T::SHAPE,
+            value.map(Peek::new),
+            mode,
+            "",
+            /* optional */ false,
+        ),
         errors: Vec::new(),
         _type: PhantomData,
     };

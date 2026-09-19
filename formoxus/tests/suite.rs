@@ -25,12 +25,12 @@ pub mod models;
 mod buttons;
 #[path = "suite/empty_strings.rs"]
 mod empty_strings;
-#[path = "suite/form_macro.rs"]
-mod form_macro;
 #[path = "suite/enums.rs"]
 mod enums;
 #[path = "suite/errors.rs"]
 mod errors;
+#[path = "suite/form_macro.rs"]
+mod form_macro;
 #[path = "suite/forms.rs"]
 mod forms;
 #[path = "suite/into_slot.rs"]
@@ -39,16 +39,16 @@ mod into_slot;
 mod newtypes;
 #[path = "suite/optional_containers.rs"]
 mod optional_containers;
-#[path = "suite/vecs.rs"]
-mod vecs;
-#[path = "suite/widgets.rs"]
-mod widgets;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
 #[path = "suite/specs.rs"]
 mod specs;
 #[path = "suite/submissions.rs"]
 mod submissions;
+#[path = "suite/vecs.rs"]
+mod vecs;
+#[path = "suite/widgets.rs"]
+mod widgets;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///
@@ -97,7 +97,10 @@ impl Harness {
         set_event_converter(Box::new(SerializedHtmlEventConverter));
         let mut dom = VirtualDom::new(app);
         let mutations = dom.rebuild_to_vec();
-        let mut harness = Harness { dom, listeners: Vec::new() };
+        let mut harness = Harness {
+            dom,
+            listeners: Vec::new(),
+        };
         harness.absorb(&mutations);
         harness
     }
@@ -192,5 +195,8 @@ impl Harness {
 /// do it: registration order is the order dioxus creates dynamic nodes, not
 /// document order, so "the second `change` listener" is not "the nested select."
 pub fn new_since(before: &[ElementId], after: Vec<ElementId>) -> Vec<ElementId> {
-    after.into_iter().filter(|id| !before.contains(id)).collect()
+    after
+        .into_iter()
+        .filter(|id| !before.contains(id))
+        .collect()
 }

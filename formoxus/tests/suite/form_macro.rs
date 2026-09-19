@@ -116,7 +116,9 @@ fn a_local_binding_works() {
 fn a_conditional_expression_works() {
     let creating = false;
     expect_that!(
-        title_of(form! { Article { title: if creating { "New article" } else { "Edit article" } } }),
+        title_of(
+            form! { Article { title: if creating { "New article" } else { "Edit article" } } }
+        ),
         some(eq("Edit article"))
     );
 }
@@ -130,7 +132,9 @@ fn a_spec_may_have_no_title() {
 
 fn headline_is_not_shouted(a: &Article) -> Vec<formoxus::error::FormError> {
     if a.headline.chars().all(|c| !c.is_lowercase()) {
-        vec![formoxus::error::FormError("headline is all caps".to_string())]
+        vec![formoxus::error::FormError(
+            "headline is all caps".to_string(),
+        )]
     } else {
         Vec::new()
     }
@@ -158,7 +162,10 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
     // The point of a *form* validator: every field passes on its own, so no
     // member reports an error, and the only thing that can reject this model is
     // a check over the whole of it.
-    let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
+    let shouted = Article {
+        headline: "TREES ARE GOOD".to_string(),
+        words: 400,
+    };
     let mut state = formoxus::form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
@@ -204,7 +211,10 @@ fn a_trip() -> Trip {
     Trip {
         name: "Spring tour".to_string(),
         secret: "hunter2".to_string(),
-        venue: Venue { street: "123 Main St".to_string(), city: "Springfield".to_string() },
+        venue: Venue {
+            street: "123 Main St".to_string(),
+            city: "Springfield".to_string(),
+        },
         stops: vec!["a@example.com".to_string(), "b@example.com".to_string()],
         confirmed: true,
     }
@@ -214,11 +224,13 @@ fn a_trip() -> Trip {
 
 #[component]
 fn LabelledName() -> Element {
-    use_form(|| empty_form(form! {
-        Trip {
-            name => { label: "Trip name" },
-        }
-    }))
+    use_form(|| {
+        empty_form(form! {
+            Trip {
+                name => { label: "Trip name" },
+            }
+        })
+    })
     .render_fragment()
 }
 
@@ -235,14 +247,16 @@ fn a_label_from_the_macro_reaches_the_markup() {
 
 #[component]
 fn PasswordSecret() -> Element {
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                secret => { control: password },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    secret => { control: password },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 
@@ -259,14 +273,16 @@ fn a_control_from_the_macro_changes_the_rendered_input() {
 
 #[component]
 fn SelectedBool() -> Element {
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                confirmed => { control: select },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    confirmed => { control: select },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 
@@ -282,14 +298,16 @@ fn a_control_can_replace_a_derived_checkbox_with_a_select() {
 
 #[component]
 fn TextareaSecret() -> Element {
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                secret => { control: textarea },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    secret => { control: textarea },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 
@@ -309,11 +327,13 @@ fn a_control_can_override_text_to_a_textarea() {
 
 #[component]
 fn BothKeys() -> Element {
-    use_form(|| empty_form(form! {
-        Trip {
-            secret => { control: password, label: "Passphrase" },
-        }
-    }))
+    use_form(|| {
+        empty_form(form! {
+            Trip {
+                secret => { control: password, label: "Passphrase" },
+            }
+        })
+    })
     .render_fragment()
 }
 
@@ -331,11 +351,13 @@ fn a_field_body_may_carry_both_keys() {
 
 #[component]
 fn NestedLabel() -> Element {
-    use_form(|| empty_form(form! {
-        Trip {
-            venue.city => { label: "Town" },
-        }
-    }))
+    use_form(|| {
+        empty_form(form! {
+            Trip {
+                venue.city => { label: "Town" },
+            }
+        })
+    })
     .render_fragment()
 }
 
@@ -357,15 +379,17 @@ fn ListLabelAndRowControls() -> Element {
     // Both halves of the list vocabulary in one spec: `stops` addresses the
     // `ListSet` itself (its legend), `stops[]` every row. That they can coexist is
     // the reason the parser compares on the rendered key rather than on idents.
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                stops => { label: "Stops along the way" },
-                stops[] => { control: email },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    stops => { label: "Stops along the way" },
+                    stops[] => { control: email },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 
@@ -373,7 +397,10 @@ fn ListLabelAndRowControls() -> Element {
 fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
     let html = render_to_html(ListLabelAndRowControls);
     // The list's own label, on the `fieldset`'s `legend`.
-    expect_that!(html, contains_substring("<legend>Stops along the way</legend>"));
+    expect_that!(
+        html,
+        contains_substring("<legend>Stops along the way</legend>")
+    );
     // And every row got the control — two rows in `a_trip`, so exactly two.
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
     // Rows still hold their values: the override is presentational only.
@@ -385,26 +412,30 @@ fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
 
 #[component]
 fn EverythingAtOnce() -> Element {
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                title: "Edit trip",
-                validator: trip_has_a_name,
-                name => { label: "Trip name" },
-                secret => { control: password, label: "Passphrase" },
-                venue.city => { label: "Town" },
-                stops => { label: "Stops" },
-                stops[] => { control: email },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    title: "Edit trip",
+                    validator: trip_has_a_name,
+                    name => { label: "Trip name" },
+                    secret => { control: password, label: "Passphrase" },
+                    venue.city => { label: "Town" },
+                    stops => { label: "Stops" },
+                    stops[] => { control: email },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 
 fn trip_has_a_name(t: &Trip) -> Vec<formoxus::error::FormError> {
     if t.name.is_empty() {
-        vec![formoxus::error::FormError("a trip needs a name".to_string())]
+        vec![formoxus::error::FormError(
+            "a trip needs a name".to_string(),
+        )]
     } else {
         Vec::new()
     }
@@ -431,7 +462,10 @@ fn every_entry_kind_coexists_in_one_spec() {
 fn a_passing_validator_lets_the_model_through() {
     // The control for the rejection test: a validator that returns no errors must
     // not be mistaken for "no validator", and must not swallow the model.
-    let quiet = Article { headline: "Trees are good".to_string(), words: 400 };
+    let quiet = Article {
+        headline: "Trees are good".to_string(),
+        words: 400,
+    };
     let mut state = formoxus::form_for(
         &quiet,
         form! { Article { validator: headline_is_not_shouted } },
@@ -446,7 +480,10 @@ fn a_validators_message_lands_where_form_errors_render() {
     // `FormState::render` draws its `form-error` markup from, which is what makes
     // it visible to a user. (That the vec renders is covered in-crate by
     // `tests::forms::a_pushed_error_renders`.)
-    let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
+    let shouted = Article {
+        headline: "TREES ARE GOOD".to_string(),
+        words: 400,
+    };
     let mut state = formoxus::form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
@@ -462,7 +499,10 @@ fn a_validators_message_lands_where_form_errors_render() {
 fn a_second_validate_clears_the_first_ones_verdict() {
     // A form the user then fixes must be accepted. Without the clear at the top of
     // `validate`, the first rejection would be permanent.
-    let shouted = Article { headline: "TREES ARE GOOD".to_string(), words: 400 };
+    let shouted = Article {
+        headline: "TREES ARE GOOD".to_string(),
+        words: 400,
+    };
     let mut state = formoxus::form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
@@ -479,8 +519,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
 
 /// Counts its calls, so a test can assert it did NOT run. Has its own static
 /// rather than sharing one, since tests run in parallel.
-static SHORT_CIRCUIT_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+static SHORT_CIRCUIT_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn counting_validator(_: &Article) -> Vec<formoxus::error::FormError> {
     SHORT_CIRCUIT_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -494,7 +533,10 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
     // implicit, because a validator may reasonably assume its input is
     // well-formed — `words` here never parsed, so no `Article` exists.
     let mut state = formoxus::form_for(
-        &Article { headline: "Trees".to_string(), words: 1 },
+        &Article {
+            headline: "Trees".to_string(),
+            words: 1,
+        },
         form! { Article { validator: counting_validator } },
     );
     state.apply(&std::collections::HashMap::from([
@@ -526,10 +568,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
 /// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
 /// function call from `render_control` could not provide.
 #[component]
-fn ShoutyWidget(
-    values: formoxus::ValuesByPath,
-    props: formoxus::widgets::FieldProps,
-) -> Element {
+fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::widgets::FieldProps) -> Element {
     let _ = values;
     let marker = use_hook(|| "scope-ok");
     let label = props.label.clone().unwrap_or_default();
@@ -542,14 +581,16 @@ fn ShoutyWidget(
 
 #[component]
 fn CustomSecret() -> Element {
-    use_form(|| form_for(
-        &a_trip(),
-        form! {
-            Trip {
-                secret => { control: custom(ShoutyWidget) },
-            }
-        },
-    ))
+    use_form(|| {
+        form_for(
+            &a_trip(),
+            form! {
+                Trip {
+                    secret => { control: custom(ShoutyWidget) },
+                }
+            },
+        )
+    })
     .render_fragment()
 }
 

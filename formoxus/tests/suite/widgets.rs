@@ -4,17 +4,17 @@
 // name to win the glob-import ambiguity.
 use super::models::{EventForCreate, Location as ModelLocation};
 use super::render_to_html;
-use formoxus::*;
 use dioxus::core::Mutation;
+use dioxus::prelude::*;
 use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
+use facet::Facet;
+use formoxus::*;
+use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
-use dioxus::prelude::*;
-use facet::Facet;
 use std::{collections::HashMap, fmt::Debug};
-use googletest::prelude::*;
 
 /// One signal per leaf input, keyed by qualified path.
 ///
@@ -38,14 +38,17 @@ fn use_field_signals<T: Clone + Debug + PartialEq + Facet<'static>>(
 #[component]
 fn EventFormView() -> Element {
     let form = use_hook(|| {
-        form_for(&EventForCreate {
-            title: "Board Game Night".to_string(),
-            location: ModelLocation {
-                street: "123 Main St".to_string(),
-                city: "Springfield".to_string(),
-                zip: "12345".to_string(),
+        form_for(
+            &EventForCreate {
+                title: "Board Game Night".to_string(),
+                location: ModelLocation {
+                    street: "123 Main St".to_string(),
+                    city: "Springfield".to_string(),
+                    zip: "12345".to_string(),
+                },
             },
-        }, FormSpec::default())
+            FormSpec::default(),
+        )
     });
     let signals = use_field_signals(&form);
 
@@ -175,9 +178,8 @@ fn text_kind() -> ValueKind {
 
 #[component]
 fn PopulatedInput() -> Element {
-    let values = use_store(|| {
-        HashMap::from([("title".to_string(), "Board Game Night".to_string())])
-    });
+    let values =
+        use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
     rsx! {
         ScalarInput {
             value_kind: text_kind(),
@@ -360,7 +362,10 @@ fn an_errored_field_marks_its_control_aria_invalid() {
     // The error message must be an immediate `small` sibling of the input, or
     // Pico's `input[aria-invalid="true"] + small` rule never matches and the
     // message renders as ordinary body text — the bug this whole change fixes.
-    expect_that!(html, contains_substring(r#"/><small class="field-errors">"#));
+    expect_that!(
+        html,
+        contains_substring(r#"/><small class="field-errors">"#)
+    );
 }
 
 #[gtest]
@@ -406,9 +411,9 @@ thread_local! {
 #[component]
 fn WithControl() -> Element {
     let control = CONTROL.with_borrow(|c| c.clone().expect("set by rendered_with"));
-    let form = use_form(|| empty_form(
-        FormSpec::<OneString>::default().with_custom_control("secret", control),
-    ));
+    let form = use_form(|| {
+        empty_form(FormSpec::<OneString>::default().with_custom_control("secret", control))
+    });
     form.render_fragment()
 }
 
@@ -435,7 +440,11 @@ fn every_input_type_reaches_the_type_attribute() {
     for (input_type, expected) in cases {
         let html = rendered_with(ControlType::Input(input_type.clone()));
         let wanted = format!("type=\"{expected}\"");
-        expect_that!(html, contains_substring(wanted.as_str()), "for {input_type:?}");
+        expect_that!(
+            html,
+            contains_substring(wanted.as_str()),
+            "for {input_type:?}"
+        );
     }
 }
 
@@ -479,7 +488,9 @@ fn a_password_round_trips_its_value_like_any_other_field() {
     fn FilledPassword() -> Element {
         let form = use_form(|| {
             form_for(
-                &OneString { secret: "hunter2".to_string() },
+                &OneString {
+                    secret: "hunter2".to_string(),
+                },
                 FormSpec::<OneString>::default()
                     .with_custom_control("secret", ControlType::Input(InputType::Password)),
             )

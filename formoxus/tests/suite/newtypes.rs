@@ -7,8 +7,8 @@
 //! halves of that: the string-facing side behaves exactly like the bare scalar,
 //! and the value still rebuilds as the wrapper.
 
-use formoxus::*;
 use facet::Facet;
+use formoxus::*;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -50,7 +50,9 @@ struct HasPair {
     pair: Pair,
 }
 
-fn paths_of(form: &FormState<impl Clone + std::fmt::Debug + PartialEq + Facet<'static>>) -> Vec<String> {
+fn paths_of(
+    form: &FormState<impl Clone + std::fmt::Debug + PartialEq + Facet<'static>>,
+) -> Vec<String> {
     form.leaves().into_iter().map(|(p, _)| p).collect()
 }
 
@@ -85,14 +87,20 @@ fn a_newtype_around_a_non_scalar_is_still_a_struct() {
 #[gtest]
 fn a_newtype_round_trips_through_edit_mode() {
     // Populating reads THROUGH the wrapper, and writing rebuilds it.
-    let doc = Doc { title: "Unit 1".to_string(), body: Note("hello **there**".to_string()) };
+    let doc = Doc {
+        title: "Unit 1".to_string(),
+        body: Note("hello **there**".to_string()),
+    };
     let mut form = form_for(&doc, FormSpec::default());
     expect_that!(form.validate(), some(eq(&doc)));
 }
 
 #[gtest]
 fn a_populated_newtype_shows_its_inner_value_in_the_input() {
-    let doc = Doc { title: "Unit 1".to_string(), body: Note("hello".to_string()) };
+    let doc = Doc {
+        title: "Unit 1".to_string(),
+        body: Note("hello".to_string()),
+    };
     let form = form_for(&doc, FormSpec::default());
     let body: Vec<String> = form
         .leaves()
@@ -134,7 +142,10 @@ fn a_numeric_newtype_parses_through_the_inner_vtable() {
     ]);
     expect_that!(
         form.validate(),
-        some(eq(&Tally { label: "Votes".to_string(), count: Count(42) }))
+        some(eq(&Tally {
+            label: "Votes".to_string(),
+            count: Count(42)
+        }))
     );
 }
 
@@ -150,7 +161,11 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
     ]);
     expect_that!(form.validate(), none());
     expect_that!(
-        form.collect_errors().fields.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(),
+        form.collect_errors()
+            .fields
+            .iter()
+            .map(|(p, _)| p.clone())
+            .collect::<Vec<_>>(),
         elements_are![eq("count")]
     );
 }
@@ -161,7 +176,11 @@ fn an_empty_newtype_field_is_required_like_any_other() {
     form.apply_form_values(&[("title".to_string(), "Unit 1".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(
-        form.collect_errors().fields.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(),
+        form.collect_errors()
+            .fields
+            .iter()
+            .map(|(p, _)| p.clone())
+            .collect::<Vec<_>>(),
         elements_are![eq("body")]
     );
 }
@@ -180,7 +199,10 @@ fn an_absent_optional_newtype_round_trips_as_none() {
     form.apply_form_values(&[("title".to_string(), "Unit 1".to_string())]);
     expect_that!(
         form.validate(),
-        some(eq(&MaybeDoc { title: "Unit 1".to_string(), body: None }))
+        some(eq(&MaybeDoc {
+            title: "Unit 1".to_string(),
+            body: None
+        }))
     );
 }
 

@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use dioxus::core::Element;
 
+use crate::error::{FieldError, FormAccessError};
 use crate::members::{Edit, FieldSpecs};
 use crate::{FormMember, RenderCtx};
-use crate::error::{FieldError, FormAccessError};
-
 
 #[derive(Clone, Debug)]
 pub struct OptionMember {
@@ -59,15 +58,18 @@ impl FormMember for OptionMember {
     fn clone_box(&self) -> Box<dyn FormMember> {
         Box::new(self.clone())
     }
-    
-    fn write_value_into<'p>(&self, partial: facet::Partial<'p>) -> Result<facet::Partial<'p>, facet::ReflectError> {
+
+    fn write_value_into<'p>(
+        &self,
+        partial: facet::Partial<'p>,
+    ) -> Result<facet::Partial<'p>, facet::ReflectError> {
         if self.is_present() {
             self.inner.write_value_into(partial.begin_some()?)?.end()
         } else {
             partial.set_default()
         }
     }
-    
+
     fn is_present(&self) -> bool {
         self.inner.is_present()
     }
@@ -79,12 +81,16 @@ impl FormMember for OptionMember {
         self.inner.edit(prefix, edit)
     }
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError> {
         // Same pass-through as `edit`, for the same reason: a decorator, not a
         // path segment.
         self.inner.push_field_error(prefix, path, error)
     }
-
 
     fn clear_errors(&mut self) {
         self.inner.clear_errors();

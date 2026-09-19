@@ -8,10 +8,10 @@
 
 use super::models::{EventForCreate, Location};
 use super::render_to_html;
-use formoxus::widgets::ControlType;
-use formoxus::*;
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::widgets::ControlType;
+use formoxus::*;
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -28,9 +28,9 @@ struct Flags {
 
 #[component]
 fn RelabelledField() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<EventForCreate>::default().with_label("title", "Event name"),
-    ));
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_label("title", "Event name"))
+    });
     form.render_fragment()
 }
 
@@ -44,9 +44,9 @@ fn a_label_override_beats_the_humanized_field_name() {
 
 #[component]
 fn RelabelledNestedField() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<EventForCreate>::default().with_label("location.city", "Town"),
-    ));
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_label("location.city", "Town"))
+    });
     form.render_fragment()
 }
 
@@ -64,9 +64,9 @@ fn a_nested_path_reaches_exactly_one_field() {
 
 #[component]
 fn RelabelledFieldSet() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<EventForCreate>::default().with_label("location", "Where"),
-    ));
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_label("location", "Where"))
+    });
     form.render_fragment()
 }
 
@@ -97,9 +97,11 @@ fn the_derived_controls_are_what_the_override_has_to_beat() {
 
 #[component]
 fn OptionalBoolForcedToCheckbox() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<Flags>::default().with_custom_control("subscribed", ControlType::Checkbox),
-    ));
+    let form = use_form(|| {
+        empty_form(
+            FormSpec::<Flags>::default().with_custom_control("subscribed", ControlType::Checkbox),
+        )
+    });
     form.render_fragment()
 }
 
@@ -119,9 +121,9 @@ fn an_override_beats_a_derived_control() {
 
 #[component]
 fn BoolForcedToSelect() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<Flags>::default().with_custom_control("enabled", ControlType::Select),
-    ));
+    let form = use_form(|| {
+        empty_form(FormSpec::<Flags>::default().with_custom_control("enabled", ControlType::Select))
+    });
     form.render_fragment()
 }
 
@@ -140,9 +142,8 @@ fn an_unmatched_path_is_a_no_op() {
     // public and `apply_specs` must not panic on a path it simply doesn't find —
     // a spec is a set of statements about members, not an assertion that each
     // exists.
-    let form = empty_form(
-        FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"),
-    );
+    let form =
+        empty_form(FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"));
     expect_that!(form.leaves().len(), gt(0));
 }
 
@@ -166,7 +167,9 @@ struct WithRows {
 #[gtest]
 #[should_panic(expected = "venues is a list")]
 fn a_control_on_a_list_is_rejected() {
-    let _ = empty_form(FormSpec::<WithRows>::default().with_custom_control("venues", ControlType::Select));
+    let _ = empty_form(
+        FormSpec::<WithRows>::default().with_custom_control("venues", ControlType::Select),
+    );
 }
 
 /// The chooser has to be a FIELD, not the whole model: a bare-enum `T` has no
@@ -178,9 +181,11 @@ struct Drawing {
 
 #[component]
 fn ChooserWithAControl() -> Element {
-    let form = use_form(|| empty_form(
-        FormSpec::<Drawing>::default().with_custom_control("shape", ControlType::RadioGroup),
-    ));
+    let form = use_form(|| {
+        empty_form(
+            FormSpec::<Drawing>::default().with_custom_control("shape", ControlType::RadioGroup),
+        )
+    });
     form.render_fragment()
 }
 
@@ -214,24 +219,36 @@ struct Trip {
 }
 
 fn quiz() -> Quiz {
-    Quiz { answers: vec!["PNG".to_string(), "JPEG".to_string(), "GIF".to_string()] }
+    Quiz {
+        answers: vec!["PNG".to_string(), "JPEG".to_string(), "GIF".to_string()],
+    }
 }
 
 fn trip() -> Trip {
     Trip {
         venues: vec![
-            Location { street: "1 A St".to_string(), city: "Springfield".to_string(), zip: "11111".to_string() },
-            Location { street: "2 B St".to_string(), city: "Shelbyville".to_string(), zip: "22222".to_string() },
+            Location {
+                street: "1 A St".to_string(),
+                city: "Springfield".to_string(),
+                zip: "11111".to_string(),
+            },
+            Location {
+                street: "2 B St".to_string(),
+                city: "Shelbyville".to_string(),
+                zip: "22222".to_string(),
+            },
         ],
     }
 }
 
 #[component]
 fn RowsWithLabels() -> Element {
-    let form = use_form(|| form_for(
-        &quiz(),
-        FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
-    ));
+    let form = use_form(|| {
+        form_for(
+            &quiz(),
+            FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
+        )
+    });
     form.render_fragment()
 }
 
@@ -249,10 +266,12 @@ fn a_bracket_selector_reaches_every_row() {
 
 #[component]
 fn RowFieldsWithLabels() -> Element {
-    let form = use_form(|| form_for(
-        &trip(),
-        FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
-    ));
+    let form = use_form(|| {
+        form_for(
+            &trip(),
+            FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
+        )
+    });
     form.render_fragment()
 }
 
@@ -269,10 +288,12 @@ fn a_bracket_selector_composes_with_a_field_below_it() {
 
 #[component]
 fn ListWithItsOwnLabel() -> Element {
-    let form = use_form(|| form_for(
-        &trip(),
-        FormSpec::<Trip>::default().with_label("venues", "Where we went"),
-    ));
+    let form = use_form(|| {
+        form_for(
+            &trip(),
+            FormSpec::<Trip>::default().with_label("venues", "Where we went"),
+        )
+    });
     form.render_fragment()
 }
 
@@ -291,10 +312,14 @@ struct Answers {
 
 #[component]
 fn RowControlsOverridden() -> Element {
-    let form = use_form(|| form_for(
-        &Answers { correct: vec![true, false] },
-        FormSpec::<Answers>::default().with_custom_control("correct[]", ControlType::Select),
-    ));
+    let form = use_form(|| {
+        form_for(
+            &Answers {
+                correct: vec![true, false],
+            },
+            FormSpec::<Answers>::default().with_custom_control("correct[]", ControlType::Select),
+        )
+    });
     form.render_fragment()
 }
 
@@ -330,7 +355,10 @@ fn RowAddedAfterTheSpec() -> Element {
             FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
         );
         state
-            .edit(&Edit::AddRow { path: "answers".to_string(), before: None })
+            .edit(&Edit::AddRow {
+                path: "answers".to_string(),
+                before: None,
+            })
             .expect("appending to `answers` should succeed");
         state
     });
@@ -357,7 +385,10 @@ fn RowFieldAddedAfterTheSpec() -> Element {
             FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
         );
         state
-            .edit(&Edit::AddRow { path: "venues".to_string(), before: None })
+            .edit(&Edit::AddRow {
+                path: "venues".to_string(),
+                before: None,
+            })
             .expect("appending to `venues` should succeed");
         state
     });

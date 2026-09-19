@@ -2,7 +2,10 @@
 //! from) into a tree of `FormMember`s. One `*_member` helper per kind of thing
 //! a shape can be.
 
-use facet::{EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind, StructType, Type, UserType, Variant};
+use facet::{
+    EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind, StructType, Type,
+    UserType, Variant,
+};
 
 use crate::fields::{FormField, populate};
 use crate::members::{
@@ -43,7 +46,9 @@ pub(crate) fn members_for(
     optional: bool,
 ) -> Vec<Box<dyn FormMember>> {
     match &shape.ty {
-        Type::User(UserType::Struct(struct_type)) => fields_from_struct(struct_type, peek, mode, prefix, optional),
+        Type::User(UserType::Struct(struct_type)) => {
+            fields_from_struct(struct_type, peek, mode, prefix, optional)
+        }
         Type::User(UserType::Enum(enum_type)) => {
             fields_from_enum(enum_type, peek, mode, prefix, optional)
         }
@@ -71,7 +76,13 @@ fn fields_from_struct(
                 ps.field_by_name(field.name)
                     .expect("field came from this shape, so it exists on the value")
             });
-            member_for(field, field_peek, mode, &qualify(prefix, field.name), optional)
+            member_for(
+                field,
+                field_peek,
+                mode,
+                &qualify(prefix, field.name),
+                optional,
+            )
         })
         .collect()
 }
@@ -135,7 +146,13 @@ pub(crate) fn variant_members(
                 pe.field_by_name(field.name)
                     .expect("field belongs to the active variant, so access can't error")
             });
-            member_for(field, field_peek, mode, &qualify(prefix, field.name), optional)
+            member_for(
+                field,
+                field_peek,
+                mode,
+                &qualify(prefix, field.name),
+                optional,
+            )
         })
         .collect()
 }
@@ -154,7 +171,8 @@ fn fields_from_enum(
         p.into_enum()
             .expect("shape said enum, so the value peeks as one")
     });
-    let variant = chosen_variant(enum_type, peek_enum, mode, prefix).expect("Variant should not be Unchosen here.");
+    let variant = chosen_variant(enum_type, peek_enum, mode, prefix)
+        .expect("Variant should not be Unchosen here.");
     variant_members(variant, peek_enum, mode, prefix, optional)
 }
 
@@ -187,15 +205,19 @@ pub(crate) fn member_for_shape(
     if let Ok(option_def) = shape.def.into_option() {
         return option_member(option_def, name, peek, mode, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_member(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(|| {
-            panic!("scalar type {scalar:?} is not supported in FormField (field {name})")
-        });
+        return scalar_member(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(
+            || panic!("scalar type {scalar:?} is not supported in FormField (field {name})"),
+        );
     } else if let Some(inner) = newtype_inner(shape) {
         // A newtype is ONE input, not a fieldset around a field called "0".
         // The peek descends with it: the field holds the inner scalar, so
         // `populate` must see the inner value, not the wrapper.
-        let scalar = inner.scalar_type().expect("newtype_inner only returns scalars");
-        let inner_peek = peek.and_then(|p| p.into_struct().ok()).and_then(|s| s.field(0).ok());
+        let scalar = inner
+            .scalar_type()
+            .expect("newtype_inner only returns scalars");
+        let inner_peek = peek
+            .and_then(|p| p.into_struct().ok())
+            .and_then(|s| s.field(0).ok());
         return scalar_member(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
             panic!("newtype {shape} wraps {scalar:?}, which is not supported in FormField (field {name})")
         });
@@ -207,9 +229,7 @@ pub(crate) fn member_for_shape(
     }
 
     match &shape.ty {
-        Type::User(UserType::Struct(_)) => {
-            struct_member(shape, name, peek, mode, prefix, optional)
-        }
+        Type::User(UserType::Struct(_)) => struct_member(shape, name, peek, mode, prefix, optional),
         Type::User(UserType::Enum(enum_type)) => {
             enum_member(enum_type, name, peek, mode, prefix, optional)
         }
@@ -225,11 +245,20 @@ fn option_member(
     prefix: &str,
 ) -> Box<dyn FormMember> {
     let inner_peek = peek.and_then(|p| {
-        p.into_option().expect("shape said Option, so the value should peek as one").value()
+        p.into_option()
+            .expect("shape said Option, so the value should peek as one")
+            .value()
     });
-    let inner = member_for_shape(option_def.t, name, inner_peek, mode, prefix, /* optional */ true);
+    let inner = member_for_shape(
+        option_def.t,
+        name,
+        inner_peek,
+        mode,
+        prefix,
+        /* optional */ true,
+    );
     Box::new(OptionMember { inner })
-} 
+}
 
 /// The inner shape of a newtype wrapper — `String` for `struct Markdown(String)`.
 ///
@@ -366,7 +395,14 @@ fn list_member(
                     // Keeping this in step with `collect_leaves` is what keeps
                     // the leaf paths and the store keys the same strings.
                     let row = row_segment(i);
-                    member_for_shape(shape, &row, Some(element), mode, &qualify(prefix, &row), /* optional */ false)
+                    member_for_shape(
+                        shape,
+                        &row,
+                        Some(element),
+                        mode,
+                        &qualify(prefix, &row),
+                        /* optional */ false,
+                    )
                 })
                 .collect()
         })

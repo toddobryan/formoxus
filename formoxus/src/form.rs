@@ -13,21 +13,20 @@
 //! validator, buttons — that `form!` builds and [`FormState::apply_specs`]
 //! lays onto the tree. Lives in [`spec`].
 
-use facet::Facet;
-use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, future::Future, pin::Pin, rc::Rc};
-use dioxus::prelude::*;
-use crate::{RenderCtx, ValuesByPath};
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::members::Edit;
+use crate::{RenderCtx, ValuesByPath};
+use dioxus::prelude::*;
+use facet::Facet;
+use serde::{Deserialize, Serialize};
+use std::{fmt::Debug, future::Future, pin::Pin, rc::Rc};
 
 mod spec;
 mod state;
 
 pub use spec::{FieldSpec, FormSpec};
 pub use state::{FormState, empty_form, form_for};
-
 
 pub type FieldErrors = Vec<(String, Vec<FieldError>)>;
 
@@ -322,7 +321,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     pub fn render_fields(&self) -> Element {
-        self.state.read().render_fields(&RenderCtx::root(self.values, self.on_edit))
+        self.state
+            .read()
+            .render_fields(&RenderCtx::root(self.values, self.on_edit))
     }
 
     pub fn render_errors(&self) -> Element {
@@ -472,5 +473,9 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             warn!("rejected form edit: {e}");
         }
     });
-    Form { state, values, on_edit }
+    Form {
+        state,
+        values,
+        on_edit,
+    }
 }

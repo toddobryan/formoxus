@@ -1,18 +1,18 @@
 //! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
+use super::models::{Event, EventForCreate, Location};
 use super::render_to_html;
-use formoxus::*;
-use dioxus::prelude::*;
-use facet::Facet;
 use dioxus::core::Mutation;
+use dioxus::prelude::*;
 use dioxus_html::{
     PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData, set_event_converter,
 };
+use facet::Facet;
+use formoxus::*;
+use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
 use std::{collections::HashMap, marker::PhantomData};
-use super::models::{Event, EventForCreate, Location};
-use googletest::prelude::*;
 
 fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
     Box::new(FormField {
@@ -34,7 +34,7 @@ fn location_members(
     vec![
         text_field("street", street),
         text_field("city", city),
-        text_field("zip",  zip),
+        text_field("zip", zip),
     ]
 }
 
@@ -101,7 +101,10 @@ fn EmptyEventForm() -> Element {
 fn form_for_none_walks_the_shape_into_empty_members() {
     let form = empty_form::<EventForCreate>(FormSpec::default());
 
-    expect_that!(member_names(&form.members), elements_are![eq("title"), eq("location")]);
+    expect_that!(
+        member_names(&form.members),
+        elements_are![eq("title"), eq("location")]
+    );
 
     // The nested struct field became a FieldSet with its own members,
     // discovered purely from `Location`'s shape. The inner names are now
@@ -113,14 +116,16 @@ fn form_for_none_walks_the_shape_into_empty_members() {
         expect_that!(rendered, contains_substring(format!(r#"name="{name}""#)));
     }
     // Nothing was populated, so every input is blank.
-    expect_that!(rendered, not(contains_substring(r#"value="Board Game Night""#)));
+    expect_that!(
+        rendered,
+        not(contains_substring(r#"value="Board Game Night""#))
+    );
 }
 
 #[component]
 fn TitledEventForm() -> Element {
-    let form = use_form(|| empty_form::<EventForCreate>(
-        FormSpec::default().with_title("New Event"),
-    ));
+    let form =
+        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
     form.render_fragment()
 }
 
@@ -191,14 +196,20 @@ fn option_fields_round_trip_both_ways() {
         guests: 2,
         note: Some("bringing dessert".to_string()),
     };
-    expect_that!(form_for(&with_note, FormSpec::default()).validate(), some(eq(&with_note)));
+    expect_that!(
+        form_for(&with_note, FormSpec::default()).validate(),
+        some(eq(&with_note))
+    );
 
     let without_note = Rsvp {
         name: "Ada".to_string(),
         guests: 2,
         note: None,
     };
-    expect_that!(form_for(&without_note, FormSpec::default()).validate(), some(eq(&without_note)));
+    expect_that!(
+        form_for(&without_note, FormSpec::default()).validate(),
+        some(eq(&without_note))
+    );
 }
 
 fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
@@ -272,11 +283,14 @@ fn unparseable_input_becomes_invalid_not_a_panic() {
 
 #[gtest]
 fn blanking_a_field_makes_it_empty_again() {
-    let mut form = form_for(&Rsvp {
-        name: "Ada".to_string(),
-        guests: 2,
-        note: Some("bringing dessert".to_string()),
-    }, FormSpec::default());
+    let mut form = form_for(
+        &Rsvp {
+            name: "Ada".to_string(),
+            guests: 2,
+            note: Some("bringing dessert".to_string()),
+        },
+        FormSpec::default(),
+    );
     // Clearing an optional field is legal; clearing a required one isn't.
     form.apply(&values(&[("note", ""), ("name", "")]));
 
@@ -358,10 +372,7 @@ fn event_for_create_form_round_trips_to_model() {
     let mut form: FormState<EventForCreate> = FormState {
         spec: FormSpec::new().with_title("New Event"),
         members: vec![
-            text_field(
-                "title",
-                FieldValue::Valid("Board Game Night".to_string()),
-            ),
+            text_field("title", FieldValue::Valid("Board Game Night".to_string())),
             location_field_set(
                 FieldValue::Valid("123 Main St".to_string()),
                 FieldValue::Valid("Springfield".to_string()),
@@ -392,7 +403,10 @@ fn a_label_defaults_to_the_humanized_field_name() {
 
     let form = empty_form::<Settings>(FormSpec::default());
     let labels: Vec<Option<String>> = form.members.iter().map(|m| m.label()).collect();
-    expect_that!(labels, elements_are![some(eq("Can Shuffle")), some(eq("Name"))]);
+    expect_that!(
+        labels,
+        elements_are![some(eq("Can Shuffle")), some(eq("Name"))]
+    );
 }
 
 #[gtest]
@@ -404,9 +418,12 @@ fn a_list_row_gets_no_label() {
         answer_choices: Vec<String>,
     }
 
-    let form = form_for(&Quiz {
-        answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
-    }, FormSpec::default());
+    let form = form_for(
+        &Quiz {
+            answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
+        },
+        FormSpec::default(),
+    );
     let list = &form.members[0];
     expect_that!(list.label(), some(eq("Answer Choices")));
 
@@ -424,9 +441,14 @@ fn QuizForm() -> Element {
     struct Quiz {
         answer_choices: Vec<String>,
     }
-    let form = use_form(|| form_for(&Quiz {
-        answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
-    }, FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &Quiz {
+                answer_choices: vec!["PNG".to_string(), "JPEG".to_string()],
+            },
+            FormSpec::default(),
+        )
+    });
     form.render_fragment()
 }
 
@@ -518,7 +540,10 @@ fn a_form_starts_with_no_error_markup() {
     fn Untouched() -> Element {
         use_form(|| empty_form(FormSpec::<Credentials>::default())).render_fragment()
     }
-    expect_that!(render_to_html(Untouched), not(contains_substring("form-error")));
+    expect_that!(
+        render_to_html(Untouched),
+        not(contains_substring("form-error"))
+    );
 }
 
 // ── The split render methods ─────────────────────────────────────────────
@@ -532,9 +557,8 @@ fn a_form_starts_with_no_error_markup() {
 
 #[component]
 fn TitledFieldsOnly() -> Element {
-    let form = use_form(|| {
-        empty_form::<EventForCreate>(FormSpec::default().with_title("New Event"))
-    });
+    let form =
+        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
     form.render_fields()
 }
 
@@ -570,9 +594,8 @@ fn render_fields_omits_a_pushed_error() {
 
 #[component]
 fn TitleOnly() -> Element {
-    let form = use_form(|| {
-        empty_form::<EventForCreate>(FormSpec::default().with_title("New Event"))
-    });
+    let form =
+        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
     form.render_title()
 }
 
@@ -639,9 +662,8 @@ fn render_errors_is_empty_before_any_push() {
 
 #[component]
 fn WrappedTitledEventForm() -> Element {
-    let form = use_form(|| {
-        empty_form::<EventForCreate>(FormSpec::default().with_title("New Event"))
-    });
+    let form =
+        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
     form.render(Fns::new())
 }
 
@@ -658,7 +680,9 @@ fn render_places_the_title_before_the_form_element_not_inside_it() {
     let title_pos = rendered
         .find("form-title")
         .expect("the title should render");
-    let form_open_pos = rendered.find("<form").expect("a form element should render");
+    let form_open_pos = rendered
+        .find("<form")
+        .expect("a form element should render");
     expect_that!(title_pos, lt(form_open_pos));
 }
 
@@ -680,12 +704,22 @@ fn validate_clears_a_pushed_error() {
     // means a pushed error never BLOCKS validate, since the clear happens first —
     // which this proves by getting a model back out.
     let mut state = empty_form(FormSpec::<Credentials>::default());
-    state.errors.push(FormError("invalid credentials".to_string()));
+    state
+        .errors
+        .push(FormError("invalid credentials".to_string()));
     expect_that!(state.has_errors(), eq(true));
 
-    state.apply(&HashMap::from([("username".to_string(), "bob".to_string())]));
+    state.apply(&HashMap::from([(
+        "username".to_string(),
+        "bob".to_string(),
+    )]));
     let model = state.validate();
 
-    expect_that!(model, some(eq(&Credentials { username: "bob".to_string() })));
+    expect_that!(
+        model,
+        some(eq(&Credentials {
+            username: "bob".to_string()
+        }))
+    );
     expect_that!(state.has_errors(), eq(false));
 }

@@ -72,7 +72,10 @@ fn each_type_picks_its_html_type_and_class() {
     // `destructive` is a plain `button`: letting it submit would save the form
     // it is meant to discard.
     expect_that!(html, contains_substring(r#"type="button" class="danger""#));
-    expect_that!(html, contains_substring(r#"type="reset" class="outline danger""#));
+    expect_that!(
+        html,
+        contains_substring(r#"type="reset" class="outline danger""#)
+    );
     expect_that!(html, contains_substring(r#"type="submit" class="primary""#));
 }
 
@@ -88,7 +91,10 @@ fn the_row_is_wrapped_for_the_existing_style_rule() {
 
 #[gtest]
 fn a_supplied_button_is_enabled() {
-    expect_that!(render_to_html(FakeForm), not(contains_substring("disabled")));
+    expect_that!(
+        render_to_html(FakeForm),
+        not(contains_substring("disabled"))
+    );
 }
 
 // ── When the handlers and the spec disagree ──────────────────────────────
@@ -106,8 +112,14 @@ fn a_button_with_no_fn_is_disabled_and_says_so() {
     // `submit` with nothing behind it would reload the page.
     expect_that!(html, contains_substring("Drop"));
     expect_that!(html, contains_substring("disabled"));
-    expect_that!(html, contains_substring("button `delete` has no fn supplied"));
-    expect_that!(html, contains_substring("button `update` has no fn supplied"));
+    expect_that!(
+        html,
+        contains_substring("button `delete` has no fn supplied")
+    );
+    expect_that!(
+        html,
+        contains_substring("button `update` has no fn supplied")
+    );
 }
 
 #[component]

@@ -1,14 +1,14 @@
 //! A struct-typed member: its fields, nested under its own name.
 
-use dioxus::prelude::*;
-use facet::{Partial, ReflectError};
-use std::collections::HashMap;
-use crate::error::{FieldError, FormAccessError, FormError};
 use crate::RenderCtx;
+use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
 use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
 };
+use dioxus::prelude::*;
+use facet::{Partial, ReflectError};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct FieldSet {
@@ -88,7 +88,7 @@ impl FormMember for FieldSet {
         }
         Ok(partial)
     }
-    
+
     fn is_present(&self) -> bool {
         self.members.iter().any(|fm| fm.is_present())
     }
@@ -109,7 +109,12 @@ impl FormMember for FieldSet {
         Err(no_such_path(path))
     }
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError> {
         let nested = qualify(prefix, &self.name);
         ensure_owned(&nested, path)?;
         for m in self.members.iter_mut() {
@@ -119,7 +124,6 @@ impl FormMember for FieldSet {
         }
         Err(no_such_path(path))
     }
-    
 
     fn clear_errors(&mut self) {
         self.errors.clear();

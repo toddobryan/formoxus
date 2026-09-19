@@ -29,7 +29,12 @@ pub struct ButtonSpec {
 
 impl ButtonSpec {
     pub fn new(name: &str, ty: ButtonType) -> Self {
-        Self { name: name.to_string(), ty, text: None, invocation: None }
+        Self {
+            name: name.to_string(),
+            ty,
+            text: None,
+            invocation: None,
+        }
     }
 
     pub fn with_text(mut self, text: &str) -> Self {
@@ -53,7 +58,8 @@ impl ButtonSpec {
 
     /// The `invocation` if one was given, else what the type implies.
     pub fn invocation(&self) -> Invocation {
-        self.invocation.unwrap_or_else(|| self.ty.default_invocation())
+        self.invocation
+            .unwrap_or_else(|| self.ty.default_invocation())
     }
 }
 
@@ -151,7 +157,9 @@ pub struct Fns<T> {
 
 impl<T> Clone for Fns<T> {
     fn clone(&self) -> Self {
-        Fns { fns: self.fns.clone() }
+        Fns {
+            fns: self.fns.clone(),
+        }
     }
 }
 
@@ -163,7 +171,9 @@ impl<T> Default for Fns<T> {
 
 impl<T> Fns<T> {
     pub fn new() -> Self {
-        Fns { fns: BTreeMap::new() }
+        Fns {
+            fns: BTreeMap::new(),
+        }
     }
 
     /// Add one. Used by `using_fns!`, which emits one call per entry.

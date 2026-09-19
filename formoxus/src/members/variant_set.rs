@@ -1,16 +1,17 @@
 //! An enum-typed member, locked to one variant chosen before the form existed.
 
-use dioxus::prelude::*;
-use facet::{EnumType, Partial, ReflectError, Variant};
-use std::collections::HashMap;
 use crate::RenderCtx;
 use crate::build::{FormMode, variant_members};
 use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, variant_segment,
+    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    variant_segment,
 };
 use crate::widgets::{ControlType, VariantSelect};
+use dioxus::prelude::*;
+use facet::{EnumType, Partial, ReflectError, Variant};
+use std::collections::HashMap;
 
 /// The enum variant at a particular point
 ///
@@ -24,7 +25,6 @@ pub enum VariantChoice {
     /// This variant, by name.
     Named(String),
 }
-
 
 /// An enum-typed field, locked to one answer chosen before the form (per the
 /// design — variant choice is a construction parameter, not an editable field).
@@ -120,8 +120,9 @@ impl VariantSet {
             return Ok(found);
         }
         let known: Vec<&str> = enum_type.variants.iter().map(|v| v.name).collect();
-        let message =
-            format!("{name:?} is not a variant of the enum at {my_path} (expected one of {known:?})");
+        let message = format!(
+            "{name:?} is not a variant of the enum at {my_path} (expected one of {known:?})"
+        );
         self.errors.push(FieldError(message.clone()));
         Err(FormAccessError(message))
     }
@@ -193,7 +194,9 @@ impl FormMember for VariantSet {
     fn validate(&mut self) {
         self.errors.clear();
         if matches!(self.choice, VariantChoice::Unchosen) {
-            self.errors.push(FieldError("You must choose a variant for this field.".to_string()))
+            self.errors.push(FieldError(
+                "You must choose a variant for this field.".to_string(),
+            ))
         }
         for m in self.members.iter_mut() {
             m.validate();
@@ -217,7 +220,12 @@ impl FormMember for VariantSet {
         }
     }
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError> {
         // Unlike `edit`, `path == my_path` IS meaningful here: `self.errors` is
         // already `Vec<FieldError>` — it's what renders beside the `<select>` —
         // so a server complaint about the CHOICE itself ("pick a grading
@@ -240,7 +248,6 @@ impl FormMember for VariantSet {
         }
         Err(no_such_path(path))
     }
-
 
     fn clear_errors(&mut self) {
         self.errors.clear();
@@ -326,7 +333,9 @@ impl FormMember for VariantSet {
                     partial = m.write_into(partial)?;
                 }
             }
-            VariantChoice::Unchosen => unreachable!("A VariantChoice::Unchosen is handled by OptionMember")
+            VariantChoice::Unchosen => {
+                unreachable!("A VariantChoice::Unchosen is handled by OptionMember")
+            }
         }
         Ok(partial)
     }

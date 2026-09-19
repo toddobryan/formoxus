@@ -1,9 +1,9 @@
 //! `""` IS absence, at both boundaries.
 
-use formoxus::*;
 use facet::Facet;
-use std::{collections::HashMap, fmt::Debug};
+use formoxus::*;
 use googletest::prelude::*;
+use std::{collections::HashMap, fmt::Debug};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Optional {
@@ -30,9 +30,12 @@ where
 fn populating_some_empty_collapses_to_none() {
     // Regression: populating used to keep `Valid("")` here, so this returned
     // `Some("")` while the DOM path returned `None` for the same model.
-    let mut form = form_for(&Optional {
-        body: Some(String::new()),
-    }, FormSpec::default());
+    let mut form = form_for(
+        &Optional {
+            body: Some(String::new()),
+        },
+        FormSpec::default(),
+    );
     expect_that!(form.validate(), some(eq(&Optional { body: None })));
 }
 
@@ -71,9 +74,12 @@ fn none_and_some_empty_are_indistinguishable() {
     // Both directions of the same coin: populating with `None` and `Some("")`
     // produce the same form, so nothing downstream can tell them apart.
     let from_none = form_for(&Optional { body: None }, FormSpec::default());
-    let from_empty = form_for(&Optional {
-        body: Some(String::new()),
-    }, FormSpec::default());
+    let from_empty = form_for(
+        &Optional {
+            body: Some(String::new()),
+        },
+        FormSpec::default(),
+    );
     expect_that!(from_none.leaves(), eq(&from_empty.leaves()));
 }
 

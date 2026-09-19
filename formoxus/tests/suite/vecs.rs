@@ -1,12 +1,12 @@
 //! `Vec`/`Def::List` in edit mode.
 
-use formoxus::*;
-use dioxus::prelude::*;
-use facet::Facet;
-use std::collections::HashMap;
 use super::models::{Location, Shape};
 use super::{Harness, new_since};
+use dioxus::prelude::*;
+use facet::Facet;
+use formoxus::*;
 use googletest::prelude::*;
+use std::collections::HashMap;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Quiz {
@@ -121,7 +121,10 @@ fn nested_lists_nest_their_keys() {
     };
     let form = form_for(&grid, FormSpec::default());
     let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
-    expect_that!(paths, elements_are![eq("rows.#0.#0"), eq("rows.#0.#1"), eq("rows.#1.#0")]);
+    expect_that!(
+        paths,
+        elements_are![eq("rows.#0.#0"), eq("rows.#0.#1"), eq("rows.#1.#0")]
+    );
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&grid)));
@@ -191,7 +194,10 @@ fn create_mode_yields_no_rows_yet() {
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>(FormSpec::default());
-    form.apply(&HashMap::from([("title".to_string(), "Unit 1".to_string())]));
+    form.apply(&HashMap::from([(
+        "title".to_string(),
+        "Unit 1".to_string(),
+    )]));
     expect_that!(
         form.validate(),
         some(eq(&Quiz {
@@ -217,12 +223,20 @@ fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
 #[gtest]
 fn adding_a_row_appends_by_default() {
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
-        .expect("answers is a list");
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: None,
+    })
+    .expect("answers is a list");
 
     expect_that!(
         paths_of(&form),
-        elements_are![eq("title"), eq("answers.#0"), eq("answers.#1"), eq("answers.#2")]
+        elements_are![
+            eq("title"),
+            eq("answers.#0"),
+            eq("answers.#1"),
+            eq("answers.#2")
+        ]
     );
 }
 
@@ -232,8 +246,11 @@ fn a_new_row_is_blank_and_buildable() {
     // has to come out as a working member rather than a placeholder: fill it and
     // the model builds.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
-        .expect("answers is a list");
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: None,
+    })
+    .expect("answers is a list");
     form.apply_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
 
     expect_that!(
@@ -253,8 +270,11 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
     // survives structural edits) would hand row 1 the text the user typed into
     // row 0. Keys make the insert a pure addition: nobody else is touched.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(0) })
-        .expect("answers is a list");
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: Some(0),
+    })
+    .expect("answers is a list");
 
     expect_that!(
         form.leaves(),
@@ -276,15 +296,22 @@ fn the_list_builds_in_row_order_not_key_order() {
     // reads a row's name, so a row inserted at the front lands at the front of
     // the model even though its key is the highest.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(0) })
-        .expect("answers is a list");
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: Some(0),
+    })
+    .expect("answers is a list");
     form.apply_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
 
     expect_that!(
         form.validate(),
         some(eq(&Quiz {
             title: "Unit 1".to_string(),
-            answers: vec!["aardvark".to_string(), "alpha".to_string(), "beta".to_string()],
+            answers: vec![
+                "aardvark".to_string(),
+                "alpha".to_string(),
+                "beta".to_string()
+            ],
         }))
     );
 }
@@ -295,16 +322,25 @@ fn removing_a_row_leaves_the_survivors_keys_untouched() {
     // row 1's paths; keys mean the survivor is still `#1` and still owns the
     // values already sitting under `places.#1.*` in the store.
     let mut form = form_for(&venues(), FormSpec::default());
-    form.edit(&Edit::RemoveRow { path: "places".to_string(), index: 0 })
-        .expect("places is a list");
+    form.edit(&Edit::RemoveRow {
+        path: "places".to_string(),
+        index: 0,
+    })
+    .expect("places is a list");
 
     expect_that!(
         paths_of(&form),
-        elements_are![eq("places.#1.street"), eq("places.#1.city"), eq("places.#1.zip")]
+        elements_are![
+            eq("places.#1.street"),
+            eq("places.#1.city"),
+            eq("places.#1.zip")
+        ]
     );
     expect_that!(
         form.validate(),
-        some(eq(&Venues { places: vec![venues().places[1].clone()] }))
+        some(eq(&Venues {
+            places: vec![venues().places[1].clone()]
+        }))
     );
 }
 
@@ -314,10 +350,16 @@ fn a_key_is_never_reused() {
     // row's key, or the value store's leftovers from the removed row would
     // silently populate the new one.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::RemoveRow { path: "answers".to_string(), index: 1 })
-        .expect("places is a list");
-    form.edit(&Edit::AddRow { path: "answers".to_string(), before: None })
-        .expect("answers is a list");
+    form.edit(&Edit::RemoveRow {
+        path: "answers".to_string(),
+        index: 1,
+    })
+    .expect("places is a list");
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: None,
+    })
+    .expect("answers is a list");
 
     expect_that!(
         paths_of(&form),
@@ -332,12 +374,18 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
     // construction — including being reachable by the containment walk, which
     // means its prefix has to match what `list_member` would have produced.
     let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
-    form.edit(&Edit::AddRow { path: "shapes".to_string(), before: None })
-        .expect("shapes is a list");
+    form.edit(&Edit::AddRow {
+        path: "shapes".to_string(),
+        before: None,
+    })
+    .expect("shapes is a list");
     form.choose_variant("shapes.#0", Some("Circle"))
         .expect("the new row is an enum, and Circle is one of its variants");
 
-    expect_that!(paths_of(&form), elements_are![eq("shapes.#0.$Circle.radius")]);
+    expect_that!(
+        paths_of(&form),
+        elements_are![eq("shapes.#0.$Circle.radius")]
+    );
 }
 
 #[gtest]
@@ -346,11 +394,17 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     // aborts instead of reaching an `ErrorBoundary` — so these are checked.
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow { path: "answers".to_string(), before: Some(9) }),
+        form.edit(&Edit::AddRow {
+            path: "answers".to_string(),
+            before: Some(9)
+        }),
         err(anything())
     );
     expect_that!(
-        form.edit(&Edit::RemoveRow { path: "answers".to_string(), index: 9 }),
+        form.edit(&Edit::RemoveRow {
+            path: "answers".to_string(),
+            index: 9
+        }),
         err(anything())
     );
     expect_that!(
@@ -367,7 +421,10 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     // `no such path: answers` — a lie, since the list is precisely what owns it.
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow { path: "answers".to_string(), before: None }),
+        form.edit(&Edit::AddRow {
+            path: "answers".to_string(),
+            before: None
+        }),
         ok(anything())
     );
 }
@@ -418,7 +475,11 @@ fn clicking_add_on_an_empty_list_creates_a_row() {
     // read as a gap. With an Add button it is simply the right answer.
     let mut app = Harness::mount(BlankQuizForm);
     let add = app.only_listener("click");
-    expect_that!(app.html(), not(contains_substring("answers.#")), "no rows yet");
+    expect_that!(
+        app.html(),
+        not(contains_substring("answers.#")),
+        "no rows yet"
+    );
 
     app.click(add);
 
@@ -439,20 +500,32 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     let inputs = app.listeners("input");
     app.click(add);
     let remove_first = new_since(&clicks, app.listeners("click"))[0];
-    app.fire("input", new_since(&inputs, app.listeners("input"))[0], "alpha");
+    app.fire(
+        "input",
+        new_since(&inputs, app.listeners("input"))[0],
+        "alpha",
+    );
 
     // Row two.
     let clicks = app.listeners("click");
     let inputs = app.listeners("input");
     app.click(add);
-    app.fire("input", new_since(&inputs, app.listeners("input"))[0], "beta");
+    app.fire(
+        "input",
+        new_since(&inputs, app.listeners("input"))[0],
+        "beta",
+    );
 
     expect_that!(
         app.listeners("click"),
         contains(eq(&remove_first)),
         "appending must not tear down the row that was already there"
     );
-    expect_that!(new_since(&clicks, app.listeners("click")).len(), eq(1), "one new Remove");
+    expect_that!(
+        new_since(&clicks, app.listeners("click")).len(),
+        eq(1),
+        "one new Remove"
+    );
 
     app.click(remove_first);
 
@@ -480,5 +553,9 @@ fn the_row_controls_never_submit_the_form() {
     // demo page's Check button is a real submit, that failure would look like
     // "adding a row validates the form."
     let html = super::render_to_html(QuizForm);
-    expect_that!(html.matches(r#"<button type="button""#).count(), eq(3), "two Remove, one Add");
+    expect_that!(
+        html.matches(r#"<button type="button""#).count(),
+        eq(3),
+        "two Remove, one Add"
+    );
 }

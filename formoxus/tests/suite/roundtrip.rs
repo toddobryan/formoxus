@@ -23,8 +23,8 @@
 //! vtables; nothing in the type system enforces it. [`round_trips`] is public to
 //! the test suite so such a type can be held to the same standard.
 
-use formoxus::fields::parse_scalar;
 use facet::{Facet, Peek};
+use formoxus::fields::parse_scalar;
 use googletest::prelude::*;
 use std::fmt::Debug;
 
@@ -93,12 +93,27 @@ fn floats_round_trip_including_the_awkward_ones() {
     // `1.0/3.0` and `0.1 + 0.2` are the classic shortest-repr traps, and the
     // subnormal/limit values are where a naive `{:.N}` formatter loses bits.
     round_trips(&[
-        0.0f32, -0.0, 1.0 / 3.0, f32::MIN, f32::MAX,
-        f32::MIN_POSITIVE, f32::EPSILON, f32::INFINITY, f32::NEG_INFINITY,
+        0.0f32,
+        -0.0,
+        1.0 / 3.0,
+        f32::MIN,
+        f32::MAX,
+        f32::MIN_POSITIVE,
+        f32::EPSILON,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
     ]);
     round_trips(&[
-        0.0f64, -0.0, 1.0 / 3.0, 0.1 + 0.2, f64::MIN, f64::MAX,
-        f64::MIN_POSITIVE, f64::EPSILON, f64::INFINITY, f64::NEG_INFINITY,
+        0.0f64,
+        -0.0,
+        1.0 / 3.0,
+        0.1 + 0.2,
+        f64::MIN,
+        f64::MAX,
+        f64::MIN_POSITIVE,
+        f64::EPSILON,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
     ]);
 }
 

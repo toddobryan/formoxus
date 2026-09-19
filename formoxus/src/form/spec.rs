@@ -7,8 +7,8 @@ use std::{fmt::Debug, marker::PhantomData};
 use facet::Facet;
 use indexmap::IndexMap;
 
-use crate::error::FormError;
 use crate::buttons::ButtonSpec;
+use crate::error::FormError;
 use crate::widgets::ControlType;
 
 #[derive(Clone, Debug)]
@@ -28,7 +28,7 @@ pub struct FieldSpec {
     pub custom_control: Option<ControlType>,
 }
 
-impl<T:  Clone + Debug + Facet<'static>> FormSpec<T> {
+impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     pub fn new() -> Self {
         Self {
             title: None,
@@ -76,5 +76,7 @@ impl<T:  Clone + Debug + Facet<'static>> FormSpec<T> {
 }
 
 impl<T: Clone + Debug + Facet<'static>> Default for FormSpec<T> {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

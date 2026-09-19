@@ -82,9 +82,7 @@ impl Parse for FnEntry {
                 n => {
                     return Err(syn::Error::new_spanned(
                         &c.inputs,
-                        format!(
-                            "a button fn takes the model or nothing, not {n} arguments"
-                        ),
+                        format!("a button fn takes the model or nothing, not {n} arguments"),
                     ));
                 }
             },

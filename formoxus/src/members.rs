@@ -16,10 +16,10 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::error::{FieldError, FormAccessError};
-use crate::label_case::{LabelCase, ToCase};
 use crate::FieldSpec;
+use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
+use crate::label_case::{LabelCase, ToCase};
 use dioxus::stores::Store;
 
 pub type FieldSpecs = IndexMap<String, FieldSpec>;
@@ -44,7 +44,7 @@ pub trait FormMember: Debug {
     fn has_errors(&self) -> bool;
     fn clone_box(&self) -> Box<dyn FormMember>;
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError>;
-    
+
     fn write_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         let mut partial = partial.begin_field(&self.name())?;
         partial = self.write_value_into(partial)?;
@@ -86,7 +86,12 @@ pub trait FormMember: Debug {
     /// only thing a container reads, so containers stay kind-agnostic.
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError>;
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError>;
 
     fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs);
 }
@@ -104,7 +109,10 @@ impl Clone for Box<dyn FormMember> {
 /// failure ("no such variant") propagates verbatim instead of being swallowed as
 /// "no such path" by a parent that was still shopping around.
 pub(crate) fn owns(nested: &str, path: &str) -> bool {
-    path == nested || path.strip_prefix(nested).is_some_and(|rest| rest.starts_with('.'))
+    path == nested
+        || path
+            .strip_prefix(nested)
+            .is_some_and(|rest| rest.starts_with('.'))
 }
 
 pub(crate) fn no_such_path(path: &str) -> FormAccessError {
@@ -227,7 +235,12 @@ impl RenderCtx {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionMember` says otherwise.
     pub fn root(values: ValuesByPath, on_edit: Callback<Edit>) -> Self {
-        Self { prefix: String::new(), values, required: true, on_edit }
+        Self {
+            prefix: String::new(),
+            values,
+            required: true,
+            on_edit,
+        }
     }
 
     /// Descend into a named child — the `qualify` every container already does.
@@ -278,7 +291,7 @@ pub enum Edit {
     RemoveRow {
         path: String,
         index: usize,
-    }
+    },
 }
 
 impl Edit {

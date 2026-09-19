@@ -7,10 +7,10 @@
 //! only members with errors appear, and a container that can be *pushed* an
 //! error at its own path must be able to hand it back from there.
 
-use formoxus::*;
-use facet::Facet;
-use googletest::prelude::*;
 use super::models::{EventForCreate, Location, Shape};
+use facet::Facet;
+use formoxus::*;
+use googletest::prelude::*;
 
 /// A struct with an enum field. `enums` has its own `Drawing` of the same
 /// shape; this one is local rather than shared because the two modules assert
@@ -187,7 +187,10 @@ fn a_server_verdict_survives_the_enum_being_unchosen() {
 
     let errors = form.collect_errors();
     expect_that!(paths(&errors), elements_are![eq("shape")]);
-    expect_that!(messages_at(&errors, "shape"), elements_are![eq("Pick a shape first.")]);
+    expect_that!(
+        messages_at(&errors, "shape"),
+        elements_are![eq("Pick a shape first.")]
+    );
 }
 
 #[gtest]
@@ -215,12 +218,18 @@ struct Tally {
 fn list_rows_report_their_own_row_keys() {
     // Row identity, not position — `#1` is the key `ListSet::rows` assigned,
     // which is what makes an error survive a sibling row being removed.
-    let tally = Tally { label: "Votes".to_string(), counts: vec![1, 2, 3] };
+    let tally = Tally {
+        label: "Votes".to_string(),
+        counts: vec![1, 2, 3],
+    };
     let mut form = form_for(&tally, FormSpec::default());
     form.apply_form_values(&[("counts.#1".to_string(), "not a number".to_string())]);
     expect_that!(form.validate(), none());
 
-    expect_that!(paths(&form.collect_errors()), elements_are![eq("counts.#1")]);
+    expect_that!(
+        paths(&form.collect_errors()),
+        elements_are![eq("counts.#1")]
+    );
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -306,7 +315,10 @@ fn the_specs_validator_lands_in_form_not_fields() {
     // though the form failed. A caller that branched on `fields.is_empty()`
     // ALONE would call this a pass.
     let spec = FormSpec::default().with_validator(label_must_not_be_shouted);
-    let tally = Tally { label: "VOTES".to_string(), counts: vec![1] };
+    let tally = Tally {
+        label: "VOTES".to_string(),
+        counts: vec![1],
+    };
     let mut form = form_for(&tally, spec);
     expect_that!(form.validate(), none());
 

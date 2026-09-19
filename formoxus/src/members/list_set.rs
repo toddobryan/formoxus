@@ -4,17 +4,18 @@
 //! a row be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `row_segment` for why renaming would be a data hazard.
 
+use crate::RenderCtx;
+use crate::build::{FormMode, member_for_shape};
+use crate::error::{FieldError, FormAccessError, FormError};
+use crate::form::FieldErrors;
+use crate::members::{
+    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    row_segment,
+};
+use crate::widgets::{AddRowButton, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use std::collections::HashMap;
-use crate::error::{FieldError, FormAccessError, FormError};
-use crate::RenderCtx;
-use crate::form::FieldErrors;
-use crate::widgets::{AddRowButton, RemoveRowButton};
-use crate::build::{FormMode, member_for_shape};
-use crate::members::{
-    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify, row_segment,
-};
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
@@ -35,7 +36,12 @@ impl ListSet {
     /// members. The row's prefix has to match what `list_member` produces at
     /// construction, or the row would render fine and write to store keys
     /// nobody reads.
-    fn add_row(&mut self, my_path: &str, before: Option<usize>, optional: bool) -> Result<(), FormAccessError> {
+    fn add_row(
+        &mut self,
+        my_path: &str,
+        before: Option<usize>,
+        optional: bool,
+    ) -> Result<(), FormAccessError> {
         let at = before.unwrap_or(self.rows.len());
         if at > self.rows.len() {
             return Err(FormAccessError(format!(
@@ -170,7 +176,7 @@ impl FormMember for ListSet {
         }
         Ok(partial)
     }
-    
+
     fn is_present(&self) -> bool {
         !self.rows.is_empty() && self.rows.iter().any(|fm| fm.is_present())
     }
@@ -202,7 +208,12 @@ impl FormMember for ListSet {
         Err(no_such_path(path))
     }
 
-    fn push_field_error(&mut self, prefix: &str, path: &str, error: FieldError) -> Result<(), FormAccessError> {
+    fn push_field_error(
+        &mut self,
+        prefix: &str,
+        path: &str,
+        error: FieldError,
+    ) -> Result<(), FormAccessError> {
         // No `path == my_path` case, unlike `edit`: a list has no field of its
         // own to attach a `FieldError` to (`self.errors` holds `FormError`s, a
         // different type) — only a row can be the field a server complained

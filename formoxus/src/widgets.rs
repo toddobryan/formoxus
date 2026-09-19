@@ -10,8 +10,8 @@
 use dioxus::prelude::*;
 
 use crate::error::FieldError;
-use crate::label_case::{LabelCase, ToCase};
 use crate::fields::ValueKind;
+use crate::label_case::{LabelCase, ToCase};
 use crate::{Edit, ValuesByPath};
 
 /// The per-field error list, rendered under every control.
@@ -215,8 +215,6 @@ pub fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
     }
 }
 
-
-
 /// A single-line text input bound to one path in the value map.
 ///
 /// `values` + `path` rather than a pre-lensed child store, because a path that
@@ -261,17 +259,21 @@ pub fn ScalarInput(
         // `Ref<Source>` are `Text` to the parser and nothing to a `<select>`.
         // The author named this widget for this field; that IS the evidence.
         (_, ControlType::Custom { render, .. }) => render(ControlProps { values, props }),
-        _ => panic!("{control:?} cannot render a {value_kind:?} (field {})", props.path),
+        _ => panic!(
+            "{control:?} cannot render a {value_kind:?} (field {})",
+            props.path
+        ),
     }
 }
 
 #[component]
-pub fn HtmlInput(
-    input_type: InputType,
-    values: ValuesByPath,
-    props: FieldProps,
-) -> Element {
-    let FieldProps { path, label: label_text, required, errors } = props;
+pub fn HtmlInput(input_type: InputType, values: ValuesByPath, props: FieldProps) -> Element {
+    let FieldProps {
+        path,
+        label: label_text,
+        required,
+        errors,
+    } = props;
 
     let current = get_current(&path, values);
 
@@ -356,11 +358,13 @@ pub fn HtmlInput(
 /// nothing here needs the extra `InputType` cases (`Password`'s masking,
 /// `Hidden`'s bare markup) that make `HtmlInput` carry one.
 #[component]
-pub fn TextareaInput(
-    values: ValuesByPath,
-    props: FieldProps,
-) -> Element {
-    let FieldProps { path, label: label_text, required, errors } = props;
+pub fn TextareaInput(values: ValuesByPath, props: FieldProps) -> Element {
+    let FieldProps {
+        path,
+        label: label_text,
+        required,
+        errors,
+    } = props;
 
     let current = get_current(&path, values);
 
@@ -390,15 +394,17 @@ pub fn TextareaInput(
 }
 
 #[component]
-pub fn BooleanInput(
-    mut values: ValuesByPath,
-    props: FieldProps,
-) -> Element {
+pub fn BooleanInput(mut values: ValuesByPath, props: FieldProps) -> Element {
     // An `Option<bool>` has three states and a checkbox has two, so it needs a
     // select. Delegating rather than inlining one keeps a single implementation
     // of the "no value" option and the required/optional asymmetry.
 
-    let FieldProps { path, label, errors, .. } = props;
+    let FieldProps {
+        path,
+        label,
+        errors,
+        ..
+    } = props;
 
     // `required` is deliberately dropped rather than forwarded. HTML `required`
     // on a checkbox means "must be ticked", which is not what a required `bool`
@@ -445,7 +451,10 @@ pub struct SelectChoice {
 
 impl SelectChoice {
     pub fn new(value: impl Into<String>, display: impl Into<String>) -> Self {
-        Self { value: value.into(), display: display.into() }
+        Self {
+            value: value.into(),
+            display: display.into(),
+        }
     }
 }
 
@@ -453,7 +462,10 @@ impl SelectChoice {
 /// from `SelectInput`'s own "no value" option, so it is spelled in exactly one
 /// place rather than once per caller.
 fn bool_choices() -> Vec<SelectChoice> {
-    vec![SelectChoice::new("true", "True"), SelectChoice::new("false", "False")]
+    vec![
+        SelectChoice::new("true", "True"),
+        SelectChoice::new("false", "False"),
+    ]
 }
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
@@ -473,12 +485,13 @@ fn bool_choices() -> Vec<SelectChoice> {
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub fn SelectInput(
-    values: ValuesByPath,
-    choices: Vec<SelectChoice>,
-    props: FieldProps,
-) -> Element {
-    let FieldProps { path, label: label_text, required, errors } = props;
+pub fn SelectInput(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProps) -> Element {
+    let FieldProps {
+        path,
+        label: label_text,
+        required,
+        errors,
+    } = props;
 
     let current = get_current(&path, values);
 

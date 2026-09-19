@@ -91,7 +91,10 @@ fn every_control() -> Vec<(&'static str, ControlType)> {
 fn renders(path: &str, control: ControlType) -> bool {
     let mut dom = VirtualDom::new_with_props(
         OneField,
-        OneFieldProps { path: path.to_string(), control },
+        OneFieldProps {
+            path: path.to_string(),
+            control,
+        },
     );
     dom.rebuild_in_place();
     let html = dioxus_ssr::render(&dom);
@@ -110,7 +113,12 @@ fn main() {
     panic::set_hook(Box::new(|_| {}));
 
     let controls = every_control();
-    let width = controls.iter().map(|(n, _)| n.len()).max().unwrap_or(0).max(7);
+    let width = controls
+        .iter()
+        .map(|(n, _)| n.len())
+        .max()
+        .unwrap_or(0)
+        .max(7);
 
     println!("\nformoxus control matrix — which (value kind, control) pairs render\n");
     print!("{:width$}", "control", width = width);

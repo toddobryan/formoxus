@@ -20,13 +20,13 @@
 //! deliberately survives: a chosen unit variant has no leaves, so presence there
 //! cannot be derived the way it is for structs and lists.
 
-use formoxus::*;
+use super::Harness;
+use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
-use std::{collections::HashMap, fmt::Debug};
-use super::models::{Location, Mode};
-use super::Harness;
+use formoxus::*;
 use googletest::prelude::*;
+use std::{collections::HashMap, fmt::Debug};
 
 /// `Option<Struct>` — the case that used to panic one way and lie the other.
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -97,7 +97,12 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
     let form = form_for(&contact(None), FormSpec::default());
     expect_that!(
         paths(&form),
-        elements_are![eq("name"), eq("address.street"), eq("address.city"), eq("address.zip")]
+        elements_are![
+            eq("name"),
+            eq("address.street"),
+            eq("address.city"),
+            eq("address.zip")
+        ]
     );
     expect_that!(
         form.leaves(),
@@ -215,9 +220,12 @@ fn an_empty_optional_list_collapses_to_absent() {
     // caller could legitimately ask for a present, zero-row list. If that
     // wins, flip this test to expect `Some(vec![])` and derive presence from
     // the *length choice* rather than from emptiness.
-    let mut form = form_for(&Tagged {
-        tags: Some(Vec::new()),
-    }, FormSpec::default());
+    let mut form = form_for(
+        &Tagged {
+            tags: Some(Vec::new()),
+        },
+        FormSpec::default(),
+    );
     expect_that!(form.validate(), some(eq(&Tagged { tags: None })));
 }
 
@@ -309,7 +317,11 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
         modes: Some(vec![Mode::Fast, Mode::Slow]),
     };
     let form = form_for(&value, FormSpec::default());
-    expect_that!(form.leaves(), eq(&Vec::new()), "fieldless variants have no leaves");
+    expect_that!(
+        form.leaves(),
+        eq(&Vec::new()),
+        "fieldless variants have no leaves"
+    );
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&value)));
@@ -449,10 +461,18 @@ fn an_optional_bool_offers_all_three_of_its_states() {
     let html = super::render_to_html(PrefsForm);
     expect_that!(
         html,
-        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#))
+        contains_substring(format!(
+            r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#
+        ))
     );
-    expect_that!(html, contains_substring(r#"<option value="true">True</option>"#));
-    expect_that!(html, contains_substring(r#"<option value="false">False</option>"#));
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="true">True</option>"#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="false">False</option>"#)
+    );
     // It IS a leaf, unlike a variant picker, so it has to be findable by name.
     expect_that!(html, contains_substring(r#"name="subscribed""#));
 }
@@ -473,9 +493,14 @@ fn choosing_a_value_and_choosing_none_both_round_trip_through_the_dom() {
     app.fire("change", select, "");
     expect_that!(
         app.html(),
-        contains_substring(format!(r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#))
+        contains_substring(format!(
+            r#"<option value="" selected=true>{ABSENT_DISPLAY}</option>"#
+        ))
     );
-    expect_that!(app.html(), not(contains_substring(r#"value="true" selected=true"#)));
+    expect_that!(
+        app.html(),
+        not(contains_substring(r#"value="true" selected=true"#))
+    );
 }
 
 #[gtest]
@@ -486,16 +511,14 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
     // `SelectChoice::new("True", ..)` would still pass here and fail in the two
     // render tests above. The pair is what covers it: this says what the raw
     // strings must be, those say the widget emits them.
-    for (raw, expected) in [
-        ("true", Some(true)),
-        ("false", Some(false)),
-        ("", None),
-    ] {
+    for (raw, expected) in [("true", Some(true)), ("false", Some(false)), ("", None)] {
         let mut form = empty_form::<Prefs>(FormSpec::default());
         form.apply_form_values(&[("subscribed".to_string(), raw.to_string())]);
         expect_that!(
             form.validate(),
-            some(eq(&Prefs { subscribed: expected })),
+            some(eq(&Prefs {
+                subscribed: expected
+            })),
             "raw {raw:?} should validate as {expected:?}"
         );
     }
@@ -546,10 +569,13 @@ fn an_untouched_checkbox_submits_as_false() {
     values.insert("email".to_string(), "ada@example.com".to_string());
 
     form.apply(&values);
-    expect_that!(form.validate(), some(eq(&Signup {
-        email: "ada@example.com".to_string(),
-        subscribed: false,
-    })));
+    expect_that!(
+        form.validate(),
+        some(eq(&Signup {
+            email: "ada@example.com".to_string(),
+            subscribed: false,
+        }))
+    );
     expect_that!(form.has_errors(), eq(false));
 }
 
@@ -572,9 +598,12 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     let values: HashMap<String, String> = form.leaves().into_iter().collect();
 
     form.apply(&values);
-    expect_that!(form.validate(), some(eq(&Event {
-        published: false,
-        venue: None,
-        subscribed: None,
-    })));
+    expect_that!(
+        form.validate(),
+        some(eq(&Event {
+            published: false,
+            venue: None,
+            subscribed: None,
+        }))
+    );
 }
