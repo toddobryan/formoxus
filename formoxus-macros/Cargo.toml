@@ -1,7 +1,15 @@
 [package]
 name = "formoxus-macros"
-version = "0.1.0"
-edition = "2024"
+readme = "README.md"
+description = "Proc macros for formoxus: form! and using_fns!. Not useful on its own — depend on `formoxus` instead"
+keywords = ["dioxus", "forms", "macros", "facet"]
+categories = ["development-tools", "web-programming"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true

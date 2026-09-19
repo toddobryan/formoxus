@@ -5,6 +5,18 @@ members = [
     "formoxus-macros",
 ]
 
+# Shared by both published crates, so a version bump or a license change is one
+# edit rather than two that can drift.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# facet 0.46.5 requires 1.90 and is the highest floor in the tree (dioxus asks
+# only 1.83). Derived from the dependency, NOT verified by building on 1.90.
+rust-version = "1.90"
+authors = ["Todd O'Bryan <toddobryan@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/toddobryan/formoxus"
+
 [workspace.dependencies]
 dioxus = { version = "0.7.10" }
 dioxus-ssr = { version = "0.7" }
@@ -22,5 +34,8 @@ indexmap = { version = "2" }
 serde = { version = "1", features = ["derive"] }
 trybuild = { version = "1.0.116" }
 
-# workspace
-formoxus-macros = { path = "formoxus-macros" }
+# workspace. The `version` is required as well as the `path`: on publish cargo
+# strips the path and the released crate resolves its macros from crates.io, so
+# a bare path dependency is rejected by `cargo package`. Bump it with
+# `workspace.package.version` — nothing enforces that they agree.
+formoxus-macros = { path = "formoxus-macros", version = "0.1.0" }
