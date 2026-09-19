@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "formoxus",
+    "formoxus-macros",
+]
+
+[workspace.dependencies]
+dioxus = { version = "0.7.9" }
+dioxus-ssr = { version = "0.7" }
+# dev-only: the `serialize` feature ships SerializedHtmlEventConverter, which is
+# what lets a bare VirtualDom dispatch a real DOM event in a test.
+dioxus-html = { version = "0.7", features = ["serialize"] }
+facet = { version = "0.46.5", features = ["reflect"] }
+googletest = { version = "0.14.3", features = ["proptest"] }
+heck = { version = "0.5.0" }
+# Ordered map: preserves declaration order (so a `FormSpec`'s Debug output and
+# any future field-ordering customization are stable) while still overwriting on
+# duplicate insert, which a Vec of pairs would not. Already in the lock
+# transitively, so declaring it costs nothing to build.
+indexmap = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+trybuild = { version = "1.0.116" }
+
+# workspace
+formoxus-macros = { path = "formoxus-macros" }
