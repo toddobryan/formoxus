@@ -1,0 +1,27 @@
+/* Pico supplies the form controls; this is only what formoxus's own class
+   names need on top. Kept tiny on purpose — the point of the gallery is to
+   show what formoxus emits, not to dress it up. */
+.formoxus-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+.formoxus-buttons button {
+    width: auto;
+}
+.field-errors {
+    color: var(--pico-del-color, #b3261e);
+}
+.example {
+    border: 1px solid var(--pico-muted-border-color, #ccc);
+    border-radius: var(--pico-border-radius, 0.25rem);
+    padding: 1rem 1.25rem;
+    margin-block: 2rem;
+}
+.example > h2 {
+    margin-top: 0;
+}
+.example > .note {
+    color: var(--pico-muted-color, #666);
+    font-size: 0.9em;
+}

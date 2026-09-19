@@ -1,8 +1,8 @@
 [package]
 name = "formoxus-examples"
-# Never goes to crates.io. It exists to be read and run from a checkout, and to
-# be COMPILED — an example that CI doesn't build is an example that has already
-# rotted, it just doesn't know it yet.
+# Never goes to crates.io. It exists to be read, run, and — most importantly —
+# COMPILED: an example that CI doesn't build has already rotted, it just
+# doesn't know it yet.
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -13,6 +13,18 @@ repository.workspace = true
 
 [dependencies]
 formoxus = { path = "../formoxus" }
-dioxus = { workspace = true }
-dioxus-ssr = { workspace = true }
+dioxus = { workspace = true, features = ["fullstack"] }
 facet = { workspace = true }
+
+# `control_matrix` renders to a string with no browser. Kept off the wasm build
+# by a target cfg rather than a feature, so `cargo test --workspace` in CI still
+# compiles it without anyone passing a flag.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dioxus-ssr = { workspace = true }
+
+[features]
+# Empty by default, so a plain `cargo check` builds neither renderer. `dx serve`
+# selects `web` for the client build and `server` for the host one.
+default = []
+web = ["dioxus/web"]
+server = ["dioxus/server"]

@@ -16,6 +16,12 @@
 //! the README's "what isn't done" section honest, and to tell us when work on
 //! the unimplemented controls actually lands.
 
+// `dx serve` builds this whole package for wasm, binaries included, and there
+// is no `dioxus-ssr` there — nor any point in a terminal table inside a
+// browser. Gating by target rather than by a cargo feature keeps
+// `cargo test --workspace` compiling it in CI with nobody passing a flag.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::widgets::{ControlType, InputType};
@@ -88,6 +94,7 @@ fn every_control() -> Vec<(&'static str, ControlType)> {
 /// vanishes while its siblings render normally — which is the real failure mode
 /// a user would hit, and is why this looks for the field's own label in the
 /// output instead.
+#[cfg(not(target_arch = "wasm32"))]
 fn renders(path: &str, control: ControlType) -> bool {
     let mut dom = VirtualDom::new_with_props(
         OneField,
@@ -106,6 +113,10 @@ fn renders(path: &str, control: ControlType) -> bool {
     html.contains(&format!(r#"name="{path}""#))
 }
 
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     // Each unimplemented pair panics on purpose, and the default hook would
     // print a backtrace over the table for every one of them.

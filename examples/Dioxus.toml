@@ -1,0 +1,14 @@
+[application]
+name = "formoxus-examples"
+default_platform = "web"
+asset_dir = "assets"
+out_dir = "dist"
+
+[web.app]
+title = "formoxus examples"
+base_path = "/"
+
+[web.watcher]
+reload_html = true
+watch_path = ["assets", "src"]
+index_on_404 = true
