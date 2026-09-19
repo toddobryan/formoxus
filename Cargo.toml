@@ -3,6 +3,14 @@ resolver = "2"
 members = [
     "formoxus",
     "formoxus-macros",
+    "examples",
+]
+# `examples` is a member so it is always COMPILED and cannot rot, but it is not
+# a DEFAULT member, so a bare `cargo test` in the edit loop skips it. Reach it
+# with `--workspace` (what CI should run) or `-p formoxus-examples`.
+default-members = [
+    "formoxus",
+    "formoxus-macros",
 ]
 
 # Shared by both published crates, so a version bump or a license change is one

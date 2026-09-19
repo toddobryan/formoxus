@@ -1,0 +1,18 @@
+[package]
+name = "formoxus-examples"
+# Never goes to crates.io. It exists to be read and run from a checkout, and to
+# be COMPILED — an example that CI doesn't build is an example that has already
+# rotted, it just doesn't know it yet.
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+formoxus = { path = "../formoxus" }
+dioxus = { workspace = true }
+dioxus-ssr = { workspace = true }
+facet = { workspace = true }

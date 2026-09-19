@@ -124,10 +124,14 @@ read as success.
 
 Being explicit, since this is pre-release:
 
-- **Four declarable controls panic at render**: `select_multiple`,
-  `checkbox_multiple`, `radio_group`, and `file`. `select` currently works only
-  on `bool`. `form!` accepts all of these names today; only the `<input type=…>`
-  family, `textarea`, `checkbox`, and `custom(...)` are fully wired.
+- **Only 45 of the 84 `(value kind, control)` pairs actually render**, and
+  `form!` accepts all 84 today. The rest panic at render. `select_multiple`,
+  `checkbox_multiple`, `radio_group` and `file` never work; `select` and
+  `checkbox` work only on `bool`; `textarea` only on a string; and every
+  `<input type=…>` panics on a `bool`. Run
+  `cargo run -p formoxus-examples --bin control_matrix` for the current table —
+  and note that a failure here is a field *silently vanishing* from the form,
+  not a visible crash, because Dioxus contains the panic to that component.
 - **No file upload**, which is the `file` control above.
 - **No live/as-you-type validation** — validation runs on submit.
 - **`Vec` rows are named by index**, so reordering rows renames their paths.
