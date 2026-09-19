@@ -75,9 +75,17 @@ fn into_slot_resolves_by_field_type_with_no_turbofish() {
     // Each slot is genuinely callable as its own type, and dispatches to the
     // closure that was actually assigned to it rather than to one of the
     // other two impls.
-    let _ = (slots.validated)("model".to_string());
-    let _ = (slots.unchecked)();
-    let _ = slots.source.call();
+    //
+    // The futures are dropped unawaited on purpose, which is what the `allow` is
+    // for: each closure pushes to `log` in its BODY and only then returns an
+    // async block, so calling is enough to prove dispatch. Awaiting would need a
+    // runtime and would test nothing further.
+    #[allow(clippy::let_underscore_future)]
+    {
+        let _ = (slots.validated)("model".to_string());
+        let _ = (slots.unchecked)();
+        let _ = slots.source.call();
+    }
 
     expect_that!(
         *log.borrow(),

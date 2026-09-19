@@ -366,7 +366,7 @@ struct FieldBody {
 impl Parse for FieldBody {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         if !input.peek(syn::token::Brace) {
-            return Err(input.error("expected a field specification surrounded by braces"))
+            Err(input.error("expected a field specification surrounded by braces"))
         } else {
             let body;
             let braces = braced!(body in input);
