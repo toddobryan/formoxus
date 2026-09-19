@@ -1,0 +1,7 @@
+# Commits to skip in `git blame` — bulk reformats with no semantic change.
+# Honored automatically by GitHub; locally it needs
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# which this repo has already been configured with.
+
+# Run cargo fmt over the workspace
+40590d0b344b621a7224e6acee42e2295ef19684
