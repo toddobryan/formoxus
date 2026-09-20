@@ -21,11 +21,11 @@ fn address() -> FormSpec<Address> {
             browser_validation: off,
             label_case: "label-case",
             state => {
-                control: select,
+                widget: select,
                 //choices: STATES,
             },
-            telephone_number => { control: tel },
-            email => { control: email },
+            telephone_number => { widget: tel },
+            email => { widget: email },
             // zip => { pattern: "^\d{5}(-\d{4})?"},
             buttons: {
                 reset: { type: reset, },

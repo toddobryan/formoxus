@@ -426,7 +426,7 @@ fn a_plain_bool_inside_an_optional_struct_still_renders_a_checkbox() {
 }
 
 #[gtest]
-fn an_optional_bool_renders_a_tri_state_control_instead() {
+fn an_optional_bool_renders_a_tri_state_widget_instead() {
     // The other direction. A checkbox has two states and `Option<bool>` has
     // three, so `subscribed` is the one bool here that genuinely needs the
     // select — which is why the flag can't simply be dropped.
@@ -456,7 +456,7 @@ fn PrefsForm() -> Element {
 #[gtest]
 fn an_optional_bool_offers_all_three_of_its_states() {
     // A checkbox can express two of the three, which is the whole reason this
-    // control exists. "Absent" is a real answer here, so it is a selectable
+    // widget exists. "Absent" is a real answer here, so it is a selectable
     // option rather than the unselectable placeholder a required select gets.
     let html = super::render_to_html(PrefsForm);
     expect_that!(

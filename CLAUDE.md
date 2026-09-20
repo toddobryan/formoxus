@@ -27,6 +27,18 @@ than stylistic: a derive can only expand in the crate that *defines* the type,
 while these expand at the call site, which is what lets a form name a model from
 one crate and a widget from another without tripping the orphan rule.
 
+## Vocabulary: **widget**, never "control"
+
+One word for anything that renders a field, at every size: `WidgetType`,
+`WidgetProps`, `src/widgets/`, `widget:` in `form!`. Not "control" — nothing
+here renders a bare element (even `Input` wraps a label, caption, required
+marker and error list), and Django, whose Field/Widget split this design came
+from, calls the whole range `Widget`. A brief widget→control rename on
+2026-09-19 was reversed the next day; anything between those two commits reads
+"control" and is stale. See `.claude/memory/widget_is_the_umbrella_word.md`,
+which also records the Control-vs-Widget split that was considered and why it
+does not work.
+
 ## `.claude/memory/`
 
 Start at its `MEMORY.md` index. Holds the accumulated design reasoning for

@@ -5,11 +5,11 @@
 //! Two function-like macros, no derives. That's the whole design: a derive runs
 //! on a type *definition*, so it can only ever expand in the crate that owns the
 //! type. These expand at the **call site**, in the consuming crate, which is what
-//! lets a form name a model from one crate and a control from another without
+//! lets a form name a model from one crate and a widget from another without
 //! tripping the orphan rule — see `.claude/memory/facet_form_design_decisions.md`.
 //!
 //! - [`macro@form`] builds a `FormSpec` for a model from a declarative block:
-//!   title, per-field labels and controls, `[]` row selectors for `Vec` fields,
+//!   title, per-field labels and widgets, `[]` row selectors for `Vec` fields,
 //!   a form-wide validator, and a `buttons:` block. Every field path it names is
 //!   checked against the model's real shape at compile time, by emitting a
 //!   witness expression per path — a typo is a compile error, not a runtime

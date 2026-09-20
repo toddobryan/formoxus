@@ -15,7 +15,7 @@ pub fn Gallery() -> Element {
     rsx! {
         Example {
             title: "A form at all",
-            note: "Scalars, a control override, and buttons — the parts that already work.",
+            note: "Scalars, a widget override, and buttons — the parts that already work.",
             basics::Basics {},
         }
 

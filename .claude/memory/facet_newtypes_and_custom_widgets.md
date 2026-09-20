@@ -1,6 +1,6 @@
 ---
 name: facet-newtypes-and-custom-widgets
-description: "Two things built 2026-09-18 to unblock the question editor: ControlType::Custom (the custom-widget escape hatch) and newtype-as-leaf support. Includes the probed facet API facts — a newtype reports scalar_type() = None and CANNOT parse_from_str, even with #[facet(transparent)]"
+description: "Two things built 2026-09-18 to unblock the question editor: WidgetType::Custom (the custom-widget escape hatch) and newtype-as-leaf support. Includes the probed facet API facts — a newtype reports scalar_type() = None and CANNOT parse_from_str, even with #[facet(transparent)]"
 metadata:
   type: project
 ---
@@ -8,19 +8,19 @@ metadata:
 Both landed while trying to port `ui::MarkdownInput` to the reflection path.
 The widget turned out to be the easy half; see "The blocker nobody predicted".
 
-## `ControlType::Custom` — the escape hatch
+## `WidgetType::Custom` — the escape hatch
 
 `form2!`'s `custom(MyWidget)` had been **parsing and expanding since the macro
-was written, with nothing to expand against**: `ControlType` had no `Custom`
-variant and `ControlProps` did not exist, so any use of it failed to compile at
+was written, with nothing to expand against**: `WidgetType` had no `Custom`
+variant and `WidgetProps` did not exist, so any use of it failed to compile at
 the call site. Now:
 
 ```rust
-Custom { name: &'static str, render: fn(ControlProps) -> Element }
-pub struct ControlProps { pub values: ValuesByPath, pub props: FieldProps }
+Custom { name: &'static str, render: fn(WidgetProps) -> Element }
+pub struct WidgetProps { pub values: ValuesByPath, pub props: FieldProps }
 ```
 
-- **`fn` pointer, NOT `Box<dyn Fn>`, and the derives force it.** `ControlType`
+- **`fn` pointer, NOT `Box<dyn Fn>`, and the derives force it.** `WidgetType`
   is `Clone + Debug + PartialEq`; a boxed closure supplies none of the three. A
   non-capturing closure coerces to a plain `fn`, which is `Copy`.
 - **`Debug`/`PartialEq` are hand-written** because deriving `PartialEq` over a
@@ -43,7 +43,7 @@ pub struct ControlProps { pub values: ValuesByPath, pub props: FieldProps }
 `Markdown` is `struct Markdown(String)`. The shape walk dispatches on
 `shape.scalar_type()`, so it fell through to `struct_member` and rendered as a
 **fieldset containing an input named `text.0`** — and `FieldSet` never reads
-`custom_control`, so `custom(MarkdownWidget)` would have silently done nothing.
+`custom_widget`, so `custom(MarkdownWidget)` would have silently done nothing.
 
 **Probed facet facts, all verified by running them:**
 
@@ -77,17 +77,17 @@ compile-time `T`, and a concrete type is unrecoverable from a runtime
 `Markdown` field becomes a `FormField<String>` plus
 `wrapper: Option<&'static Shape>`, and **only `write_value_into` consults it**
 (`begin_nth_field(0)` → set → `end`). Everything string-facing — parsing,
-display, `ValueKind`, control derivation — keeps working untouched.
+display, `ValueKind`, widget derivation — keeps working untouched.
 
 No `#[facet(transparent)]` anywhere. Requiring it would mean a newtype in a
-crate we don't control could never be a form field.
+crate we don't widget could never be a form field.
 
 ## Fallout
 
 - `models` gained a `facet` dependency, and `Markdown` derives `Facet`.
 - `ui::MarkdownWidget` is the reflection-path Markdown editor (textarea + live
   preview). No trait, so **no orphan-rule problem** — the derive path's
-  `MarkdownInput` needed `FieldWidget`; a custom control is just a component.
+  `MarkdownInput` needed `FieldWidget`; a custom widget is just a component.
 - **`FieldProps` collides the same way `Form` does.** `formoxus::prelude::*`
   brings the DERIVE path's `FieldProps` (`label`/`required`/`placeholder`) into
   scope and it shadows the reflection path's

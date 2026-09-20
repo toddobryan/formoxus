@@ -1,6 +1,6 @@
 ---
 name: next-up-two-todos
-description: "Running queue on the facet branch (2026-09-16..18). The wire rework is FINISHED 2026-09-18 — option (a) leaves-over-the-wire, Submission<T> extracted, all three files migrated, cargo test --workspace green at 476. Remaining: 4 render_control arms, and the Path/Prefix newtype (still deferred)"
+description: "Running queue on the facet branch (2026-09-16..18). The wire rework is FINISHED 2026-09-18 — option (a) leaves-over-the-wire, Submission<T> extracted, all three files migrated, cargo test --workspace green at 476. Remaining: 4 render_widget arms, and the Path/Prefix newtype (still deferred)"
 metadata:
   type: project
 ---
@@ -49,7 +49,7 @@ view is the client-side counterpart to `Submission` and will be identical in
 every form. Deliberately left local: only one caller so far. When a second form
 needs it, it becomes `Form::apply_errors(FormErrors)` in formoxus.
 
-**Still open from before, untouched:** four unimplemented `render_control` arms
+**Still open from before, untouched:** four unimplemented `render_widget` arms
 (`SelectMultiple`, `CheckboxMultiple`, `RadioGroup`, `File`) and `Select`
 beyond `Bool`; and the `Path`/`Prefix` newtype below, which gained a third
 piece of evidence when `VariantSet::collect_errors` tripped over `my_path` vs
@@ -63,16 +63,16 @@ see [[facet_form_design_decisions]]). Both surfaced while wiring buttons into
 `login.rs`.
 
 **Status as of 2026-09-16: both closed out**, `cargo test --workspace` green.
-`form2!`'s `controls!` table still accepts more control names than
-`render_control` implements — that gap is not fully closed, just narrowed by
+`form2!`'s `widgets!` table still accepts more widget names than
+`render_widget` implements — that gap is not fully closed, just narrowed by
 one. See "What's still open" below before picking this back up.
 
 ## 1. `Textarea` — done
 
-`render_control` (`crates/formoxus/src/reflect/widgets.rs`) had three arms
+`render_widget` (`crates/formoxus/src/reflect/widgets.rs`) had three arms
 (`Input` family, `Checkbox`, `Select` on `Bool`); five names panicked at
 render regardless of value kind. Added a fourth arm,
-`(ValueKind::Text { .. }, ControlType::Textarea)`, dispatching to a new
+`(ValueKind::Text { .. }, WidgetType::Textarea)`, dispatching to a new
 `TextareaInput` component — a straight copy of `HtmlInput`'s controlled-value
 binding and label/error layout, minus the `InputType`-specific branches
 (`Password` masking, bare `Hidden` markup) that don't apply to a `<textarea>`.
@@ -80,7 +80,7 @@ binding and label/error layout, minus the `InputType`-specific branches
 `input`'s, so the same `get_current`/`write_value`/`oninput` pattern carries
 over unchanged.
 
-Test: `a_control_can_override_text_to_a_textarea` in
+Test: `a_widget_can_override_text_to_a_textarea` in
 `crates/formoxus/tests/reflect.rs`, following the file's existing
 `PasswordSecret`/`SelectedBool` pattern — asserts on `<textarea` and the
 carried-over value directly, per the standing note that a render panic here is
@@ -90,8 +90,8 @@ silently fails), so the test can't just check the page rendered *something*.
 **Still panic on render, whatever the value kind:** `SelectMultiple`,
 `CheckboxMultiple`, `RadioGroup`, `File` — and `Select` still only works
 against `Bool`. Same fix shape as `Textarea`: add the arm, don't shrink the
-table (the `controls!` doc comment in `formoxus-macros/src/form2.rs` argues
-that case — the macro crate can't see `render_control`'s arms, so gating the
+table (the `widgets!` doc comment in `formoxus-macros/src/form2.rs` argues
+that case — the macro crate can't see `render_widget`'s arms, so gating the
 table on them would be a worse sync hazard than the table being wider).
 
 ## 2. `form_demo.rs` migrated onto `buttons:` + `using_fns!` — done
@@ -121,9 +121,9 @@ migration.
 
 ## What's still open
 
-Four more `render_control` arms (`SelectMultiple`, `CheckboxMultiple`,
+Four more `render_widget` arms (`SelectMultiple`, `CheckboxMultiple`,
 `RadioGroup`, `File`), and widening `Select` beyond `Bool`. Nothing currently
-reaches for them — no page asks for a `radio_group` or `multiselect` control —
+reaches for them — no page asks for a `radio_group` or `multiselect` widget —
 so there's no test pressure driving which one to do next; whoever picks this
 up should probably wait for a real caller rather than speculatively
 implementing all four.

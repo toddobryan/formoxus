@@ -101,10 +101,10 @@ levels where it is meaningful:
 |---|---|---|---|
 | `novalidate` | yes | yes | n/a (it is a `<form>` attribute) |
 | `label_case` | yes | yes | no — per-field casing is incoherent |
-| default widget by type | yes | ? | already have `custom_control` per field |
+| default widget by type | yes | ? | already have `custom_widget` per field |
 
-`FieldField::control()` already has the right shape for the widget tier —
-`self.custom_control.clone().unwrap_or_else(|| self.default_control())` — and
+`FieldField::widget()` already has the right shape for the widget tier —
+`self.custom_widget.clone().unwrap_or_else(|| self.default_widget())` — and
 the registry slots in as the middle fallback, keyed on
 `wrapper.unwrap_or(T::SHAPE)`, per [[widget-registry-idea]].
 

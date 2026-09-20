@@ -2,7 +2,6 @@
 
 use crate::RenderCtx;
 use crate::build::{FormMode, variant_members};
-use crate::controls::{ControlType, VariantSelect};
 use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
@@ -10,6 +9,7 @@ use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     variant_segment,
 };
+use crate::widgets::{VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use std::collections::HashMap;
@@ -38,7 +38,7 @@ pub enum VariantChoice {
 pub struct VariantSet {
     pub name: String,
     pub label: Option<String>,
-    pub custom_control: Option<ControlType>,
+    pub custom_widget: Option<WidgetType>,
     pub enum_type: &'static EnumType,
     pub optional: bool,
     pub choice: VariantChoice,
@@ -268,7 +268,7 @@ impl FormMember for VariantSet {
     }
 
     fn raw_value(&self) -> String {
-        // Not a scalar — the choice is fixed, not a control of its own.
+        // Not a scalar — the choice is fixed, not a widget of its own.
         String::new()
     }
 
@@ -289,7 +289,7 @@ impl FormMember for VariantSet {
         // `self.errors` sits at `my_path`, where the `<select>` is, one segment
         // SHALLOWER than `child_prefix`'s `$Variant` — the same two-paths trap
         // `edit` documents. Reporting them under `nested` would name a path no
-        // control renders.
+        // widget renders.
         //
         // Three writers put errors there and all three have to come back out:
         // `validate` (unchosen), `lookup_variant` (a stale name from a live
@@ -346,10 +346,10 @@ impl FormMember for VariantSet {
     fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
             self.label = spec.label.clone().or(self.label.take());
-            // A variant chooser is the one container that DOES have a control of
+            // A variant chooser is the one container that DOES have a widget of
             // its own — the `<select>` — so an override here is meaningful (a
             // radio group), even though nothing renders one yet.
-            self.custom_control = spec.custom_control.clone().or(self.custom_control.take());
+            self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
         }
         // Two paths again, exactly as in `edit`: this member sits at `my_path`,
         // but its children sit one segment deeper under the chosen variant's

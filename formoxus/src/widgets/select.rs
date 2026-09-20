@@ -7,7 +7,7 @@ use super::types::FieldProps;
 use super::values::{get_current, write_value};
 use crate::ValuesByPath;
 
-/// One option in a [`SelectInput`].
+/// One option in a [`Select`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectChoice {
     /// The raw string written into the value map, so it has to be exactly what
@@ -28,7 +28,7 @@ impl SelectChoice {
 }
 
 /// The three states of an `Option<bool>`, minus the absent one — that comes
-/// from `SelectInput`'s own "no value" option, so it is spelled in exactly one
+/// from `Select`'s own "no value" option, so it is spelled in exactly one
 /// place rather than once per caller.
 pub(super) fn bool_choices() -> Vec<SelectChoice> {
     vec![
@@ -54,7 +54,7 @@ pub(super) fn bool_choices() -> Vec<SelectChoice> {
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub fn SelectInput(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProps) -> Element {
+pub fn Select(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProps) -> Element {
     let FieldProps {
         path,
         label: label_text,
@@ -64,7 +64,7 @@ pub fn SelectInput(values: ValuesByPath, choices: Vec<SelectChoice>, props: Fiel
 
     let current = get_current(&path, values);
 
-    // See `TextInput` for why this is `Option` rather than a plain bool.
+    // See `Input` for why this is `Option` rather than a plain bool.
     let invalid = (!errors.is_empty()).then_some("true");
 
     rsx! {
@@ -118,7 +118,7 @@ pub fn SelectInput(values: ValuesByPath, choices: Vec<SelectChoice>, props: Fiel
 /// unanswered optional field. What the select actually emits is `""`, which
 /// `VariantSelect` turns into `ChooseVariant { variant: None }`.
 ///
-/// [`SelectInput`] shows the same text, and it *does* carry a `name` — but it is
+/// [`Select`] shows the same text, and it *does* carry a `name` — but it is
 /// safe there for the same reason by a different route: the option's value is
 /// `""`, never this text, and `""` is absence at both boundaries.
 /// **Not localizable yet, and it should be.** This is English punctuation baked

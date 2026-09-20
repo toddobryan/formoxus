@@ -1,4 +1,4 @@
-//! Controls that change a form's SHAPE rather than a value: which enum
+//! Widgets that change a form's SHAPE rather than a value: which enum
 //! variant is chosen, and the rows of a list.
 
 use dioxus::prelude::*;
@@ -62,7 +62,7 @@ pub fn VariantSelect(
     }
 }
 
-/// The control that appends a row to a list.
+/// The widget that appends a row to a list.
 ///
 /// Like [`VariantSelect`], it reads nothing from the value store — adding a row
 /// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
@@ -77,7 +77,7 @@ pub fn AddRowButton(path: String, on_edit: Callback<Edit>) -> Element {
             class: "add-row",
             onclick: move |_| {
                 // Append. `before` exists for mid-list insertion, which needs a
-                // control between every pair of rows — a UI question that hasn't
+                // widget between every pair of rows — a UI question that hasn't
                 // been answered yet, not a limitation of the edit.
                 on_edit.call(Edit::AddRow { path: path.clone(), before: None });
             },
@@ -86,7 +86,7 @@ pub fn AddRowButton(path: String, on_edit: Callback<Edit>) -> Element {
     }
 }
 
-/// The control that drops one row from a list.
+/// The widget that drops one row from a list.
 ///
 /// Addressed by POSITION, not by the row's key: the list is what applies the
 /// edit and it works in terms of `rows`, so a position is what it can act on

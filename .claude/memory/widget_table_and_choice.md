@@ -1,13 +1,13 @@
 ---
-name: control-table-and-choice
-description: "NEXT UP (queued 2026-09-19, nothing built). Only 45 of 84 (value kind, control) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
+name: widget-table-and-choice
+description: "NEXT UP (queued 2026-09-19, nothing built). Only 45 of 84 (value kind, widget) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
 metadata:
   type: project
 ---
 
 ## The measurement
 
-`cargo run -p formoxus-examples --bin control_matrix` prints it, and the
+`cargo run -p formoxus-examples --bin widget_matrix` prints it, and the
 number is **45 of 84**. `form!` accepts all 84 today.
 
 - all 14 `<input type=…>` work on Text/Int/Float, and **panic on Bool**
@@ -25,7 +25,7 @@ either.
 subtree as nothing.** So `catch_unwind` reports that all 84 pairs pass, and
 what a user actually gets is the field *silently disappearing* from the form
 while its siblings render normally. No error reaches an `ErrorBoundary`,
-nothing is logged in release. This is why `control_matrix` looks for
+nothing is logged in release. This is why `widget_matrix` looks for
 `name="<path>"` in the rendered HTML instead of trying to catch a panic.
 
 (Two markers tried before that one were false positives, and both say
@@ -38,7 +38,7 @@ at all, and a checkbox puts its text in a plain `<label>` rather than the
 `ValueKind::Choice`, `MultiChoice` and `File` are declared in the enum and
 **never constructed anywhere in the crate**. `FormField::value_kind()` derives
 purely from `T::SHAPE.scalar_type()` and can only ever produce `Text`, `Bool`,
-`Int`, `Float`. Since `ScalarInput` dispatches on `(ValueKind, ControlType)`,
+`Int`, `Float`. Since `ScalarInput` dispatches on `(ValueKind, WidgetType)`,
 a choice field has no value kind to match against — the arm has nothing to be
 written *for*. Something upstream has to start producing a `Choice` first.
 
@@ -48,7 +48,7 @@ There are already **two different notions of "choice"**, and only one is built:
 
 1. **Shape choice — which variant does this value take?** Built:
    `VariantSet` + `VariantSelect`, on a path entirely separate from
-   `ControlType::Select`. See [[facet-form-design-decisions]] (typed
+   `WidgetType::Select`. See [[facet-form-design-decisions]] (typed
    `VariantChoice`, iterative disclosure, `choose_variant` dispatching by path
    containment).
 2. **Value choice — which of these N runtime candidates?** NOT built. A
@@ -85,8 +85,8 @@ already documented; it is the ordinary surface that is bare.
 ## UPDATE 2026-09-19: the fork is partly answered
 
 Todd proposed a design the same day — see [[choice-fields-design]]. In short:
-value-choice stays separate from shape-choice, choices attach to the CONTROL
+value-choice stays separate from shape-choice, choices attach to the WIDGET
 rather than the type (so `ValueKind::Choice`/`MultiChoice` get deleted, not
 filled in), and a `Choice { display, raw_value }` reuses the ordinary parse
 path. Still open there: how the choices callback is carried, because a
-`Box<dyn Fn>` cannot live on `ControlType` without killing its derives.
+`Box<dyn Fn>` cannot live on `WidgetType` without killing its derives.

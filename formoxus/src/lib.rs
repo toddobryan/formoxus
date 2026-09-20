@@ -2,7 +2,7 @@
 //! [`facet`] shape, instead of from a hand-written form struct.
 //!
 //! A model needs only `#[derive(Facet)]`. [`form!`](macro@form) declares the
-//! form over it — title, labels, controls, validators, buttons — and
+//! form over it — title, labels, widgets, validators, buttons — and
 //! [`use_form`] turns that declaration into a live, reactive form. Values
 //! convert through facet's own vtables, so there is no `FromStr`/`Display`
 //! bound to satisfy and no per-form type to write.
@@ -19,8 +19,8 @@
 //!     let form = use_form(|| empty_form(form! {
 //!         Signup {
 //!             title: "Sign up",
-//!             email => { control: email },
-//!             password => { control: password },
+//!             email => { widget: email },
+//!             password => { widget: password },
 //!             buttons: { create: { type: submit } }
 //!         }
 //!     }));
@@ -48,7 +48,6 @@
 
 pub mod build;
 pub mod buttons;
-pub mod controls;
 pub mod defaults;
 pub mod error;
 pub mod fields;
@@ -56,6 +55,7 @@ pub mod form;
 pub mod label_case;
 pub mod members;
 pub mod submission;
+pub mod widgets;
 
 /// `form! { Model { … } }` — build a [`FormSpec`] for `Model`.
 ///
@@ -79,7 +79,6 @@ pub use formoxus_macros::using_fns;
 pub use crate::defaults::{Formoxus, defaults, provide_defaults};
 pub use crate::error::{FieldError, FormError};
 pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
-pub use controls::ABSENT_DISPLAY;
 pub use fields::{FieldValue, FormField};
 pub use form::{
     FieldErrors, FieldSpec, Form, FormErrors, FormSpec, FormState, Handler, IntoSlot, Provider,
@@ -91,6 +90,7 @@ pub use members::{
     model_path,
 };
 pub use submission::Submission;
+pub use widgets::ABSENT_DISPLAY;
 
 /// The common surface: `use formoxus::prelude::*;`.
 ///

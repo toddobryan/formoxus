@@ -16,7 +16,7 @@ formoxus = { path = "../formoxus" }
 dioxus = { workspace = true, features = ["fullstack"] }
 facet = { workspace = true }
 
-# `control_matrix` renders to a string with no browser. Kept off the wasm build
+# `widget_matrix` renders to a string with no browser. Kept off the wasm build
 # by a target cfg rather than a feature, so `cargo test --workspace` in CI still
 # compiles it without anyone passing a flag.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

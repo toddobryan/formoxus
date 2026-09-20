@@ -6,7 +6,6 @@
 
 use crate::RenderCtx;
 use crate::build::{FormMode, member_for_shape};
-use crate::controls::{AddRowButton, RemoveRowButton};
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
@@ -14,6 +13,7 @@ use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     row_segment,
 };
+use crate::widgets::{AddRowButton, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use std::collections::HashMap;
@@ -97,10 +97,10 @@ impl FormMember for ListSet {
     fn render(&self, ctx: &RenderCtx) -> Element {
         let nested = ctx.nested(&self.name);
         // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
-        // `nested.prefix`'s children: the controls act on the list, not on a row.
+        // `nested.prefix`'s children: the widgets act on the list, not on a row.
         let path = ctx.path(&self.name);
         // A `fieldset` for the same reason `VariantSet` uses one: the rows and
-        // the controls that manage them are one thing. It also gives the list's
+        // the widgets that manage them are one thing. It also gives the list's
         // label somewhere to appear — until now no container but `FieldSet`
         // rendered its own label, so a `Vec<String>` called `answers` showed up
         // on the page as a bare stack of inputs.
@@ -119,7 +119,7 @@ impl FormMember for ListSet {
                     // the list by position, so inserting at the top would
                     // re-render every row below it; with one it moves the nodes
                     // it already has. The wrapper exists because a key has to sit
-                    // on an element, and it is what pairs a row with its control.
+                    // on an element, and it is what pairs a row with its widget.
                     div { class: "form-row", key: "{row.name()}",
                         { row.render(&nested) }
                         RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit }
@@ -245,9 +245,9 @@ impl FormMember for ListSet {
         if let Some(spec) = fields.get(&my_path) {
             // Checked before anything is written — see `FieldSet::apply_specs`.
             assert!(
-                spec.custom_control.is_none(),
-                "{my_path} is a list, which has no single control to override — \
-                 write `{}[]` to give every ROW a control, or did you mean `label`?",
+                spec.custom_widget.is_none(),
+                "{my_path} is a list, which has no single widget to override — \
+                 write `{}[]` to give every ROW a widget, or did you mean `label`?",
                 self.name
             );
             self.label = spec.label.clone().or(self.label.take());

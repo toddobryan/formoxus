@@ -12,7 +12,7 @@ struct Article {
 fn main() {
     let _ = empty_form::<Article>(form! {
         Article {
-            headline[] => { control: textarea },
+            headline[] => { widget: textarea },
         }
     });
 }

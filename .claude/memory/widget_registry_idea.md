@@ -12,7 +12,7 @@ crate) can't depend on `ui` (widgets), but a `FormSpec` for a question form
 needs to live in `api` (for `Submission::accept`) AND wants `Markdown`
 fields to render with `ui::MarkdownWidget`. First answer on the table: split
 the spec — `api::question_form()` owns model/title/labels/validator, `web`
-layers `.with_custom_control(path, …)` on top for the Markdown fields.
+layers `.with_custom_widget(path, …)` on top for the Markdown fields.
 
 **Todd reframed it, and the reframing is the useful part:** not "how does
 *this app* route around its own crate graph" but "how would a project
@@ -24,10 +24,10 @@ extracted to its own repo right after this conversation.
 
 ## Why a plain trait impl doesn't work
 
-The obvious shape: formoxus defines `trait CustomControl { fn control() ->
-ControlType; }`, and whatever crate CAN see both the widget and the model
+The obvious shape: formoxus defines `trait CustomWidget { fn widget() ->
+WidgetType; }`, and whatever crate CAN see both the widget and the model
 type (e.g. `ui`, which depends on both `formoxus` and `models`) does `impl
-CustomControl for Markdown`. **This is a hard orphan-rule violation** — E0117
+CustomWidget for Markdown`. **This is a hard orphan-rule violation** — E0117
 — because neither the trait (`formoxus`'s) nor the type (`models`'s) is
 local to the crate writing the impl. Exactly the same wall `form2!`'s design
 already hit for a different reason (see this repo's `facet_form_design_decisions.md`,
@@ -46,13 +46,13 @@ Sketch:
 registry.register::<Markdown>(MarkdownWidget::render);
 ```
 
-- **Consulted as a fallback default, not a hard override.** `FormField::control()`
+- **Consulted as a fallback default, not a hard override.** `FormField::widget()`
   (`formoxus/src/reflect/fields.rs`) already has the right shape for this —
-  `self.custom_control.clone().unwrap_or_else(|| self.default_control())`.
+  `self.custom_widget.clone().unwrap_or_else(|| self.default_widget())`.
   The registry slots in as a THIRD, middle tier: explicit per-field
-  `custom_control` (set via `form2!`/`with_custom_control`) wins if present;
+  `custom_widget` (set via `form2!`/`with_custom_widget`) wins if present;
   else a registered default for the field's TYPE; else the existing
-  scalar-kind `default_control()`.
+  scalar-kind `default_widget()`.
 - **The key is `wrapper.unwrap_or(T::SHAPE)`, not `T::SHAPE` alone.**
   Because of how newtypes-as-leaves works (`facet_newtypes_and_custom_widgets.md`):
   a `Markdown` field is actually a `FormField<String>` with `wrapper:
@@ -66,35 +66,35 @@ registry.register::<Markdown>(MarkdownWidget::render);
   not assumed.** Checked `facet-core-0.46.5`'s actual source
   (`types/shape.rs`): `Shape` has real `PartialEq`/`Eq`/`Hash`, keyed on a
   stable `id` field (not raw pointer identity, not `Debug`-string hackery).
-  So `HashMap<&'static Shape, ControlType>` (or wrapping value) just works —
+  So `HashMap<&'static Shape, WidgetType>` (or wrapping value) just works —
   no typetag-style name registration, no per-scalar-type boilerplate to
   keep in sync. This is the same identity mechanism `ListSet`/`VariantSet`
   already lean on (`shape: &'static Shape` fields), just reused for a new
   purpose.
-- **Reuses `ControlType::Custom` wholesale, no new variant needed.**
-  `Custom { name: &'static str, render: fn(ControlProps) -> Element }`
+- **Reuses `WidgetType::Custom` wholesale, no new variant needed.**
+  `Custom { name: &'static str, render: fn(WidgetProps) -> Element }`
   already exists (`facet_newtypes_and_custom_widgets.md`) — registration
   just produces one of these to stash in the map.
 
 ## What this buys, concretely
 
 In the apcsp-dioxus case that started this: `api::question_form()` stays
-**entirely** clean — no custom controls named anywhere in `api` — and `web`
-never has to remember `.with_custom_control("data.$TrueFalse.text", …)` at
+**entirely** clean — no custom widgets named anywhere in `api` — and `web`
+never has to remember `.with_custom_widget("data.$TrueFalse.text", …)` at
 every call site either, since `Markdown`'s widget is registered once
 (wherever `ui` gets initialized) and just applies everywhere that type
 appears, forever. See apcsp-dioxus's `question_editor_plan.md` — its "Open
 decision" section now points back here.
 
-## Open, unresolved when the session paused: how the registry reaches `control()`
+## Open, unresolved when the session paused: how the registry reaches `widget()`
 
-`FormField::control()` currently takes no external parameters — it's a
+`FormField::widget()` currently takes no external parameters — it's a
 plain method consulting only `self`. Two ways to get a registry to it,
 genuinely undecided:
 
-1. **Global `OnceLock<Mutex<HashMap<&'static Shape, ControlType>>>`,
+1. **Global `OnceLock<Mutex<HashMap<&'static Shape, WidgetType>>>`,
    populated by `.register::<T>()` calls at app startup** (e.g. in `web`'s
-   `main.rs` before `launch!`). `control()` just consults it directly — zero
+   `main.rs` before `launch!`). `widget()` just consults it directly — zero
    signature changes to `render()`, `RenderCtx`, or any of `Form<T>`'s
    several methods that build a fresh `RenderCtx::root(...)`
    (`render_fragment`/`render_title`/`render_fields`/`render_errors` all do

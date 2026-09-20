@@ -237,7 +237,7 @@ listener order, and hot reload.
    `FormMember::apply_specs` on all five member kinds, wired into the constructor
    AND re-applied after every `FormState::edit`; `[]` row selectors end to end;
    Todd's `form2!` PARSER complete (title/validator/field entries with
-   `{ control:, label: }` bodies, bracket paths, per-key errors). 153 lib tests,
+   `{ widget:, label: }` bodies, bracket paths, per-key errors). 153 lib tests,
    25 macro tests.
 
    **DONE 2026-09-13 (the chain to Login, all of it).** `expand()` emits a block
@@ -259,10 +259,10 @@ listener order, and hot reload.
    `crates/formoxus/tests/ui/form2_*.rs` pin all of it, including one that pins the
    known limitation that a path through an `Option` cannot be expressed.
 
-   (b) **The control vocabulary is flat and lowercase, and that is the stable
-   surface.** `control: password`, not `control: Input(Password)` — the two-level
+   (b) **The widget vocabulary is flat and lowercase, and that is the stable
+   surface.** `widget: password`, not `widget: Input(Password)` — the two-level
    shape is how formoxus groups `<input>` for dispatch, not a concept an author
-   has, and HTML spells it `type="password"`. A `controls!` table generates both
+   has, and HTML spells it `type="password"`. A `widgets!` table generates both
    the lookup and the name list, so "did you mean" cannot drift from what
    resolves. `InputType::html_type()` is the pivot BACK to HTML (`tel`,
    `datetime-local`), so HTML's names sit on both sides of the enum. Rejected on
@@ -327,7 +327,7 @@ listener order, and hot reload.
 4. **`Question`** — needs `Facet` on `Markdown`, `Ref<Source>`, `RecordId`,
    `SelectType`, `AnswerChoice` first, plus 2.
 5. **Mid-list insert / drag reorder** — rows are keyed, so both are pure additions
-   rather than renames. Needs a control between rows (a UI question), and DnD must
+   rather than renames. Needs a widget between rows (a UI question), and DnD must
    permute `rows` rather than reorder visually: tree order IS submission order, so
    a CSS-only reorder would submit stale.
 6. **The discarded argument is GONE — `use_form` takes a thunk (2026-09-13).**
@@ -376,8 +376,8 @@ listener order, and hot reload.
    "validate this path" callback (sibling to `on_edit`, not part of it — `Edit` is
    about shape) keeps one source of truth.
 
-9. **Constraints as extra control arguments — DEFERRED ON PURPOSE 2026-09-13.**
-   `control: integer { min: 1, max: 10 }`, `control: text { max_length: 40,
+9. **Constraints as extra widget arguments — DEFERRED ON PURPOSE 2026-09-13.**
+   `widget: integer { min: 1, max: 10 }`, `widget: text { max_length: 40,
    pattern: "…" }`. Todd chose explicitly to stay on the basics instead. Two
    things to know when it comes back:
 
@@ -390,11 +390,11 @@ listener order, and hot reload.
    `ValueKind` -> `ScalarInput` -> the rendered attributes -> validation — already
    exists and is already threaded.
 
-   (b) **The syntax must not put the constraint on the CONTROL**, even though
+   (b) **The syntax must not put the constraint on the WIDGET**, even though
    that is where the grammar makes it convenient. See
    [[facet-form-design-decisions]]: constraints nest in the VALUE kind precisely
-   so a presentational override cannot discard validation. `control: text {
-   max_length: 40 }` reads as a control argument but has to LAND in the field's
+   so a presentational override cannot discard validation. `widget: text {
+   max_length: 40 }` reads as a widget argument but has to LAND in the field's
    `ValueKind`, or swapping `text` for `textarea` silently drops the limit. That
    is the design trap, and it is why this is more than parser work.
 

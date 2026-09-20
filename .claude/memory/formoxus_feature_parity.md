@@ -117,7 +117,7 @@ at the use site" — a real differentiator, not just parity.
      against that cache synchronously — catches honest staleness (picked something that's
      since disappeared) before submit, without making `validate()` async or threading
      `Providers` into it. Explicitly *not* a security boundary (a malicious client
-     controls its own cache), only a formoxus feature worth having for the fast-feedback
+     widgets its own cache), only a formoxus feature worth having for the fast-feedback
      case. Would need each `ProvidedWidget` to expose some way to check "is this value in
      this `Choices`" (e.g. a method on the trait), plus a place to stash the last-fetched
      `Choices` where `validate()` can reach it synchronously — not designed in detail yet.

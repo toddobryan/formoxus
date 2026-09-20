@@ -1,6 +1,6 @@
 ---
-name: formoxus-control-survey
-description: "Survey of Django's and leptos_form's form-control taxonomies, the verified facet attribute-grammar capabilities, and the ControlType/ValueKind/Constraint design that came out of it — conversation of 2026-09-10 into 09-11, DESIGN ONLY, nothing implemented"
+name: formoxus-widget-survey
+description: "Survey of Django's and leptos_form's form-widget taxonomies, the verified facet attribute-grammar capabilities, and the WidgetType/ValueKind/Constraint design that came out of it — conversation of 2026-09-10 into 09-11, DESIGN ONLY, nothing implemented"
 metadata:
   node_type: memory
   type: project
@@ -9,7 +9,7 @@ metadata:
 **Status: NOTHING HERE IS IMPLEMENTED.** This is the record of a design
 conversation on the night of 2026-09-10 into the morning of 2026-09-11, on
 branch `facet` at `0e713a8`. It picks up from the handoff in
-[[facet-form-design-decisions]] "Retiring the derive path, part 1: the control
+[[facet-form-design-decisions]] "Retiring the derive path, part 1: the widget
 taxonomy", which ended on an open question. That question is now answered (see
 "Decisions" below) and the design has moved considerably past it.
 
@@ -79,17 +79,17 @@ choice means marking a field for LOGGING silently changes its rendering.
 **2. Do the taxonomy split BEFORE Login**, so Login is written against the final
 shape and never has to be touched twice. (Todd chose this over "after Login".)
 
-**3. Constraints nest in the VALUE kind, not in `ControlType`.** Todd pushed back
+**3. Constraints nest in the VALUE kind, not in `WidgetType`.** Todd pushed back
 on making `Constraint` orthogonal — "which constraints are allowed are dependent
-on the control/input types" — and he was right that they must nest in something,
-but the axis is the value type, not the control. The deciding argument:
+on the widget/input types" — and he was right that they must nest in something,
+but the axis is the value type, not the widget. The deciding argument:
 
 - A `String` with `max_length`, overridden from `Text` to `Textarea` or
-  `Password`, must KEEP `max_length`. If the constraint lives inside the control
+  `Password`, must KEEP `max_length`. If the constraint lives inside the widget
   variant, a presentational override silently discards validation.
 - Django agrees: `max_length` is a `CharField` argument, not a `TextInput` one,
   and survives rendering as `Textarea`/`PasswordInput`/`EmailInput`.
-- Grouping by control also inherits HTML's irregularities: `min`/`max`/`step`
+- Grouping by widget also inherits HTML's irregularities: `min`/`max`/`step`
   apply to `date`/`month`/`week`/`time`/`datetime-local` as well as `number`/
   `range` (so the predicate is "ordered", not "numeric"), and `pattern` applies
   to `text`/`search`/`url`/`tel`/`email`/`password` but NOT to `textarea`.
@@ -98,17 +98,17 @@ but the axis is the value type, not the control. The deciding argument:
 (`Text`, `Boolean { optional }`, `Int { min, max }`, `Float`) are value families,
 not HTML elements — and `Int { min, max }` is already "value family plus its
 constraints", which is the target shape. So `InputKind` -> `ValueKind` is mostly a
-rename plus fields; `ControlType`/`InputType` is the genuinely new construction.
+rename plus fields; `WidgetType`/`InputType` is the genuinely new construction.
 This makes the split cheaper than it first looked.
 
-**5. Control resolution must happen at-or-before VALIDATE, not at render.**
-Todd proposed storing the `Shape` and resolving the control late, so the default
+**5. Widget resolution must happen at-or-before VALIDATE, not at render.**
+Todd proposed storing the `Shape` and resolving the widget late, so the default
 is never "overruled". The principle is right; two facts constrain the mechanism:
 
 - `input_kind` is NOT render-only. It is read at `fields.rs:125` (gates the
   *required* error) and `fields.rs:152` (gates `partial.set(false)`), both via
   `is_unticked_checkbox`. And for a real reason: **a checkbox omits its value
-  when unticked**, which is a property of the control and is what makes blank
+  when unticked**, which is a property of the widget and is what makes blank
   mean `false`. `validate(&mut self)` takes no context to thread it through.
 - **`Shape` alone is insufficient.** Because `Option` peeling wraps rather than
   parameterizes, both `bool` and `Option<bool>` produce a `FormField<bool>` —
@@ -126,19 +126,19 @@ Resulting arrangement — default as a FUNCTION, override as a SLOT:
 pub struct FormField<T: …> {
     pub name: String,
     pub label: Option<String>,
-    pub optional: bool,                   // what the walk learned; not a control property
-    pub control: Option<ControlType>,     // None = nobody overrode this
+    pub optional: bool,                   // what the walk learned; not a widget property
+    pub widget: Option<WidgetType>,     // None = nobody overrode this
     pub value: FieldValue<T>,
     pub errors: Vec<FieldError>,
 }
-fn default_control(&self) -> ControlType  // from ValueKind + self.optional
-fn control(&self) -> ControlType { self.control.clone().unwrap_or_else(|| self.default_control()) }
+fn default_widget(&self) -> WidgetType  // from ValueKind + self.optional
+fn widget(&self) -> WidgetType { self.widget.clone().unwrap_or_else(|| self.default_widget()) }
 ```
 
-`is_unticked_checkbox` becomes `matches!(self.control(), Input(Checkbox))`, which
+`is_unticked_checkbox` becomes `matches!(self.widget(), Input(Checkbox))`, which
 reads better than today's `Boolean { optional: false }`.
 
-Incidental win: pulling `optional` out as its own field. It was never a control
+Incidental win: pulling `optional` out as its own field. It was never a widget
 property — it is a structural fact from the build walk, and having it live inside
 `InputKind::Boolean { optional }` is why that variant has to dissolve.
 
@@ -173,7 +173,7 @@ the same two-tier shape already recorded for `Provider` scoping in
 |---|---|---|
 | client (`validate()` in wasm) | our Rust, pre-submit | UX only, never a boundary |
 | server | our Rust, authoritative | the actual boundary |
-| browser-native (`min=`, `maxlength=`) | the UA | opportunistic, per control type |
+| browser-native (`min=`, `maxlength=`) | the UA | opportunistic, per widget type |
 
 This also strengthens the deferred blur-validation item: parse errors mostly
 surface on their own, but a range violation is invisible until submit. Bounds are
@@ -265,7 +265,7 @@ anywhere. Its field attributes are all presentation: `class`, `style`, `id`, `el
 **So leptos_form is not a source of constraint design.** Three things there ARE
 worth taking:
 
-- **`el` as a field attribute** is our `ControlType`, expressed as a Rust type
+- **`el` as a field attribute** is our `WidgetType`, expressed as a Rust type
   (`HtmlElement<Input>` vs `HtmlElement<Textarea>`) with a `DefaultHtmlElement`
   trait giving the per-type default. Same shape as the type-directed registry,
   and it confirms "element choice is per-field, defaulted per-type".
@@ -324,7 +324,7 @@ anyone asking.
    `Boolean { optional: true }` becoming `Select`, and for the shape supplying
    those particular choices.
 
-## The control taxonomy, comprehensively
+## The widget taxonomy, comprehensively
 
 ### All 22 `<input type>`s
 
@@ -343,11 +343,11 @@ anyone asking.
 | `file` | NOT a String | — | comment, not a variant |
 | `button`, `submit`, `reset`, `image` | nothing / coords | — | EXCLUDE |
 
-The last four are not field controls — they produce no value for a model field,
+The last four are not field widgets — they produce no value for a model field,
 and the page already owns its own buttons. Including them would make
-`ControlType` mean "any input element" rather than "how this field is edited".
+`WidgetType` mean "any input element" rather than "how this field is edited".
 
-### Elements for `ControlType`
+### Elements for `WidgetType`
 
 `Input(InputType)` live; `Select { multiple, size }` live; `TextArea { rows,
 cols, wrap }` stub (cheap, and wanted for `Markdown`); `Output`, `Progress
@@ -355,7 +355,7 @@ cols, wrap }` stub (cheap, and wanted for `Markdown`); `Output`, `Progress
 including them widens the type from "how the user edits this" to "how this is
 displayed".
 
-`datalist` is a modifier on `Input(Text)` via `list=`, not a control of its own —
+`datalist` is a modifier on `Input(Text)` via `list=`, not a widget of its own —
 same category as `placeholder`.
 
 ### Four traps
@@ -367,7 +367,7 @@ same category as `placeholder`.
    `datetime-local`. Browsers fall back to `text`.
 3. **`radio` and checkbox-groups break "one path, one element."** Both render
    several DOM nodes sharing one `name`. Everything in `reflect/` assumes a path
-   maps to one control, `get_current`/`write_value` included. Radio is not "a
+   maps to one widget, `get_current`/`write_value` included. Radio is not "a
    select with different CSS".
 4. **`file` does not fit the value model at all.** `ValuesByPath` is
    `HashMap<String, String>`; a file input's value is a `FileList`. Django
@@ -377,7 +377,7 @@ same category as `placeholder`.
 
 ## The eight ValueKinds, and the rule that bounds the list
 
-| ValueKind | carrier | constraints | controls |
+| ValueKind | carrier | constraints | widgets |
 |---|---|---|---|
 | `Text` | `String` | `min_length`, `max_length`, `pattern` | text, search, tel, url, email, password, textarea |
 | `Int` | `i8`…`i128`, `u8`…`u64` | `min`, `max`, `step` | number, range, text |
@@ -391,7 +391,7 @@ same category as `placeholder`.
 **The rule: a family earns a variant only if it has a distinct constraint
 vocabulary.** That test removes four apparent candidates — `color` (no constraint
 attributes apply at all), `email`/`url`/`tel`/`search` (their authorable
-constraints are Text's; the browser validates by type), `hidden` (a control
+constraints are Text's; the browser validates by type), `hidden` (a widget
 applied to any kind), `range` (same value as number, different widget). Four
 things that look like types turn out to be presentation, which is the split
 earning its keep.
@@ -431,9 +431,9 @@ exactly where the prerequisites start.
 
 | lives on | overridable? | who reads it |
 |---|---|---|
-| `ValueKind` (with constraints) | no — derived from `T` | `validate`, `write_value_into`, `default_control` |
-| `optional` | no — from the build walk | `default_control`, `is_unticked_checkbox` |
-| `control: Option<ControlType>` | yes — attribute or call site | `render` |
+| `ValueKind` (with constraints) | no — derived from `T` | `validate`, `write_value_into`, `default_widget` |
+| `optional` | no — from the build walk | `default_widget`, `is_unticked_checkbox` |
+| `widget: Option<WidgetType>` | yes — attribute or call site | `render` |
 
 ---
 
@@ -451,7 +451,7 @@ reason the decision is defensible rather than a coin flip.
 ## It worked. That is the point.
 
 `crates/formoxus/src/reflect/attrs.rs` held a real `define_attr_grammar!` block
-with `Password`, `Control(Option<ControlType>)`, `Label(&str)`, `Title(&str)`, and
+with `Password`, `Widget(Option<WidgetType>)`, `Label(&str)`, `Title(&str)`, and
 six passing tests in `crates/formoxus/tests/reflect/facet_forms.rs`. All deleted
 at Todd's instruction once `form2!` won. **Do not re-litigate this by rebuilding
 it** — it is not that the mechanism failed, it is that a proc macro does strictly
@@ -484,9 +484,9 @@ NO integers. So `#[facet(ns::range(min = 0, max = 100))]` cannot work while
 1. **A lone PascalCase identifier is parsed as a STRUCT variant**, not
    `ArbitraryType` — "struct variant must reference a defined struct". Only a
    *multi-token* type path falls through, so it must be written
-   `Control(crate::reflect::widgets::ControlType)`.
+   `Widget(crate::reflect::widgets::WidgetType)`.
 2. **`ArbitraryType` payloads must be `Option<T>`.** The dispatcher hands the
-   value through wrapped in `Some`, so `Control(ControlType)` is a type error.
+   value through wrapped in `Some`, so `Widget(WidgetType)` is a type error.
    The kind's own doc example is `Option<DefaultInPlaceFn>`.
 3. **Payload types must implement `Facet`.** A non-builtin grammar with no
    function-pointer variants derives `Facet` on the generated `Attr`. (Adding any
@@ -494,7 +494,7 @@ NO integers. So `#[facet(ns::range(min = 0, max = 100))]` cannot work while
    requirement — a strange coupling, but real.)
 4. **Payloads must be `const`-constructible.** The value lands in
    `static __ATTR_DATA: Attr = …;`, which is what buys full rustc type-checking —
-   but it forbids `String` and `Vec`. A `ControlType::Select { choices: Vec<_> }`
+   but it forbids `String` and `Vec`. A `WidgetType::Select { choices: Vec<_> }`
    could never be an attribute payload.
 
 **The read-back protocol is NOT uniform, and `get_as` is shape-checked, so asking

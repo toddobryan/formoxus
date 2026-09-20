@@ -6,10 +6,10 @@ serve:
 serve-log:
     dx serve -p formoxus-examples --log-to-file /tmp/dx-formoxus.log
 
-# Which (value kind, control) pairs actually render. See
-# .claude/memory/control_table_and_choice.md for what the number means.
+# Which (value kind, widget) pairs actually render. See
+# .claude/memory/widget_table_and_choice.md for what the number means.
 matrix:
-    cargo run -p formoxus-examples --bin control_matrix
+    cargo run -p formoxus-examples --bin widget_matrix
 
 # Everything CI runs, in CI's order, so a red build is reproducible locally.
 ci: fmt clippy test docs msrv

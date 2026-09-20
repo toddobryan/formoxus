@@ -2,10 +2,10 @@
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 
 use crate::RenderCtx;
-use crate::controls::{ControlType, FieldProps, InputType, ScalarInput};
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
+use crate::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
@@ -22,7 +22,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
-    pub custom_control: Option<ControlType>,
+    pub custom_widget: Option<WidgetType>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `FormField<String>` standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
@@ -32,7 +32,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     /// shape walk only ever has a shape in hand, and `FormField<T>` needs a
     /// type at compile time. So a `Markdown` field becomes a
     /// `FormField<String>` that remembers what to re-wrap it in, and every
-    /// string-facing operation — parsing, display, `ValueKind`, the control —
+    /// string-facing operation — parsing, display, `ValueKind`, the widget —
     /// goes on working unchanged against the inner scalar.
     ///
     /// Only [`write_value_into`](FormMember::write_value_into) consults it.
@@ -67,8 +67,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// and nothing about presentation is committed during the SHAPE walk. The
     /// constraint fields are all `None` for now — this is where an author's
     /// `#[facet(formoxus::max_length(…))]` will merge in, and the reason they
-    /// live on the *value* kind rather than on `ControlType` is that overriding
-    /// a `Text` control to `Textarea` or `Password` must not discard validation.
+    /// live on the *value* kind rather than on `WidgetType` is that overriding
+    /// a `Text` widget to `Textarea` or `Password` must not discard validation.
     ///
     /// Bounds come from the type itself rather than being written out, so they
     /// can't drift from `T`. They're `i128` because that's the only std integer
@@ -119,26 +119,30 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// wraps rather than parameterizes, so `bool` and `Option<bool>` both arrive
     /// as `FormField<bool>`. A checkbox has two states and an `Option<bool>` has
     /// three, which is the whole reason that flag has to travel from the walk.
-    fn default_control(&self) -> ControlType {
+    fn default_widget(&self) -> WidgetType {
         match self.value_kind() {
-            ValueKind::Text { .. } => ControlType::Input(InputType::Text),
+            ValueKind::Text { .. } => WidgetType::Input(InputType::Text),
             // Deliberately `text`, not `number`: `type="number"` hands back `""`
             // for anything the browser dislikes, so a half-typed value vanishes.
-            ValueKind::Int { .. } | ValueKind::Float => ControlType::Input(InputType::Text),
-            ValueKind::Bool if self.optional => ControlType::Select,
-            ValueKind::Bool => ControlType::Checkbox,
+            ValueKind::Int { .. } | ValueKind::Float => WidgetType::Input(InputType::Text),
+            // An `Option<bool>` has three states and a checkbox has two, so the
+            // optional case gets a `Select` — reusing the one implementation of
+            // the "no value" option rather than growing a third checkbox state
+            // the DOM would have to be talked into.
+            ValueKind::Bool if self.optional => WidgetType::Select,
+            ValueKind::Bool => WidgetType::Checkbox,
         }
     }
 
-    /// The control to render: an override if one was set, else the derived default.
-    fn control(&self) -> ControlType {
-        self.custom_control
+    /// The widget to render: an override if one was set, else the derived default.
+    fn widget(&self) -> WidgetType {
+        self.custom_widget
             .clone()
-            .unwrap_or_else(|| self.default_control())
+            .unwrap_or_else(|| self.default_widget())
     }
 
     fn is_unticked_checkbox(&self) -> bool {
-        matches!(self.value, FieldValue::Empty) && matches!(self.control(), ControlType::Checkbox)
+        matches!(self.value, FieldValue::Empty) && matches!(self.widget(), WidgetType::Checkbox)
     }
 }
 
@@ -195,9 +199,9 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 
     fn render(&self, ctx: &RenderCtx) -> Element {
         rsx! {
-            ScalarInput {
+            ScalarWidget {
                 value_kind: self.value_kind(),
-                control: self.control(),
+                widget: self.widget(),
                 values: ctx.values,
                 props: FieldProps {
                     path: ctx.path(&self.name),
@@ -212,8 +216,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn validate(&mut self) {
         self.errors.clear();
         // An `Invalid` value carries its own parse error, and this is the only
-        // route that error has to the screen: the control boundary is
-        // `(path, label, required, errors)`, so a control cannot reach into
+        // route that error has to the screen: the widget boundary is
+        // `(path, label, required, errors)`, so a widget cannot reach into
         // `FieldValue` to find it. Hoisting here rather than merging in
         // `render` also keeps one answer to "what is wrong with this field".
         //
@@ -311,7 +315,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 
     fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
-            self.custom_control = spec.custom_control.clone().or(self.custom_control.take());
+            self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
             self.label = spec.label.clone().or(self.label.take());
         }
     }

@@ -116,7 +116,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// Every leaf input in the form, as `(qualified_path, raw_value)` — the
-    /// list the control layer turns into one signal apiece.
+    /// list the widget layer turns into one signal apiece.
     pub fn leaves(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
         for m in self.members.iter() {
@@ -156,7 +156,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         // A structural edit can CREATE members that did not exist when the spec
         // was first applied: `AddRow` builds a fresh row from the shape alone,
         // and choosing a variant reveals that variant's fields. Without this, a
-        // row added after mount renders with derived labels and controls while
+        // row added after mount renders with derived labels and widgets while
         // its siblings carry the spec's — visibly inconsistent, and only for the
         // rows the user happened to add.
         //

@@ -1,4 +1,4 @@
-//! What a control IS, as opposed to what it renders: the control
+//! What a widget IS, as opposed to what it renders: the widget
 //! vocabulary `form!` speaks, and the two prop bundles every input takes.
 
 use dioxus::prelude::*;
@@ -7,7 +7,7 @@ use crate::ValuesByPath;
 use crate::error::FieldError;
 
 #[derive(Clone)]
-pub enum ControlType {
+pub enum WidgetType {
     Input(InputType),
     Textarea,
     Select,
@@ -16,32 +16,32 @@ pub enum ControlType {
     CheckboxMultiple,
     RadioGroup,
     File,
-    /// A control the author supplied, via `form!`'s `custom(MyWidget)`.
+    /// A widget the author supplied, via `form!`'s `custom(MyWidget)`.
     ///
-    /// The escape hatch for a value kind the built-in controls cannot serve —
+    /// The escape hatch for a value kind the built-in widgets cannot serve —
     /// `Markdown` needs a live preview, a `Ref<Source>` needs an async-fed
     /// combobox. Neither is expressible as an `<input type=…>`, and neither
     /// belongs in `ValueKind`: they are presentation, not value family.
     ///
-    /// **`fn` pointer, NOT `Box<dyn Fn>` — the derives force it.** `ControlType`
+    /// **`fn` pointer, NOT `Box<dyn Fn>` — the derives force it.** `WidgetType`
     /// is `Clone + Debug + PartialEq`, and a boxed closure supplies none of the
     /// three. A non-capturing closure coerces to a plain `fn`, which is `Copy`,
     /// clones trivially, and compares by address. That is what lets this variant
-    /// exist without disturbing anything that already holds a `ControlType`.
+    /// exist without disturbing anything that already holds a `WidgetType`.
     ///
     /// The cost is `Debug`: a fn pointer prints as an address. Hence `name`,
-    /// which `form!` fills in from the control's own path so panics and test
+    /// which `form!` fills in from the widget's own path so panics and test
     /// assertions read `custom(MarkdownWidget)` rather than `0x7f…`.
     Custom {
         name: &'static str,
-        render: fn(ControlProps) -> Element,
+        render: fn(WidgetProps) -> Element,
     },
 }
 
 // `Debug` and `PartialEq` are hand-written rather than derived, and only because
 // of `Custom`'s `fn` pointer. Both impls reproduce the derive exactly for every
 // other variant.
-impl std::fmt::Debug for ControlType {
+impl std::fmt::Debug for WidgetType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Input(t) => write!(f, "Input({t:?})"),
@@ -52,7 +52,7 @@ impl std::fmt::Debug for ControlType {
             Self::CheckboxMultiple => f.write_str("CheckboxMultiple"),
             Self::RadioGroup => f.write_str("RadioGroup"),
             Self::File => f.write_str("File"),
-            // `form!`'s own spelling, so the panic in `ScalarInput` quotes back
+            // `form!`'s own spelling, so the panic in `ScalarWidget` quotes back
             // what the author wrote. Deriving this would print the fn pointer's
             // address beside the name, which is noise in every message it
             // appears in.
@@ -61,33 +61,33 @@ impl std::fmt::Debug for ControlType {
     }
 }
 
-impl PartialEq for ControlType {
+impl PartialEq for WidgetType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Input(a), Self::Input(b)) => a == b,
-            // Two custom controls are the same control when they name the same
+            // Two custom widgets are the same widget when they name the same
             // input. Comparing the `fn` pointers is what rustc warns about and
             // is genuinely meaningless here: identical functions may be merged
             // to one address, and one function may be duplicated across codegen
             // units, so neither equality nor inequality tells you anything about
-            // which control you have.
+            // which widget you have.
             (Self::Custom { name: a, .. }, Self::Custom { name: b, .. }) => a == b,
             _ => std::mem::discriminant(self) == std::mem::discriminant(other),
         }
     }
 }
 
-/// What a custom control is handed: the same pair every built-in control gets.
+/// What a custom widget is handed: the same pair every built-in widget gets.
 ///
 /// One struct rather than two parameters because `render` is a `fn` pointer and
 /// a single argument keeps that signature stable as the boundary grows.
 ///
-/// Note this is the control boundary the design notes fix — `(path, label,
+/// Note this is the widget boundary the design notes fix — `(path, label,
 /// required, errors)` in `props`, plus the value store — and NOT a
-/// `FormField<T>`. A control never sees the typed field: it reads and writes raw
-/// strings through `values`, exactly as `HtmlInput` does.
+/// `FormField<T>`. A widget never sees the typed field: it reads and writes raw
+/// strings through `values`, exactly as `Input` does.
 #[derive(Clone, PartialEq)]
-pub struct ControlProps {
+pub struct WidgetProps {
     pub values: ValuesByPath,
     pub props: FieldProps,
 }
@@ -123,7 +123,7 @@ impl InputType {
             Self::Password => "password",
             Self::Hidden => "hidden",
             // Selectable, but NOT the default for a numeric field — see
-            // `FormField::default_control`. `type="number"` hands back `""` for
+            // `FormField::default_widget`. `type="number"` hands back `""` for
             // anything the browser dislikes, so a half-typed value vanishes
             // mid-keystroke. A numeric renders as text and `ValueKind` parses it.
             // Anyone who wants the spinner and the mobile keypad can ask.

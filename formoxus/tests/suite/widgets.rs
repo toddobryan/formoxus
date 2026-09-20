@@ -158,14 +158,14 @@ fn signals_are_populated_from_the_model() {
 
 // ── The store-bound widget boundary ──────────────────────────────────────
 //
-// These drive `ScalarInput` directly rather than through `FormMember::render`,
+// These drive `ScalarWidget` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use formoxus::controls::{ControlType, FieldProps, InputType, ScalarInput};
 use formoxus::fields::ValueKind;
+use formoxus::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
 
 /// What a `String` field derives. Spelled out because these tests drive
-/// `ScalarInput` directly rather than through `FormField::render`, so nothing
+/// `ScalarWidget` directly rather than through `FormField::render`, so nothing
 /// upstream is computing it for them — which is the point: they pin the widget
 /// boundary independently of how the members happen to wire it up.
 fn text_kind() -> ValueKind {
@@ -181,9 +181,9 @@ fn PopulatedInput() -> Element {
     let values =
         use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
     rsx! {
-        ScalarInput {
+        ScalarWidget {
             value_kind: text_kind(),
-            control: ControlType::Input(InputType::Text),
+            widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "title".to_string(),
@@ -201,9 +201,9 @@ fn EmptyInput() -> Element {
     // chosen after mount produces.
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
-        ScalarInput {
+        ScalarWidget {
             value_kind: text_kind(),
-            control: ControlType::Input(InputType::Text),
+            widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "shape.radius".to_string(),
@@ -259,7 +259,7 @@ fn type_into(app: fn() -> Element, text: &str) -> String {
             Mutation::NewEventListener { name, id } if name == "input" => Some(*id),
             _ => None,
         })
-        .expect("ScalarInput should have registered an `oninput` listener");
+        .expect("ScalarWidget should have registered an `oninput` listener");
 
     // Listeners are registered against `PlatformEventData`, not `FormData` — the
     // `oninput` attribute macro does that conversion itself, inside the handler.
@@ -352,8 +352,8 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
 // ── The error state is markup, not a class we invented ───────────────────
 
 #[gtest]
-fn an_errored_field_marks_its_control_aria_invalid() {
-    // The control itself carries the error state, not just the message beside
+fn an_errored_field_marks_its_widget_aria_invalid() {
+    // The widget itself carries the error state, not just the message beside
     // it — this is the half a screen reader announces. Rendering the message
     // alone would serve the sighted case and leave the other unserved.
     let html = super::render_to_html(ScoreFormWithBadInput);
@@ -376,8 +376,8 @@ fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
 
 // ── `type=` reaching the rendered input ──────────────────────────────────
 //
-// `HtmlInput` renders every `<input type=…>` there is, so the type has to travel
-// from the spec's `ControlType` all the way to the attribute. Before these, both
+// `Input` renders every `<input type=…>` there is, so the type has to travel
+// from the spec's `WidgetType` all the way to the attribute. Before these, both
 // leaves hardcoded `type="text"` and a `password` override rendered a visible
 // text box.
 
@@ -393,23 +393,23 @@ struct OneNumber {
     count: u32,
 }
 
-fn rendered_with(control: ControlType) -> String {
+fn rendered_with(widget: WidgetType) -> String {
     // A thread-local rather than a prop, because `render_to_html` takes a plain
     // `fn() -> Element` — there is nowhere to thread an argument through.
-    CONTROL.replace(Some(control));
-    render_to_html(WithControl)
+    WIDGET.replace(Some(widget));
+    render_to_html(WithWidget)
 }
 
 thread_local! {
-    static CONTROL: std::cell::RefCell<Option<ControlType>> =
+    static WIDGET: std::cell::RefCell<Option<WidgetType>> =
         const { std::cell::RefCell::new(None) };
 }
 
 #[component]
-fn WithControl() -> Element {
-    let control = CONTROL.with_borrow(|c| c.clone().expect("set by rendered_with"));
+fn WithWidget() -> Element {
+    let widget = WIDGET.with_borrow(|c| c.clone().expect("set by rendered_with"));
     let form = use_form(|| {
-        empty_form(FormSpec::<OneString>::default().with_custom_control("secret", control))
+        empty_form(FormSpec::<OneString>::default().with_custom_widget("secret", widget))
     });
     form.render_fragment()
 }
@@ -435,7 +435,7 @@ fn every_input_type_reaches_the_type_attribute() {
         (InputType::Week, "week"),
     ];
     for (input_type, expected) in cases {
-        let html = rendered_with(ControlType::Input(input_type.clone()));
+        let html = rendered_with(WidgetType::Input(input_type.clone()));
         let wanted = format!("type=\"{expected}\"");
         expect_that!(
             html,
@@ -465,7 +465,7 @@ fn a_numeric_field_can_still_ask_for_a_number_input() {
     // The override half of `a_numeric_field_still_renders_as_text`: text is the
     // DEFAULT, not the only option. Someone who wants the spinner and the mobile
     // numeric keypad, and accepts that the browser may hand back `""`, can say so.
-    let html = rendered_with(ControlType::Input(InputType::Number));
+    let html = rendered_with(WidgetType::Input(InputType::Number));
     expect_that!(html, contains_substring("type=\"number\""));
 }
 
@@ -489,7 +489,7 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                     secret: "hunter2".to_string(),
                 },
                 FormSpec::<OneString>::default()
-                    .with_custom_control("secret", ControlType::Input(InputType::Password)),
+                    .with_custom_widget("secret", WidgetType::Input(InputType::Password)),
             )
         });
         form.render_fragment()
@@ -511,8 +511,8 @@ fn typing_into_a_password_reaches_the_value_map() {
 fn a_hidden_input_renders_without_a_label_or_marker() {
     // The wrapper every other leaf uses is a `label` with a caption and a
     // required marker. Around `type="hidden"` that puts visible text and an
-    // asterisk on screen beside a control nobody can see.
-    let html = rendered_with(ControlType::Input(InputType::Hidden));
+    // asterisk on screen beside a widget nobody can see.
+    let html = rendered_with(WidgetType::Input(InputType::Hidden));
     expect_that!(html, contains_substring("type=\"hidden\""));
     expect_that!(html, not(contains_substring("<label")));
     expect_that!(html, not(contains_substring("field-label")));
@@ -528,9 +528,9 @@ fn PasswordWithEcho() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     let stored = values.read().get("secret").cloned().unwrap_or_default();
     rsx! {
-        ScalarInput {
+        ScalarWidget {
             value_kind: text_kind(),
-            control: ControlType::Input(InputType::Password),
+            widget: WidgetType::Input(InputType::Password),
             values,
             props: FieldProps {
                 path: "secret".to_string(),

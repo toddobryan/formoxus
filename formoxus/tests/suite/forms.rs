@@ -20,7 +20,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
         name: name.to_string(),
         label: None,
         optional: false,
-        custom_control: None,
+        custom_widget: None,
         wrapper: None,
         value,
         errors: Vec::new(),
@@ -487,7 +487,7 @@ struct Credentials {
 
 /// Click the app's first `click` listener and return the re-rendered HTML.
 ///
-/// The sibling of `type_into` in `tests::widgets`: the listener's `ElementId`
+/// The sibling of `type_into` in the `widgets` module: the listener's `ElementId`
 /// comes out of the rebuild's mutations rather than being hard-coded, so the
 /// markup around the button can change freely.
 fn click_button(app: fn() -> Element) -> String {
@@ -539,7 +539,7 @@ fn a_pushed_error_renders() {
 
 #[gtest]
 fn a_form_starts_with_no_error_markup() {
-    // The control for the test above: without it, `contains_substring` proves
+    // The widget for the test above: without it, `contains_substring` proves
     // only that the string appears somewhere, not that the click put it there.
     #[component]
     fn Untouched() -> Element {
@@ -621,7 +621,7 @@ fn TitleOnlyAbsent() -> Element {
 
 #[gtest]
 fn render_title_is_empty_when_there_is_none() {
-    // The control for the test above: a titleless form's `render_title` slice
+    // The widget for the test above: a titleless form's `render_title` slice
     // is nothing at all, not an empty heading that still occupies a DOM node.
     let rendered = render_to_html(TitleOnlyAbsent);
     expect_that!(rendered.trim(), eq(""));
@@ -693,7 +693,7 @@ fn render_places_the_title_before_the_form_element_not_inside_it() {
 
 #[gtest]
 fn render_fragment_stays_unwrapped() {
-    // The control: `render_fragment` must NOT pick up `render`'s div/form
+    // The widget: `render_fragment` must NOT pick up `render`'s div/form
     // wrapper, since every existing call site depends on getting back exactly
     // today's bare fragment. `TitledEventForm` (defined above) renders via
     // `render_fragment`, with the same model and title as `WrappedTitledEventForm`.

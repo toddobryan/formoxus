@@ -10,12 +10,12 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::controls::ControlType;
+use formoxus::widgets::WidgetType;
 use formoxus::*;
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
-/// controls differ, which is what makes them the useful subjects for testing
+/// widgets differ, which is what makes them the useful subjects for testing
 /// precedence. A plain `bool` derives a checkbox, an `Option<bool>` a tri-state
 /// select.
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -78,7 +78,7 @@ fn a_field_sets_own_label_becomes_its_legend() {
     expect_that!(html, contains_substring("<legend>Where</legend>"));
 }
 
-// ── Controls ─────────────────────────────────────────────────────────────
+// ── Widgets ─────────────────────────────────────────────────────────────
 
 #[component]
 fn UntouchedFlags() -> Element {
@@ -87,7 +87,7 @@ fn UntouchedFlags() -> Element {
 }
 
 #[gtest]
-fn the_derived_controls_are_what_the_override_has_to_beat() {
+fn the_derived_widgets_are_what_the_override_has_to_beat() {
     // Baseline, so the two tests below are measuring a change rather than a
     // coincidence: `enabled` is a checkbox and `subscribed` a select.
     let html = render_to_html(UntouchedFlags);
@@ -99,16 +99,16 @@ fn the_derived_controls_are_what_the_override_has_to_beat() {
 fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| {
         empty_form(
-            FormSpec::<Flags>::default().with_custom_control("subscribed", ControlType::Checkbox),
+            FormSpec::<Flags>::default().with_custom_widget("subscribed", WidgetType::Checkbox),
         )
     });
     form.render_fragment()
 }
 
 #[gtest]
-fn an_override_beats_a_derived_control() {
+fn an_override_beats_a_derived_widget() {
     // `Option<bool>` derives `Select`. Forcing a checkbox is the strongest form
-    // of the precedence rule: the override has to displace a control the shape
+    // of the precedence rule: the override has to displace a widget the shape
     // actively chose, not merely fill a gap.
     //
     // (Whether this is a GOOD idea is another matter — a checkbox can't express
@@ -122,7 +122,7 @@ fn an_override_beats_a_derived_control() {
 #[component]
 fn BoolForcedToSelect() -> Element {
     let form = use_form(|| {
-        empty_form(FormSpec::<Flags>::default().with_custom_control("enabled", ControlType::Select))
+        empty_form(FormSpec::<Flags>::default().with_custom_widget("enabled", WidgetType::Select))
     });
     form.render_fragment()
 }
@@ -149,13 +149,12 @@ fn an_unmatched_path_is_a_no_op() {
 
 #[gtest]
 #[should_panic(expected = "location is a field set")]
-fn a_control_on_a_field_set_is_rejected() {
-    // A field set has no single control to be, and silently ignoring the entry
+fn a_widget_on_a_field_set_is_rejected() {
+    // A field set has no single widget to be, and silently ignoring the entry
     // would leave the author with no thread to pull. The message names the path
     // because a nested form has more than one candidate.
     let _ = empty_form(
-        FormSpec::<EventForCreate>::default()
-            .with_custom_control("location", ControlType::Textarea),
+        FormSpec::<EventForCreate>::default().with_custom_widget("location", WidgetType::Textarea),
     );
 }
 
@@ -166,9 +165,9 @@ struct WithRows {
 
 #[gtest]
 #[should_panic(expected = "venues is a list")]
-fn a_control_on_a_list_is_rejected() {
+fn a_widget_on_a_list_is_rejected() {
     let _ = empty_form(
-        FormSpec::<WithRows>::default().with_custom_control("venues", ControlType::Select),
+        FormSpec::<WithRows>::default().with_custom_widget("venues", WidgetType::Select),
     );
 }
 
@@ -180,25 +179,25 @@ struct Drawing {
 }
 
 #[component]
-fn ChooserWithAControl() -> Element {
+fn ChooserWithAWidget() -> Element {
     let form = use_form(|| {
         empty_form(
-            FormSpec::<Drawing>::default().with_custom_control("shape", ControlType::RadioGroup),
+            FormSpec::<Drawing>::default().with_custom_widget("shape", WidgetType::RadioGroup),
         )
     });
     form.render_fragment()
 }
 
 #[gtest]
-fn a_control_on_a_variant_chooser_is_accepted() {
-    // The one container that DOES own a control — the `<select>` that picks the
+fn a_widget_on_a_variant_chooser_is_accepted() {
+    // The one container that DOES own a widget — the `<select>` that picks the
     // variant. The asymmetry with the two rejections above is deliberate.
     //
     // Nothing renders a radio group yet, so what this pins is that the override
     // is STORED and ignored rather than refused: construction succeeds and the
     // select still renders. It starts failing the day `RadioGroup` is honoured,
     // which is the right moment to be told.
-    let html = render_to_html(ChooserWithAControl);
+    let html = render_to_html(ChooserWithAWidget);
     expect_that!(html.matches("<select").count(), eq(1));
 }
 
@@ -311,35 +310,35 @@ struct Answers {
 }
 
 #[component]
-fn RowControlsOverridden() -> Element {
+fn RowWidgetsOverridden() -> Element {
     let form = use_form(|| {
         form_for(
             &Answers {
                 correct: vec![true, false],
             },
-            FormSpec::<Answers>::default().with_custom_control("correct[]", ControlType::Select),
+            FormSpec::<Answers>::default().with_custom_widget("correct[]", WidgetType::Select),
         )
     });
     form.render_fragment()
 }
 
 #[gtest]
-fn a_bracket_selector_can_set_each_rows_control() {
+fn a_bracket_selector_can_set_each_rows_widget() {
     // A `Vec<bool>` derives a checkbox per row; the selector replaces all of
     // them. This is the half Todd's reading of `ListSet` predicted: a list has no
-    // control of its own, but it has N rows that each do.
-    let html = render_to_html(RowControlsOverridden);
+    // widget of its own, but it has N rows that each do.
+    let html = render_to_html(RowWidgetsOverridden);
     expect_that!(html.matches("<select").count(), eq(2));
     expect_that!(html.matches(r#"type="checkbox""#).count(), eq(0));
 }
 
 #[gtest]
-#[should_panic(expected = "write `venues[]` to give every ROW a control")]
-fn a_control_on_the_list_itself_now_suggests_the_bracket() {
+#[should_panic(expected = "write `venues[]` to give every ROW a widget")]
+fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     // The rejection still stands, but it can name the fix now.
     let _ = form_for(
         &trip(),
-        FormSpec::<Trip>::default().with_custom_control("venues", ControlType::Select),
+        FormSpec::<Trip>::default().with_custom_widget("venues", WidgetType::Select),
     );
 }
 

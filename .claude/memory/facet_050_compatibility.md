@@ -43,7 +43,7 @@ library leans on hardest — is untouched.
 
 **`Shape`'s `PartialEq`/`Hash` are still keyed on `id`, a byte-identical impl**
 (it just moved from shape.rs:284 to :328). That is the verified premise
-[[widget-registry-idea]] rests on for `HashMap<&'static Shape, ControlType>`,
+[[widget-registry-idea]] rests on for `HashMap<&'static Shape, WidgetType>`,
 and it survives 0.50.
 
 ## What 0.50 actually is
@@ -54,7 +54,7 @@ taxonomy bridge (`schema_of`/`schemas_of` in a new `taxon_bridge.rs`),
 `#[facet(orm::primary_key)]`, with `Attr::ns()` / `Attr::key()`.
 
 `define_attr_grammar!` still exists in 0.50. That was the mechanism
-[[formoxus-control-survey]] records as built, proven, then abandoned. Namespaced
+[[formoxus-widget-survey]] records as built, proven, then abandoned. Namespaced
 attributes do NOT reopen that decision — what actually won it for `form!` was
 the orphan rule dissolving because the macro expands in the CONSUMING crate
 ([[facet-form-design-decisions]]), and namespacing is orthogonal to that. NOT

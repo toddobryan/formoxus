@@ -8,9 +8,9 @@ use facet::Facet;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
-use crate::controls::ControlType;
 use crate::error::FormError;
 use crate::label_case::LabelCase;
+use crate::widgets::WidgetType;
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
@@ -34,7 +34,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldSpec {
     pub label: Option<String>,
-    pub custom_control: Option<ControlType>,
+    pub custom_widget: Option<WidgetType>,
 }
 
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
@@ -65,8 +65,8 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_custom_control(mut self, path: &str, c: ControlType) -> Self {
-        self.field(path).custom_control = Some(c);
+    pub fn with_custom_widget(mut self, path: &str, c: WidgetType) -> Self {
+        self.field(path).custom_widget = Some(c);
         self
     }
 

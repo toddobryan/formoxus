@@ -21,7 +21,7 @@ fn fake_form() -> FormSpec<FakeFormWithButtons> {
     form!(
         FakeFormWithButtons {
             some_data => {
-                control: text,
+                widget: text,
             },
             buttons: {
                 delete: { type: destructive, text: "Drop" },

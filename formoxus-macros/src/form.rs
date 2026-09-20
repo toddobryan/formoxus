@@ -94,7 +94,7 @@ impl FormSpecInput {
                 Entry::Field { path, body } => fsm.field_specs.push(FieldSpec {
                     path,
                     label: body.label,
-                    control: body.control,
+                    widget: body.widget,
                 }),
                 Entry::Buttons(buttons) => fsm.buttons = buttons,
             }
@@ -133,11 +133,11 @@ impl FormSpecInput {
             .map(|f| {
                 let key = f.path.key();
                 let label = f.label.as_ref().map(|l| quote! { .with_label(#key, &#l) });
-                let control = f.control.as_ref().map(|c| {
+                let widget = f.widget.as_ref().map(|c| {
                     let c = c.path();
-                    quote! { .with_custom_control(#key, #c) }
+                    quote! { .with_custom_widget(#key, #c) }
                 });
-                quote! { #label #control }
+                quote! { #label #widget }
             })
             .collect();
         let witnesses: Vec<TokenStream2> = fsm
@@ -530,12 +530,12 @@ impl Parse for SpecPath {
 struct FieldSpec {
     path: SpecPath,
     label: Option<Expr>,
-    control: Option<ControlRef>,
+    widget: Option<WidgetRef>,
 }
 
 #[derive(Debug)]
 struct FieldBody {
-    control: Option<ControlRef>,
+    widget: Option<WidgetRef>,
     label: Option<Expr>,
 }
 
@@ -547,17 +547,17 @@ impl Parse for FieldBody {
             let body;
             let braces = braced!(body in input);
             let mut fb = FieldBody {
-                control: None,
+                widget: None,
                 label: None,
             };
             while !body.is_empty() {
                 let key: Ident = body.parse()?;
                 let _colon: Token![:] = body.parse()?;
                 match key.to_string().as_str() {
-                    "control" if fb.control.is_some() => {
-                        return Err(syn::Error::new_spanned(&key, "duplicate control key"));
+                    "widget" if fb.widget.is_some() => {
+                        return Err(syn::Error::new_spanned(&key, "duplicate widget key"));
                     }
-                    "control" => fb.control = Some(body.parse()?),
+                    "widget" => fb.widget = Some(body.parse()?),
                     "label" if fb.label.is_some() => {
                         return Err(syn::Error::new_spanned(&key, "duplicate label"));
                     }
@@ -565,7 +565,7 @@ impl Parse for FieldBody {
                     other => {
                         return Err(syn::Error::new_spanned(
                             &key,
-                            format!("unknown key {other}, expected control or label"),
+                            format!("unknown key {other}, expected widget or label"),
                         ));
                     }
                 }
@@ -574,7 +574,7 @@ impl Parse for FieldBody {
                 }
             }
 
-            if fb.control.is_none() && fb.label.is_none() {
+            if fb.widget.is_none() && fb.label.is_none() {
                 return Err(syn::Error::new(braces.span.join(), "empty field body"));
             }
             Ok(fb)
@@ -582,9 +582,9 @@ impl Parse for FieldBody {
     }
 }
 
-/// The author-facing control vocabulary, and the `ControlType` each name means.
+/// The author-facing widget vocabulary, and the `WidgetType` each name means.
 ///
-/// **Flat and lowercase, deliberately.** `ControlType::Input(InputType::Password)`
+/// **Flat and lowercase, deliberately.** `WidgetType::Input(InputType::Password)`
 /// is the shape of formoxus's own enum — grouping the `<input type=X>` family
 /// under one variant is a dispatch convenience, not a concept an author has. HTML
 /// spells it `type="password"` and so does this. That makes this table the stable
@@ -596,34 +596,34 @@ impl Parse for FieldBody {
 /// does not (`integer`/`float`, which both become `type="number"`; `textarea`,
 /// `select`).
 ///
-/// Every name here is accepted whether or not `ScalarInput` can render it yet.
+/// Every name here is accepted whether or not `ScalarWidget` can render it yet.
 /// Gating on that was considered and REJECTED: the macro crate cannot see
-/// `ScalarInput`'s match arms, so an "implemented" list would be a hand-kept copy
+/// `ScalarWidget`'s match arms, so an "implemented" list would be a hand-kept copy
 /// of a match in another crate — a worse sync hazard than the one this table
 /// already has — and its first false positive would be `password`. An unwired
-/// control still panics at render, naming both the control and the value kind.
-macro_rules! controls {
+/// widget still panics at render, naming both the widget and the value kind.
+macro_rules! widgets {
     (
         $( $name:ident => $variant:ident $( ( $input:ident ) )? ),* $(,)?
     ) => {
-        /// The tokens for a known control name, or `None` if it is not one.
-        fn control_tokens(name: &Ident) -> Option<TokenStream2> {
+        /// The tokens for a known widget name, or `None` if it is not one.
+        fn widget_tokens(name: &Ident) -> Option<TokenStream2> {
             match name.to_string().as_str() {
                 $( stringify!($name) => Some(quote! {
-                    ::formoxus::controls::ControlType::$variant
-                    $( ( ::formoxus::controls::InputType::$input ) )?
+                    ::formoxus::widgets::WidgetType::$variant
+                    $( ( ::formoxus::widgets::InputType::$input ) )?
                 }), )*
                 _ => None,
             }
         }
 
-        /// Every accepted name, for the "unknown control" message. Generated from
+        /// Every accepted name, for the "unknown widget" message. Generated from
         /// the same table as the match, so the two cannot disagree.
-        const CONTROL_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
+        const WIDGET_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
     };
 }
 
-controls! {
+widgets! {
     // <input type=…>
     text           => Input(Text),
     password       => Input(Password),
@@ -653,30 +653,30 @@ controls! {
     file              => File,
 }
 
-mod control_kw {
+mod widget_kw {
     syn::custom_keyword!(custom);
 }
 
 #[derive(Debug)]
-enum ControlRef {
-    /// One of the names in [`controls!`], already validated.
+enum WidgetRef {
+    /// One of the names in [`widgets!`], already validated.
     Named(Ident),
     /// `custom(MarkdownWidget)` — a `Path`, not an `Ident`, so that
     /// `custom(inputs::MarkdownWidget)` works without importing the input.
     Custom(Path),
 }
 
-impl ControlRef {
-    /// The `ControlType` expression this names, fully qualified.
+impl WidgetRef {
+    /// The `WidgetType` expression this names, fully qualified.
     ///
     /// Infallible: `parse` rejected anything not in the table, so the lookup here
     /// cannot miss.
     fn path(&self) -> TokenStream2 {
         match self {
             Self::Named(name) => {
-                control_tokens(name).expect("parse rejects names that are not in the table")
+                widget_tokens(name).expect("parse rejects names that are not in the table")
             }
-            // A NON-CAPTURING closure, which coerces to `fn(ControlProps) ->
+            // A NON-CAPTURING closure, which coerces to `fn(WidgetProps) ->
             // Element`. The input goes inside `rsx!` rather than being called,
             // so it gets a component scope of its own and may use hooks.
             //
@@ -686,7 +686,7 @@ impl ControlRef {
             Self::Custom(component) => {
                 let name = last_segment_string(component);
                 quote! {
-                    ::formoxus::controls::ControlType::Custom {
+                    ::formoxus::widgets::WidgetType::Custom {
                         name: #name,
                         render: |__p| ::dioxus::prelude::rsx! {
                             #component { values: __p.values, props: __p.props }
@@ -707,10 +707,10 @@ fn last_segment_string(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-impl Parse for ControlRef {
+impl Parse for WidgetRef {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(control_kw::custom) {
-            let kw: control_kw::custom = input.parse()?;
+        if input.peek(widget_kw::custom) {
+            let kw: widget_kw::custom = input.parse()?;
             if !input.peek(syn::token::Paren) {
                 return Err(syn::Error::new(
                     kw.span,
@@ -727,10 +727,10 @@ impl Parse for ControlRef {
         }
 
         let name: Ident = input.parse()?;
-        if control_tokens(&name).is_some() {
+        if widget_tokens(&name).is_some() {
             Ok(Self::Named(name))
         } else {
-            Err(syn::Error::new(name.span(), unknown_control(&name)))
+            Err(syn::Error::new(name.span(), unknown_widget(&name)))
         }
     }
 }
@@ -739,30 +739,30 @@ impl Parse for ControlRef {
 ///
 /// Three cases, in order of how likely the author is to have meant them: a name
 /// that IS in the table under a different case (`Password`, `DatetimeLocal` — the
-/// old `ControlType`-shaped spelling), a near miss, and no idea.
-fn unknown_control(name: &Ident) -> String {
+/// old `WidgetType`-shaped spelling), a near miss, and no idea.
+fn unknown_widget(name: &Ident) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
-    if lowered != written && CONTROL_NAMES.contains(&lowered.as_str()) {
+    if lowered != written && WIDGET_NAMES.contains(&lowered.as_str()) {
         return format!(
-            "unknown control `{written}` — control names are lowercase, write `{lowered}`"
+            "unknown widget `{written}` — widget names are lowercase, write `{lowered}`"
         );
     }
-    match CONTROL_NAMES
+    match WIDGET_NAMES
         .iter()
         .filter(|n| edit_distance(&lowered, n) <= 2)
         .min_by_key(|n| edit_distance(&lowered, n))
     {
-        Some(near) => format!("unknown control `{written}` — did you mean `{near}`?"),
+        Some(near) => format!("unknown widget `{written}` — did you mean `{near}`?"),
         None => format!(
-            "unknown control `{written}` — expected one of {}, or `custom(MyWidget)`",
-            CONTROL_NAMES.join(", ")
+            "unknown widget `{written}` — expected one of {}, or `custom(MyWidget)`",
+            WIDGET_NAMES.join(", ")
         ),
     }
 }
 
 /// `DatetimeLocal` -> `datetime_local`. Only good enough to recognise the
-/// `ControlType`/`InputType` spellings an author might copy from the enum.
+/// `WidgetType`/`InputType` spellings an author might copy from the enum.
 fn to_snake(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     for (i, c) in s.char_indices() {
@@ -937,10 +937,10 @@ pub(crate) enum ButtonType {
 }
 
 /// The author-facing button-type vocabulary, same shape and same reasoning as
-/// [`controls!`]: one table generates both the parse and the list the error
+/// [`widgets!`]: one table generates both the parse and the list the error
 /// message reads from, so the two cannot drift apart.
 ///
-/// Lowercase for the same reason control names are — three of these five are
+/// Lowercase for the same reason widget names are — three of these five are
 /// literally the HTML `type` attribute, and the author is writing HTML's word.
 macro_rules! button_types {
     ( $( $name:ident => $variant:ident ),* $(,)? ) => {
@@ -980,7 +980,7 @@ button_types! {
 }
 
 /// The message for a button type that is not in the table — the same three
-/// cases, in the same order, as [`unknown_control`].
+/// cases, in the same order, as [`unknown_widget`].
 fn unknown_button_type(name: &Ident) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
@@ -1028,8 +1028,8 @@ mod tests {
             .collect()
     }
 
-    /// Field entries as `("dotted.path", "control", "label")`, with `""` for an
-    /// absent control or label. The control is rendered the way `expand` will
+    /// Field entries as `("dotted.path", "widget", "label")`, with `""` for an
+    /// absent widget or label. The widget is rendered the way `expand` will
     /// have to, so this also pins that `Input(Password)` keeps both idents.
     fn fields(spec: &FormSpecInput) -> Vec<(String, String, String)> {
         spec.entries
@@ -1037,10 +1037,10 @@ mod tests {
             .filter_map(|e| match e {
                 Entry::Field { path, body } => Some((
                     path.key(),
-                    match &body.control {
+                    match &body.widget {
                         None => String::new(),
-                        Some(ControlRef::Named(n)) => n.to_string(),
-                        Some(ControlRef::Custom(w)) => {
+                        Some(WidgetRef::Named(n)) => n.to_string(),
+                        Some(WidgetRef::Custom(w)) => {
                             format!("custom({})", quote!(#w))
                         }
                     },
@@ -1082,7 +1082,7 @@ mod tests {
         let spec = parse(quote! {
             LoginForm {
                 title: "Sign In",
-                password => { control: password },
+                password => { widget: password },
             }
         })
         .expect("LoginForm should parse");
@@ -1107,9 +1107,9 @@ mod tests {
             ChangePasswordForm {
                 title: "Change Password",
                 validator: check_new_and_confirm_match,
-                current_password => { control: password },
-                new_password => { control: password, label: "New password" },
-                confirm_new_password => { control: password, label: "Confirm new password" },
+                current_password => { widget: password },
+                new_password => { widget: password, label: "New password" },
+                confirm_new_password => { widget: password, label: "Confirm new password" },
             }
         })
         .expect("ChangePasswordForm should parse");
@@ -1130,8 +1130,8 @@ mod tests {
     // ── Shapes ───────────────────────────────────────────────────────────
 
     #[gtest]
-    fn a_bare_control_needs_no_parens() {
-        let spec = parse(quote! { Source { notes => { control: textarea } } }).unwrap();
+    fn a_bare_widget_needs_no_parens() {
+        let spec = parse(quote! { Source { notes => { widget: textarea } } }).unwrap();
         expect_that!(
             fields(&spec),
             elements_are![eq(&(
@@ -1144,7 +1144,7 @@ mod tests {
 
     #[gtest]
     fn a_label_only_entry_is_legal() {
-        // Nothing about a label requires a control — renaming a field is the
+        // Nothing about a label requires a widget — renaming a field is the
         // commonest customization there is.
         let spec = parse(quote! { Source { url => { label: "Homepage" } } }).unwrap();
         expect_that!(
@@ -1179,7 +1179,7 @@ mod tests {
         let spec = parse(quote! {
             Source {
                 title: "Sources",
-                notes => { control: textarea, label: "Notes", },
+                notes => { widget: textarea, label: "Notes", },
             }
         })
         .expect("trailing commas in both positions should parse");
@@ -1198,15 +1198,15 @@ mod tests {
 
     #[gtest]
     fn a_bare_list_path_addresses_the_list_itself() {
-        // No brackets: this is the `ListSet`, so it gets the legend. A control
-        // here is rejected at apply time, since a list has no single control.
+        // No brackets: this is the `ListSet`, so it gets the legend. A widget
+        // here is rejected at apply time, since a list has no single widget.
         let spec = parse(quote! { Quiz { answers => { label: "Answers" } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("answers"));
     }
 
     #[gtest]
     fn empty_brackets_address_every_row() {
-        let spec = parse(quote! { Quiz { answers[] => { control: textarea } } }).unwrap();
+        let spec = parse(quote! { Quiz { answers[] => { widget: textarea } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("answers[]"));
         expect_that!(fields(&spec)[0].1, eq("textarea"));
     }
@@ -1224,7 +1224,7 @@ mod tests {
     fn brackets_may_appear_more_than_once() {
         // `Vec<Vec<T>>` is already a supported shape, so the path syntax should
         // not be the thing that can't express it.
-        let spec = parse(quote! { Grid { rows[].cells[] => { control: textarea } } }).unwrap();
+        let spec = parse(quote! { Grid { rows[].cells[] => { widget: textarea } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("rows[].cells[]"));
     }
 
@@ -1254,7 +1254,7 @@ mod tests {
     fn an_unknown_key_names_itself() {
         let msg = err_of(quote! { Source { notes => { contrl: textarea } } });
         expect_that!(msg, contains_substring("contrl"));
-        expect_that!(msg, contains_substring("control"));
+        expect_that!(msg, contains_substring("widget"));
     }
 
     #[gtest]
@@ -1268,7 +1268,7 @@ mod tests {
     #[gtest]
     fn a_missing_fat_arrow_is_rejected() {
         expect_that!(
-            err_of(quote! { Source { notes { control: textarea } } }),
+            err_of(quote! { Source { notes { widget: textarea } } }),
             contains_substring("=>")
         );
     }
@@ -1290,7 +1290,7 @@ mod tests {
     //
     // Two entries naming the same path would silently MERGE rather than
     // conflict: both go through `fields.entry(path).or_default()`, so a second
-    // `label` overwrites the first and leaves the control in place. Nothing
+    // `label` overwrites the first and leaves the widget in place. Nothing
     // downstream can notice, which is why the parser has to.
 
     #[gtest]
@@ -1298,7 +1298,7 @@ mod tests {
         let msg = err_of(quote! {
             Source {
                 notes => { label: "Notes" },
-                notes => { control: textarea },
+                notes => { widget: textarea },
             }
         });
         expect_that!(msg, contains_substring("notes"));
@@ -1326,7 +1326,7 @@ mod tests {
             err_of(quote! {
                 Trip {
                     venues[].city => { label: "City" },
-                    venues[].city => { control: textarea },
+                    venues[].city => { widget: textarea },
                 }
             }),
             contains_substring("venues[].city")
@@ -1354,7 +1354,7 @@ mod tests {
         let spec = parse(quote! {
             Weird {
                 validator => { label: "Validator" },
-                buttons => { control: textarea },
+                buttons => { widget: textarea },
             }
         })
         .expect("fields named after the other two attributes should parse too");
@@ -1381,7 +1381,7 @@ mod tests {
         // Why the test is for `:` rather than against `=>`: here the second
         // token is `.`, so "not a fat arrow" would have sent this to
         // `parse_title` and failed on the missing colon.
-        let spec = parse(quote! { Page { title.text => { control: textarea } } })
+        let spec = parse(quote! { Page { title.text => { widget: textarea } } })
             .expect("a dotted path rooted at a keyword should parse as a field");
         expect_that!(fields(&spec)[0].0, eq("title.text"));
     }
@@ -1389,7 +1389,7 @@ mod tests {
     #[gtest]
     fn a_row_selector_on_a_keyword_name_is_a_field() {
         // Same hazard with `[` in the second position instead of `.`.
-        let spec = parse(quote! { Deck { buttons[].text => { control: text } } })
+        let spec = parse(quote! { Deck { buttons[].text => { widget: text } } })
             .expect("a row selector rooted at a keyword should parse as a field");
         expect_that!(fields(&spec)[0].0, eq("buttons[].text"));
     }
@@ -1404,7 +1404,7 @@ mod tests {
         // never reaches `parse_buttons` and dies on the missing `=>`.
         let spec = parse(quote! {
             FakeFormWithButtons {
-                some_data => { control: textarea },
+                some_data => { widget: textarea },
                 buttons: {
                     delete: { type: destructive, text: "Drop" },
                     reload: { type: reset },
@@ -1630,12 +1630,12 @@ mod tests {
     fn a_list_and_its_rows_are_different_paths() {
         // The collision that must NOT fire. `answers` is the `ListSet` (its
         // legend) and `answers[]` is every row; naming both in one spec is the
-        // normal way to label a list and give its rows a control. A dedup on the
+        // normal way to label a list and give its rows a widget. A dedup on the
         // idents alone would reject this.
         let spec = parse(quote! {
             Quiz {
                 answers => { label: "Answers" },
-                answers[] => { control: textarea },
+                answers[] => { widget: textarea },
             }
         })
         .expect("a list and its rows are separate targets");
@@ -1654,7 +1654,7 @@ mod tests {
         let spec = parse(quote! {
             Grid {
                 rows[] => { label: "Row" },
-                rows[].cells[] => { control: textarea },
+                rows[].cells[] => { widget: textarea },
             }
         })
         .expect("a row and a row's field are separate targets");
@@ -1683,32 +1683,32 @@ mod tests {
             contains_substring("validator")
         );
     }
-    // ── The control vocabulary ───────────────────────────────────────────
+    // ── The widget vocabulary ───────────────────────────────────────────
 
-    /// The `ControlRef` of the first field entry.
-    fn control_of(spec: &FormSpecInput) -> &ControlRef {
+    /// The `WidgetRef` of the first field entry.
+    fn widget_of(spec: &FormSpecInput) -> &WidgetRef {
         spec.entries
             .iter()
             .find_map(|e| match e {
-                Entry::Field { body, .. } => body.control.as_ref(),
+                Entry::Field { body, .. } => body.widget.as_ref(),
                 _ => None,
             })
-            .expect("a field with a control")
+            .expect("a field with a widget")
     }
 
     #[gtest]
     fn every_name_in_the_table_parses_and_resolves() {
-        // Generated from `CONTROL_NAMES`, so a name added to the table without a
+        // Generated from `WIDGET_NAMES`, so a name added to the table without a
         // match arm — or the reverse — fails here rather than at a call site.
-        for name in CONTROL_NAMES {
+        for name in WIDGET_NAMES {
             let id = Ident::new(name, proc_macro2::Span::call_site());
-            let spec = parse(quote! { Source { f => { control: #id } } })
+            let spec = parse(quote! { Source { f => { widget: #id } } })
                 .unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
-            let tokens = control_of(&spec).path().to_string();
+            let tokens = widget_of(&spec).path().to_string();
             expect_that!(
                 &tokens,
-                contains_substring(":: formoxus :: controls :: ControlType ::"),
-                "for control `{name}`"
+                contains_substring(":: formoxus :: widgets :: WidgetType ::"),
+                "for widget `{name}`"
             );
         }
     }
@@ -1717,17 +1717,17 @@ mod tests {
     fn a_name_resolves_to_the_qualified_two_level_path() {
         // The whole point of the flat vocabulary: `password` on the outside,
         // `Input(Password)` on the inside, and the author never sees the split.
-        let spec = parse(quote! { LoginForm { password => { control: password } } }).unwrap();
-        let tokens = control_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("ControlType :: Input"));
+        let spec = parse(quote! { LoginForm { password => { widget: password } } }).unwrap();
+        let tokens = widget_of(&spec).path().to_string();
+        expect_that!(tokens, contains_substring("WidgetType :: Input"));
         expect_that!(tokens, contains_substring("InputType :: Password"));
     }
 
     #[gtest]
     fn a_non_input_name_resolves_to_a_bare_variant() {
-        let spec = parse(quote! { Source { notes => { control: textarea } } }).unwrap();
-        let tokens = control_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("ControlType :: Textarea"));
+        let spec = parse(quote! { Source { notes => { widget: textarea } } }).unwrap();
+        let tokens = widget_of(&spec).path().to_string();
+        expect_that!(tokens, contains_substring("WidgetType :: Textarea"));
         expect_that!(tokens, not(contains_substring("InputType")));
     }
 
@@ -1735,46 +1735,46 @@ mod tests {
     fn an_html_spelling_wins_over_the_enums() {
         // `tel` is HTML's name; the variant is `Telephone`. The divergence is the
         // decoupling working — an author writes what HTML calls it.
-        let spec = parse(quote! { Source { phone => { control: tel } } }).unwrap();
+        let spec = parse(quote! { Source { phone => { widget: tel } } }).unwrap();
         expect_that!(
-            control_of(&spec).path().to_string(),
+            widget_of(&spec).path().to_string(),
             contains_substring("InputType :: Telephone")
         );
     }
 
     #[gtest]
     fn a_hyphenated_html_name_is_snake_cased() {
-        let spec = parse(quote! { Source { at => { control: datetime_local } } }).unwrap();
+        let spec = parse(quote! { Source { at => { widget: datetime_local } } }).unwrap();
         expect_that!(
-            control_of(&spec).path().to_string(),
+            widget_of(&spec).path().to_string(),
             contains_substring("InputType :: DatetimeLocal")
         );
     }
 
     #[gtest]
     fn a_near_miss_is_suggested() {
-        let msg = err_of(quote! { Source { p => { control: passwrod } } });
+        let msg = err_of(quote! { Source { p => { widget: passwrod } } });
         expect_that!(msg, contains_substring("passwrod"));
         expect_that!(msg, contains_substring("did you mean `password`"));
     }
 
     #[gtest]
     fn the_enum_spelling_is_named_as_a_case_error() {
-        // Someone reading `ControlType` will try `Password` and `DatetimeLocal`.
+        // Someone reading `WidgetType` will try `Password` and `DatetimeLocal`.
         // Both are in the table under another case, so say so instead of guessing.
         expect_that!(
-            err_of(quote! { Source { p => { control: Password } } }),
-            contains_substring("control names are lowercase, write `password`")
+            err_of(quote! { Source { p => { widget: Password } } }),
+            contains_substring("widget names are lowercase, write `password`")
         );
         expect_that!(
-            err_of(quote! { Source { p => { control: DatetimeLocal } } }),
+            err_of(quote! { Source { p => { widget: DatetimeLocal } } }),
             contains_substring("write `datetime_local`")
         );
     }
 
     #[gtest]
-    fn a_nonsense_control_lists_the_vocabulary() {
-        let msg = err_of(quote! { Source { p => { control: fluorescent } } });
+    fn a_nonsense_widget_lists_the_vocabulary() {
+        let msg = err_of(quote! { Source { p => { widget: fluorescent } } });
         expect_that!(msg, contains_substring("textarea"));
         expect_that!(msg, contains_substring("custom(MyWidget)"));
     }
@@ -1785,14 +1785,14 @@ mod tests {
         // want the spinner. What is NOT there is `integer`/`float`: those were
         // `InputType` variant names, never HTML ones, and two spellings for one
         // attribute is the drift this table exists to prevent.
-        let spec = parse(quote! { Q { n => { control: number } } }).unwrap();
+        let spec = parse(quote! { Q { n => { widget: number } } }).unwrap();
         expect_that!(
-            control_of(&spec).path().to_string(),
+            widget_of(&spec).path().to_string(),
             contains_substring("InputType :: Number")
         );
         expect_that!(
-            err_of(quote! { Q { n => { control: integer } } }),
-            contains_substring("unknown control `integer`")
+            err_of(quote! { Q { n => { widget: integer } } }),
+            contains_substring("unknown widget `integer`")
         );
     }
 
@@ -1802,7 +1802,7 @@ mod tests {
         // fails on `Input`, which is not a name — and `input` is not one either,
         // so the message falls through to the vocabulary list.
         expect_that!(
-            err_of(quote! { Source { p => { control: Input(Password) } } }).len(),
+            err_of(quote! { Source { p => { widget: Input(Password) } } }).len(),
             gt(0)
         );
     }
@@ -1811,17 +1811,17 @@ mod tests {
 
     #[gtest]
     fn a_custom_widget_parses() {
-        let spec = parse(quote! { Source { notes => { control: custom(MarkdownWidget) } } })
+        let spec = parse(quote! { Source { notes => { widget: custom(MarkdownWidget) } } })
             .expect("custom(MarkdownWidget) should parse");
         expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
     }
 
     #[gtest]
     fn a_custom_widget_may_be_module_qualified() {
-        // The reason it is a `Path` and not an `Ident`: naming a control should not
+        // The reason it is a `Path` and not an `Ident`: naming a widget should not
         // require importing it.
         let spec =
-            parse(quote! { Source { notes => { control: custom(widgets::MarkdownWidget) } } })
+            parse(quote! { Source { notes => { widget: custom(widgets::MarkdownWidget) } } })
                 .expect("a qualified component path should parse");
         expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
     }
@@ -1830,13 +1830,13 @@ mod tests {
     fn a_custom_widget_expands_to_a_non_capturing_closure() {
         // Pins the whole contract: the input is placed INSIDE rsx! (so it gets a
         // component scope and may use hooks) rather than called, the closure
-        // captures nothing (so it coerces to `fn(ControlProps) -> Element`), and
+        // captures nothing (so it coerces to `fn(WidgetProps) -> Element`), and
         // the readable name rides along because Debug on a fn pointer is an
         // address.
         let spec =
-            parse(quote! { Source { notes => { control: custom(MarkdownWidget) } } }).unwrap();
-        let tokens = control_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("ControlType :: Custom"));
+            parse(quote! { Source { notes => { widget: custom(MarkdownWidget) } } }).unwrap();
+        let tokens = widget_of(&spec).path().to_string();
+        expect_that!(tokens, contains_substring("WidgetType :: Custom"));
         expect_that!(tokens, contains_substring("name : \"MarkdownWidget\""));
         expect_that!(tokens, contains_substring("render : | __p |"));
         expect_that!(tokens, contains_substring("rsx !"));
@@ -1845,10 +1845,10 @@ mod tests {
 
     #[gtest]
     fn a_qualified_custom_widget_keeps_only_the_last_segment_as_its_name() {
-        let spec = parse(quote! { Source { notes => { control: custom(a::b::MarkdownWidget) } } })
-            .unwrap();
+        let spec =
+            parse(quote! { Source { notes => { widget: custom(a::b::MarkdownWidget) } } }).unwrap();
         expect_that!(
-            control_of(&spec).path().to_string(),
+            widget_of(&spec).path().to_string(),
             contains_substring("name : \"MarkdownWidget\"")
         );
     }
@@ -1856,7 +1856,7 @@ mod tests {
     #[gtest]
     fn custom_without_a_widget_is_rejected() {
         expect_that!(
-            err_of(quote! { Source { notes => { control: custom } } }),
+            err_of(quote! { Source { notes => { widget: custom } } }),
             contains_substring("custom(MyWidget)")
         );
     }
@@ -1864,7 +1864,7 @@ mod tests {
     #[gtest]
     fn custom_with_two_widgets_is_rejected() {
         expect_that!(
-            err_of(quote! { Source { notes => { control: custom(A, B) } } }),
+            err_of(quote! { Source { notes => { widget: custom(A, B) } } }),
             contains_substring("one component")
         );
     }
@@ -1892,7 +1892,7 @@ mod tests {
     #[gtest]
     fn a_plain_field_borrows_it() {
         expect_that!(
-            witness_of(quote! { LoginForm { password => { control: password } } }),
+            witness_of(quote! { LoginForm { password => { widget: password } } }),
             eq("let _ = & __s . password ;")
         );
     }
@@ -1910,7 +1910,7 @@ mod tests {
         // The loop is what makes a row's type INFERRED — the macro never has to
         // name the element type, which it could not do anyway.
         expect_that!(
-            witness_of(quote! { Quiz { answers[] => { control: textarea } } }),
+            witness_of(quote! { Quiz { answers[] => { widget: textarea } } }),
             eq("for __row0 in __s . answers . iter () { let _ = & __row0 ; }")
         );
     }
@@ -1928,7 +1928,7 @@ mod tests {
         // Depth-indexed bindings rather than shadowing: `__row0`/`__row1` keep a
         // rustc error pointing at the loop that actually failed.
         expect_that!(
-            witness_of(quote! { Grid { rows[].cells[] => { control: textarea } } }),
+            witness_of(quote! { Grid { rows[].cells[] => { widget: textarea } } }),
             eq("for __row0 in __s . rows . iter () \
                  { for __row1 in __row0 . cells . iter () { let _ = & __row1 ; } }")
         );
@@ -1949,8 +1949,8 @@ mod tests {
         let spec = parse(quote! {
             ChangePasswordForm {
                 title: "Change Password",
-                current_password => { control: password },
-                new_password => { control: password, label: "New password" },
+                current_password => { widget: password },
+                new_password => { widget: password, label: "New password" },
             }
         })
         .unwrap();
@@ -1966,7 +1966,7 @@ mod tests {
         expect_that!(out, contains_substring("let _ = & __s . new_password ;"));
         // And the builder chain is still there beside it.
         expect_that!(out, contains_substring("with_title"));
-        expect_that!(out, contains_substring("with_custom_control"));
+        expect_that!(out, contains_substring("with_custom_widget"));
     }
 
     #[gtest]

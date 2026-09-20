@@ -64,7 +64,7 @@ body {
     font: inherit;
 }
 
-/* The error state lives on the control, so a sibling selector reaches the
+/* The error state lives on the widget, so a sibling selector reaches the
    message without either element needing a class of its own. */
 [aria-invalid="true"] { border-color: var(--fx-error); }
 

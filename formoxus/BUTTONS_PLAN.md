@@ -210,7 +210,7 @@ path**. Three findings, each verified rather than reasoned about:
    a signal" — `tests/reflect.rs`, nine tests). An item cannot capture a local.
 
 So the reflection path trades the compile-time check for a render-time one,
-which is the trade the rest of that path already makes — an unwired control
+which is the trade the rest of that path already makes — an unwired widget
 fails at render too.
 
 - `using_fns!` builds a `Fns<T>` map, reading each closure's **arity**

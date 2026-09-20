@@ -1,12 +1,9 @@
-//! Tests that have to be written the way a *consumer* writes them.
+//! `form!` from the outside, as a consumer writes it.
 //!
-//! Most tests live inside the crate (`src/tests/`) because they reach
-//! crate-private items. This target exists for the ones that CAN'T: anything
-//! exercising formoxus's own macros has to be written from a crate where the
-//! path `formoxus::` resolves — which rules out formoxus itself.
-//!
-//! Submodules live in `tests/consumer/` and need `#[path]`, because cargo only
-//! auto-discovers `tests/*.rs` and would otherwise look for `tests/<name>.rs`.
+//! These could not be written anywhere else: the macro expands to absolute
+//! `::formoxus::` paths, which only resolve from a crate that is not formoxus.
+//! Inside the library they would not compile, so this file is the only place
+//! the expansion is exercised end to end rather than as tokens.
 
 use facet::Facet;
 use formoxus::form;
@@ -178,7 +175,7 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
 // ══ Field specs reaching the built tree ══════════════════════════════════
 //
 // The gap these close: the macro crate's tests stop at the emitted tokens, and
-// `src/tests/specs.rs` deliberately builds its `FormSpec`s by hand so it
+// `specs.rs` deliberately builds its `FormSpec`s by hand so it
 // stays honest about testing the *builder*. Neither would notice `expand()`
 // emitting a wrong key string, or dropping the field arm of the chain. These go
 // through `form!` and read the DOM, which is the only unambiguous evidence that
@@ -196,7 +193,7 @@ struct Venue {
 }
 
 /// Wide enough to reach every addressing shape in one model: a scalar, a nested
-/// struct, a list, and a `bool` whose derived control is a checkbox (so a `select`
+/// struct, a list, and a `bool` whose derived widget is a checkbox (so a `select`
 /// override is visibly different).
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Trip {
@@ -243,7 +240,7 @@ fn a_label_from_the_macro_reaches_the_markup() {
     expect_that!(html, not(contains_substring(">Name<")));
 }
 
-// ── A control ────────────────────────────────────────────────────────────
+// ── A widget ────────────────────────────────────────────────────────────
 
 #[component]
 fn PasswordSecret() -> Element {
@@ -252,7 +249,7 @@ fn PasswordSecret() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    secret => { control: password },
+                    secret => { widget: password },
                 }
             },
         )
@@ -261,10 +258,10 @@ fn PasswordSecret() -> Element {
 }
 
 #[gtest]
-fn a_control_from_the_macro_changes_the_rendered_input() {
+fn a_widget_from_the_macro_changes_the_rendered_input() {
     let html = render_to_html(PasswordSecret);
     expect_that!(html, contains_substring("type=\"password\""));
-    // The value round-trips like any other field's — `control: password` changes
+    // The value round-trips like any other field's — `widget: password` changes
     // the masking, not the binding.
     expect_that!(html, contains_substring("hunter2"));
     // A sibling scalar keeps its default, so the override landed on one field.
@@ -278,7 +275,7 @@ fn SelectedBool() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    confirmed => { control: select },
+                    confirmed => { widget: select },
                 }
             },
         )
@@ -287,7 +284,7 @@ fn SelectedBool() -> Element {
 }
 
 #[gtest]
-fn a_control_can_replace_a_derived_checkbox_with_a_select() {
+fn a_widget_can_replace_a_derived_checkbox_with_a_select() {
     // A `bool` derives a checkbox. Overriding to `select` crosses a bigger gap
     // than one `<input type=…>` to another — a different component entirely — so
     // it checks the dispatch and not just the attribute.
@@ -303,7 +300,7 @@ fn TextareaSecret() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    secret => { control: textarea },
+                    secret => { widget: textarea },
                 }
             },
         )
@@ -312,8 +309,8 @@ fn TextareaSecret() -> Element {
 }
 
 #[gtest]
-fn a_control_can_override_text_to_a_textarea() {
-    // `render_control`'s panic is survivable under SSR — a sibling field's
+fn a_widget_can_override_text_to_a_textarea() {
+    // `render_widget`'s panic is survivable under SSR — a sibling field's
     // markup keeps showing up even when this one fails to render — so this
     // asserts directly on the overridden field rather than on the page as a
     // whole. See `.claude/memory/next_up_two_todos.md`.
@@ -330,7 +327,7 @@ fn BothKeys() -> Element {
     use_form(|| {
         empty_form(form! {
             Trip {
-                secret => { control: password, label: "Passphrase" },
+                secret => { widget: password, label: "Passphrase" },
             }
         })
     })
@@ -375,7 +372,7 @@ fn a_dotted_path_reaches_exactly_one_nested_field() {
 // ── `[]`, the row selector ───────────────────────────────────────────────
 
 #[component]
-fn ListLabelAndRowControls() -> Element {
+fn ListLabelAndRowWidgets() -> Element {
     // Both halves of the list vocabulary in one spec: `stops` addresses the
     // `ListSet` itself (its legend), `stops[]` every row. That they can coexist is
     // the reason the parser compares on the rendered key rather than on idents.
@@ -385,7 +382,7 @@ fn ListLabelAndRowControls() -> Element {
             form! {
                 Trip {
                     stops => { label: "Stops along the way" },
-                    stops[] => { control: email },
+                    stops[] => { widget: email },
                 }
             },
         )
@@ -395,13 +392,13 @@ fn ListLabelAndRowControls() -> Element {
 
 #[gtest]
 fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
-    let html = render_to_html(ListLabelAndRowControls);
+    let html = render_to_html(ListLabelAndRowWidgets);
     // The list's own label, on the `fieldset`'s `legend`.
     expect_that!(
         html,
         contains_substring("<legend>Stops along the way</legend>")
     );
-    // And every row got the control — two rows in `a_trip`, so exactly two.
+    // And every row got the widget — two rows in `a_trip`, so exactly two.
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
     // Rows still hold their values: the override is presentational only.
     expect_that!(html, contains_substring("a@example.com"));
@@ -420,10 +417,10 @@ fn EverythingAtOnce() -> Element {
                     title: "Edit trip",
                     validator: trip_has_a_name,
                     name => { label: "Trip name" },
-                    secret => { control: password, label: "Passphrase" },
+                    secret => { widget: password, label: "Passphrase" },
                     venue.city => { label: "Town" },
                     stops => { label: "Stops" },
-                    stops[] => { control: email },
+                    stops[] => { widget: email },
                 }
             },
         )
@@ -460,7 +457,7 @@ fn every_entry_kind_coexists_in_one_spec() {
 
 #[gtest]
 fn a_passing_validator_lets_the_model_through() {
-    // The control for the rejection test: a validator that returns no errors must
+    // The widget for the rejection test: a validator that returns no errors must
     // not be mistaken for "no validator", and must not swallow the model.
     let quiet = Article {
         headline: "Trees are good".to_string(),
@@ -554,21 +551,21 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
 
 // ── `custom(Widget)` ─────────────────────────────────────────────────────
 //
-// The escape hatch for a value kind no built-in control can serve. These are
-// here rather than in `src/tests/` for the usual reason: a custom
-// widget is a component in the CONSUMING crate, which is exactly what the macro
-// has to expand against.
+// The escape hatch for a value kind no built-in widget can serve. These are
+// here, and not as an inline `mod tests`, for the usual reason: a custom
+// widget is a component in the CONSUMING crate, which is exactly what the
+// macro has to expand against.
 
 /// Stands in for `ui::MarkdownInput` and the source picker — a component taking
-/// the `(values, props)` pair every built-in control gets.
+/// the `(values, props)` pair every built-in widget gets.
 ///
 /// It reads `props` to prove the boundary arrives intact, and calls `use_hook`
 /// to prove the widget gets a component scope of its own. That second part is
 /// the load-bearing one: the real widgets need `use_resource` (to fetch a
 /// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
-/// function call from `render_control` could not provide.
+/// function call from `render_widget` could not provide.
 #[component]
-fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::controls::FieldProps) -> Element {
+fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::widgets::FieldProps) -> Element {
     let _ = values;
     let marker = use_hook(|| "scope-ok");
     let label = props.label.clone().unwrap_or_default();
@@ -586,7 +583,7 @@ fn CustomSecret() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    secret => { control: custom(ShoutyWidget) },
+                    secret => { widget: custom(ShoutyWidget) },
                 }
             },
         )
@@ -595,7 +592,7 @@ fn CustomSecret() -> Element {
 }
 
 #[gtest]
-fn a_custom_control_replaces_the_default_widget_entirely() {
+fn a_custom_widget_replaces_the_default_widget_entirely() {
     let html = render_to_html(CustomSecret);
     expect_that!(html, contains_substring(r#"class="shouty""#));
     expect_that!(
@@ -625,8 +622,8 @@ fn a_custom_widget_gets_its_own_component_scope() {
 }
 
 #[gtest]
-fn sibling_fields_still_render_their_normal_controls() {
-    // A custom control is per-field. Nothing about naming one for `secret`
+fn sibling_fields_still_render_their_normal_widgets() {
+    // A custom widget is per-field. Nothing about naming one for `secret`
     // should disturb how `name` or `confirmed` render.
     let html = render_to_html(CustomSecret);
     expect_that!(html, contains_substring(r#"name="name""#));

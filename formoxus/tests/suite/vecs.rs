@@ -438,9 +438,9 @@ fn QuizForm() -> Element {
 #[gtest]
 fn each_row_renders_inside_its_own_wrapper() {
     // The wrapper exists so a row has an element to carry dioxus's `key:` — and
-    // it is where a per-row remove control will go. The key itself is NOT
+    // it is where a per-row remove widget will go. The key itself is NOT
     // visible here: dioxus keys aren't DOM attributes, they only show up in
-    // diffing behaviour, which needs a control that can dispatch `AddRow`
+    // diffing behaviour, which needs a widget that can dispatch `AddRow`
     // before it can be driven. This guards the structure the key rides on.
     let html = super::render_to_html(QuizForm);
     expect_that!(html.matches(r#"<div class="form-row">"#).count(), eq(2));
@@ -448,19 +448,19 @@ fn each_row_renders_inside_its_own_wrapper() {
     expect_that!(html, contains_substring(r#"name="answers.#1""#));
 }
 
-// ── The row controls ─────────────────────────────────────────────────────
+// ── The row widgets ─────────────────────────────────────────────────────
 //
 // These build the list up THROUGH THE UI rather than mounting a populated one,
 // because that is the only way to know which button is which: listener
 // registration order is the order dioxus creates dynamic nodes, not document
 // order, so "the first click listener" is not "the Add button." Built this way,
-// every control is identified by the click that produced it.
+// every widget is identified by the click that produced it.
 //
 // None of these prove the row `key:` earns its keep — appending diffs correctly
 // by position too, so removing the key fails nothing here. The key's payoff is
-// mid-list insertion, which has no control yet; the data half of that claim is
+// mid-list insertion, which has no widget yet; the data half of that claim is
 // `inserting_at_the_front_does_not_move_the_rows_below_it`, and the DOM half
-// arrives with the insert-between-rows control.
+// arrives with the insert-between-rows widget.
 
 #[component]
 fn BlankQuizForm() -> Element {
@@ -495,7 +495,7 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     let mut app = Harness::mount(BlankQuizForm);
     let add = app.only_listener("click");
 
-    // Row one. The control it reveals is the one that wasn't there before.
+    // Row one. The widget it reveals is the one that wasn't there before.
     let clicks = app.listeners("click");
     let inputs = app.listeners("input");
     app.click(add);
@@ -547,8 +547,8 @@ fn a_list_renders_its_own_label() {
 }
 
 #[gtest]
-fn the_row_controls_never_submit_the_form() {
-    // Inside a `<form>` a bare `<button>` is `type="submit"`. Both controls
+fn the_row_widgets_never_submit_the_form() {
+    // Inside a `<form>` a bare `<button>` is `type="submit"`. Both widgets
     // would then submit the form instead of editing the list — and since the
     // demo page's Check button is a real submit, that failure would look like
     // "adding a row validates the form."

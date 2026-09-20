@@ -1,17 +1,17 @@
 ---
 name: choice-fields-design
-description: "Design for VALUE-choice fields (Select/RadioGroup/SelectMultiple/CheckboxMultiple), from Todd's 2026-09-19 proposal plus what it collides with. DECIDED: a Choice{display,raw_value} parsed through the normal vtable path. OPEN: how the choices callback is carried, because a Box<dyn Fn> cannot live on ControlType. Nothing built"
+description: "Design for VALUE-choice fields (Select/RadioGroup/SelectMultiple/CheckboxMultiple), from Todd's 2026-09-19 proposal plus what it collides with. DECIDED: a Choice{display,raw_value} parsed through the normal vtable path. OPEN: how the choices callback is carried, because a Box<dyn Fn> cannot live on WidgetType. Nothing built"
 metadata:
   type: project
 ---
 
-Answers the fork left open in [[control-table-and-choice]]: what produces a
+Answers the fork left open in [[widget-table-and-choice]]: what produces a
 *value* choice, as distinct from the shape choice `VariantSet` already handles.
 Read that file first for why this is not a missing-match-arm job.
 
 ## Todd's proposal (2026-09-19)
 
-Choices apply to four controls — `Select`, `SelectMultiple`,
+Choices apply to four widgets — `Select`, `SelectMultiple`,
 `CheckboxMultiple`, `RadioGroup` — and arrive at three different times:
 
 1. **Static** — known when the form is declared.
@@ -49,9 +49,9 @@ and what `apply_leaves` reads as "not supplied". A `Choice` with an empty raw
 value is therefore indistinguishable from an unanswered field. Reject it at
 construction rather than discovering it as a silently-unset form.
 
-## The collision: a closure cannot live on `ControlType`
+## The collision: a closure cannot live on `WidgetType`
 
-`ControlType` is `Clone + Debug + PartialEq`, and its `Custom` variant already
+`WidgetType` is `Clone + Debug + PartialEq`, and its `Custom` variant already
 uses a **`fn` pointer rather than `Box<dyn Fn>` for exactly this reason** — a
 boxed closure supplies none of the three (see
 [[facet-newtypes-and-custom-widgets]]). Those derives are load-bearing:
@@ -59,10 +59,10 @@ boxed closure supplies none of the three (see
 
 `Provider<C>` dodges the problem differently — `Rc<dyn Fn() -> Pin<Box<dyn
 Future<Output = C>>>>` with a hand-written `Clone` — but it is neither `Debug`
-nor `PartialEq`, so it cannot sit inside `ControlType` either.
+nor `PartialEq`, so it cannot sit inside `WidgetType` either.
 
 **So: whatever carries choices must supply Clone + Debug + PartialEq, or it
-must not live on `ControlType`.** This is the open decision.
+must not live on `WidgetType`.** This is the open decision.
 
 ### Option A — `fn` pointer, plus `Provider` for the fetched case
 
@@ -91,7 +91,7 @@ is the whole reason Provider carries case (2) under this option.
 ### Option B — one capturing closure, in a side-channel
 
 Keep a single `Box<dyn Fn>`/`Rc<dyn Fn>` covering all three, but store it
-**keyed by path off to the side** instead of as a field on `ControlType` — the
+**keyed by path off to the side** instead of as a field on `WidgetType` — the
 move `FormField` already makes with its `wrapper: Option<&'static Shape>`. The
 derives survive because the closure never enters the type that needs them.
 Simpler for a consumer (one concept, not two); costs a lookup and a second
@@ -101,7 +101,7 @@ place where per-field data lives.
 
 ## Single and multiple are NOT one feature
 
-The four controls split along a line the proposal does not draw:
+The four widgets split along a line the proposal does not draw:
 
 - **`Select` and `RadioGroup` pick one value.** These drop straight into the
   existing leaf model — one leaf, one string, parsed as it always was.
@@ -112,12 +112,12 @@ The four controls split along a line the proposal does not draw:
   question about how several values live under one path, and it interacts with
   leaf-paths-are-the-wire-format.
 
-**Ship the two single-choice controls first**; treat multi as its own design
+**Ship the two single-choice widgets first**; treat multi as its own design
 pass.
 
 ## A simplification this buys
 
-If choices attach to the **control** rather than to the type, then a `String`
+If choices attach to the **widget** rather than to the type, then a `String`
 field with `select` + choices simply works, and so does an `i64` with a radio
 group of numeric raw values — the raw string parses as whatever the field
 already is. `ValueKind::Choice` and `ValueKind::MultiChoice` then never need
@@ -127,7 +127,7 @@ variants rather than fill them in.
 It also keeps shape-choice (`VariantSet`/`VariantSelect`, "which variant is
 this value?") and value-choice ("which of these candidates?") as separate
 mechanisms answering separate questions, which is the conclusion
-[[control-table-and-choice]] was heading toward.
+[[widget-table-and-choice]] was heading toward.
 
 ## Watch out for
 
@@ -137,6 +137,6 @@ mechanisms answering separate questions, which is the conclusion
   render` is a plain function with no scope; reading the store there subscribes
   whoever called it, and one keystroke re-renders the whole form. This is the
   same constraint that forced one-component-per-leaf ([[facet-form-spike]]).
-- `control_matrix` in the examples crate is the check: implementing
+- `widget_matrix` in the examples crate is the check: implementing
   `Select`/`RadioGroup` for real should move cells from PANIC to ok, and the
   45/84 baseline is what to compare against.

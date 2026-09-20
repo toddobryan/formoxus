@@ -141,9 +141,9 @@ impl FormMember for FieldSet {
             // Checked before anything is written, so a rejected spec leaves the
             // member untouched — which matters the day this becomes a `Result`.
             assert!(
-                spec.custom_control.is_none(),
-                "{my_path} is a field set, which has no single control to \
-                 override (a composite control for one isn't supported yet) — \
+                spec.custom_widget.is_none(),
+                "{my_path} is a field set, which has no single widget to \
+                 override (a composite widget for one isn't supported yet) — \
                  did you mean `label`?"
             );
             self.label = spec.label.clone().or(self.label.take());

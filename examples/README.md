@@ -10,17 +10,17 @@ It is a workspace member for that reason, but deliberately *not* a
 ```bash
 cargo test                      # fast loop — library and macros only
 cargo test --workspace          # what CI should run — includes this crate
-cargo run -p formoxus-examples --bin control_matrix
+cargo run -p formoxus-examples --bin widget_matrix
 ```
 
-## `control_matrix`
+## `widget_matrix`
 
 A development tool rather than a teaching example. It prints which
-`(value kind, control)` pairs actually render.
+`(value kind, widget)` pairs actually render.
 
-That set is not written down anywhere. `form!` accepts every control name in
+That set is not written down anywhere. `form!` accepts every widget name in
 its table against every field, and whether the pair then works is decided at
-runtime by a match in `ScalarInput` whose fallthrough arm panics — so a reader
+runtime by a match in `ScalarWidget` whose fallthrough arm panics — so a reader
 of the macro's table cannot tell which combinations are real. This prints the
 truth, and keeps the root README's "What isn't done" section honest.
 
@@ -34,7 +34,7 @@ for `name="<path>"` in the output instead.
 Two earlier markers were false positives worth knowing about, since they say
 something real about the widgets: a `hidden` input deliberately renders bare
 with no label at all, and a checkbox puts its text in a plain `<label>` rather
-than the `field-label` span every other control uses.
+than the `field-label` span every other widget uses.
 
 ## Still to come
 

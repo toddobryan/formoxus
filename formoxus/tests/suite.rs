@@ -35,8 +35,6 @@ mod errors;
 mod form_macro;
 #[path = "suite/forms.rs"]
 mod forms;
-#[path = "suite/inputs.rs"]
-mod inputs;
 #[path = "suite/into_slot.rs"]
 mod into_slot;
 #[path = "suite/label_case.rs"]
@@ -53,6 +51,8 @@ mod specs;
 mod submissions;
 #[path = "suite/vecs.rs"]
 mod vecs;
+#[path = "suite/widgets.rs"]
+mod widgets;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///
@@ -139,7 +139,7 @@ impl Harness {
     }
 
     /// The sole listener for `event`, asserting there is exactly one. Keeps a
-    /// test from silently firing at the wrong control when the markup grows.
+    /// test from silently firing at the wrong widget when the markup grows.
     pub fn only_listener(&self, event: &str) -> ElementId {
         let found = self.listeners(event);
         assert_eq!(
@@ -151,7 +151,7 @@ impl Harness {
         found[0]
     }
 
-    /// Fire `event` at `id` with `value` as the control's value, then flush the
+    /// Fire `event` at `id` with `value` as the widget's value, then flush the
     /// re-render so the next assertion sees the result. Returns how many DOM
     /// edits that re-render produced — see
     /// [`switching_variants_actually_edits_the_dom`] for why the count matters.
@@ -195,7 +195,7 @@ impl Harness {
 
 /// The listeners in `after` that weren't in `before`.
 ///
-/// How a test identifies a control that an edit just revealed. Position won't
+/// How a test identifies a widget that an edit just revealed. Position won't
 /// do it: registration order is the order dioxus creates dynamic nodes, not
 /// document order, so "the second `change` listener" is not "the nested select."
 pub fn new_since(before: &[ElementId], after: Vec<ElementId>) -> Vec<ElementId> {

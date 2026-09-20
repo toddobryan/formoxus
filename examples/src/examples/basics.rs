@@ -17,9 +17,9 @@ fn spec() -> FormSpec<Signup> {
     form! {
         Signup {
             title: "Sign up",
-            email => { control: email },
-            password => { control: password },
-            bio => { label: "About you", control: textarea },
+            email => { widget: email },
+            password => { widget: password },
+            bio => { label: "About you", widget: textarea },
             agreed => { label: "I agree to the terms" },
             buttons: {
                 create: { type: submit, text: "Create account" },

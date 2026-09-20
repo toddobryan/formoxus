@@ -51,7 +51,7 @@ pub type Handler<M> = Rc<dyn Fn(M) -> Pin<Box<dyn Future<Output = ()>>>>;
 /// form is invalid.
 pub type UncheckedHandler = Rc<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>;
 
-/// A re-invokable async fetch a control calls when it needs external data —
+/// A re-invokable async fetch a widget calls when it needs external data —
 /// e.g. a picker's list of choices — supplied at the render call site rather
 /// than baked into the form's declaration.
 ///
@@ -186,7 +186,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// survives a schema rebuild because paths are stable under one.
     values: ValuesByPath,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
-    /// control layer stay ignorant of `T` — [`RenderCtx`] can't be generic
+    /// widget layer stay ignorant of `T` — [`RenderCtx`] can't be generic
     /// without making every member type generic too.
     on_edit: Callback<Edit>,
     /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
@@ -348,7 +348,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             // A grouping element so the button row is addressable as one
             // thing: `.formoxus-buttons` is the hook for laying it out, and
             // for opting its buttons out of any full-width rule a consumer's
-            // stylesheet applies to form controls.
+            // stylesheet applies to form widgets.
             div { class: "formoxus-buttons", { rendered.into_iter() } }
         }
     }
@@ -429,7 +429,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// [`empty_form`] goes back to empty.
     ///
     /// **A `type="reset"` button does not do this on its own.** Native reset
-    /// restores the DOM's own idea of each control's initial value, but every
+    /// restores the DOM's own idea of each widget's initial value, but every
     /// formoxus input is controlled — its value comes from the store on the
     /// next render — so the old values would reappear immediately. The state
     /// is the thing that has to change.
@@ -444,7 +444,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `apply_leaves` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            crate::controls::write_value(&path, self.values, raw);
+            crate::widgets::write_value(&path, self.values, raw);
         }
     }
 

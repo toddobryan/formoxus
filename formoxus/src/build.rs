@@ -279,7 +279,7 @@ fn option_member(
 ///
 /// Note this needs NO `#[facet(transparent)]`. That attribute would also work
 /// (it populates `shape.inner`), but requiring it would mean a newtype in a
-/// crate we don't control could never be a form field.
+/// crate we don't widget could never be a form field.
 pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
     let Type::User(UserType::Struct(st)) = &shape.ty else {
         return None;
@@ -291,8 +291,8 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
     inner.scalar_type().map(|_| inner)
 }
 
-/// The closed set of scalar types with a built-in control. Anything else needs
-/// a custom control and returns `None` here, which `member_for_shape` turns into
+/// The closed set of scalar types with a built-in widget. Anything else needs
+/// a custom widget and returns `None` here, which `member_for_shape` turns into
 /// a panic naming the type.
 ///
 /// **`usize` and `isize` are left out on purpose, not by oversight.** Their
@@ -304,8 +304,8 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 /// runtime, on one target.
 ///
 /// **This walk no longer decides anything about presentation.** It used to
-/// assign an `InputKind` per arm; the control is now derived on the read side
-/// from `T::SHAPE`, with `custom_control` beside it as the override slot. So the
+/// assign an `InputKind` per arm; the widget is now derived on the read side
+/// from `T::SHAPE`, with `custom_widget` beside it as the override slot. So the
 /// only thing the shape contributes here is *which concrete `T`* the field
 /// carries, and the only thing the walk contributes is `optional` — a
 /// structural fact (`Option` peeling) that no later reader can recover,
@@ -333,7 +333,7 @@ fn scalar_member(
                         name: name.to_string(),
                         label: None,
                         optional,
-                        custom_control: None,
+                        custom_widget: None,
                         wrapper,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
@@ -460,7 +460,7 @@ fn enum_member(
     Box::new(VariantSet {
         name: name.to_string(),
         label: None,
-        custom_control: None,
+        custom_widget: None,
         enum_type,
         optional,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it

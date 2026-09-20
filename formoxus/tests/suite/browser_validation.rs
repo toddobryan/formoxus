@@ -90,7 +90,7 @@ fn reset_restores_the_seeded_values() {
         let form = use_form(move || form_for(&contact, form! { Contact {} }));
 
         // Type over the seeded value, then put it back.
-        formoxus::controls::write_value("name", form.values(), "Grace".to_string());
+        formoxus::widgets::write_value("name", form.values(), "Grace".to_string());
         form.reset();
 
         form.render_fragment()
@@ -106,7 +106,7 @@ fn reset_of_an_empty_form_clears_it() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        formoxus::controls::write_value("name", form.values(), "typed".to_string());
+        formoxus::widgets::write_value("name", form.values(), "typed".to_string());
         form.reset();
         form.render_fragment()
     }

@@ -322,7 +322,7 @@ the inner type is, so it never needs the concrete type reflection can't give us.
 
 **`Absent` renders a disabled `--none--` input** (`ABSENT_DISPLAY`) so leaving a value out
 stays visible rather than the field silently vanishing — and it's where a `<select>` would
-go if variant choice ever becomes live. Safe because **disabled controls aren't submitted**,
+go if variant choice ever becomes live. Safe because **disabled widgets aren't submitted**,
 so that string never returns through `FormData::values()` and can't be mistaken for a value.
 
 That makes `VariantSet::Absent` the first member that **renders without being a leaf**,
@@ -906,7 +906,7 @@ gap.**
 
 **Listener registration order is NOT document order.** It is the order dioxus
 creates dynamic nodes. A test that picks "the nested select" as `listeners[1]`
-fires at the wrong control. Identify a revealed control by the fact that it
+fires at the wrong widget. Identify a revealed widget by the fact that it
 *appeared* (diff the listener set across the edit) rather than by position.
 
 **A structural `rsx!` change needs a full `dx serve` restart.** Hot reload
@@ -1111,7 +1111,7 @@ The bug: `optional` was threaded like `FormMode`, so `Option<Venue>` gave every
 field of `Venue` `optional: true`, and a plain `bool` inside it rendered the
 tri-state select — offering "No Value" for a state the type cannot hold. Pinned
 by `a_plain_bool_inside_an_optional_struct_still_renders_a_checkbox` and its
-opposite `an_optional_bool_renders_a_tri_state_control_instead`, so a fix can't be
+opposite `an_optional_bool_renders_a_tri_state_widget_instead`, so a fix can't be
 "stop setting it". Nothing else caught it: `optional_containers` was all strings.
 
 **A leaf reads its own value; only a non-leaf takes it as a prop.** `SelectInput`
@@ -1199,7 +1199,7 @@ tri-state select whose blank really is absence, so there `Empty` must reach
 
 ### The rejected alternative worth remembering
 
-Todd proposed making a required `bool` a three-choice control (unanswered /
+Todd proposed making a required `bool` a three-choice widget (unanswered /
 checked / unchecked) so the *user* could express the distinction, since a
 checkbox renders identically whether untouched or deliberately unticked — the
 store's three states (`""`, `"true"`, `"false"` after tick-then-untick) are
@@ -1224,7 +1224,7 @@ the type cannot hold") does not actually survive the reframe: the third option
 is not *no value for the field*, it is *not yet answered* — form state, not type
 state. The test still earns its place for the flag-leak bug it caught.
 
-## Retiring the derive path, part 1: the control taxonomy (2026-09-10, DESIGN ONLY)
+## Retiring the derive path, part 1: the widget taxonomy (2026-09-10, DESIGN ONLY)
 
 **Nothing is implemented. This section is a handoff — it ends with an open
 question Todd has to answer before code starts.**
@@ -1245,19 +1245,19 @@ have `#[facet(sensitive)]` with an O(1) `Field::is_sensitive()`.
 
 ### Todd's reframe #1: `InputKind` is the wrong shape AND the wrong name
 
-Proposed instead of a flat `InputKind`: **`ControlType`** whose variants are HTML
+Proposed instead of a flat `InputKind`: **`WidgetType`** whose variants are HTML
 *elements* — `Input(InputType)`, `Select`, `TextArea`, `Meter`, `Progress`, … —
 with `InputType` carrying `Text | Password | Email | Search | Tel | Url | Range |
 Date | Time | …`. Mirrors HTML's own element→type structure instead of flattening
 it, and extends along the axis that actually varies.
 
 **The consequence this exposes (raised by Claude, not yet decided):** `Int { min,
-max }` and `Float` are NOT control types. Under the new taxonomy both collapse to
+max }` and `Float` are NOT widget types. Under the new taxonomy both collapse to
 `Input(Text)` — which is already how they render — and `min`/`max` have nowhere
 to live. Today's enum is doing two jobs at once:
 
 ```
-ControlType::Input(InputType::…)   // what element renders
+WidgetType::Input(InputType::…)   // what element renders
 Constraint { min, max, … }         // what values are valid
 ```
 
@@ -1270,7 +1270,7 @@ Also flagged: `Meter`/`Progress` are *output* elements. Including them widens th
 type from "how the user edits this" to "how this is displayed" — possibly wanted,
 but it should be a decision, not a drift.
 
-Note `ControlType::Select` REAPPEARS after `InputKind::Select` was deleted the
+Note `WidgetType::Select` REAPPEARS after `InputKind::Select` was deleted the
 same day, and that is consistent rather than a reversal: the deletion was about a
 *shape* not being able to imply a select's OPTIONS, while `Select`-as-element is a
 different claim. `Boolean { optional: true }` (which already renders a select)
@@ -1298,17 +1298,17 @@ namespace (facet-macros-impl-0.46.5/src/extension.rs:147-170). A small proc-macr
 surface, on a pre-1.0 mechanism that can churn — and shedding macro machinery was
 part of why the reflection path exists.
 
-**B. The call site says it.** `form_for(&model).control("password",
+**B. The call site says it.** `form_for(&model).widget("password",
 InputType::Password)`. A `String` does not IMPLY password — that is an authoring
 decision, not a shape fact, so it belongs at CALL-SITE time, which is exactly
 where the registry already puts widget choice ("Provider timing", above). No
 facet coupling, no macro surface, and it is the registry arriving early rather
-than a new mechanism. The trade: verbosity, and the control choice no longer sits
+than a new mechanism. The trade: verbosity, and the widget choice no longer sits
 beside the field it describes.
 
 ### Where to start once A-vs-B is answered
 
-The `ControlType`/`InputType` split plus the constraint extraction, because Login
+The `WidgetType`/`InputType` split plus the constraint extraction, because Login
 cannot be rewritten without password support and everything ELSE Login needs is
 plumbing: title (setter for an existing field), form-level errors (an existing
 `Vec<FormError>` nothing populates), buttons (zero work — the page owns `form`
@@ -1328,17 +1328,17 @@ probably a small struct rather than a bare `Vec<(String, String)>`.
 by deserialization itself, and only semantic rules (passwords match, strength)
 need re-running server-side.
 
-### SUPERSEDED — read [[formoxus-control-survey]] instead
+### SUPERSEDED — read [[formoxus-widget-survey]] instead
 
 The section above ends on an open question that was answered the next night, and
 the design moved well past it. `#[facet(formoxus::password)]` won for
 form-purpose structs (with a separate, still-undesigned mechanism for independent
 models), the `__attr!` cost recorded above is too high (`define_attr_grammar!`
 generates it), and the constraint axis landed differently: constraints nest in the
-VALUE kind, not in `ControlType`, because a presentational override must not
+VALUE kind, not in `WidgetType`, because a presentational override must not
 discard validation. `InputKind` turned out to be misnamed rather than mis-shaped.
 Full record, with the surveys and the verified facet findings, in
-[[formoxus-control-survey]].
+[[formoxus-widget-survey]].
 
 ## The `form2!` decision, and `FormSpec` (2026-09-12, through `9d5482e`)
 
@@ -1361,10 +1361,10 @@ had built the losing option.
    data — it cannot generate types, and `name = sign_in` is a bare ident, which
    is not one of its payload kinds. So attributes structurally could NOT reach
    derive-path parity; a proc macro can.
-3. **It sheds every sharp edge** listed in [[formoxus-control-survey]]'s
+3. **It sheds every sharp edge** listed in [[formoxus-widget-survey]]'s
    correction section — the `Option<T>` wrapping, the non-uniform read protocol,
    struct fields limited to five types, no nesting, `Facet` forced onto
-   `ControlType`/`InputType`, tests exiled from the crate, pre-1.0 churn.
+   `WidgetType`/`InputType`, tests exiled from the crate, pre-1.0 churn.
 
 **Costs accepted, both named explicitly.** Presentation no longer sits beside the
 field — Todd's own earlier argument for attributes — mitigated by putting the
@@ -1442,19 +1442,19 @@ the witness fn); and the walks differ anyway (`edit` finds one member by path,
 What IS shared is the signature convention — `customize(&mut self, prefix, spec)`
 mirroring `edit(&mut self, prefix, edit)`, and `edit`'s doc comment about "one
 method rather than one per edit kind" applies verbatim. **Do not add a setter per
-property** (`set_control`, `set_label`, …) — that widens the trait every time
+property** (`set_widget`, `set_label`, …) — that widens the trait every time
 `FieldSpec` grows a field.
 
 Mutation must go through the trait at all because `FormState.members` is
 `Vec<Box<dyn FormMember>>` and `FormMember: Debug` only — no `Any`, no downcast,
-so nothing outside can reach `custom_control` on the concrete `FormField<T>`.
+so nothing outside can reach `custom_widget` on the concrete `FormField<T>`.
 
 ### Small but sharp
 
 **`IndexMap`, not `HashMap` or `Vec<(String, FieldSpec)>`.** Ordered (stable
 `Debug`; keeps a future field-ordering customization possible) AND overwrites on
 duplicate insert, which a `Vec` would not — `.with_label(p, …)` after
-`.with_custom_control(p, …)` must reach the same entry. Its `PartialEq` ignores
+`.with_custom_widget(p, …)` must reach the same entry. Its `PartialEq` ignores
 order, and `insert` keeps an existing key's position. Already in the lock
 transitively, so it costs nothing to build.
 
@@ -1507,13 +1507,13 @@ fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs);
 - `VariantSet` recurses via `child_prefix` (children sit a segment deeper under the
   variant descriptor); `OptionMember` forwards the prefix untouched.
 
-### Which members may take a control
+### Which members may take a widget
 
-| member | `label` | `custom_control` |
+| member | `label` | `custom_widget` |
 |---|---|---|
 | `FormField` | yes | yes |
 | `VariantSet` | yes | **yes** — it owns the `<select>`; a radio group is meaningful, not yet rendered |
-| `FieldSet` | yes (legend) | PANIC — no single control exists |
+| `FieldSet` | yes (legend) | PANIC — no single widget exists |
 | `ListSet` | yes | PANIC, with a message pointing at `[]` |
 | `OptionMember` | forwards | forwards |
 
@@ -1524,7 +1524,7 @@ The asymmetry is deliberate. Panics fire at construction (house precedent:
 
 ```
 venues        => { label: "Venues" }    the ListSet's legend
-venues[]      => { control: … }         every row
+venues[]      => { widget: … }         every row
 venues[].city => { label: "City" }      the `city` field of every row
 ```
 
@@ -1537,7 +1537,7 @@ row's fields are unnameable.
 (`core/src/form_component/impls/collections.rs`). But it gives the row config its
 own NAMED slot. We copied that separation rather than overloading one entry:
 overloading would make a single `FieldSpec`'s `label` apply to the container and
-its `control` to the children, two halves travelling opposite directions.
+its `widget` to the children, two halves travelling opposite directions.
 
 **How it resolves:** `[]` survives into the map key. `ListSet::apply_specs`
 substitutes each row's actual segment (`k.replace("venues[]", "venues.#0")`).
@@ -1723,7 +1723,7 @@ verified with a throwaway compile rather than reasoned about:
    local.
 
 Todd's call, after seeing all three: **runtime checking.** The reflection path
-already fails at render for an unwired control, so this is the trade it makes
+already fails at render for an unwired widget, so this is the trade it makes
 everywhere else.
 
 **The macro is `using_fns!`.** It builds a `Fns<T>` name→fn map and reads each

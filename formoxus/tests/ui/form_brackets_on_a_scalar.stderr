@@ -4,13 +4,13 @@ error[E0599]: no method named `iter` found for struct `std::string::String` in t
 13 |       let _ = empty_form::<Article>(form! {
    |  ___________________________________-
 14 | |         Article {
-15 | |             headline[] => { control: textarea },
+15 | |             headline[] => { widget: textarea },
    | |            -^^^^^^^^ method not found in `std::string::String`
    | |____________|
    |
    |
 help: because of the in-memory representation of `&str`, to obtain an `Iterator` over each of its codepoint use method `chars`
    |
-15 -             headline[] => { control: textarea },
-15 +             chars[] => { control: textarea },
+15 -             headline[] => { widget: textarea },
+15 +             chars[] => { widget: textarea },
    |
