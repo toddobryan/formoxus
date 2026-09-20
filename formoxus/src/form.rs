@@ -206,7 +206,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// `peek`, not `read`: the casing is fixed for the life of the form, so
     /// subscribing a render scope to the whole state for it would re-render on
     /// every unrelated structural edit.
-    fn label_case(&self) -> LabelCase {
+    /// The casing this form's derived labels actually use, with the whole
+    /// cascade applied: what the form stated, else the app-wide
+    /// [`Defaults`](crate::Defaults), else the built-in.
+    pub fn label_case(&self) -> LabelCase {
         self.state
             .peek()
             .label_case()
