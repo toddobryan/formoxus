@@ -2,6 +2,7 @@
 
 use crate::RenderCtx;
 use crate::build::{FormMode, variant_members};
+use crate::controls::{ControlType, VariantSelect};
 use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
@@ -9,7 +10,6 @@ use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     variant_segment,
 };
-use crate::widgets::{ControlType, VariantSelect};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use std::collections::HashMap;
@@ -268,7 +268,7 @@ impl FormMember for VariantSet {
     }
 
     fn raw_value(&self) -> String {
-        // Not a scalar — the choice is fixed, not an input of its own.
+        // Not a scalar — the choice is fixed, not a control of its own.
         String::new()
     }
 
@@ -289,7 +289,7 @@ impl FormMember for VariantSet {
         // `self.errors` sits at `my_path`, where the `<select>` is, one segment
         // SHALLOWER than `child_prefix`'s `$Variant` — the same two-paths trap
         // `edit` documents. Reporting them under `nested` would name a path no
-        // widget renders.
+        // control renders.
         //
         // Three writers put errors there and all three have to come back out:
         // `validate` (unchosen), `lookup_variant` (a stale name from a live

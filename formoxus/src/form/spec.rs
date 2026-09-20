@@ -8,9 +8,9 @@ use facet::Facet;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
+use crate::controls::ControlType;
 use crate::error::FormError;
 use crate::label_case::LabelCase;
-use crate::widgets::ControlType;
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {

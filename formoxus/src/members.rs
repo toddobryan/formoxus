@@ -30,7 +30,7 @@ pub trait FormMember: Debug {
     fn render(&self, ctx: &RenderCtx) -> Element;
     /// This member's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
-    /// widget layer only ever asks leaves for this.
+    /// control layer only ever asks leaves for this.
     fn raw_value(&self) -> String;
     /// Flatten this member's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
@@ -38,7 +38,7 @@ pub trait FormMember: Debug {
     fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>);
     /// The reverse of [`collect_leaves`](Self::collect_leaves): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
-    /// This is the "shuffle back" from widget state into plain form data.
+    /// This is the "shuffle back" from control state into plain form data.
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>);
     fn validate(&mut self);
     fn has_errors(&self) -> bool;
@@ -278,7 +278,7 @@ impl RenderCtx {
 }
 
 /// A change to the form's *shape*, as opposed to its values — the counterpart
-/// to `apply`. Crosses the widget boundary in a `Callback<Edit>`, which is why
+/// to `apply`. Crosses the control boundary in a `Callback<Edit>`, which is why
 /// it owns its strings rather than borrowing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Edit {

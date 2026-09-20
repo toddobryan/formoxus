@@ -5,7 +5,7 @@
 //! Two function-like macros, no derives. That's the whole design: a derive runs
 //! on a type *definition*, so it can only ever expand in the crate that owns the
 //! type. These expand at the **call site**, in the consuming crate, which is what
-//! lets a form name a model from one crate and a widget from another without
+//! lets a form name a model from one crate and a control from another without
 //! tripping the orphan rule — see `.claude/memory/facet_form_design_decisions.md`.
 //!
 //! - [`macro@form`] builds a `FormSpec` for a model from a declarative block:

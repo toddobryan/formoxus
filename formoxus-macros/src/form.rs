@@ -610,8 +610,8 @@ macro_rules! controls {
         fn control_tokens(name: &Ident) -> Option<TokenStream2> {
             match name.to_string().as_str() {
                 $( stringify!($name) => Some(quote! {
-                    ::formoxus::widgets::ControlType::$variant
-                    $( ( ::formoxus::widgets::InputType::$input ) )?
+                    ::formoxus::controls::ControlType::$variant
+                    $( ( ::formoxus::controls::InputType::$input ) )?
                 }), )*
                 _ => None,
             }
@@ -662,7 +662,7 @@ enum ControlRef {
     /// One of the names in [`controls!`], already validated.
     Named(Ident),
     /// `custom(MarkdownWidget)` — a `Path`, not an `Ident`, so that
-    /// `custom(widgets::MarkdownWidget)` works without importing the widget.
+    /// `custom(inputs::MarkdownWidget)` works without importing the input.
     Custom(Path),
 }
 
@@ -677,19 +677,19 @@ impl ControlRef {
                 control_tokens(name).expect("parse rejects names that are not in the table")
             }
             // A NON-CAPTURING closure, which coerces to `fn(ControlProps) ->
-            // Element`. The widget goes inside `rsx!` rather than being called,
+            // Element`. The input goes inside `rsx!` rather than being called,
             // so it gets a component scope of its own and may use hooks.
             //
             // The name is carried separately because `Debug` on a fn pointer
             // prints an address, and panic messages and test assertions want
             // "MarkdownWidget".
-            Self::Custom(widget) => {
-                let name = last_segment_string(widget);
+            Self::Custom(component) => {
+                let name = last_segment_string(component);
                 quote! {
-                    ::formoxus::widgets::ControlType::Custom {
+                    ::formoxus::controls::ControlType::Custom {
                         name: #name,
                         render: |__p| ::dioxus::prelude::rsx! {
-                            #widget { values: __p.values, props: __p.props }
+                            #component { values: __p.values, props: __p.props }
                         },
                     }
                 }
@@ -699,7 +699,7 @@ impl ControlRef {
 }
 
 /// The last segment of a path, as a string — `"MarkdownWidget"` for
-/// `widgets::MarkdownWidget`.
+/// `inputs::MarkdownWidget`.
 fn last_segment_string(path: &Path) -> String {
     path.segments
         .last()
@@ -719,11 +719,11 @@ impl Parse for ControlRef {
             }
             let inner;
             parenthesized!(inner in input);
-            let widget: Path = inner.parse()?;
+            let component: Path = inner.parse()?;
             if !inner.is_empty() {
-                return Err(inner.error("`custom` takes one widget and nothing else"));
+                return Err(inner.error("`custom` takes one component and nothing else"));
             }
-            return Ok(Self::Custom(widget));
+            return Ok(Self::Custom(component));
         }
 
         let name: Ident = input.parse()?;
@@ -1707,7 +1707,7 @@ mod tests {
             let tokens = control_of(&spec).path().to_string();
             expect_that!(
                 &tokens,
-                contains_substring(":: formoxus :: widgets :: ControlType ::"),
+                contains_substring(":: formoxus :: controls :: ControlType ::"),
                 "for control `{name}`"
             );
         }
@@ -1818,17 +1818,17 @@ mod tests {
 
     #[gtest]
     fn a_custom_widget_may_be_module_qualified() {
-        // The reason it is a `Path` and not an `Ident`: naming a widget should not
+        // The reason it is a `Path` and not an `Ident`: naming a control should not
         // require importing it.
         let spec =
             parse(quote! { Source { notes => { control: custom(widgets::MarkdownWidget) } } })
-                .expect("a qualified widget path should parse");
+                .expect("a qualified component path should parse");
         expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
     }
 
     #[gtest]
     fn a_custom_widget_expands_to_a_non_capturing_closure() {
-        // Pins the whole contract: the widget is placed INSIDE rsx! (so it gets a
+        // Pins the whole contract: the input is placed INSIDE rsx! (so it gets a
         // component scope and may use hooks) rather than called, the closure
         // captures nothing (so it coerces to `fn(ControlProps) -> Element`), and
         // the readable name rides along because Debug on a fn pointer is an
@@ -1865,7 +1865,7 @@ mod tests {
     fn custom_with_two_widgets_is_rejected() {
         expect_that!(
             err_of(quote! { Source { notes => { control: custom(A, B) } } }),
-            contains_substring("one widget")
+            contains_substring("one component")
         );
     }
 

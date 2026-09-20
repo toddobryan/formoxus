@@ -79,7 +79,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     ///
     /// For what only the server can know — nothing local is wrong with
     /// "incorrect password", so no validator could have caught it. The message
-    /// lands at the path the widget that must display it already renders at.
+    /// lands at the path the control that must display it already renders at.
     ///
     /// **Panics if `path` isn't a field of this form.** That is a caller bug (a
     /// typo, or a path assuming a shape the model doesn't have), not anything a

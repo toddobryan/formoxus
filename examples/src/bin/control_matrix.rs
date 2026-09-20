@@ -24,7 +24,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::widgets::{ControlType, InputType};
+use formoxus::controls::{ControlType, InputType};
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
 

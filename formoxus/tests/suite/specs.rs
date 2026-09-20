@@ -10,7 +10,7 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::widgets::ControlType;
+use formoxus::controls::ControlType;
 use formoxus::*;
 use googletest::prelude::*;
 

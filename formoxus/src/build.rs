@@ -292,7 +292,7 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 }
 
 /// The closed set of scalar types with a built-in control. Anything else needs
-/// a custom widget and returns `None` here, which `member_for_shape` turns into
+/// a custom control and returns `None` here, which `member_for_shape` turns into
 /// a panic naming the type.
 ///
 /// **`usize` and `isize` are left out on purpose, not by oversight.** Their

@@ -161,8 +161,8 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarInput` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
+use formoxus::controls::{ControlType, FieldProps, InputType, ScalarInput};
 use formoxus::fields::ValueKind;
-use formoxus::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 
 /// What a `String` field derives. Spelled out because these tests drive
 /// `ScalarInput` directly rather than through `FormField::render`, so nothing

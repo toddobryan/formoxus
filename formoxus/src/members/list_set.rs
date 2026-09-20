@@ -6,6 +6,7 @@
 
 use crate::RenderCtx;
 use crate::build::{FormMode, member_for_shape};
+use crate::controls::{AddRowButton, RemoveRowButton};
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
@@ -13,7 +14,6 @@ use crate::members::{
     Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
     row_segment,
 };
-use crate::widgets::{AddRowButton, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use std::collections::HashMap;

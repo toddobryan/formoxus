@@ -116,7 +116,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// Every leaf input in the form, as `(qualified_path, raw_value)` — the
-    /// list the widget layer turns into one signal apiece.
+    /// list the control layer turns into one signal apiece.
     pub fn leaves(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
         for m in self.members.iter() {
@@ -125,7 +125,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         out
     }
 
-    /// Take raw widget values back in, keyed by the same qualified paths
+    /// Take raw input values back in, keyed by the same qualified paths
     /// [`leaves`](Self::leaves) hands out. Call this on submit, before
     /// `validate()`.
     pub fn apply(&mut self, values: &HashMap<String, String>) {
@@ -183,7 +183,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// generated, so neither crosses the wire as a structural instruction. It
     /// still returns `Result` rather than panicking, because on wasm a panic
     /// aborts instead of reaching an `ErrorBoundary` — dioxus-core notes that
-    /// unwinds aren't caught there. The `Result` is the transport; the widget
+    /// unwinds aren't caught there. The `Result` is the transport; the input
     /// layer is expected to push it into the boundary rather than recover.
     pub fn choose_variant(
         &mut self,

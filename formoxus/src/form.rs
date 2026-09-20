@@ -51,7 +51,7 @@ pub type Handler<M> = Rc<dyn Fn(M) -> Pin<Box<dyn Future<Output = ()>>>>;
 /// form is invalid.
 pub type UncheckedHandler = Rc<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>;
 
-/// A re-invokable async fetch a widget calls when it needs external data —
+/// A re-invokable async fetch a control calls when it needs external data —
 /// e.g. a picker's list of choices — supplied at the render call site rather
 /// than baked into the form's declaration.
 ///
@@ -186,7 +186,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// survives a schema rebuild because paths are stable under one.
     values: ValuesByPath,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
-    /// widget layer stay ignorant of `T` — [`RenderCtx`] can't be generic
+    /// control layer stay ignorant of `T` — [`RenderCtx`] can't be generic
     /// without making every member type generic too.
     on_edit: Callback<Edit>,
     /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
@@ -444,7 +444,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `apply_leaves` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            crate::widgets::write_value(&path, self.values, raw);
+            crate::controls::write_value(&path, self.values, raw);
         }
     }
 

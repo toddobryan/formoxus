@@ -143,7 +143,7 @@ impl FormMember for FieldSet {
             assert!(
                 spec.custom_control.is_none(),
                 "{my_path} is a field set, which has no single control to \
-                 override (a composite widget for one isn't supported yet) — \
+                 override (a composite control for one isn't supported yet) — \
                  did you mean `label`?"
             );
             self.label = spec.label.clone().or(self.label.take());

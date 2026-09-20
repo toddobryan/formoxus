@@ -2,10 +2,10 @@
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 
 use crate::RenderCtx;
+use crate::controls::{ControlType, FieldProps, InputType, ScalarInput};
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
-use crate::widgets::{ControlType, FieldProps, InputType, ScalarInput};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
@@ -212,8 +212,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn validate(&mut self) {
         self.errors.clear();
         // An `Invalid` value carries its own parse error, and this is the only
-        // route that error has to the screen: the widget boundary is
-        // `(path, label, required, errors)`, so a widget cannot reach into
+        // route that error has to the screen: the control boundary is
+        // `(path, label, required, errors)`, so a control cannot reach into
         // `FieldValue` to find it. Hoisting here rather than merging in
         // `render` also keeps one answer to "what is wrong with this field".
         //

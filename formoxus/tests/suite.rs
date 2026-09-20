@@ -35,6 +35,8 @@ mod errors;
 mod form_macro;
 #[path = "suite/forms.rs"]
 mod forms;
+#[path = "suite/inputs.rs"]
+mod inputs;
 #[path = "suite/into_slot.rs"]
 mod into_slot;
 #[path = "suite/label_case.rs"]
@@ -51,8 +53,6 @@ mod specs;
 mod submissions;
 #[path = "suite/vecs.rs"]
 mod vecs;
-#[path = "suite/widgets.rs"]
-mod widgets;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///

@@ -568,7 +568,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
 /// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
 /// function call from `render_control` could not provide.
 #[component]
-fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::widgets::FieldProps) -> Element {
+fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::controls::FieldProps) -> Element {
     let _ = values;
     let marker = use_hook(|| "scope-ok");
     let label = props.label.clone().unwrap_or_default();
