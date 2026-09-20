@@ -21,6 +21,8 @@ use dioxus::prelude::*;
 #[path = "suite/models.rs"]
 pub mod models;
 
+#[path = "suite/browser_validation.rs"]
+mod browser_validation;
 #[path = "suite/buttons.rs"]
 mod buttons;
 #[path = "suite/empty_strings.rs"]

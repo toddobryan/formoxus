@@ -50,6 +50,8 @@ use crate::label_case::LabelCase;
 pub struct Formoxus {
     /// How a field's name becomes its label when nothing names one explicitly.
     pub label_case: LabelCase,
+    /// Whether browser validation should run before Formoxus' own validation
+    pub use_browser_validation: bool,
 }
 
 impl Default for Formoxus {
@@ -57,6 +59,7 @@ impl Default for Formoxus {
     fn default() -> Self {
         Self {
             label_case: LabelCase::Title,
+            use_browser_validation: true,
         }
     }
 }
@@ -68,6 +71,11 @@ impl Formoxus {
 
     pub fn with_label_case(mut self, case: LabelCase) -> Self {
         self.label_case = case;
+        self
+    }
+
+    pub fn use_browser_validation(mut self, value: bool) -> Self {
+        self.use_browser_validation = value;
         self
     }
 }

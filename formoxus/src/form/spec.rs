@@ -27,6 +27,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     /// per-form setting can still override that. See
     /// `.claude/memory/config_cascade.md`.
     pub(super) label_case: Option<LabelCase>,
+    pub(super) use_browser_validation: Option<bool>,
     _type: PhantomData<T>,
 }
 
@@ -44,6 +45,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             validator: None,
             buttons: Vec::new(),
             label_case: None,
+            use_browser_validation: None,
             _type: PhantomData,
         }
     }
@@ -82,6 +84,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// a second call is a caller changing its mind, not adding to a list.
     pub fn with_buttons(mut self, buttons: Vec<ButtonSpec>) -> Self {
         self.buttons = buttons;
+        self
+    }
+
+    pub fn with_use_browser_validation(mut self, use_browser_validation: bool) -> Self {
+        self.use_browser_validation = Some(use_browser_validation);
         self
     }
 

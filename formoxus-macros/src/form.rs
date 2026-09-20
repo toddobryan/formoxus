@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
@@ -6,7 +6,7 @@ use syn::{
     Expr, Ident, Path, Result, Token, braced,
     ext::IdentExt,
     parenthesized,
-    parse::{Parse, ParseStream},
+    parse::{Parse, ParseBuffer, ParseStream},
     punctuated::Punctuated,
 };
 
@@ -43,6 +43,9 @@ const LABEL_CASES: [(&str, &str); 11] = [
 
 mod kw {
     syn::custom_keyword!(label_case);
+    syn::custom_keyword!(browser_validation);
+    syn::custom_keyword!(on);
+    syn::custom_keyword!(off);
     syn::custom_keyword!(title);
     syn::custom_keyword!(validator);
     syn::custom_keyword!(buttons);
@@ -58,6 +61,7 @@ struct FormSpecInput {
 struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
+    use_browser_validation: Option<bool>,
     label_case: Option<Ident>,
     validator: Option<Expr>,
     buttons: Vec<ButtonInfo>,
@@ -69,6 +73,7 @@ impl FormSpecMeta {
         Self {
             model_type,
             title: None,
+            use_browser_validation: None,
             label_case: None,
             validator: None,
             buttons: Vec::new(),
@@ -83,6 +88,7 @@ impl FormSpecInput {
         for e in self.entries {
             match e {
                 Entry::Title(expr) => fsm.title = Some(expr),
+                Entry::BrowserValidation(value) => fsm.use_browser_validation = Some(value),
                 Entry::LabelCase(ident) => fsm.label_case = Some(ident),
                 Entry::Validator(expr) => fsm.validator = Some(expr),
                 Entry::Field { path, body } => fsm.field_specs.push(FieldSpec {
@@ -103,6 +109,11 @@ impl FormSpecInput {
         let label_case: Option<TokenStream2> = fsm.label_case.map(|c| {
             quote! {
                 .with_label_case(::formoxus::label_case::LabelCase::#c)
+            }
+        });
+        let use_browser_validation: Option<TokenStream2> = fsm.use_browser_validation.map(|ubv| {
+            quote! {
+                .with_use_browser_validation(#ubv)
             }
         });
         let validator: Option<TokenStream2> = fsm.validator.map(|v| {
@@ -145,6 +156,7 @@ impl FormSpecInput {
                 ::formoxus::form::FormSpec::<#model_type>::new()
                 #title
                 #label_case
+                #use_browser_validation
                 #validator
                 #buttons
                 #(#fields)*
@@ -181,6 +193,63 @@ fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> TokenStream2
     }
 }
 
+#[derive(Debug, Default)]
+struct FormAttribute {
+    title: bool,
+    browser_validation: bool,
+    label_case: bool,
+    validator: bool,
+    buttons: bool,
+    fields: HashSet<String>,
+}
+
+impl FormAttribute {
+    fn check_duplicate(&mut self, body: &ParseBuffer<'_>, entry: &Entry) -> Result<()> {
+        if self.check_seen_and_set(entry) {
+            if let Entry::Field { path, .. } = entry {
+                let key = path.key();
+                Err(syn::Error::new(
+                    path.span(),
+                    format!("`{key}` is specified twice — merge the two bodies into one"),
+                ))
+            } else {
+                let name = entry.name();
+                Err(body.error(format!("`{name}` is given twice")))
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn check_seen_and_set(&mut self, entry: &Entry) -> bool {
+        let previously_seen = match entry {
+            Entry::Title(_) => self.title,
+            Entry::LabelCase(_) => self.label_case,
+            Entry::BrowserValidation(_) => self.browser_validation,
+            Entry::Validator(_) => self.validator,
+            Entry::Buttons(_) => self.buttons,
+            Entry::Field { path, .. } => {
+                let key = path.key();
+                self.fields.contains(&key)
+            }
+        };
+        if !previously_seen {
+            match entry {
+                Entry::Title(_) => self.title = true,
+                Entry::LabelCase(_) => self.label_case = true,
+                Entry::BrowserValidation(_) => self.browser_validation = true,
+                Entry::Validator(_) => self.validator = true,
+                Entry::Buttons(_) => self.buttons = true,
+                Entry::Field { path, .. } => {
+                    let key = path.key();
+                    let _ = self.fields.insert(key);
+                }
+            }
+        }
+        previously_seen
+    }
+}
+
 impl Parse for FormSpecInput {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let target: Path = input.parse()?;
@@ -189,35 +258,9 @@ impl Parse for FormSpecInput {
         let entries: Vec<Entry> = Punctuated::<Entry, Token![,]>::parse_terminated(&body)?
             .into_iter()
             .collect();
-        let mut seen: HashMap<String, ()> = HashMap::new();
-        let (mut had_title, mut had_validator, mut had_buttons) = (false, false, false);
-        let mut had_label_case = false;
+        let mut attrs: FormAttribute = FormAttribute::default();
         for e in &entries {
-            match e {
-                Entry::Title(_) if had_title => return Err(body.error("`title` is given twice")),
-                Entry::Title(_) => had_title = true,
-                Entry::LabelCase(_) if had_label_case => {
-                    return Err(body.error("`label_case` is given twice"));
-                }
-                Entry::LabelCase(_) => had_label_case = true,
-                Entry::Validator(_) if had_validator => {
-                    return Err(body.error("`validator` is given twice"));
-                }
-                Entry::Validator(_) => had_validator = true,
-                Entry::Buttons(_) if had_buttons => {
-                    return Err(body.error("`buttons` is given twice"));
-                }
-                Entry::Buttons(_) => had_buttons = true,
-                Entry::Field { path, .. } => {
-                    let key = path.key();
-                    if seen.insert(key.clone(), ()).is_some() {
-                        return Err(syn::Error::new(
-                            path.span(),
-                            format!("`{key}` is specified twice — merge the two bodies into one"),
-                        ));
-                    }
-                }
-            }
+            attrs.check_duplicate(&body, e)?;
         }
         Ok(FormSpecInput { target, entries })
     }
@@ -226,6 +269,7 @@ impl Parse for FormSpecInput {
 #[derive(Debug)]
 enum Entry {
     Title(Expr),
+    BrowserValidation(bool),
     /// The resolved `LabelCase` variant, already looked up — a bad string is a
     /// parse error, so nothing downstream has to handle one.
     LabelCase(Ident),
@@ -270,6 +314,24 @@ impl Entry {
         let _colon: Token![:] = input.parse()?;
         let expr: Expr = input.parse()?;
         Ok(Entry::Title(expr))
+    }
+
+    fn parse_browser_validation(input: ParseStream<'_>) -> Result<Self> {
+        let _browser_validation: kw::browser_validation = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        let is_on = input.peek(kw::on);
+        let is_off = input.peek(kw::off);
+        if !is_on && !is_off {
+            Err(input.error("Expected `on` or `off` after `browser_validation`"))
+        } else if is_on {
+            let _on: kw::on = input.parse()?;
+            Ok(Entry::BrowserValidation(true))
+        } else if is_off {
+            let _off: kw::off = input.parse()?;
+            Ok(Entry::BrowserValidation(false))
+        } else {
+            Err(input.error("It should be impossible to get here"))
+        }
     }
 
     fn parse_validator(input: ParseStream<'_>) -> Result<Self> {
@@ -332,6 +394,18 @@ impl Entry {
         }
         Ok(Entry::Buttons(buttons))
     }
+
+    fn name(&self) -> String {
+        let attr_name: &str = match self {
+            Entry::Title(_) => "title",
+            Entry::BrowserValidation(_) => "browser_validation",
+            Entry::LabelCase(_) => "label_case",
+            Entry::Validator(_) => "validator",
+            Entry::Field { path, .. } => &path.key(),
+            Entry::Buttons(_) => "buttons",
+        };
+        attr_name.to_string()
+    }
 }
 
 impl Parse for Entry {
@@ -340,6 +414,8 @@ impl Parse for Entry {
             Entry::parse_label_case(input)
         } else if attribute(input, kw::title) {
             Entry::parse_title(input)
+        } else if attribute(input, kw::browser_validation) {
+            Entry::parse_browser_validation(input)
         } else if attribute(input, kw::validator) {
             Entry::parse_validator(input)
         } else if attribute(input, kw::buttons) {
@@ -943,6 +1019,7 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Entry::Title(_) => "title",
+                Entry::BrowserValidation(_) => "browser_validation",
                 Entry::LabelCase(_) => "label_case",
                 Entry::Validator(_) => "validator",
                 Entry::Field { .. } => "field",

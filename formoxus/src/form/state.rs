@@ -57,6 +57,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.label_case
     }
 
+    /// What this form *stated* about the browser's own validation, if
+    /// anything. `None` means "not stated" — see [`Self::label_case`] for why
+    /// resolving it cannot happen here.
+    pub fn use_browser_validation(&self) -> Option<bool> {
+        self.spec.use_browser_validation
+    }
+
     pub fn title(&self) -> Option<String> {
         self.spec.title.clone()
     }

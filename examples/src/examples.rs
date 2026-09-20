@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 
 mod basics;
+mod select;
 
 /// Every example, in the order they appear on the page.
 ///
@@ -15,7 +16,13 @@ pub fn Gallery() -> Element {
         Example {
             title: "A form at all",
             note: "Scalars, a control override, and buttons — the parts that already work.",
-            basics::Basics {}
+            basics::Basics {},
+        }
+
+        Example {
+            title: "An address form",
+            note: "Select for state (which I hate), and some formatting",
+            select::AddressForm {},
         }
     }
 }

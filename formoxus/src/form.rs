@@ -189,6 +189,14 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// widget layer stay ignorant of `T` — [`RenderCtx`] can't be generic
     /// without making every member type generic too.
     on_edit: Callback<Edit>,
+    /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
+    /// it, before any edit.
+    ///
+    /// A whole `FormState`, not just its leaves, because a reset has to undo
+    /// STRUCTURAL edits too — rows added to a `Vec`, a variant chosen. Those
+    /// live in the state and nowhere else, so restoring only the raw strings
+    /// would leave a form with the right values in the wrong shape.
+    initial: Signal<FormState<T>>,
 }
 
 // Hand-written, not derived: `#[derive(Copy)]` would add a spurious `T: Copy`
@@ -206,6 +214,21 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// `peek`, not `read`: the casing is fixed for the life of the form, so
     /// subscribing a render scope to the whole state for it would re-render on
     /// every unrelated structural edit.
+    /// Whether the browser's own constraint validation gates this form, with
+    /// the whole cascade applied: what the form stated, else the app-wide
+    /// [`Formoxus`](crate::Formoxus), else the built-in (`true`).
+    ///
+    /// When this is false the `<form>` renders `novalidate`, which is what
+    /// lets formoxus's own validation and error rendering actually run — the
+    /// browser would otherwise gate submit first and `onsubmit` would never
+    /// fire. See [the `defaults` module](mod@crate::defaults).
+    pub fn use_browser_validation(&self) -> bool {
+        self.state
+            .peek()
+            .use_browser_validation()
+            .unwrap_or_else(|| crate::defaults::defaults().use_browser_validation)
+    }
+
     /// The casing this form's derived labels actually use, with the whole
     /// cascade applied: what the form stated, else the app-wide
     /// [`Formoxus`](crate::Formoxus), else the built-in.
@@ -260,6 +283,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                 class: "form",
                 { state.render_title() }
                 form {
+                    // Dioxus omits a boolean attribute whose value is false,
+                    // so this is absent exactly when validation stays on —
+                    // which matters, because in HTML a boolean attribute that
+                    // is merely PRESENT is true, `novalidate="false"` included.
+                    novalidate: !self.use_browser_validation(),
                     onsubmit: move |e: FormEvent| {
                         // Without this the browser navigates and the handler's
                         // future is dropped mid-flight.
@@ -393,6 +421,33 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// Lives here because this is the only place that knows both halves — a
     /// caller never has to remember that `apply` comes first.
+    /// Put the form back the way [`use_form`] built it.
+    ///
+    /// Everything goes: edited values, validation errors, and structural edits
+    /// like added rows or a chosen variant. A form built with
+    /// [`form_for`] returns to that model's values; one built with
+    /// [`empty_form`] goes back to empty.
+    ///
+    /// **A `type="reset"` button does not do this on its own.** Native reset
+    /// restores the DOM's own idea of each control's initial value, but every
+    /// formoxus input is controlled — its value comes from the store on the
+    /// next render — so the old values would reappear immediately. The state
+    /// is the thing that has to change.
+    pub fn reset(&self) {
+        let fresh = self.initial.peek().clone();
+        let leaves = fresh.leaves();
+        let mut state = self.state;
+        *state.write() = fresh;
+        // Written per path rather than by replacing the map, so each input's
+        // own subscription fires. Paths that only existed because of an edit
+        // being undone are left behind as stale keys; nothing reads them, since
+        // the restored schema is what decides which paths get rendered, and
+        // `apply_leaves` treats an absent path as empty either way.
+        for (path, raw) in leaves {
+            crate::widgets::write_value(&path, self.values, raw);
+        }
+    }
+
     pub fn validate(&self) -> Option<T> {
         // `Signal` is a `Copy` handle to shared reactive state, so copy it for a
         // mutable binding and write through the copy. Keeps `&self` here, which
@@ -478,6 +533,10 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: impl FnOnce() -> FormState<T>,
 ) -> Form<T> {
     let state = use_signal(state);
+    // A snapshot, taken once. `FormState` is plain data and `Clone`, so this is
+    // a real copy rather than another handle to the same thing — which is the
+    // point, since `state` is about to be edited.
+    let initial = use_signal(move || state.peek().clone());
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
@@ -496,5 +555,6 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         state,
         values,
         on_edit,
+        initial,
     }
 }
