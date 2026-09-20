@@ -3,7 +3,7 @@ use heck::{
     ToTrainCase, ToUpperCamelCase,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LabelCase {
     CamelLower,
     CamelCapitalized,

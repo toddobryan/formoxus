@@ -47,12 +47,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    /// The casing derived labels use, with the built-in default applied.
+    /// What this form *stated* about label casing, if anything.
     ///
-    /// The single place the cascade bottoms out, so an app-level tier read from
-    /// context can be added here without every caller learning about it.
-    pub fn label_case(&self) -> LabelCase {
-        self.spec.label_case.unwrap_or(LabelCase::Title)
+    /// `None` means "not stated", not "Title" — resolving it needs the
+    /// app-level tier, which lives in Dioxus context and so needs a runtime.
+    /// A `FormState` rebuilt on the server by [`crate::Submission`] has none,
+    /// which is why the resolution is [`crate::Form::label_case`] and not here.
+    pub fn label_case(&self) -> Option<LabelCase> {
+        self.spec.label_case
     }
 
     pub fn title(&self) -> Option<String> {

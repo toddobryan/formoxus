@@ -207,7 +207,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// subscribing a render scope to the whole state for it would re-render on
     /// every unrelated structural edit.
     fn label_case(&self) -> LabelCase {
-        self.state.peek().label_case()
+        self.state
+            .peek()
+            .label_case()
+            .unwrap_or_else(|| crate::defaults::defaults().label_case)
     }
 
     pub fn values(&self) -> ValuesByPath {

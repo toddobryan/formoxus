@@ -9,7 +9,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::label_case::{LabelCase, ToCase};
-use formoxus::{empty_form, form, use_form};
+use formoxus::{Defaults, defaults, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -127,19 +127,21 @@ fn the_macro_resolves_every_spelling() {
             .find(|(k, _)| *k == spelling)
             .map(|(_, c)| format!("{c:?}"))
             .expect("spelling is in EXPECTED");
+        let got = state.label_case().expect("the form stated a case");
         expect_that!(
-            format!("{:?}", state.label_case()),
+            format!("{got:?}"),
             eq(&want),
             "form! resolved {spelling:?} to the wrong case"
         );
     }
 }
 
-/// Unset means the built-in default, not an error — the cascade bottoms out.
+/// A form that says nothing stores nothing — `None` is "not stated", not
+/// "Title". Resolving it is the job of the tier above, which needs a runtime.
 #[gtest]
-fn a_form_that_says_nothing_gets_title_case() {
+fn a_form_that_says_nothing_stores_nothing() {
     let state = empty_form::<Model>(form! { Model { title: "No casing stated" } });
-    expect_that!(format!("{:?}", state.label_case()), eq("Title"));
+    expect_that!(state.label_case(), none());
 }
 
 /// The setting reaches the markup, not just the spec.
@@ -163,4 +165,78 @@ fn the_chosen_case_reaches_the_rendered_label() {
     expect_that!(html, contains_substring("EMAIL-ADDRESS"));
     // And not the default it would have had otherwise.
     expect_that!(html, not(contains_substring("Email Address")));
+}
+
+// ── The cascade: app default -> per-form -> built-in ─────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Person {
+    first_name: String,
+}
+
+/// With nobody providing anything, the built-in applies.
+#[gtest]
+fn with_no_app_default_a_silent_form_is_title_case() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Person {} }));
+        form.render_fragment()
+    }
+    expect_that!(super::render_to_html(App), contains_substring("First Name"));
+}
+
+/// An app-level default reaches a form that stated nothing.
+#[gtest]
+fn an_app_default_reaches_a_silent_form() {
+    #[component]
+    fn App() -> Element {
+        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        let form = use_form(|| empty_form(form! { Person {} }));
+        form.render_fragment()
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring("FIRST_NAME"));
+    expect_that!(html, not(contains_substring("First Name")));
+}
+
+/// **The precedence that makes it a cascade and not just a global.** The form
+/// wins over the app default, which is the whole point of the middle tier.
+#[gtest]
+fn a_form_overrides_the_app_default() {
+    #[component]
+    fn App() -> Element {
+        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        let form = use_form(|| empty_form(form! { Person { label_case: "label-case" } }));
+        form.render_fragment()
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring("first-name"));
+    expect_that!(html, not(contains_substring("FIRST_NAME")));
+}
+
+/// A nested provider shadows an outer one for its subtree only — which a
+/// `static` could not express at all, and is why this is context.
+#[gtest]
+fn a_nested_provider_shadows_an_outer_one() {
+    #[component]
+    fn Inner() -> Element {
+        provide_defaults(defaults().with_label_case(LabelCase::KebabAllCaps));
+        let form = use_form(|| empty_form(form! { Person {} }));
+        form.render_fragment()
+    }
+
+    #[component]
+    fn App() -> Element {
+        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        let outer = use_form(|| empty_form(form! { Person {} }));
+        rsx! {
+            {outer.render_fragment()}
+            Inner {}
+        }
+    }
+
+    let html = super::render_to_html(App);
+    // Both are present: the outer form keeps the outer default.
+    expect_that!(html, contains_substring("FIRST_NAME"));
+    expect_that!(html, contains_substring("FIRST-NAME"));
 }
