@@ -76,7 +76,7 @@ pub use formoxus_macros::using_fns;
 
 // A flat root, so `use formoxus::*` (and the test modules' `use crate::*`)
 // reaches the whole vocabulary without knowing which module each name lives in.
-pub use crate::defaults::{Defaults, defaults, provide_defaults};
+pub use crate::defaults::{Formoxus, defaults, provide_defaults};
 pub use crate::error::{FieldError, FormError};
 pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
 pub use fields::{FieldValue, FormField};
@@ -98,7 +98,7 @@ pub use widgets::ABSENT_DISPLAY;
 /// convenience rather than a separate contract. For precise imports, reach into
 /// the defining module (`formoxus::form::FormSpec`, …).
 pub mod prelude {
-    pub use crate::defaults::{Defaults, defaults, provide_defaults};
+    pub use crate::defaults::{Formoxus, defaults, provide_defaults};
     pub use crate::error::{FieldError, FormError};
     pub use crate::form::{
         Form, FormSpec, FormState, Provider, empty_form, form_for, handler, provider,

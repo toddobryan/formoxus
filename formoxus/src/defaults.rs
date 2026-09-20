@@ -14,7 +14,7 @@
 //!
 //! ```ignore
 //! fn App() -> Element {
-//!     provide_defaults(Defaults::new().with_label_case(LabelCase::Lower));
+//!     provide_defaults(Formoxus::new().with_label_case(LabelCase::Lower));
 //!     rsx! { Router::<Route> {} }
 //! }
 //! ```
@@ -40,19 +40,19 @@ use dioxus::prelude::*;
 
 use crate::label_case::LabelCase;
 
-/// The settings a whole app can fix once.
+/// The settings a whole app can fix once — formoxus's own configuration.
 ///
 /// `#[non_exhaustive]`, so adding a setting later is not a breaking change.
-/// Build one with [`Defaults::new`] and the `with_*` methods rather than a
+/// Build one with [`Formoxus::new`] and the `with_*` methods rather than a
 /// struct literal.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
-pub struct Defaults {
+pub struct Formoxus {
     /// How a field's name becomes its label when nothing names one explicitly.
     pub label_case: LabelCase,
 }
 
-impl Default for Defaults {
+impl Default for Formoxus {
     /// The built-ins — what formoxus does when an app says nothing at all.
     fn default() -> Self {
         Self {
@@ -61,7 +61,7 @@ impl Default for Defaults {
     }
 }
 
-impl Defaults {
+impl Formoxus {
     pub fn new() -> Self {
         Self::default()
     }
@@ -76,8 +76,8 @@ impl Defaults {
 ///
 /// Call it in a component body, usually the app root. A nested call shadows an
 /// outer one for that subtree only.
-pub fn provide_defaults(defaults: Defaults) {
-    provide_context(defaults);
+pub fn provide_defaults(config: Formoxus) {
+    provide_context(config);
 }
 
 /// The defaults in effect at this point in the tree, or the built-ins if
@@ -88,6 +88,6 @@ pub fn provide_defaults(defaults: Defaults) {
 /// [`crate::FormState`]: the server rebuilds a `FormState` through
 /// [`crate::Submission`] with no runtime anywhere, and would panic here.
 /// It has no labels to render either way.
-pub fn defaults() -> Defaults {
-    try_consume_context::<Defaults>().unwrap_or_default()
+pub fn defaults() -> Formoxus {
+    try_consume_context::<Formoxus>().unwrap_or_default()
 }

@@ -9,7 +9,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::label_case::{LabelCase, ToCase};
-use formoxus::{Defaults, defaults, empty_form, form, provide_defaults, use_form};
+use formoxus::{Formoxus, defaults, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -190,7 +190,7 @@ fn with_no_app_default_a_silent_form_is_title_case() {
 fn an_app_default_reaches_a_silent_form() {
     #[component]
     fn App() -> Element {
-        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let form = use_form(|| empty_form(form! { Person {} }));
         form.render_fragment()
     }
@@ -205,7 +205,7 @@ fn an_app_default_reaches_a_silent_form() {
 fn a_form_overrides_the_app_default() {
     #[component]
     fn App() -> Element {
-        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let form = use_form(|| empty_form(form! { Person { label_case: "label-case" } }));
         form.render_fragment()
     }
@@ -227,7 +227,7 @@ fn a_nested_provider_shadows_an_outer_one() {
 
     #[component]
     fn App() -> Element {
-        provide_defaults(Defaults::new().with_label_case(LabelCase::SnakeAllCaps));
+        provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let outer = use_form(|| empty_form(form! { Person {} }));
         rsx! {
             {outer.render_fragment()}

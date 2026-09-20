@@ -208,7 +208,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// every unrelated structural edit.
     /// The casing this form's derived labels actually use, with the whole
     /// cascade applied: what the form stated, else the app-wide
-    /// [`Defaults`](crate::Defaults), else the built-in.
+    /// [`Formoxus`](crate::Formoxus), else the built-in.
     pub fn label_case(&self) -> LabelCase {
         self.state
             .peek()
