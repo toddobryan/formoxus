@@ -137,7 +137,14 @@ impl FormSpecInput {
                     let c = c.path();
                     quote! { .with_custom_widget(#key, #c) }
                 });
-                quote! { #label #widget }
+                let choices = f
+                    .widget
+                    .as_ref()
+                    .and_then(|w| w.args.choices.as_ref())
+                    .map(|c| {
+                        quote! { .with_choices(#key, #c) }
+                    });
+                quote! { #label #widget #choices }
             })
             .collect();
         let witnesses: Vec<TokenStream2> = fsm
@@ -274,9 +281,12 @@ enum Entry {
     /// parse error, so nothing downstream has to handle one.
     LabelCase(Ident),
     Validator(Expr),
+    /// **Boxed.** `FieldBody` carries up to three `syn::Expr`s, each of which is
+    /// ~168 bytes, so inlining it here would make every `Entry` — including a
+    /// `BrowserValidation(bool)` — as large as the biggest one.
     Field {
         path: SpecPath,
-        body: FieldBody,
+        body: Box<FieldBody>,
     },
     Buttons(Vec<ButtonInfo>),
 }
@@ -349,7 +359,10 @@ impl Entry {
             input.parse::<syn::token::FatArrow>()?;
         }
         let body: FieldBody = input.parse()?;
-        Ok(Entry::Field { path, body })
+        Ok(Entry::Field {
+            path,
+            body: Box::new(body),
+        })
     }
 
     /// `buttons: { save: { type: submit, text: "Save" }, … }`
@@ -657,13 +670,44 @@ mod widget_kw {
     syn::custom_keyword!(custom);
 }
 
+/// The widgets that can be handed a list to choose from.
+///
+/// A hand-kept list, and deliberately so: the alternative is gating on
+/// `ScalarWidget`'s match arms, which this crate cannot see — the same reason
+/// [`widgets!`] accepts every name whether or not it renders yet. The cost of
+/// being wrong here is a good error message for a pair that would have panicked
+/// at render anyway.
+const CHOOSERS: &[&str] = &[
+    "select",
+    "select_multiple",
+    "checkbox_multiple",
+    "radio_group",
+];
+
 #[derive(Debug)]
-enum WidgetRef {
+struct WidgetRef {
+    kind: WidgetKind,
+    args: WidgetArgs,
+}
+
+#[derive(Debug)]
+enum WidgetKind {
     /// One of the names in [`widgets!`], already validated.
     Named(Ident),
     /// `custom(MarkdownWidget)` — a `Path`, not an `Ident`, so that
     /// `custom(inputs::MarkdownWidget)` works without importing the input.
     Custom(Path),
+}
+
+/// What goes inside `widget: select { … }`.
+///
+/// Separate from the widget's identity because these are per-FIELD settings
+/// that happen to be gated by widget — `FieldSpec` is where they land, not
+/// `WidgetType`, which is the dispatch discriminant. Room here for the HTML
+/// attribute keys (`rows`, `placeholder`, `class`) that will join `choices`.
+#[derive(Debug, Default)]
+struct WidgetArgs {
+    choices: Option<Expr>,
 }
 
 impl WidgetRef {
@@ -672,8 +716,8 @@ impl WidgetRef {
     /// Infallible: `parse` rejected anything not in the table, so the lookup here
     /// cannot miss.
     fn path(&self) -> TokenStream2 {
-        match self {
-            Self::Named(name) => {
+        match &self.kind {
+            WidgetKind::Named(name) => {
                 widget_tokens(name).expect("parse rejects names that are not in the table")
             }
             // A NON-CAPTURING closure, which coerces to `fn(WidgetProps) ->
@@ -683,7 +727,7 @@ impl WidgetRef {
             // The name is carried separately because `Debug` on a fn pointer
             // prints an address, and panic messages and test assertions want
             // "MarkdownWidget".
-            Self::Custom(component) => {
+            WidgetKind::Custom(component) => {
                 let name = last_segment_string(component);
                 quote! {
                     ::formoxus::widgets::WidgetType::Custom {
@@ -709,6 +753,18 @@ fn last_segment_string(path: &Path) -> String {
 
 impl Parse for WidgetRef {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let kind = input.parse::<WidgetKind>()?;
+        let args = if input.peek(syn::token::Brace) {
+            parse_widget_args(input, &kind)?
+        } else {
+            WidgetArgs::default()
+        };
+        Ok(Self { kind, args })
+    }
+}
+
+impl Parse for WidgetKind {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(widget_kw::custom) {
             let kw: widget_kw::custom = input.parse()?;
             if !input.peek(syn::token::Paren) {
@@ -732,6 +788,71 @@ impl Parse for WidgetRef {
         } else {
             Err(syn::Error::new(name.span(), unknown_widget(&name)))
         }
+    }
+}
+
+/// `{ choices: STATES }` — the arguments one widget accepts.
+///
+/// Gated by widget rather than accepted everywhere, so `widget: text { choices:
+/// … }` is a compile error naming the widgets that would have worked, instead of
+/// a setting that is silently ignored at render.
+fn parse_widget_args(input: ParseStream, kind: &WidgetKind) -> syn::Result<WidgetArgs> {
+    let body;
+    let braces = braced!(body in input);
+    let mut args = WidgetArgs::default();
+
+    while !body.is_empty() {
+        let key: Ident = body.parse()?;
+        let _colon: Token![:] = body.parse()?;
+        match key.to_string().as_str() {
+            "choices" if args.choices.is_some() => {
+                return Err(syn::Error::new_spanned(&key, "duplicate `choices`"));
+            }
+            "choices" => {
+                reject_choices_unless_chooser(&key, kind)?;
+                args.choices = Some(body.parse()?);
+            }
+            other => {
+                return Err(syn::Error::new_spanned(
+                    &key,
+                    format!("unknown widget argument `{other}` — expected `choices`"),
+                ));
+            }
+        }
+        if body.peek(Token![,]) {
+            body.parse::<Token![,]>()?;
+        }
+    }
+
+    if args.choices.is_none() {
+        return Err(syn::Error::new(
+            braces.span.join(),
+            "empty widget arguments — drop the braces if there are none",
+        ));
+    }
+    Ok(args)
+}
+
+fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<()> {
+    match kind {
+        WidgetKind::Named(name) if CHOOSERS.contains(&name.to_string().as_str()) => Ok(()),
+        WidgetKind::Named(name) => Err(syn::Error::new_spanned(
+            key,
+            format!(
+                "`{name}` takes no `choices` — they apply to {}",
+                CHOOSERS
+                    .iter()
+                    .map(|c| format!("`{c}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )),
+        // A custom widget receives `(values, props)` and nothing else, so a list
+        // handed to it here would go nowhere. Its own choices are its business.
+        WidgetKind::Custom(_) => Err(syn::Error::new_spanned(
+            key,
+            "a custom widget supplies its own choices",
+        )),
     }
 }
 
@@ -1037,10 +1158,10 @@ mod tests {
             .filter_map(|e| match e {
                 Entry::Field { path, body } => Some((
                     path.key(),
-                    match &body.widget {
+                    match body.widget.as_ref().map(|w| &w.kind) {
                         None => String::new(),
-                        Some(WidgetRef::Named(n)) => n.to_string(),
-                        Some(WidgetRef::Custom(w)) => {
+                        Some(WidgetKind::Named(n)) => n.to_string(),
+                        Some(WidgetKind::Custom(w)) => {
                             format!("custom({})", quote!(#w))
                         }
                     },
@@ -1804,6 +1925,106 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { p => { widget: Input(Password) } } }).len(),
             gt(0)
+        );
+    }
+
+    // ── `widget: name { … }` ─────────────────────────────────────────────
+
+    #[gtest]
+    fn a_chooser_takes_a_choices_argument() {
+        let spec = parse(quote! { Address { state => { widget: select { choices: STATES } } } })
+            .expect("`select` accepts choices");
+        expect_that!(fields(&spec)[0].1, eq("select"));
+    }
+
+    #[gtest]
+    fn choices_reach_the_expansion_as_a_with_choices_call() {
+        let spec =
+            parse(quote! { Address { state => { widget: select { choices: STATES } } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens, contains_substring("with_choices"));
+        expect_that!(tokens, contains_substring("STATES"));
+        // The widget override still lands; choices are an addition, not a
+        // replacement.
+        expect_that!(tokens, contains_substring("with_custom_widget"));
+    }
+
+    #[gtest]
+    fn an_arbitrary_expression_is_accepted_as_a_list() {
+        // Whatever it is, it only has to be `IntoIterator<Item: Into<SelectChoice>>`
+        // at the call site — the macro never inspects it.
+        let spec = parse(quote! { Address { state => { widget: select { choices: states() } } } })
+            .unwrap();
+        expect_that!(spec.expand().to_string(), contains_substring("states ()"));
+    }
+
+    #[gtest]
+    fn a_non_chooser_is_told_which_widgets_take_choices() {
+        let msg = parse(quote! { Address { state => { widget: text { choices: STATES } } } })
+            .expect_err("`text` has nothing to choose from")
+            .to_string();
+        expect_that!(msg, contains_substring("`text` takes no `choices`"));
+        expect_that!(msg, contains_substring("`select`"));
+        expect_that!(msg, contains_substring("`radio_group`"));
+    }
+
+    #[gtest]
+    fn a_custom_widget_is_told_to_manage_its_own() {
+        expect_that!(
+            parse(quote! { Source { notes => { widget: custom(Picker) { choices: STATES } } } })
+                .expect_err("a custom widget never receives them")
+                .to_string(),
+            contains_substring("supplies its own choices")
+        );
+    }
+
+    #[gtest]
+    fn an_unknown_argument_names_what_was_expected() {
+        expect_that!(
+            parse(quote! { Address { state => { widget: select { rows: 4 } } } })
+                .expect_err("`rows` is not an argument yet")
+                .to_string(),
+            contains_substring("unknown widget argument `rows`")
+        );
+    }
+
+    #[gtest]
+    fn two_choices_keys_are_rejected() {
+        expect_that!(
+            parse(quote! { Address { state => { widget: select { choices: A, choices: B } } } })
+                .expect_err("the second silently winning would be worse")
+                .to_string(),
+            contains_substring("duplicate `choices`")
+        );
+    }
+
+    #[gtest]
+    fn an_empty_argument_block_is_rejected() {
+        expect_that!(
+            parse(quote! { Address { state => { widget: select {} } } })
+                .expect_err("braces that say nothing")
+                .to_string(),
+            contains_substring("empty widget arguments")
+        );
+    }
+
+    /// The braces are optional, so everything written before they existed still
+    /// parses unchanged.
+    #[gtest]
+    fn a_widget_without_braces_is_unaffected() {
+        let spec = parse(quote! { Address { state => { widget: select } } }).unwrap();
+        expect_that!(fields(&spec)[0].1, eq("select"));
+        expect_that!(
+            spec.expand().to_string(),
+            not(contains_substring("with_choices"))
+        );
+    }
+
+    #[gtest]
+    fn a_trailing_comma_inside_the_braces_is_allowed() {
+        expect_that!(
+            parse(quote! { Address { state => { widget: select { choices: STATES, } } } }),
+            ok(anything())
         );
     }
 

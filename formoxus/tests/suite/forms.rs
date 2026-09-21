@@ -21,6 +21,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
         label: None,
         optional: false,
         custom_widget: None,
+        choices: None,
         wrapper: None,
         value,
         errors: Vec::new(),

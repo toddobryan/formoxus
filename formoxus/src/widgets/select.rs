@@ -27,6 +27,49 @@ impl SelectChoice {
     }
 }
 
+// A choice list is usually written as a literal table, and `SelectChoice` holds
+// `String`s, so it cannot be a `const` array. These conversions are what let the
+// list be a plain `&[(&str, &str)]` — which CAN be `const` — and still arrive as
+// choices. The borrowed-tuple impl exists because iterating a slice yields
+// references, so `STATES.iter()` would otherwise miss.
+impl From<(&str, &str)> for SelectChoice {
+    fn from((value, display): (&str, &str)) -> Self {
+        Self::new(value, display)
+    }
+}
+
+impl From<&(&str, &str)> for SelectChoice {
+    fn from(pair: &(&str, &str)) -> Self {
+        Self::from(*pair)
+    }
+}
+
+impl From<(String, String)> for SelectChoice {
+    fn from((value, display): (String, String)) -> Self {
+        Self::new(value, display)
+    }
+}
+
+/// A choice whose display text IS its value — `"Alabama"` rather than
+/// `("AL", "Alabama")`.
+impl From<&str> for SelectChoice {
+    fn from(both: &str) -> Self {
+        Self::new(both, both)
+    }
+}
+
+impl From<&&str> for SelectChoice {
+    fn from(both: &&str) -> Self {
+        Self::new(*both, *both)
+    }
+}
+
+impl From<String> for SelectChoice {
+    fn from(both: String) -> Self {
+        Self::new(both.clone(), both)
+    }
+}
+
 /// The three states of an `Option<bool>`, minus the absent one — that comes
 /// from `Select`'s own "no value" option, so it is spelled in exactly one
 /// place rather than once per caller.

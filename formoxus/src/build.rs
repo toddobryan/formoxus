@@ -334,6 +334,7 @@ fn scalar_member(
                         label: None,
                         optional,
                         custom_widget: None,
+                        choices: None,
                         wrapper,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),

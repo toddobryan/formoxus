@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 use super::checkbox::Checkbox;
 use super::input::Input;
-use super::select::{Select, bool_choices};
+use super::select::{Select, SelectChoice, bool_choices};
 use super::textarea::Textarea;
 use super::types::{FieldProps, WidgetProps, WidgetType};
 use crate::ValuesByPath;
@@ -26,6 +26,7 @@ use crate::fields::ValueKind;
 pub fn ScalarWidget(
     value_kind: ValueKind,
     widget: WidgetType,
+    choices: Option<Vec<SelectChoice>>,
     values: ValuesByPath,
     props: FieldProps,
 ) -> Element {
@@ -50,8 +51,25 @@ pub fn ScalarWidget(
         (ValueKind::Bool, WidgetType::Checkbox) => {
             rsx! { Checkbox { values, props } }
         }
+        // Any single scalar can be chosen from a list, because a choice's value
+        // is just the raw string this field already parses. The list is the only
+        // thing that makes the pair renderable, hence the panic rather than an
+        // empty `<select>` — a chooser with nothing to choose is a declaration
+        // the author did not finish.
+        (ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float, WidgetType::Select) => {
+            let Some(choices) = choices else {
+                panic!(
+                    "`select` needs choices (field {}) — add `widget: select {{ choices: … }}`",
+                    props.path
+                )
+            };
+            rsx! { Select { values, choices, props } }
+        }
+        // A bool's choices are derivable, so it is the one kind that renders
+        // without a list — but an explicit one still wins, for a form that would
+        // rather say "Yes"/"No".
         (ValueKind::Bool, WidgetType::Select) => {
-            rsx! { Select { values, choices: bool_choices(), props } }
+            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props } }
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
         // because the built-in widgets can't serve its type, so gating it on

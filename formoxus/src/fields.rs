@@ -5,7 +5,7 @@ use crate::RenderCtx;
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
-use crate::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
+use crate::widgets::{FieldProps, InputType, ScalarWidget, SelectChoice, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use std::{collections::HashMap, fmt::Debug};
@@ -23,6 +23,9 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub label: Option<String>,
     pub optional: bool,
     pub custom_widget: Option<WidgetType>,
+    /// What a chooser offers, if the spec named a list. `None` for a field no
+    /// spec gave choices to — which is every field rendered as an `<input>`.
+    pub choices: Option<Vec<SelectChoice>>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `FormField<String>` standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
@@ -202,6 +205,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             ScalarWidget {
                 value_kind: self.value_kind(),
                 widget: self.widget(),
+                choices: self.choices.clone(),
                 values: ctx.values,
                 props: FieldProps {
                     path: ctx.path(&self.name),
@@ -317,6 +321,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
             self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
             self.label = spec.label.clone().or(self.label.take());
+            self.choices = spec.choices.clone().or(self.choices.take());
         }
     }
 

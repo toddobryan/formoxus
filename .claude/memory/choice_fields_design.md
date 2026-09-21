@@ -1,6 +1,6 @@
 ---
 name: choice-fields-design
-description: "Design for VALUE-choice fields (Select/RadioGroup/SelectMultiple/CheckboxMultiple), from Todd's 2026-09-19 proposal plus what it collides with. DECIDED: a Choice{display,raw_value} parsed through the normal vtable path. OPEN: how the choices callback is carried, because a Box<dyn Fn> cannot live on WidgetType. Nothing built"
+description: "Design for VALUE-choice fields (Select/RadioGroup/SelectMultiple/CheckboxMultiple). TIER 1 (STATIC) IS BUILT as of 2026-09-21: `widget: select { choices: EXPR }` -> FieldSpec.choices -> FormField -> ScalarWidget. Tiers 2 and 3 (render-time and reactive) are still open, and so is the Box<dyn Fn>-cannot-live-on-WidgetType problem they run into"
 metadata:
   type: project
 ---
@@ -8,6 +8,55 @@ metadata:
 Answers the fork left open in [[widget-table-and-choice]]: what produces a
 *value* choice, as distinct from the shape choice `VariantSet` already handles.
 Read that file first for why this is not a missing-match-arm job.
+
+## BUILT 2026-09-21: tier 1, static choices
+
+Shipped, with 275 suite tests and 88 macro tests green:
+
+```rust
+const STATES: &[(&str, &str)] = &[("AL", "Alabama"), /* … */];
+
+form! { Address { state => { widget: select { choices: STATES } } } }
+```
+
+The pieces, and why each sits where it does:
+
+- **`widget: <name> { … }`** is a new brace block after a widget name, parsed
+  into `WidgetArgs`. It is the syntax the HTML attribute keys (`rows`,
+  `placeholder`, `class`) will join, so `choices` is the first argument, not a
+  special case. Braces stay optional, so nothing written before it changed.
+- **`FieldSpec.choices: Option<Vec<SelectChoice>>`**, NOT a payload on
+  `WidgetType`. `WidgetType` is the dispatch discriminant and is compared for
+  equality across the tree; two selects with different lists are the same *kind*
+  of widget. This also keeps `ScalarWidget`'s arms from binding a payload
+  dispatch never reads.
+- **Gating is a hand-kept `CHOOSERS` list in the macro** (`select`,
+  `select_multiple`, `checkbox_multiple`, `radio_group`). Same trade the
+  `widgets!` table doc already records: the macro crate cannot see
+  `ScalarWidget`'s arms, so being wrong here costs a good error message for a
+  pair that would have panicked at render anyway.
+- **`SelectChoice` grew `From` impls** for `(&str,&str)`, `&(&str,&str)`,
+  `&str`, `String`, `(String,String)`. Not sugar: `SelectChoice` holds `String`s
+  so a list of them can never be `const`, and nobody writes fifty states as a
+  runtime `Vec`. The borrowed-tuple impl is the one that matters, since
+  iterating a slice yields references.
+- **`(Text|Int|Float, Select)` now renders** — it panicked before, which is the
+  bug Todd hit. A `Bool` still derives `bool_choices()` when no list is given,
+  and an explicit list overrides it.
+- **A `select` with no choices panics**, naming the field and the fix. Dioxus
+  contains the panic, so what a reader sees is the field missing; the test
+  asserts absence and says why.
+
+### Still open
+
+- **Tiers 2 and 3** (render-time and reactive choices) are untouched, and the
+  `Box<dyn Fn>` problem below is still the wall. `FieldSpec.choices` being a
+  plain `Vec` is what a future `ChoiceSource` enum would replace.
+- **Nothing validates that a submitted value is IN the list.** A `<select>` can
+  only emit its own options, but a hand-crafted POST can send anything, so this
+  is a real server-side gap rather than a nicety.
+- `SelectMultiple`/`CheckboxMultiple` remain the structural problem below: a
+  leaf holds ONE string.
 
 ## Todd's proposal (2026-09-19)
 

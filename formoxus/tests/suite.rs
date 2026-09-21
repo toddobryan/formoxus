@@ -25,6 +25,8 @@ pub mod models;
 mod browser_validation;
 #[path = "suite/buttons.rs"]
 mod buttons;
+#[path = "suite/choices.rs"]
+mod choices;
 #[path = "suite/empty_strings.rs"]
 mod empty_strings;
 #[path = "suite/enums.rs"]
