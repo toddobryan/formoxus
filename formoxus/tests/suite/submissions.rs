@@ -148,11 +148,12 @@ fn a_cross_field_failure_arrives_with_no_field_errors_at_all() {
 #[gtest]
 fn a_server_verdict_lands_on_the_named_field() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let errors = submission.reject_field("username", "That username is taken.");
+    let wire = submission.reject_field(path!(Credentials.username), "That username is taken.");
+    let errors = wire.errors();
 
-    expect_that!(paths(&errors), elements_are![eq("username")]);
+    expect_that!(paths(errors), elements_are![eq("username")]);
     expect_that!(
-        messages_at(&errors, "username"),
+        messages_at(errors, "username"),
         elements_are![eq("That username is taken.")]
     );
     expect_that!(errors.form, is_empty());
@@ -161,11 +162,12 @@ fn a_server_verdict_lands_on_the_named_field() {
 #[gtest]
 fn a_form_level_verdict_lands_in_form_with_no_field_named() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let errors = submission.reject("Those credentials don't match.");
+    let wire = submission.reject("Those credentials don't match.");
+    let errors = wire.errors();
 
     expect_that!(errors.fields, is_empty());
     expect_that!(
-        form_messages(&errors),
+        form_messages(errors),
         elements_are![eq("Those credentials don't match.")]
     );
 }
@@ -176,19 +178,60 @@ fn rejecting_reports_only_the_rejected_field() {
     // the server's verdict travels alone rather than dragging along the
     // now-clean state of every sibling.
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let errors = submission.reject_field("password", "That password was found in a breach.");
+    let wire = submission.reject_field(
+        path!(Credentials.password),
+        "That password was found in a breach.",
+    );
 
-    expect_that!(paths(&errors), elements_are![eq("password")]);
+    expect_that!(paths(wire.errors()), elements_are![eq("password")]);
 }
 
+/// The values ride back with the verdict, so the client can absorb both in one
+/// call rather than holding its own copy and merging.
 #[gtest]
-#[should_panic(expected = "cannot reject `nope`")]
-fn rejecting_a_path_the_form_does_not_have_is_a_caller_bug() {
-    // Loud rather than silent: dropping the message would leave the user with a
-    // rejected submission and no visible reason for it.
+fn a_rejection_carries_the_values_back_too() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let _ = submission.reject_field("nope", "...");
+    let wire = submission.reject_field(path!(Credentials.username), "Taken.");
+
+    expect_that!(wire.values().get("username"), some(eq("ada")));
+    expect_that!(wire.is_clean(), eq(false));
 }
+
+/// A clean acceptance still produces a `WireForm`, so the return type of a
+/// handler does not change shape between the accept and reject arms.
+#[gtest]
+fn an_accepted_submission_becomes_a_clean_wire_form() {
+    let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
+    let wire = submission.into_wire();
+
+    expect_that!(wire.is_clean(), eq(true));
+    expect_that!(wire.values().get("password"), some(eq("hunter2")));
+}
+
+/// Values regenerated from a normalized model — the server changed something
+/// and wants the client to show the corrected form.
+#[gtest]
+fn from_model_regenerates_every_leaf() {
+    let mut model = Submission::accept(credentials_spec(), &filled())
+        .expect("valid")
+        .into_model();
+    model.username = model.username.to_uppercase();
+
+    let wire = WireForm::from_model(&model, credentials_spec());
+
+    expect_that!(wire.values().get("username"), some(eq("ADA")));
+    expect_that!(wire.values().get("password"), some(eq("hunter2")));
+    expect_that!(wire.is_clean(), eq(true));
+}
+
+// A path the model does not have can no longer be WRITTEN: `reject_field` takes
+// `Path<T>`, and `path!(Credentials.nope)` fails to compile. That guarantee is
+// pinned by `tests/ui/path_unknown_field.rs` rather than here.
+//
+// The runtime panic it replaces is still reachable, but only for a path that
+// exists on `T` while the form's tree does not hold it — an unchosen variant's
+// field. `errors.rs` covers that through `FormState::push_field_error`, which
+// keeps its `&str` for exactly the dynamic cases `path!` cannot spell.
 
 #[gtest]
 fn into_model_hands_the_value_onward() {

@@ -40,6 +40,9 @@ heck = { version = "0.5.0" }
 # transitively, so declaring it costs nothing to build.
 indexmap = { version = "2" }
 serde = { version = "1", features = ["derive"] }
+# dev-only: `WireForm` is what crosses a server-fn boundary, so a test has to
+# prove it survives a real serializer rather than just deriving the impls.
+serde_json = { version = "1" }
 trybuild = { version = "1.0.116" }
 
 # workspace. The `version` is required as well as the `path`: on publish cargo

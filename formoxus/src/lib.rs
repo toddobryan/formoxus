@@ -54,8 +54,10 @@ pub mod fields;
 pub mod form;
 pub mod label_case;
 pub mod members;
+pub mod path;
 pub mod submission;
 pub mod widgets;
+pub mod wire;
 
 /// `form! { Model { … } }` — build a [`FormSpec`] for `Model`.
 ///
@@ -74,6 +76,15 @@ pub use formoxus_macros::form;
 /// not at compile time — there is no per-form type to hang a struct literal on.
 pub use formoxus_macros::using_fns;
 
+/// `path!(Model.field)` — one compile-checked [`Path`] into `Model`.
+///
+/// The witness trick `form!` uses on its own field entries, available for any
+/// field: it emits a borrow of the field beside the path's string form, so a
+/// typo is a compile error rather than a `no_such_path` at runtime. Nested
+/// paths (`Model.venue.city`) and row paths (`Model.answers[].text`) work the
+/// same way.
+pub use formoxus_macros::path;
+
 // A flat root, so `use formoxus::*` (and the test modules' `use crate::*`)
 // reaches the whole vocabulary without knowing which module each name lives in.
 pub use crate::defaults::{Formoxus, defaults, provide_defaults};
@@ -89,8 +100,10 @@ pub use members::{
     Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
     model_path,
 };
+pub use path::Path;
 pub use submission::Submission;
 pub use widgets::ABSENT_DISPLAY;
+pub use wire::WireForm;
 
 /// The common surface: `use formoxus::prelude::*;`.
 ///
@@ -104,10 +117,12 @@ pub mod prelude {
         Form, FormSpec, FormState, Provider, empty_form, form_for, handler, provider,
         unchecked_handler, use_form, use_form_values,
     };
+    pub use crate::path::Path;
     pub use crate::submission::Submission;
+    pub use crate::wire::WireForm;
     // Straight from the macro crate, not `crate::{form, …}`: `crate::form` names
     // both the module and the macro, so re-exporting it that way would put the
     // MODULE into every glob import of this prelude too. `formoxus_macros::form`
     // is only ever the macro.
-    pub use formoxus_macros::{form, using_fns};
+    pub use formoxus_macros::{form, path, using_fns};
 }

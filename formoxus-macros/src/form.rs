@@ -170,7 +170,7 @@ impl FormSpecInput {
 /// Never executed — it exists so rustc checks the access. `[]` becomes a loop,
 /// which is what lets a row's field be named at all: the element type is
 /// inferred, so nothing has to spell it out.
-fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> TokenStream2 {
+pub(crate) fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> TokenStream2 {
     match segments.split_first() {
         None => quote! { let _ = &#base; },
         Some((seg, rest)) => {
@@ -457,15 +457,15 @@ where
 /// row's real path contains a generated key (`venues.#0.city`) that no author
 /// could write and that would pin one row anyway.
 #[derive(Debug)]
-struct SpecPath {
-    segments: Vec<Segment>,
+pub(crate) struct SpecPath {
+    pub(crate) segments: Vec<Segment>,
 }
 
 #[derive(Debug)]
-struct Segment {
-    ident: Ident,
+pub(crate) struct Segment {
+    pub(crate) ident: Ident,
     /// Was this segment written `name[]`?
-    each: bool,
+    pub(crate) each: bool,
 }
 
 impl SpecPath {
@@ -474,7 +474,7 @@ impl SpecPath {
     /// `[]` survives into the key deliberately — `ListSet::apply_specs` is what
     /// resolves it, by substituting each row's actual segment. Stripping it here
     /// would lose the distinction between the list and its rows.
-    fn key(&self) -> String {
+    pub(crate) fn key(&self) -> String {
         self.segments
             .iter()
             .map(|s| {

@@ -14,6 +14,9 @@
 //!   checked against the model's real shape at compile time, by emitting a
 //!   witness expression per path — a typo is a compile error, not a runtime
 //!   `no_such_path`.
+//! - [`macro@path`] builds one compile-checked `Path<Model>`, by the same
+//!   witness trick, for any field — whether or not a form mentions it. It is
+//!   what keeps `reject_field` and friends from taking a bare `&str`.
 //! - [`macro@using_fns`] supplies the handlers for one `render`, keyed by button
 //!   name. It's a runtime-reconciled map rather than a struct because the
 //!   reflection path has no per-form type to hang a struct literal on; which
@@ -27,12 +30,25 @@
 use proc_macro::TokenStream;
 
 mod form;
+mod path;
 mod using_fns;
 
 /// `form! { Model { … } }` — build a `FormSpec` for `Model`.
 #[proc_macro]
 pub fn form(input: TokenStream) -> TokenStream {
     form::impl_form(input.into()).into()
+}
+
+/// `path!(Model.field)` — a compile-checked [`Path`](../formoxus/path/struct.Path.html)
+/// into `Model`.
+///
+/// Emits a witness borrow of the field beside the path's string form, so a
+/// typo is `E0609` at the call site instead of a runtime `no_such_path`. Works
+/// for any field, nested (`Model.venue.city`) or rows (`Model.answers[].text`),
+/// whether or not a `form!` names it.
+#[proc_macro]
+pub fn path(input: TokenStream) -> TokenStream {
+    path::impl_path(input.into()).into()
 }
 
 /// The handlers for one `render`, keyed by button name — see

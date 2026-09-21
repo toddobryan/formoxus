@@ -1,0 +1,10 @@
+error[E0609]: no field `pasword` on type `&Signup`
+  --> tests/ui/path_unknown_field.rs:14:26
+   |
+14 |     let _ = path!(Signup.pasword);
+   |                          ^^^^^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+14 |     let _ = path!(Signup.password);
+   |                             +

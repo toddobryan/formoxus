@@ -17,6 +17,8 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::label_case::LabelCase;
 use crate::members::Edit;
+use crate::path::Path;
+use crate::wire::WireForm;
 use crate::{RenderCtx, ValuesByPath};
 use dioxus::prelude::*;
 use facet::Facet;
@@ -31,7 +33,7 @@ pub use state::{FormState, empty_form, form_for};
 
 pub type FieldErrors = Vec<(String, Vec<FieldError>)>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FormErrors {
     pub form: Vec<FormError>,
     pub fields: FieldErrors,
@@ -412,9 +414,78 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// special-cased here: `FormField::validate` already clears and rebuilds
     /// every leaf's own `errors` on each call, so a stale server-pushed error
     /// cannot outlive the next submit.
-    pub fn push_field_error(&self, path: &str, message: &str) -> Result<(), FormAccessError> {
+    /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile
+    /// error rather than this `Err`. The `Err` remains for the paths a
+    /// `path!` cannot spell: a specific row (`venues.#0.city`) has an index
+    /// only the runtime knows, so those go through
+    /// [`FormState::push_field_error`] with a string.
+    pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
         let mut state = self.state;
-        state.write().push_field_error(path, message)
+        state.write().push_field_error(path.as_str(), message)
+    }
+
+    /// Put a server's verdict back onto the form — the return leg of a submit.
+    ///
+    /// The counterpart to [`FormState::collect_errors`], which had no consumer
+    /// before this existed: every caller wrote the same loop over
+    /// `errors.fields` by hand, with a stringly-typed path, and had nowhere to
+    /// put `errors.form` at all.
+    ///
+    /// Paths arrive as strings because they came off the wire, so this is the
+    /// one error path that a `Path<T>` cannot protect — an `Err` here means the
+    /// server named a field this form does not have, which is a mismatch
+    /// between the two sides' specs rather than anything a user did. Errors
+    /// already applied are left in place; the first bad path stops the rest.
+    ///
+    /// **Cleared by the next [`validate`](Self::validate)**, like every other
+    /// pushed error.
+    pub fn apply_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
+        let mut state = self.state;
+        {
+            let mut state = state.write();
+            state.errors = errors.form.clone();
+        }
+        for (path, messages) in errors.fields.iter() {
+            for message in messages {
+                state.write().push_field_error(path, &message.0)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// This form as plain data, ready to cross a server-fn boundary.
+    ///
+    /// Carries the live values and whatever errors currently stand. Neither
+    /// [`Form`] nor [`FormState`] can cross one — see [`crate::wire`] for why
+    /// the spec travels as code instead.
+    pub fn to_wire(&self) -> WireForm<T> {
+        WireForm::new(
+            self.values.read().clone(),
+            self.state.read().collect_errors(),
+        )
+    }
+
+    /// Take a server's reply back into the live form: its values, then its
+    /// errors.
+    ///
+    /// **Empty values mean "leave the values alone."** A rejection normally
+    /// sends errors only, since the client still holds what it submitted; a
+    /// server that normalized something sends values back too.
+    ///
+    /// Values are written per path rather than by replacing the map, for the
+    /// reason [`reset`](Self::reset) documents: each input's own subscription
+    /// has to fire. Expect every field whose value changed to re-render, which
+    /// is a broader invalidation than a keystroke and exactly what a
+    /// round-trip should produce.
+    ///
+    /// **Structure is not rebuilt.** Values land in the map, but which paths
+    /// get *rendered* is decided by the state's schema, so a server cannot add
+    /// a row or choose a variant this way — only change what is already there.
+    pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
+        for (path, raw) in wire.values() {
+            crate::widgets::write_value(path, self.values, raw.clone());
+        }
+        self.apply_errors(wire.errors())
     }
 
     /// Push the live values into the state, then build the model.

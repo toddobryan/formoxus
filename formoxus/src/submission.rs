@@ -6,6 +6,8 @@ use facet::Facet;
 
 use crate::error::FormError;
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
+use crate::path::Path;
+use crate::wire::WireForm;
 
 /// A submitted form that passed its own validation, holding both the model the
 /// caller wanted and the tree a server verdict can still be attached to.
@@ -88,11 +90,24 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// 500. Failing loudly beats returning a `Result` that every call site has
     /// to `?` for a bug that should never ship, and beats dropping the message
     /// on the floor.
-    pub fn reject_field(mut self, path: &str, message: &str) -> FormErrors {
+    /// **Takes a [`Path`], not a `&str`.** A typo is a compile error at the
+    /// call site, so the panic below is now reachable only by a path
+    /// `path!` cannot spell — a specific row, whose index only the runtime
+    /// knows. Those go through [`FormState::push_field_error`] with a string.
+    ///
+    /// **Still panics on a path this form does not have.** A `Path<T>` proves
+    /// the field exists on `T`; it does not prove this form renders it, since a
+    /// form may cover part of a model, and an unchosen variant's fields are not
+    /// in the tree. That remains a caller bug rather than anything a user's
+    /// input can provoke, and on a server a panic unwinds into a 500 — which
+    /// beats dropping the message on the floor.
+    ///
+    /// [`FormState::push_field_error`]: crate::FormState::push_field_error
+    pub fn reject_field(mut self, path: Path<T>, message: &str) -> WireForm<T> {
         self.state
-            .push_field_error(path, message)
+            .push_field_error(path.as_str(), message)
             .unwrap_or_else(|e| panic!("cannot reject `{path}`: {e}"));
-        self.state.collect_errors()
+        self.into_wire_with_errors()
     }
 
     /// Record a server-discovered verdict about the form as a whole and finish.
@@ -100,8 +115,24 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// The counterpart to [`reject_field`](Self::reject_field) for a verdict
     /// that names no field — "those credentials don't match" can't say whether
     /// it was the username or the password.
-    pub fn reject(mut self, message: &str) -> FormErrors {
+    pub fn reject(mut self, message: &str) -> WireForm<T> {
         self.state.errors.push(FormError(message.to_string()));
-        self.state.collect_errors()
+        self.into_wire_with_errors()
+    }
+
+    /// Accepted as submitted: the form's own leaves, no errors.
+    ///
+    /// For a handler that is finished and wants the client to absorb the
+    /// canonical values. To send back values the server *changed*, normalize
+    /// the model instead and use [`WireForm::from_model`] — that regenerates
+    /// every leaf from the value, so the two cannot drift.
+    pub fn into_wire(self) -> WireForm<T> {
+        WireForm::new(self.state.as_hash_map(), FormErrors::default())
+    }
+
+    /// Values plus whatever has been objected to — what both `reject_*` return.
+    fn into_wire_with_errors(self) -> WireForm<T> {
+        let errors = self.state.collect_errors();
+        WireForm::new(self.state.as_hash_map(), errors)
     }
 }

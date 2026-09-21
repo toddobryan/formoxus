@@ -1458,6 +1458,7 @@ dependencies = [
  "heck",
  "indexmap",
  "serde",
+ "serde_json",
  "trybuild",
 ]
 

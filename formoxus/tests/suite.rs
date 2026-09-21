@@ -53,6 +53,8 @@ mod submissions;
 mod vecs;
 #[path = "suite/widgets.rs"]
 mod widgets;
+#[path = "suite/wire.rs"]
+mod wire;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///

@@ -1,0 +1,11 @@
+error[E0599]: no method named `iter` found for struct `std::string::String` in the current scope
+  --> tests/ui/path_through_a_scalar.rs:12:27
+   |
+12 |     let _ = path!(Article.headline[]);
+   |                           ^^^^^^^^ method not found in `std::string::String`
+   |
+help: because of the in-memory representation of `&str`, to obtain an `Iterator` over each of its codepoint use method `chars`
+   |
+12 -     let _ = path!(Article.headline[]);
+12 +     let _ = path!(Article.chars[]);
+   |
