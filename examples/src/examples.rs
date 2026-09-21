@@ -14,7 +14,7 @@ mod select;
 pub fn Gallery() -> Element {
     rsx! {
         Example {
-            title: "A form at all",
+            title: "A basic form",
             note: "Scalars, a widget override, and buttons — the parts that already work.",
             basics::Basics {},
         }
