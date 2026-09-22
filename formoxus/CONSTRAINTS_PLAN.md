@@ -38,42 +38,56 @@ Rendered as an HTML attribute *only where the element accepts one* — see
 | `pattern` | Text | `pattern` | check built |
 | `min` | Int, Float, (Temporal) | `min` | check built |
 | `max` | Int, Float, (Temporal) | `max` | check built |
-| `step` | Int, Float, (Temporal) | `step` | **not designed yet** |
 | `validator` | any | — | not built |
 | `help_text` | any | — | not built |
 | `initial` | any | — | not built |
-| `choices` | any scalar | — | built, but in TIER 2 — see below |
+| `choices` | — | — | stays TIER 2, see below |
 
 Notes:
 
 - **`pattern` must be a `LitStr`.** Regex parsing allocates, so it cannot happen
   in a `const` block; the macro has to see the literal to validate it with
   `regress`. Every other tier-1 value may be any const expression.
-- **`step` is missing from the first pass and is a real constraint** — HTML
-  reports `stepMismatch`, so a browser will block a value formoxus would accept.
-  Gotcha: `type="number"` rejects decimals unless `step="any"` or a fractional
-  step is given.
+- **`step` is deliberately NOT offered.** It is a spinner affordance that happens
+  to also be a constraint, and an author who wants it can write
+  `(value - min) % step == 0` as a validator in two lines.
+  **But one consequence survives that decision:** `type="number"` defaults to
+  `step="1"`, so a browser rejects `1.5` in a float field rendered as `number`
+  even though formoxus accepts it. A `Float` field with `widget: number` should
+  therefore emit `step="any"` automatically — not a feature, a divergence fix.
 - **`help_text`** is pure formoxus (no HTML equivalent); Django has it and it is
   a straightforward parity item. Renders as a hint near the field, and wants an
   `aria-describedby` wiring to be worth anything.
 - **`initial`** is a create-mode default. `empty_form` currently starts every
   field empty.
 
-### The `choices` inconsistency — decide this
+### `choices` stays in tier 2 — SETTLED 2026-09-21
 
-`choices` shipped inside the widget block (`widget: select { choices: STATES }`).
-That was right when choices were a *menu*. They are now also a **domain**: the
-membership check makes them decide which values are valid, which is the tier-1
-test.
+It looks like it belongs in tier 1, since the membership check makes choices
+decide which values are valid. It does not, for two reasons.
 
-So today, swapping `widget: select { choices: STATES }` to `widget: text`
-silently drops the validation along with the menu — exactly the failure the
-tier-1/tier-2 line exists to prevent.
+**The tier follows whether the SERVER can independently know the list**, and only
+one of the three kinds of choices qualifies:
 
-Options: move `choices` to the field level (a breaking change to syntax that has
-shipped once, in `examples/src/examples/select.rs`), or accept the split and
-document that choices are presentation-only when the widget is not a chooser.
-The first is more consistent; the second is cheaper.
+| kind | in the spec? | who checks membership |
+|---|---|---|
+| static | yes | `Submission::accept`, from the shared spec |
+| render-time (fetched, or from a render parameter) | no | the author's validator, which can redo the fetch |
+| reactive (depends on other fields) | no | cross-field by definition — the form validator |
+
+Splitting one concept across two syntaxes to capture the static case would be
+worse than the thing it fixes, since the other two kinds have to live in the
+widget block regardless.
+
+**And a widget swap cannot silently drop them.** The macro already gates
+`choices` to the four choosers, so `widget: text { choices: … }` is a compile
+error — losing the validation requires deleting the `choices` line, which is
+explicit. A swap *among* choosers (`select` → `radio_group`) keeps them, because
+all four accept choices.
+
+That is the real difference from `max_length`: `text` ↔ `textarea` ↔ `password`
+is a common swap and all three accept the constraint, so a widget-block
+`max_length` would vanish unnoticed. Choosers only swap among themselves.
 
 ---
 
