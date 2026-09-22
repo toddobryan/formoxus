@@ -40,7 +40,7 @@ pub fn ScalarWidget(
         // `type="number"` would eat a half-typed value — but `number` is a
         // perfectly good override, and so is `text` on a numeric.
         (
-            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float,
+            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
             WidgetType::Input(input_type),
         ) => {
             rsx! { Input { input_type: input_type.clone(), values, props } }
@@ -56,7 +56,10 @@ pub fn ScalarWidget(
         // thing that makes the pair renderable, hence the panic rather than an
         // empty `<select>` — a chooser with nothing to choose is a declaration
         // the author did not finish.
-        (ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float, WidgetType::Select) => {
+        (
+            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
+            WidgetType::Select,
+        ) => {
             let Some(choices) = choices else {
                 panic!(
                     "`select` needs choices (field {}) — add `widget: select {{ choices: … }}`",

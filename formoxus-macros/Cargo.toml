@@ -22,6 +22,7 @@ syn = { version = "3", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
 heck = { workspace = true }
+regress = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }

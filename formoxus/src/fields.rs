@@ -8,6 +8,7 @@ use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, 
 use crate::widgets::{FieldProps, InputType, ScalarWidget, SelectChoice, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
+use regress::Regex;
 use std::{collections::HashMap, fmt::Debug};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,10 +53,13 @@ pub enum ValueKind {
         pattern: Option<&'static str>,
     },
     Int {
-        min: i128,
-        max: i128,
+        min: Option<i128>,
+        max: Option<i128>,
     }, // from the type; author bounds join later as separate Options
-    Float,
+    Float {
+        min: Option<f64>,
+        max: Option<f64>,
+    },
     Bool,
     /*Temporal,
     Choice,
@@ -63,30 +67,103 @@ pub enum ValueKind {
     File,*/
 }
 
+impl ValueKind {
+    fn check(&self, raw_value: &str) -> Vec<FieldError> {
+        let mut errors: Vec<FieldError> = Vec::new();
+        match self {
+            ValueKind::Text {
+                min_length,
+                max_length,
+                pattern,
+            } => {
+                if let Some(min) = min_length
+                    && raw_value.chars().count() < *min
+                {
+                    errors.push(FieldError(format!("length must be at least {min}")))
+                }
+                if let Some(max) = max_length
+                    && raw_value.chars().count() > *max
+                {
+                    errors.push(FieldError(format!("length must be at most {max}")))
+                }
+                if let Some(patt) = pattern {
+                    let re = Regex::new(&format!("^(?:{patt})$"))
+                        .expect("this regex should have parsed at compile time");
+                    if re.find(raw_value).is_none() {
+                        errors.push(FieldError(format!(
+                            "input should match the regular expression {patt}"
+                        )));
+                    }
+                }
+            }
+            ValueKind::Int { min, max } => {
+                let n: i128 = raw_value
+                    .parse()
+                    .expect("this int should have already successfully parsed");
+                match (min, max) {
+                    (Some(min), Some(max)) => {
+                        if n < *min || n > *max {
+                            errors.push(FieldError(format!(
+                                "number must be in the range {min} up to (and including) {max}"
+                            )));
+                        }
+                    }
+                    (Some(min), None) => {
+                        if n < *min {
+                            errors.push(FieldError(format!("number must be at least {min}")));
+                        }
+                    }
+                    (None, Some(max)) => {
+                        if n > *max {
+                            errors.push(FieldError(format!("number must be at most {max}")));
+                        }
+                    }
+                    (None, None) => (),
+                }
+            }
+            ValueKind::Float { min, max } => {
+                let n: f64 = raw_value
+                    .parse()
+                    .expect("this float should have already successfully parsed");
+                match (min, max) {
+                    (Some(min), Some(max)) => {
+                        if n < *min || n > *max || n.is_nan() {
+                            errors.push(FieldError(format!(
+                                "number must be in the range {min} up to (and including) {max}"
+                            )));
+                        }
+                    }
+                    (Some(min), None) => {
+                        if n < *min || n.is_nan() {
+                            errors.push(FieldError(format!("number must be at least {min}")));
+                        }
+                    }
+                    (None, Some(max)) => {
+                        if n > *max || n.is_nan() {
+                            errors.push(FieldError(format!("number must be at most {max}")));
+                        }
+                    }
+                    (None, None) => (),
+                }
+            }
+            ValueKind::Bool => (),
+        }
+        errors
+    }
+}
+
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
     /// Derived from `T` on every read rather than stored, so it cannot go stale
-    /// and nothing about presentation is committed during the SHAPE walk. The
-    /// constraint fields are all `None` for now — this is where an author's
-    /// `#[facet(formoxus::max_length(…))]` will merge in, and the reason they
-    /// live on the *value* kind rather than on `WidgetType` is that overriding
-    /// a `Text` widget to `Textarea` or `Password` must not discard validation.
+    /// and nothing about presentation is committed during the SHAPE walk. Constraint
+    /// fields are added by the form! macro based on the field's path.
     ///
-    /// Bounds come from the type itself rather than being written out, so they
-    /// can't drift from `T`. They're `i128` because that's the only std integer
-    /// holding both `i64::MIN` and `u64::MAX` — **this silently breaks if `u128`
-    /// is ever added**, since `u128::MAX` would truncate through the `as` cast.
+    /// Bounds on integers are i128, since that's the only type that can represent
+    /// the max and min values on all other int types. Similarly, bounds on floats are
+    /// f64s. In the form! macro (where we have access to the actual type of the field),
+    /// we check to make sure the constraints fit.
     fn value_kind(&self) -> ValueKind {
-        macro_rules! int {
-            ($t:ty) => {
-                ValueKind::Int {
-                    min: <$t>::MIN as i128,
-                    max: <$t>::MAX as i128,
-                }
-            };
-        }
-
         // `None` is unreachable: `scalar_member` only builds a `FormField` for
         // the scalars it recognises, and `member_for_shape` panics on the rest.
         let scalar = T::SHAPE
@@ -100,15 +177,21 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                 pattern: None,
             },
             ScalarType::Bool => ValueKind::Bool,
-            ScalarType::I8 => int!(i8),
-            ScalarType::I16 => int!(i16),
-            ScalarType::I32 => int!(i32),
-            ScalarType::I64 => int!(i64),
-            ScalarType::U8 => int!(u8),
-            ScalarType::U16 => int!(u16),
-            ScalarType::U32 => int!(u32),
-            ScalarType::U64 => int!(u64),
-            ScalarType::F32 | ScalarType::F64 => ValueKind::Float,
+            ScalarType::I8
+            | ScalarType::I16
+            | ScalarType::I32
+            | ScalarType::I64
+            | ScalarType::U8
+            | ScalarType::U16
+            | ScalarType::U32
+            | ScalarType::U64 => ValueKind::Int {
+                min: None,
+                max: None,
+            },
+            ScalarType::F32 | ScalarType::F64 => ValueKind::Float {
+                min: None,
+                max: None,
+            },
             other => panic!(
                 "scalar type {other:?} is not supported in FormField (field {})",
                 self.name
@@ -127,7 +210,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             ValueKind::Text { .. } => WidgetType::Input(InputType::Text),
             // Deliberately `text`, not `number`: `type="number"` hands back `""`
             // for anything the browser dislikes, so a half-typed value vanishes.
-            ValueKind::Int { .. } | ValueKind::Float => WidgetType::Input(InputType::Text),
+            ValueKind::Int { .. } | ValueKind::Float { .. } => WidgetType::Input(InputType::Text),
             // An `Option<bool>` has three states and a checkbox has two, so the
             // optional case gets a `Select` — reusing the one implementation of
             // the "no value" option rather than growing a third checkbox state
@@ -234,7 +317,21 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             FieldValue::Invalid { error, .. } => Some(error.clone()),
             _ => None,
         };
-        self.errors.extend(error);
+        // return an invalid or empty required field error (ignoring checkboxes) immediately,
+        // and an empty field can't fail any constraints, so also return
+        if error.is_some() || matches!(self.value, FieldValue::Empty) {
+            self.errors.extend(error);
+            return;
+        }
+        // now check constraints on particular types, all values should be FieldValue::Valid(t)
+        let raw = self.raw_value();
+        self.errors.extend(self.value_kind().check(&raw));
+        if let Some(choices) = &self.choices
+            && !choices.iter().any(|c| c.value == raw)
+        {
+            self.errors
+                .push(FieldError("not one of the available choices".into()));
+        }
     }
 
     fn clone_box(&self) -> Box<dyn FormMember> {
@@ -388,5 +485,324 @@ where
                 .expect("scalar_type matched, so this get should be the right type")
                 .clone(),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    fn text(
+        min_length: Option<usize>,
+        max_length: Option<usize>,
+        pattern: Option<&'static str>,
+    ) -> ValueKind {
+        ValueKind::Text {
+            min_length,
+            max_length,
+            pattern,
+        }
+    }
+
+    fn messages(kind: &ValueKind, raw: &str) -> Vec<String> {
+        kind.check(raw).into_iter().map(|e| e.0).collect()
+    }
+
+    // ── Text: lengths ────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_text_field_with_no_constraints_never_complains() {
+        expect_that!(messages(&text(None, None, None), ""), is_empty());
+        expect_that!(
+            messages(&text(None, None, None), "anything at all"),
+            is_empty()
+        );
+    }
+
+    #[gtest]
+    fn min_length_is_inclusive() {
+        let kind = text(Some(3), None, None);
+        expect_that!(messages(&kind, "ab"), len(eq(1)));
+        expect_that!(messages(&kind, "abc"), is_empty());
+        expect_that!(messages(&kind, "abcd"), is_empty());
+    }
+
+    #[gtest]
+    fn max_length_is_inclusive() {
+        let kind = text(None, Some(3), None);
+        expect_that!(messages(&kind, "abc"), is_empty());
+        expect_that!(messages(&kind, "abcd"), len(eq(1)));
+    }
+
+    /// **Characters, not bytes.** `José` is four characters and five bytes, so a
+    /// `len()` here would reject a name that fits.
+    #[gtest]
+    fn length_counts_characters_not_bytes() {
+        expect_that!(messages(&text(None, Some(4), None), "José"), is_empty());
+        expect_that!(messages(&text(Some(4), None, None), "José"), is_empty());
+        // The same string is 5 bytes, which a byte count would have rejected.
+        expect_that!("José".len(), eq(5));
+    }
+
+    /// Astral-plane characters are one `char` each, so an emoji costs one, not
+    /// four. HTML counts UTF-16 code units and would say two — a divergence
+    /// worth knowing about rather than a bug to fix, since the server's count is
+    /// the one that decides.
+    #[gtest]
+    fn an_emoji_counts_as_one_character() {
+        expect_that!(messages(&text(None, Some(1), None), "🦀"), is_empty());
+    }
+
+    #[gtest]
+    fn both_length_bounds_can_fail_independently() {
+        let kind = text(Some(2), Some(4), None);
+        expect_that!(messages(&kind, "a"), len(eq(1)));
+        expect_that!(messages(&kind, "abc"), is_empty());
+        expect_that!(messages(&kind, "abcde"), len(eq(1)));
+    }
+
+    // ── Text: pattern ────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_pattern_accepts_what_it_describes() {
+        expect_that!(
+            messages(&text(None, None, Some(r"\d{5}")), "90210"),
+            is_empty()
+        );
+    }
+
+    /// **The anchoring is the whole point.** HTML implicitly wraps a `pattern` as
+    /// `^(?:…)$`, while a bare regex search finds a substring — so without the
+    /// wrap the server would accept values the browser rejects, which is the
+    /// worst direction for the two to disagree.
+    #[gtest]
+    fn a_pattern_must_match_the_entire_value() {
+        let kind = text(None, None, Some(r"\d{5}"));
+        expect_that!(messages(&kind, "abc12345xyz"), len(eq(1)));
+        expect_that!(messages(&kind, "90210-1234"), len(eq(1)));
+    }
+
+    /// The `(?:…)` in the wrap is load-bearing, not decoration: `^a|b$` parses
+    /// as "starts with a" OR "ends with b", so an un-grouped alternation would
+    /// silently accept both halves of the wrong thing.
+    #[gtest]
+    fn an_alternation_is_grouped_before_it_is_anchored() {
+        let kind = text(None, None, Some("cat|dog"));
+        expect_that!(messages(&kind, "cat"), is_empty());
+        expect_that!(messages(&kind, "dog"), is_empty());
+        expect_that!(messages(&kind, "catfish"), len(eq(1)));
+        expect_that!(messages(&kind, "hotdog"), len(eq(1)));
+    }
+
+    #[gtest]
+    fn a_length_and_a_pattern_both_report() {
+        let kind = text(Some(10), None, Some(r"\d+"));
+        expect_that!(messages(&kind, "abc"), len(eq(2)));
+    }
+
+    /// `regress` gives ECMAScript semantics, which is the point of choosing it
+    /// over `regex`: these four all match what a browser does, so the server
+    /// cannot disagree with the client about what a `pattern` means.
+    ///
+    /// Anchors are NOT multiline — `\d{5}` rejects `"12345\n67890"` — and `$`
+    /// does not match before a trailing newline the way Perl's does. Both
+    /// matter for `pattern` on a `<textarea>`, where a value legitimately
+    /// contains newlines.
+    #[gtest]
+    fn anchors_and_dot_follow_javascript_not_perl() {
+        let five = text(None, None, Some(r"\d{5}"));
+        expect_that!(messages(&five, "12345\n67890"), len(eq(1)));
+        expect_that!(messages(&five, "12345\n"), len(eq(1)));
+
+        // `.` excludes newline (no `s` flag), so spanning lines has to be asked
+        // for explicitly.
+        expect_that!(messages(&text(None, None, Some(r".+")), "a\nb"), len(eq(1)));
+        expect_that!(
+            messages(&text(None, None, Some(r"(.|\n)+")), "a\nb"),
+            is_empty()
+        );
+    }
+
+    // ── Int ──────────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn an_int_with_no_bounds_never_complains() {
+        let kind = ValueKind::Int {
+            min: None,
+            max: None,
+        };
+        expect_that!(messages(&kind, "0"), is_empty());
+        expect_that!(
+            messages(&kind, "-170141183460469231731687303715884105728"),
+            is_empty()
+        );
+    }
+
+    #[gtest]
+    fn int_bounds_are_inclusive() {
+        let kind = ValueKind::Int {
+            min: Some(1),
+            max: Some(10),
+        };
+        expect_that!(messages(&kind, "0"), len(eq(1)));
+        expect_that!(messages(&kind, "1"), is_empty());
+        expect_that!(messages(&kind, "10"), is_empty());
+        expect_that!(messages(&kind, "11"), len(eq(1)));
+    }
+
+    #[gtest]
+    fn a_one_sided_int_bound_says_which_side() {
+        let low = ValueKind::Int {
+            min: Some(0),
+            max: None,
+        };
+        expect_that!(
+            messages(&low, "-1"),
+            elements_are![contains_substring("at least 0")]
+        );
+
+        let high = ValueKind::Int {
+            min: None,
+            max: Some(100),
+        };
+        expect_that!(
+            messages(&high, "101"),
+            elements_are![contains_substring("at most 100")]
+        );
+    }
+
+    // ── Float ────────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn float_bounds_are_inclusive() {
+        let kind = ValueKind::Float {
+            min: Some(0.0),
+            max: Some(1.0),
+        };
+        expect_that!(messages(&kind, "-0.1"), len(eq(1)));
+        expect_that!(messages(&kind, "0"), is_empty());
+        expect_that!(messages(&kind, "1"), is_empty());
+        expect_that!(messages(&kind, "1.1"), len(eq(1)));
+    }
+
+    /// **NaN is rejected only when a bound exists**, which is Todd's rule and the
+    /// only coherent one: every comparison against NaN is false, so an unguarded
+    /// range check would let it through silently. With no range stated there is
+    /// nothing for it to be outside of, and a float field is entitled to hold it.
+    #[gtest]
+    fn nan_passes_an_unbounded_float_and_fails_a_bounded_one() {
+        let free = ValueKind::Float {
+            min: None,
+            max: None,
+        };
+        expect_that!(messages(&free, "nan"), is_empty());
+        expect_that!(messages(&free, "NaN"), is_empty());
+
+        expect_that!(
+            messages(
+                &ValueKind::Float {
+                    min: Some(0.0),
+                    max: Some(1.0)
+                },
+                "nan"
+            ),
+            len(eq(1))
+        );
+        expect_that!(
+            messages(
+                &ValueKind::Float {
+                    min: Some(0.0),
+                    max: None
+                },
+                "nan"
+            ),
+            len(eq(1))
+        );
+        expect_that!(
+            messages(
+                &ValueKind::Float {
+                    min: None,
+                    max: Some(1.0)
+                },
+                "nan"
+            ),
+            len(eq(1))
+        );
+    }
+
+    /// Infinity is an ordinary float: allowed when unbounded, and compared
+    /// normally when not. Parsing saturates rather than failing, so `1e400`
+    /// arrives here as `inf` and a stated maximum is what catches it.
+    #[gtest]
+    fn infinity_is_allowed_unbounded_and_compared_when_bounded() {
+        let free = ValueKind::Float {
+            min: None,
+            max: None,
+        };
+        expect_that!(messages(&free, "inf"), is_empty());
+        expect_that!(messages(&free, "1e400"), is_empty());
+
+        let capped = ValueKind::Float {
+            min: None,
+            max: Some(100.0),
+        };
+        expect_that!(messages(&capped, "1e400"), len(eq(1)));
+        expect_that!(messages(&capped, "-inf"), is_empty());
+    }
+
+    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** Nothing yet
+    /// rejects a bound that does not fit the field's own type.
+    ///
+    /// `max: 1e50` on an `f32` field looks satisfiable and is not: `1e39` sits
+    /// comfortably inside the stated bound, but f32 parsing SATURATES rather
+    /// than erroring, so it arrives as `inf`, and `inf > 1e50` rejects it. The
+    /// author allowed a value the form then refuses, and the error message says
+    /// it is out of a range it is visibly inside.
+    ///
+    /// The fix is upstream of `check`, which only ever sees the canonical
+    /// display and cannot tell `inf`-the-answer from `inf`-the-overflow.
+    /// `value_kind`'s doc already promises the macro will "check to make sure
+    /// the constraints fit" the field's type — un-ignore this when that lands.
+    #[gtest]
+    #[ignore = "a bound that overflows the field's own type is not rejected yet"]
+    fn a_bound_that_overflows_f32_is_caught_before_it_can_bite() {
+        // The bound is fine as an f64, which is all `ValueKind::Float` stores.
+        let stated_max = 1e50_f64;
+        let inside: f64 = "1e39".parse().expect("parses as f64");
+        expect_that!(inside < stated_max, eq(true));
+
+        // But the field is an f32, and the same text does not survive the trip.
+        let as_f32: f32 = "1e39".parse().expect("parses as f32, saturating");
+        expect_that!(
+            as_f32.is_finite(),
+            eq(true),
+            "saturation to inf is what makes the stated bound unreachable"
+        );
+    }
+
+    // ── Bool ─────────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_bool_has_nothing_to_constrain() {
+        expect_that!(messages(&ValueKind::Bool, "true"), is_empty());
+        expect_that!(messages(&ValueKind::Bool, "false"), is_empty());
+    }
+
+    // ── The caller's contract ────────────────────────────────────────────
+
+    /// `check` runs only on a `FieldValue::Valid`, so the raw string is always
+    /// this type's own canonical display and always re-parses. Pinning the panic
+    /// documents that: a caller reaching here with unparsed input has skipped
+    /// the guard in `validate`, and a silent `unwrap_or` would turn that bug
+    /// into a field that quietly passes every bound.
+    #[gtest]
+    #[should_panic(expected = "should have already successfully parsed")]
+    fn checking_an_unparsed_int_is_a_caller_bug() {
+        let _ = ValueKind::Int {
+            min: Some(0),
+            max: None,
+        }
+        .check("not a number");
     }
 }
