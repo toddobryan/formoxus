@@ -1,102 +1,94 @@
 ---
 name: const-shape-walk-blocked
-description: "VERIFIED DEAD END, 2026-09-20. A `const fn` walk over facet's `Shape` cannot cross from a type to its field's type, because `ShapeRef` holds a `fn() -> &'static Shape` and function-pointer calls are forbidden in const fn. This kills compile-time newtype peeling, which was the whole reason to want it. Use the marker-trait route instead"
+description: "Compile-time checking against facet's Shape. VERIFIED 2026-09-21: a const fn CAN classify one shape, and an inline const{} block in a generated generic fn sees both T::SHAPE and a literal baked into it — which closes BOTH the constraint-vs-value-kind check and the bound-fits-the-type check at compile time. What is blocked is only CROSSING a ShapeRef to reach a field's type, which classification never needs. Supersedes the earlier marker-trait recommendation"
 metadata:
   type: project
 ---
 
-## What was being attempted
+**Read the update first — this file's original conclusion was wrong.** It said
+the const route was a dead end and to use marker traits. That over-applied a
+real but much narrower blockage.
 
-Compile-time gating of field constraints (`max_length`, `pattern`, `min`/`max`)
-in `form!` — rejecting `max_length` on a `bool` field with a compile error
-rather than letting it be silently ignored. `form!` has **zero type
-information** (its witness is a bare `let _ = &__s.password;`), so the check has
-to be delegated to rustc. Two candidate routes, and this memo is about the one
-that lost. See [[widget-attribute-gating]] for the surrounding design.
+## What works — verified by compiling, 2026-09-21
 
-## What works in a const walk
-
-All of `Shape`'s fields are `pub`, and `Type` / `UserType` / `StructType` are
-ordinary matchable enums. So this compiles and gives the right answer:
+An inline `const {}` block inside a macro-generated generic fn can see **both**
+the caller's `T` and a literal baked into the emitted code:
 
 ```rust
-const fn is_newtype(shape: &'static Shape) -> bool {
-    match shape.ty {
-        Type::User(UserType::Struct(st)) =>
-            matches!(st.kind, StructKind::TupleStruct) && st.fields.len() == 1,
-        _ => false,
-    }
+fn check<'a, T: Facet<'a>>(_x: &T) {
+    const { assert!(bound_fits(T::SHAPE, 1e50), "bound does not fit this field's type") }
 }
+check(&__s.ratio);          // emitted into form!'s witness
 ```
 
-`const _: () = assert!(is_text_shape(<String as Facet>::SHAPE));` also compiles.
-
-And an inline `const {}` block CAN see the enclosing function's generic
-parameter, which is the only way the macro could check a field whose type it
-cannot name:
-
-```rust
-pub fn assert_text<'a, T: Facet<'a>>(_: &T) {
-    const { assert!(is_text_shape(T::SHAPE), "this constraint applies to text fields") }
-}
+```
+error[E0080]: evaluation panicked: bound does not fit this field's type
+   |  evaluation of `main::check::<'_, f32>::{constant#0}` failed here
 ```
 
-That produces a real compile error naming `assert_text::<'_, bool>`.
+**The bound does not need to be a function argument**, which is what made the
+earlier analysis conclude this was impossible — a runtime `f64` parameter is
+invisible to `const {}`, and `f64` const generics are unstable. As a literal in
+the generated source it is visible, and no const generics are needed.
 
-## What does NOT work, and why it cannot be fixed upstream
+So both compile-time checks land:
 
-Crossing from a shape to a field's shape:
+- **constraint vs. value kind** — `max_length` on a `bool` field
+- **a bound that overflows the field's own type** — `max: 1e50` on an `f32`,
+  which was previously expected to be a runtime panic in `apply_specs`
+
+Classification itself is a const fn over ONE shape. `scalar_type()` can never be
+const (it compares `TypeId`s, and `PartialEq::eq` is a trait method), so classify
+on `shape.type_identifier` with a hand-written const `str_eq` — and pair it with
+`module_path` so a user type named `String` cannot false-positive.
+
+## Why this beats marker traits
+
+1. **One source of truth.** `value_kind()` already classifies by shape. A
+   `#[diagnostic::on_unimplemented]` marker trait needs a hand-kept `impl` list —
+   exactly the sync hazard the `widgets!` table doc argues against.
+2. **Three-valued, not two.** A trait bound can only pass or fail. A shape can
+   say *"can't tell"*: `is_text(shape) || is_newtype(shape)` lets
+   `Markdown(String)` through unjudged, which is CORRECT — at runtime
+   `value_kind()` sees the inner `String`, so the constraint genuinely applies.
+   This closes the newtype gap that was previously thought unavoidable.
+3. **No orphan problem.** Marker traits would need `impl HasLength for Markdown`
+   in the model's crate, dragging formoxus into it. A shape needs nothing the
+   model does not already derive.
+
+## What IS still blocked, and why it does not matter here
+
+Crossing from a shape to a FIELD's shape:
 
 ```
 error: function pointer calls are not allowed in constant functions
    |  Type::User(UserType::Struct(st)) => (st.fields[0].shape.0)(),
 ```
 
-`pub struct ShapeRef(pub fn() -> &'static Shape)` — a function pointer **by
-design**, because that indirection is what lets recursive types have shapes
-(facet's own doc: "enabling lazy evaluation for recursive types"). So:
+`ShapeRef` is `pub struct ShapeRef(pub fn() -> &'static Shape)` — a fn pointer
+by design, because that indirection is what lets recursive types have shapes.
+Marking `ShapeRef::get` const upstream would not help (the body still calls the
+pointer) and removing the indirection would break recursive types.
 
-- Marking `ShapeRef::get` as `const fn` upstream would NOT help — the body still
-  calls a fn pointer.
-- Changing `ShapeRef` to hold `&'static Shape` directly would break recursive
-  types.
+**Classification never crosses anything.** It inspects one shape, which is why
+the blockage does not apply.
 
-There is no other route to the inner type: a newtype's `scalar_type()` is
-`None`, and `parse_from_str` fails even with `#[facet(transparent)]` (see
-[[facet-newtypes-and-custom-widgets]]).
+## Limits of const-block diagnostics
 
-**Also note `scalar_type()` itself can never be const**: it works by comparing
-`TypeId`s (`type_id == TypeId::of::<String>()`), and `PartialEq::eq` is a trait
-method, forbidden in const fn.
+- **No values in the message.** `assert!` in const takes a `&'static str`;
+  formatting is `E0015: cannot call non-const formatting macro`. So "min_length
+  must not exceed max_length", never "min_length 5 exceeds max_length 3".
+- **A runtime expression is rejected** with `E0435: attempt to use a non-constant
+  value in a constant` — which is a feature: it forbids `max_length: some_var`,
+  matching the rule that a bound varying at runtime is a validator.
+- **Named consts and const arithmetic DO work**, so this covers more than
+  literals.
+- **The span lands on formoxus's own source** unless `quote_spanned!` moves it
+  onto the author's tokens — the trick `probe()` already uses for `[]`.
 
-## Why that kills the route
+## The one thing that still needs a literal
 
-Newtypes are LEAVES whose `ValueKind` comes from the INNER scalar — `FormField`
-carries the inner type with the newtype's shape on a side channel. So a check
-that cannot peel would reject `Markdown(String)` for `max_length`, which is
-precisely the kind of field custom widgets exist for.
-
-## The decision
-
-**Use the marker-trait route**: `trait HasLength {}` + `#[diagnostic::on_unimplemented]`,
-asserted at the witness. Verified to give a fully custom message with the
-primary span on the field:
-
-```
-error[E0277]: `max_length` applies to text fields, and `bool` is not one
-20 |     assert_has_length(&p.active);
-   |                        ^^^^^^^^^ this field is `bool`
-```
-
-It has the SAME newtype gap (trait resolution can't see through `Markdown`
-either), but strictly better diagnostics — the const-block error puts its
-primary span on formoxus's own source and relegates the call site to a `note:`.
-
-Generate the impls from the same table as `value_kind()`'s `match scalar`
-(fields.rs:92) so the two cannot drift — the sync hazard the `widgets!` table
-doc already calls out.
-
-**Newtypes remain unsolved.** The options are: the author writes
-`impl HasLength for Markdown {}` (needs the model crate to depend on formoxus,
-the dependency this design avoids), or constraints on newtype fields go
-unchecked at compile time.
+`pattern`. Regex parsing allocates, and heap allocation is forbidden in const
+evaluation, so `regress::Regex::new` cannot be a const fn and no const regex
+parser exists. The macro must see a `LitStr` and validate it with the same engine
+that will run it.
