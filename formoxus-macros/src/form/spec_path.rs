@@ -5,6 +5,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{
     Ident, Result, Token,
+    ext::IdentExt,
     parse::{Parse, ParseStream},
 };
 
@@ -38,10 +39,14 @@ impl SpecPath {
         self.segments
             .iter()
             .map(|s| {
+                // `unraw`: an author writing `r#type` means the field `type`,
+                // which is the name facet reports and the name
+                // `FormMember::apply_specs` looks itself up by. Leaving the
+                // `r#` on would make the key match nothing.
                 if s.each {
-                    format!("{}[]", s.ident)
+                    format!("{}[]", s.ident.unraw())
                 } else {
-                    s.ident.to_string()
+                    s.ident.unraw().to_string()
                 }
             })
             .collect::<Vec<_>>()
@@ -54,11 +59,32 @@ impl SpecPath {
     }
 }
 
+/// One segment's name, normalized so both spellings of a keyword-named field
+/// reach the same place.
+///
+/// `parse_any` is what accepts `type` at all: a plain `Ident` parse rejects
+/// every Rust keyword, and `r#type` is a perfectly legal field name. Having
+/// accepted it, the ident must be made RAW, because [`probe`] emits
+/// `#base.#ident` and `__s.type` is a syntax error where `__s.r#type` is not —
+/// accepting the bare spelling without this would trade a clear "expected
+/// identifier" for a baffling one pointing into generated code.
+///
+/// A non-keyword is returned untouched, so nothing else in the expansion moves.
+fn segment_ident(input: ParseStream<'_>) -> Result<Ident> {
+    let ident = Ident::parse_any(input)?;
+    let written = ident.to_string();
+    if written.starts_with("r#") || syn::parse_str::<Ident>(&written).is_ok() {
+        Ok(ident)
+    } else {
+        Ok(Ident::new_raw(&written, ident.span()))
+    }
+}
+
 impl Parse for SpecPath {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let mut segments = Vec::new();
         loop {
-            let ident: Ident = input.parse()?;
+            let ident = segment_ident(input)?;
             let each = if input.peek(syn::token::Bracket) {
                 let brackets;
                 let span = syn::bracketed!(brackets in input);
@@ -273,6 +299,65 @@ mod tests {
         expect_that!(
             out,
             contains_substring("fn __paths_exist (__s : & Article) { }")
+        );
+    }
+
+    // ── Keyword-named fields ───────────────────────────────────────────
+
+    /// `r#type` is a legal field name, so it has to be a legal path segment.
+    /// The `r#` is a spelling, not part of the name: facet reports the field as
+    /// `type`, and that is the key `apply_specs` looks itself up by.
+    #[gtest]
+    fn a_raw_identifier_keys_on_the_bare_name() {
+        let spec = parse(quote! { Model { r#type => { label: "Kind" } } }).expect("parses");
+        expect_that!(
+            fields(&spec)
+                .into_iter()
+                .map(|(p, _, _)| p)
+                .collect::<Vec<_>>(),
+            elements_are![eq("type")]
+        );
+    }
+
+    /// The bare spelling reaches the same field. A plain `Ident` parse rejects
+    /// every Rust keyword, which is why this needs `parse_any`.
+    #[gtest]
+    fn the_bare_spelling_of_a_keyword_reaches_the_same_field() {
+        let spec = parse(quote! { Model { type => { label: "Kind" } } }).expect("parses");
+        expect_that!(
+            fields(&spec)
+                .into_iter()
+                .map(|(p, _, _)| p)
+                .collect::<Vec<_>>(),
+            elements_are![eq("type")]
+        );
+    }
+
+    #[gtest]
+    fn a_keyword_segment_works_below_a_row_selector() {
+        let spec = parse(quote! { Model { rows[].r#match => { label: "Arm" } } }).expect("parses");
+        expect_that!(
+            fields(&spec)
+                .into_iter()
+                .map(|(p, _, _)| p)
+                .collect::<Vec<_>>(),
+            elements_are![eq("rows[].match")]
+        );
+    }
+
+    /// **The reason the parse normalizes to a RAW ident rather than keeping
+    /// what was written.** The witness is field access, and `__s.type` is a
+    /// syntax error — accepting the bare spelling without this would swap a
+    /// clear parse error for rustc complaining about generated code.
+    #[gtest]
+    fn the_witness_emits_a_keyword_segment_raw_either_way() {
+        expect_that!(
+            witness_of(quote! { Model { r#type => { label: "Kind" } } }),
+            contains_substring("__s . r#type")
+        );
+        expect_that!(
+            witness_of(quote! { Model { type => { label: "Kind" } } }),
+            contains_substring("__s . r#type")
         );
     }
 }

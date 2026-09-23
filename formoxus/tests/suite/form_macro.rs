@@ -629,3 +629,49 @@ fn sibling_fields_still_render_their_normal_widgets() {
     expect_that!(html, contains_substring(r#"name="name""#));
     expect_that!(html, contains_substring(r#"type="checkbox""#));
 }
+
+// ── Keyword-named fields ─────────────────────────────────────────────────
+
+/// A model that could not be named in `form!` at all until now. `r#type` is an
+/// ordinary Rust field name and a common one in anything mirroring a JSON API,
+/// so a form library that cannot address it has a hole in its reach.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Token {
+    r#type: String,
+    value: String,
+}
+
+#[component]
+fn RawSpelling() -> Element {
+    use_form(|| empty_form(form! { Token { r#type => { label: "Kind" } } })).render_fragment()
+}
+
+#[component]
+fn BareSpelling() -> Element {
+    use_form(|| empty_form(form! { Token { type => { label: "Kind" } } })).render_fragment()
+}
+
+/// The macro-side tests pin the tokens this emits; only a consumer test pins
+/// that they COMPILE. The witness expands to `__s.r#type` field access, which
+/// is a syntax error if the ident is not raw — and this is the only place that
+/// would show.
+///
+/// That the label arrives is the second half: the spec key has to be `type`,
+/// the name facet reports, not `r#type` as written. `default_label` would have
+/// produced "Type", so its absence is what shows the override landed on the
+/// right field rather than merely coexisting with it.
+#[gtest]
+fn a_keyword_named_field_is_addressable_by_its_raw_spelling() {
+    let html = render_to_html(RawSpelling);
+    expect_that!(html, contains_substring("Kind"));
+    expect_that!(html, not(contains_substring(">Type<")));
+}
+
+/// And bare, which is what an author is likelier to type inside a macro, since
+/// nothing there forces the `r#`. Both spellings have to reach the same field.
+#[gtest]
+fn a_keyword_named_field_is_addressable_bare() {
+    let html = render_to_html(BareSpelling);
+    expect_that!(html, contains_substring("Kind"));
+    expect_that!(html, not(contains_substring(">Type<")));
+}

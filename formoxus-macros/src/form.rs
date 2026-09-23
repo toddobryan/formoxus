@@ -20,11 +20,12 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
     Expr, Ident, Path, Result, Token, braced,
+    ext::IdentExt,
     parse::{Parse, ParseBuffer, ParseStream},
     punctuated::Punctuated,
 };
 
-pub fn impl_form(input: TokenStream2) -> TokenStream2 {
+pub(crate) fn impl_form(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FormSpecInput>(input) {
         Ok(spec) => spec.expand(),
         Err(err) => err.to_compile_error(),
@@ -419,7 +420,12 @@ impl Parse for Entry {
             Entry::parse_validator(input)
         } else if attribute(input, kw::buttons) {
             Entry::parse_buttons(input)
-        } else if input.peek(syn::Ident) {
+        // `peek_any`, not `peek(Ident)`: a field may be named with a Rust
+        // keyword (`r#type`), and a bare keyword is not an `Ident`. The five
+        // guards above have already had their say, and each of them needs a
+        // following `:`, so nothing an author writes as a field can be
+        // swallowed here.
+        } else if input.peek(Ident::peek_any) {
             Entry::parse_field(input)
         } else {
             Err(input.error("expected a form attribute or a field specifier"))
