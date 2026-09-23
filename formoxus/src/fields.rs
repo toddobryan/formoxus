@@ -23,6 +23,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
+    pub constraints: Constraints,
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
     /// spec gave choices to — which is every field rendered as an `<input>`.
@@ -65,6 +66,39 @@ pub enum ValueKind {
     Choice,
     MultiChoice,
     File,*/
+}
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum Bound {
+    Int(i128),
+    Float(f64),
+}
+
+macro_rules! bound_from_int { ($($t:ty),* $(,)?) => { $(
+    impl From<$t> for Bound {
+        fn from(v: $t) -> Self { Bound::Int(v as i128) }
+    }
+)* } }
+bound_from_int!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, usize);
+
+impl From<f32> for Bound {
+    fn from(v: f32) -> Self {
+        Bound::Float(v as f64)
+    }
+}
+impl From<f64> for Bound {
+    fn from(v: f64) -> Self {
+        Bound::Float(v)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Constraints {
+    pub min: Option<Bound>,
+    pub max: Option<Bound>,
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub pattern: Option<&'static str>,
 }
 
 impl ValueKind {
@@ -172,9 +206,9 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
 
         match scalar {
             ScalarType::String => ValueKind::Text {
-                min_length: None,
-                max_length: None,
-                pattern: None,
+                min_length: self.constraints.min_length,
+                max_length: self.constraints.max_length,
+                pattern: self.constraints.pattern,
             },
             ScalarType::Bool => ValueKind::Bool,
             ScalarType::I8
@@ -184,14 +218,40 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             | ScalarType::U8
             | ScalarType::U16
             | ScalarType::U32
-            | ScalarType::U64 => ValueKind::Int {
-                min: None,
-                max: None,
-            },
-            ScalarType::F32 | ScalarType::F64 => ValueKind::Float {
-                min: None,
-                max: None,
-            },
+            | ScalarType::U64 => {
+                let (min, max) = match (self.constraints.min, self.constraints.max) {
+                    (None, None) => (None, None),
+                    (Some(Bound::Int(min)), None) => (Some(min), None),
+                    (None, Some(Bound::Int(max))) => (None, Some(max)),
+                    (Some(Bound::Int(min)), Some(Bound::Int(max))) => (Some(min), Some(max)),
+                    (Some(Bound::Float(min)), _) => panic!(
+                        "Integer field {} does not support float min {min}",
+                        self.name
+                    ),
+                    (_, Some(Bound::Float(max))) => panic!(
+                        "Integer field {} does not support float max {max}",
+                        self.name
+                    ),
+                };
+                // TODO: check that the constraints do something
+                // For example a min of -1000 on i8 should produce an error like,
+                // "A bound of -1000 on an i8 is always true; this constraint does nothing"
+                ValueKind::Int { min, max }
+            }
+            ScalarType::F32 | ScalarType::F64 => {
+                let min = match self.constraints.min {
+                    None => None,
+                    Some(Bound::Int(min)) => Some(min as f64), // TODO: check for loss of precision
+                    Some(Bound::Float(min)) => Some(min),
+                };
+                let max = match self.constraints.max {
+                    None => None,
+                    Some(Bound::Int(max)) => Some(max as f64), // TODO: check for loss of precision
+                    Some(Bound::Float(max)) => Some(max),
+                };
+                // TODO: check constraints on f32s to make sure they're not out of range
+                ValueKind::Float { min, max }
+            }
             other => panic!(
                 "scalar type {other:?} is not supported in FormField (field {})",
                 self.name
@@ -781,6 +841,75 @@ mod tests {
         );
     }
 
+    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** `value_kind()`
+    /// widens a `Bound::Int` to `f64` with a plain `as`, which is exact only
+    /// below 2^53.
+    ///
+    /// So `min: 9_007_199_254_740_993` on an `f64` field is stored as
+    /// ...992, and the value one below the stated minimum is then accepted.
+    /// The author wrote a bound the form does not enforce — and unlike a bound
+    /// that is merely wrong, this one reads as correct at the call site.
+    ///
+    /// Both TODOs in `value_kind`'s `Float` arm point here. The fix is upstream
+    /// of `check`, which only ever sees the `f64` that survived the widening.
+    #[gtest]
+    #[ignore = "an integer bound above 2^53 is silently rounded on a float field"]
+    fn an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded() {
+        let stated_min: i128 = (1i128 << 53) + 1;
+        // Exactly what `value_kind()`'s `Float` arm does with a `Bound::Int`.
+        let as_stored = stated_min as f64;
+
+        expect_that!(
+            as_stored as i128,
+            eq(stated_min),
+            "the stated bound does not survive the widening"
+        );
+
+        // And the consequence, which is what actually matters: a value the
+        // author excluded gets in.
+        let kind = ValueKind::Float {
+            min: Some(as_stored),
+            max: None,
+        };
+        expect_that!(
+            messages(&kind, &(stated_min - 1).to_string()),
+            len(eq(1)),
+            "a value below the stated minimum is accepted anyway"
+        );
+    }
+
+    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** Nothing rejects
+    /// a bound that no value of the field's own type could ever violate.
+    ///
+    /// `min: -1000` on an `i8` field excludes nothing — `i8::MIN` is -128 — so
+    /// the constraint is dead weight that still renders as `min="-1000"` on the
+    /// input. It is almost always a typo: a digit too many, or a bound left
+    /// behind when the field changed type.
+    ///
+    /// `ValueKind::Int` cannot catch this, since it holds the bound but not the
+    /// type; only `value_kind()`, which has `T`, knows both. Its `Int` arm
+    /// carries the TODO. Note this is the SAME comparison that rejects an
+    /// overflowing bound, read in the other direction — one check against the
+    /// type's range, two ways to fail it.
+    ///
+    /// Unlike the overflow case, a vacuous bound is arguably a warning, and a
+    /// `const {}` block can only hard-error. Closing this means deciding that
+    /// it fails the build.
+    #[gtest]
+    #[ignore = "a bound that excludes no value of the field's type is not rejected yet"]
+    fn a_bound_no_value_of_the_field_type_could_violate_is_caught() {
+        let stated_min: i128 = -1000;
+        let excluded = (i8::MIN..=i8::MAX)
+            .filter(|v| i128::from(*v) < stated_min)
+            .count();
+
+        expect_that!(
+            excluded,
+            gt(0),
+            "no i8 can fail this bound, so stating it does nothing"
+        );
+    }
+
     // ── Bool ─────────────────────────────────────────────────────────────
 
     #[gtest]
@@ -804,5 +933,113 @@ mod tests {
             max: None,
         }
         .check("not a number");
+    }
+
+    // ── Constraints reach the field ──────────────────────────────────────
+    //
+    // Everything above tests `ValueKind::check` directly. These four go in
+    // through `FormField`, which is the only way to exercise `value_kind()` —
+    // the one place that pairs a constraint with the field's actual type.
+
+    fn a_field<X>(value: X, constraints: Constraints) -> FormField<X>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        FormField {
+            name: "f".to_string(),
+            label: None,
+            optional: false,
+            constraints,
+            custom_widget: None,
+            choices: None,
+            wrapper: None,
+            // `Valid`, never `Empty` — `validated` asserts this rather than
+            // trusting it, since the early return in `validate` would make a
+            // test look satisfied when nothing was checked.
+            value: FieldValue::Valid(value),
+            errors: Vec::new(),
+        }
+    }
+
+    fn validated<X>(value: X, constraints: Constraints) -> Vec<String>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        let mut field = a_field(value, constraints);
+
+        // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
+        // reaches `value_kind()` at all. A test that tripped that early return
+        // would come back with no errors and read exactly like a constraint
+        // that was checked and satisfied — so the precondition is asserted
+        // here instead of trusted.
+        assert!(
+            matches!(field.value, FieldValue::Valid(_)),
+            "a constraint test needs a Valid value, or validate checks nothing"
+        );
+        // `\"\"` IS absence, and `populate` collapses an empty display to
+        // `Empty`. So a `Valid` value that renders as `\"\"` is a state the
+        // real system cannot produce, and a constraint verdict on it would not
+        // mean anything either.
+        assert!(
+            !field.raw_value().is_empty(),
+            "an empty raw value is absence, which validate handles before constraints"
+        );
+
+        field.validate();
+        field.errors.into_iter().map(|e| e.0).collect()
+    }
+
+    #[gtest]
+    fn a_length_constraint_on_the_field_reaches_the_check() {
+        let short = Constraints {
+            max_length: Some(3),
+            ..Default::default()
+        };
+        expect_that!(validated("abc".to_string(), short.clone()), is_empty());
+        expect_that!(validated("hello".to_string(), short), len(eq(1)));
+    }
+
+    #[gtest]
+    fn integer_bounds_on_the_field_reach_the_check() {
+        let between = Constraints {
+            min: Some(Bound::Int(1)),
+            max: Some(Bound::Int(10)),
+            ..Default::default()
+        };
+        expect_that!(validated(0_i32, between.clone()), len(eq(1)));
+        expect_that!(validated(5_i32, between.clone()), is_empty());
+        expect_that!(validated(11_i32, between), len(eq(1)));
+    }
+
+    /// The cross-flavour case, and the one that matters most in practice:
+    /// `min: 0` on a float field is what people actually write, and an
+    /// unsuffixed `0` is an `i32`, so it arrives as `Bound::Int`. Widening it
+    /// is what keeps that from silently meaning "no minimum".
+    #[gtest]
+    fn an_integer_bound_on_a_float_field_is_widened_not_dropped() {
+        let non_negative = Constraints {
+            min: Some(Bound::Int(0)),
+            ..Default::default()
+        };
+        expect_that!(validated(-1.5_f64, non_negative.clone()), len(eq(1)));
+        expect_that!(validated(0.5_f64, non_negative), is_empty());
+    }
+
+    /// The other direction has no sensible answer, so it is a panic rather than
+    /// a silent drop. Rounding would invent a bound the author did not write,
+    /// and the correct direction differs by end — a `min` would ceil where a
+    /// `max` would floor.
+    ///
+    /// Only a hand-built `FormSpec` can reach this; `form!` is meant to reject
+    /// it at compile time, which is why the message is for a caller and not for
+    /// the person filling in the form.
+    #[gtest]
+    #[should_panic(expected = "does not support float min")]
+    fn a_float_bound_on_an_integer_field_is_a_caller_bug() {
+        let fractional = Constraints {
+            min: Some(Bound::Float(1.5)),
+            ..Default::default()
+        };
+        let _ = validated(3_i32, fractional);
     }
 }

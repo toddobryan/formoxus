@@ -8,6 +8,7 @@ use dioxus_html::{
     PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData, set_event_converter,
 };
 use facet::Facet;
+use formoxus::fields::Constraints;
 use formoxus::label_case::LabelCase;
 use formoxus::*;
 use googletest::prelude::*;
@@ -20,6 +21,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
         name: name.to_string(),
         label: None,
         optional: false,
+        constraints: Constraints::default(),
         custom_widget: None,
         choices: None,
         wrapper: None,
