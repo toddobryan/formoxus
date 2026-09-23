@@ -479,6 +479,19 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
             self.label = spec.label.clone().or(self.label.take());
             self.choices = spec.choices.clone().or(self.choices.take());
+            // Replaced whole, not merged field by field like the three above.
+            // Those three have something to preserve — `build` derives a label
+            // from the field name and a widget from the shape, so the spec has
+            // to mean "mine if I said anything, yours otherwise". Nothing
+            // derives a CONSTRAINT: `scalar_member` always writes
+            // `Constraints::default()`, so there has never been anything here
+            // to keep, and one rule is easier to hold than two — `with_constraints`
+            // already replaces wholesale on the spec side.
+            //
+            // The day something does derive one (a newtype declaring its own
+            // range, say), this line starts silently discarding it and wants
+            // the per-field `.or()` treatment instead.
+            self.constraints = spec.constraints.clone();
         }
     }
 

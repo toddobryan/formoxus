@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
 use crate::error::FormError;
+use crate::fields::Constraints;
 use crate::label_case::LabelCase;
 use crate::widgets::{SelectChoice, WidgetType};
 
@@ -34,6 +35,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldSpec {
     pub label: Option<String>,
+    pub constraints: Constraints,
     pub custom_widget: Option<WidgetType>,
     /// What a `<select>` (or another chooser) offers.
     ///
@@ -134,6 +136,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     fn field(&mut self, path: &str) -> &mut FieldSpec {
         self.fields.entry(path.to_string()).or_default()
+    }
+
+    pub fn with_constraints(mut self, path: &str, constraints: Constraints) -> Self {
+        self.field(path).constraints = constraints;
+        self
     }
 }
 

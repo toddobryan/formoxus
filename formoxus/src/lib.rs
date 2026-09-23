@@ -90,7 +90,7 @@ pub use formoxus_macros::path;
 pub use crate::defaults::{Formoxus, defaults, provide_defaults};
 pub use crate::error::{FieldError, FormError};
 pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
-pub use fields::{FieldValue, FormField};
+pub use fields::{Bound, Constraints, FieldValue, FormField};
 pub use form::{
     FieldErrors, FieldSpec, Form, FormErrors, FormSpec, FormState, Handler, IntoSlot, Provider,
     UncheckedHandler, empty_form, form_for, handler, provider, unchecked_handler, use_form,

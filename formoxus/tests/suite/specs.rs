@@ -6,6 +6,8 @@
 //! builder is the contract between the macro and the tree, so testing the builder
 //! keeps these honest about which half is being exercised.
 
+use std::collections::HashMap;
+
 use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
@@ -400,4 +402,72 @@ fn a_new_rows_nested_field_gets_the_spec_too() {
     // reach inside it. Three "Town"s for two original rows plus the new one.
     let html = render_to_html(RowFieldAddedAfterTheSpec);
     expect_that!(html.matches("Town").count(), eq(3));
+}
+
+// ── Constraints ──────────────────────────────────────────────────────────
+
+fn full_event(title: &str) -> HashMap<String, String> {
+    [
+        ("title", title),
+        ("location.street", "1 Main"),
+        ("location.city", "Springfield"),
+        ("location.zip", "12345"),
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect()
+}
+
+fn failing_paths(errors: &FormErrors) -> Vec<String> {
+    errors.fields.iter().map(|(p, _)| p.clone()).collect()
+}
+
+/// The whole spec -> field -> check chain, through `Submission` rather than the
+/// DOM: a constraint has no markup of its own yet, so validation is the only
+/// place its arrival shows.
+///
+/// Every other constraint test sets `Constraints` straight onto a `FormField`,
+/// which means this is the only one that would notice `apply_specs` dropping
+/// them on the floor.
+#[gtest]
+fn a_constraint_from_the_spec_reaches_validation() {
+    let spec = || {
+        FormSpec::<EventForCreate>::default().with_constraints(
+            "title",
+            Constraints {
+                max_length: Some(5),
+                ..Default::default()
+            },
+        )
+    };
+
+    expect_that!(
+        Submission::accept(spec(), &full_event("Short")).is_ok(),
+        eq(true),
+        "a title inside the stated bound is accepted"
+    );
+
+    let errors = Submission::accept(spec(), &full_event("Much too long"))
+        .expect_err("the title is over the stated maximum");
+    expect_that!(failing_paths(&errors), elements_are![eq("title")]);
+}
+
+/// `apply_specs` looks itself up by QUALIFIED path, so a constraint on a nested
+/// leaf has to survive `qualify(prefix, name)`. The flat case above would pass
+/// even if the prefix were being dropped.
+#[gtest]
+fn a_constraint_reaches_a_nested_leaf() {
+    let spec = FormSpec::<EventForCreate>::default().with_constraints(
+        "location.zip",
+        Constraints {
+            pattern: Some(r"\d{5}"),
+            ..Default::default()
+        },
+    );
+
+    let mut values = full_event("Fine");
+    values.insert("location.zip".to_string(), "NW1".to_string());
+
+    let errors = Submission::accept(spec, &values).expect_err("NW1 is not five digits");
+    expect_that!(failing_paths(&errors), elements_are![eq("location.zip")]);
 }
