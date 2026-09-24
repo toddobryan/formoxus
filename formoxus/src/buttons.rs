@@ -48,7 +48,7 @@ impl ButtonSpec {
     }
 
     /// What the button reads. Explicit `text` wins; otherwise the name in
-    /// title case, so `sign_in` reads "Sign In" rather than "sign_in" — the
+    /// title case, so `sign_in` reads "Sign In" rather than `sign_in` — the
     /// same fallback a field label gets.
     pub fn label(&self) -> String {
         self.text
@@ -132,6 +132,20 @@ pub enum ButtonFn<T> {
     Unchecked(UncheckedHandler),
 }
 
+// Hand-written for the reason the `Clone` below documents AND one of its own:
+// `Handler` is a trait object, which has no `Debug` to delegate to. The variant
+// name is the whole of what there is to say, and it is worth saying — it
+// records the arity `using_fns!` read off the closure, which is what decides
+// whether validation runs before the handler does.
+impl<T> std::fmt::Debug for ButtonFn<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ButtonFn::Validated(_) => "Validated",
+            ButtonFn::Unchecked(_) => "Unchecked",
+        })
+    }
+}
+
 // Hand-written, not derived: `#[derive(Clone)]` would add a spurious `T: Clone`
 // bound, the same trap `Provider`'s and `Form`'s hand-written impls document.
 impl<T> Clone for ButtonFn<T> {
@@ -160,6 +174,17 @@ impl<T> Clone for Fns<T> {
         Fns {
             fns: self.fns.clone(),
         }
+    }
+}
+
+// The names are the useful half and the handlers cannot be printed at all, so
+// this prints the map with each entry's arity. [`Fns::reconcile`] is a RUNTIME
+// check with no compile-time backstop, and its failures — a dead button, or a
+// handler that will never run — are exactly when someone wants to see what this
+// holds.
+impl<T> std::fmt::Debug for Fns<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_map().entries(self.fns.iter()).finish()
     }
 }
 

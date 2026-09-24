@@ -13,7 +13,7 @@ use googletest::prelude::*;
 use super::render_to_html;
 
 #[derive(Clone, Debug, PartialEq, Facet)]
-pub struct FakeFormWithButtons {
+struct FakeFormWithButtons {
     pub some_data: String,
 }
 

@@ -188,6 +188,7 @@ impl FormSpecInput {
 }
 
 #[derive(Debug, Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct FormAttribute {
     title: bool,
     browser_validation: bool,
@@ -287,23 +288,21 @@ impl Entry {
             .parse()
             .map_err(|_| input.error("`label_case` takes a string literal, e.g. \"Label Case\""))?;
         let written = lit.value();
-        match LABEL_CASES.iter().find(|(k, _)| *k == written) {
-            Some((_, variant)) => Ok(Entry::LabelCase(Ident::new(variant, lit.span()))),
-            None => {
-                // Every valid spelling, listed in full. There are only eleven,
-                // and each one shows what it does, so the list IS the
-                // documentation — better than naming the ones that are close.
-                let all = LABEL_CASES
-                    .iter()
-                    .map(|(k, _)| format!("{k:?}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Err(syn::Error::new_spanned(
-                    &lit,
-                    format!("unknown label case {written:?} — write one of: {all}"),
-                ))
-            }
-        }
+        let Some((_, variant)) = LABEL_CASES.iter().find(|(k, _)| *k == written) else {
+            // Every valid spelling, listed in full. There are only eleven,
+            // and each one shows what it does, so the list IS the
+            // documentation — better than naming the ones that are close.
+            let all = LABEL_CASES
+                .iter()
+                .map(|(k, _)| format!("{k:?}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(syn::Error::new_spanned(
+                &lit,
+                format!("unknown label case {written:?} — write one of: {all}"),
+            ));
+        };
+        Ok(Entry::LabelCase(Ident::new(variant, lit.span())))
     }
 
     fn parse_title(input: ParseStream<'_>) -> Result<Self> {
@@ -342,9 +341,9 @@ impl Entry {
         let path: SpecPath = input.parse()?;
         if !input.peek(syn::token::FatArrow) {
             return Err(input.error("Expected => after a field name"));
-        } else {
-            input.parse::<syn::token::FatArrow>()?;
         }
+
+        input.parse::<syn::token::FatArrow>()?;
         let body: FieldBody = input.parse()?;
         Ok(Entry::Field {
             path,
@@ -459,8 +458,9 @@ pub(crate) mod tests {
     use super::*;
     use googletest::prelude::*;
     use quote::quote;
+    use syn::Result;
 
-    pub(crate) fn parse(tokens: TokenStream2) -> syn::Result<FormSpecInput> {
+    pub(crate) fn parse(tokens: TokenStream2) -> Result<FormSpecInput> {
         syn::parse2::<FormSpecInput>(tokens)
     }
 

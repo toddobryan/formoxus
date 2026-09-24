@@ -136,28 +136,28 @@ impl FormMember for ListSet {
 
     fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let nested = qualify(prefix, &self.name);
-        for r in self.rows.iter() {
+        for r in &self.rows {
             r.collect_leaves(&nested, out);
         }
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
         let nested = qualify(prefix, &self.name);
-        for r in self.rows.iter() {
+        for r in &self.rows {
             r.collect_errors(&nested, out);
         }
     }
 
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
         let nested = qualify(prefix, &self.name);
-        for r in self.rows.iter_mut() {
+        for r in &mut self.rows {
             r.apply_leaves(&nested, values);
         }
     }
 
     fn validate(&mut self) {
         self.errors.clear();
-        for r in self.rows.iter_mut() {
+        for r in &mut self.rows {
             r.validate();
         }
     }
@@ -172,7 +172,7 @@ impl FormMember for ListSet {
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         let mut partial = partial.init_list()?;
-        for r in self.rows.iter() {
+        for r in &self.rows {
             partial = partial.begin_list_item()?;
             partial = r.write_value_into(partial)?;
             partial = partial.end()?;
@@ -192,22 +192,25 @@ impl FormMember for ListSet {
             return match edit {
                 Edit::AddRow { before, .. } => self.add_row(&my_path, *before, self.optional),
                 Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
-                _ => Err(FormAccessError(format!("{my_path} is a list, not an enum"))),
-            };
-        } else {
-            // Paths are unique, so at most one row can own this one. Dispatching by
-            // containment rather than trying each in turn is what lets a row's real
-            // error reach the caller intact.
-            // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
-            // member's own name, which the member qualifies on itself. Passing
-            // the row's full path double-qualifies it into `shapes.#1.#1` — the
-            // same trap `FieldSet::choose_variant` fell into.
-            for m in self.rows.iter_mut() {
-                if owns(&qualify(&my_path, &m.name()), path) {
-                    return m.edit(&my_path, edit);
+                Edit::ChooseVariant { .. } => {
+                    Err(FormAccessError(format!("{my_path} is a list, not an enum")))
                 }
+            };
+        }
+
+        // Paths are unique, so at most one row can own this one. Dispatching by
+        // containment rather than trying each in turn is what lets a row's real
+        // error reach the caller intact.
+        // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
+        // member's own name, which the member qualifies on itself. Passing
+        // the row's full path double-qualifies it into `shapes.#1.#1` — the
+        // same trap `FieldSet::choose_variant` fell into.
+        for m in &mut self.rows {
+            if owns(&qualify(&my_path, &m.name()), path) {
+                return m.edit(&my_path, edit);
             }
         }
+
         Err(no_such_path(path))
     }
 
@@ -225,7 +228,7 @@ impl FormMember for ListSet {
         // prefix it's handed.
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
-        for m in self.rows.iter_mut() {
+        for m in &mut self.rows {
             if owns(&qualify(&my_path, &m.name()), path) {
                 return m.push_field_error(&my_path, path, error);
             }
@@ -235,7 +238,7 @@ impl FormMember for ListSet {
 
     fn clear_errors(&mut self) {
         self.errors.clear();
-        for r in self.rows.iter_mut() {
+        for r in &mut self.rows {
             r.clear_errors();
         }
     }
@@ -263,7 +266,7 @@ impl FormMember for ListSet {
         // descends, and a nested `ListSet` resolves its own without special
         // casing. Unrelated keys pass through untouched.
         let marker = format!("{my_path}[]");
-        for m in self.rows.iter_mut() {
+        for m in &mut self.rows {
             // `my_path`, NOT the row's own path: a row qualifies its own name
             // onto whatever prefix it is handed, so passing the full path
             // double-qualifies it into `shapes.#1.#1` — the trap `edit`

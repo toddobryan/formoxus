@@ -70,6 +70,15 @@ pub type UncheckedHandler = Rc<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>;
 /// regardless of `C`, so the two impls never unify.
 pub struct Provider<C>(Rc<dyn Fn() -> Pin<Box<dyn Future<Output = C>>>>);
 
+// Nothing to show: the one field is a boxed closure. This exists so a type
+// holding a `Provider` can still derive `Debug` rather than having to
+// hand-write one of its own.
+impl<C> Debug for Provider<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Provider").finish_non_exhaustive()
+    }
+}
+
 // Hand-written, not derived: `#[derive(Clone)]` on a generic newtype adds a
 // spurious `C: Clone` bound — the same trap `Form`'s hand-written `Clone`
 // documents — even though `Rc` is `Clone` regardless of what it wraps.
@@ -177,6 +186,7 @@ where
 /// goes.
 ///
 /// `Copy`, so it drops into event handlers without ceremony.
+#[derive(Debug)]
 pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// Structure, typed values, errors — and *answers*. A fieldless enum
     /// variant contributes nothing to `leaves()`, so a variant choice lives
@@ -204,6 +214,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
 // Hand-written, not derived: `#[derive(Copy)]` would add a spurious `T: Copy`
 // bound — the same trap `crate::fields` documents for `Default` — even though
 // `Signal`, `Store` and `Callback` are each `Copy` regardless of what they wrap.
+#[allow(clippy::expl_impl_clone_on_copy)]
 impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Clone for Form<T> {
     fn clone(&self) -> Self {
         *self
@@ -262,6 +273,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// The shell lives here rather than on [`FormState`] because every button
     /// needs this handle to validate — `FormState` has the button *specs* but
     /// no way to run one.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "`using_fns!` builds this at the call site for this one call; taking it by value is the honest signature even though the body only reads it"
+    )]
     pub fn render(&self, fns: Fns<T>) -> Element {
         let ctx = RenderCtx::root(self.values, self.on_edit, self.label_case());
         let state = self.state.read();
@@ -443,9 +458,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let mut state = self.state;
         {
             let mut state = state.write();
-            state.errors = errors.form.clone();
+            state.errors.clone_from(&errors.form);
         }
-        for (path, messages) in errors.fields.iter() {
+        for (path, messages) in &errors.fields {
             for message in messages {
                 state.write().push_field_error(path, &message.0)?;
             }
@@ -481,6 +496,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// **Structure is not rebuilt.** Values land in the map, but which paths
     /// get *rendered* is decided by the state's schema, so a server cannot add
     /// a row or choose a variant this way — only change what is already there.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the caller is done with it: a `WireForm` arrives from a server fn and is consumed here, so `form.absorb(create_account(form.to_wire()).await?)` reads straight through. A reference would force every caller to bind it first"
+    )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
             crate::widgets::write_value(path, self.values, raw.clone());

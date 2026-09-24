@@ -19,10 +19,10 @@ struct Credentials {
 }
 
 fn passwords_must_match(c: &Credentials) -> Vec<FormError> {
-    if c.password != c.confirm_password {
-        vec![FormError("Passwords don't match.".to_string())]
-    } else {
+    if c.password == c.confirm_password {
         Vec::new()
+    } else {
+        vec![FormError("Passwords don't match.".to_string())]
     }
 }
 

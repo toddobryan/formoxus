@@ -86,7 +86,7 @@ impl PartialEq for WidgetType {
 /// required, errors)` in `props`, plus the value store — and NOT a
 /// `FormField<T>`. A widget never sees the typed field: it reads and writes raw
 /// strings through `values`, exactly as `Input` does.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WidgetProps {
     pub values: ValuesByPath,
     pub props: FieldProps,

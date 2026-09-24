@@ -31,7 +31,7 @@ impl ToCase for &str {
             LabelCase::KebabCapitalized => self.to_train_case(),
             LabelCase::KebabAllCaps => self.to_shouty_kebab_case(),
             LabelCase::SnakeLower => self.to_snake_case(),
-            LabelCase::SnakeCapitalized => self.to_train_case().replace("-", "_"),
+            LabelCase::SnakeCapitalized => self.to_train_case().replace('-', "_"),
             LabelCase::SnakeAllCaps => self.to_shouty_snake_case(),
             LabelCase::Title => self.to_title_case(),
             LabelCase::Lower => self.to_title_case().to_lowercase(),

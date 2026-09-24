@@ -12,7 +12,7 @@ use super::suggest::{edit_distance, to_snake};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ButtonInfo {
-    pub name: syn::Ident,
+    pub name: Ident,
     pub ty: ButtonType,
     pub text: Option<String>,
     pub invocation: Option<Invocation>,

@@ -52,22 +52,21 @@ fn OneField(path: String, widget: WidgetType) -> Element {
 
 /// Every widget a consumer can name, in the macro table's own order.
 fn every_widget() -> Vec<(&'static str, WidgetType)> {
-    use InputType::*;
     let inputs = [
-        ("text", Text),
-        ("password", Password),
-        ("hidden", Hidden),
-        ("number", Number),
-        ("email", Email),
-        ("tel", Telephone),
-        ("url", Url),
-        ("search", Search),
-        ("color", Color),
-        ("date", Date),
-        ("time", Time),
-        ("datetime_local", DatetimeLocal),
-        ("month", Month),
-        ("week", Week),
+        ("text", InputType::Text),
+        ("password", InputType::Password),
+        ("hidden", InputType::Hidden),
+        ("number", InputType::Number),
+        ("email", InputType::Email),
+        ("tel", InputType::Telephone),
+        ("url", InputType::Url),
+        ("search", InputType::Search),
+        ("color", InputType::Color),
+        ("date", InputType::Date),
+        ("time", InputType::Time),
+        ("datetime_local", InputType::DatetimeLocal),
+        ("month", InputType::Month),
+        ("week", InputType::Week),
     ];
     let mut all: Vec<(&'static str, WidgetType)> = inputs
         .into_iter()
@@ -134,14 +133,14 @@ fn main() {
     println!("\nformoxus widget matrix — which (value kind, widget) pairs render\n");
     print!("{:width$}", "widget", width = width);
     for p in FIELDS {
-        print!("  {:>7}", p);
+        print!("  {p:>7}");
     }
     println!();
     println!("{}", "─".repeat(width + FIELDS.len() * 9));
 
     let (mut ok, mut bad) = (0, 0);
     for (name, widget) in &widgets {
-        print!("{:width$}", name, width = width);
+        print!("{name:width$}");
         for path in FIELDS {
             if renders(path, widget.clone()) {
                 ok += 1;

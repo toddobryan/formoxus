@@ -74,16 +74,28 @@ pub enum Bound {
     Float(f64),
 }
 
-macro_rules! bound_from_int { ($($t:ty),* $(,)?) => { $(
-    impl From<$t> for Bound {
-        fn from(v: $t) -> Self { Bound::Int(v as i128) }
-    }
-)* } }
-bound_from_int!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, usize);
+macro_rules! bound_from_int {
+    // Infallible and lossless — `i128::from` says so in the type system.
+    (from: $($t:ty),* $(,)?) => { $(
+        impl From<$t> for Bound {
+            fn from(v: $t) -> Self { Bound::Int(i128::from(v)) }
+        }
+    )* };
+    // `usize`/`isize` have no `From<_> for i128` — their width is
+    // target-dependent — so these need the cast. Lossless on every target
+    // Rust supports: `i128` is wider than any pointer.
+    (cast: $($t:ty),* $(,)?) => { $(
+        impl From<$t> for Bound {
+            fn from(v: $t) -> Self { Bound::Int(v as i128) }
+        }
+    )* };
+}
+bound_from_int!(from: i8, i16, i32, i64, i128, u8, u16, u32, u64);
+bound_from_int!(cast: isize, usize);
 
 impl From<f32> for Bound {
     fn from(v: f32) -> Self {
-        Bound::Float(v as f64)
+        Bound::Float(f64::from(v))
     }
 }
 impl From<f64> for Bound {
@@ -113,12 +125,12 @@ impl ValueKind {
                 if let Some(min) = min_length
                     && raw_value.chars().count() < *min
                 {
-                    errors.push(FieldError(format!("length must be at least {min}")))
+                    errors.push(FieldError(format!("length must be at least {min}")));
                 }
                 if let Some(max) = max_length
                     && raw_value.chars().count() > *max
                 {
-                    errors.push(FieldError(format!("length must be at most {max}")))
+                    errors.push(FieldError(format!("length must be at most {max}")));
                 }
                 if let Some(patt) = pattern {
                     let re = Regex::new(&format!("^(?:{patt})$"))
@@ -238,15 +250,22 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                 // "A bound of -1000 on an i8 is always true; this constraint does nothing"
                 ValueKind::Int { min, max }
             }
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "known gap, pinned by the ignored \
+                `an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded`: a bound \
+                above 2^53 does not survive this widening. Closing it belongs upstream, in \
+                the macro's compile-time check"
+            )]
             ScalarType::F32 | ScalarType::F64 => {
                 let min = match self.constraints.min {
                     None => None,
-                    Some(Bound::Int(min)) => Some(min as f64), // TODO: check for loss of precision
+                    Some(Bound::Int(min)) => Some(min as f64),
                     Some(Bound::Float(min)) => Some(min),
                 };
                 let max = match self.constraints.max {
                     None => None,
-                    Some(Bound::Int(max)) => Some(max as f64), // TODO: check for loss of precision
+                    Some(Bound::Int(max)) => Some(max as f64),
                     Some(Bound::Float(max)) => Some(max),
                 };
                 // TODO: check constraints on f32s to make sure they're not out of range
@@ -267,10 +286,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// three, which is the whole reason that flag has to travel from the walk.
     fn default_widget(&self) -> WidgetType {
         match self.value_kind() {
-            ValueKind::Text { .. } => WidgetType::Input(InputType::Text),
-            // Deliberately `text`, not `number`: `type="number"` hands back `""`
+            // Int and Float are deliberately `text`, not `number`: `type="number"` hands back `""`
             // for anything the browser dislikes, so a half-typed value vanishes.
-            ValueKind::Int { .. } | ValueKind::Float { .. } => WidgetType::Input(InputType::Text),
+            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. } => {
+                WidgetType::Input(InputType::Text)
+            }
             // An `Option<bool>` has three states and a checkbox has two, so the
             // optional case gets a `Select` — reusing the one implementation of
             // the "no value" option rather than growing a third checkbox state
@@ -865,6 +885,11 @@ mod tests {
     ///
     /// Both TODOs in `value_kind`'s `Float` arm point here. The fix is upstream
     /// of `check`, which only ever sees the `f64` that survived the widening.
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "this test exists to demonstrate exactly these two casts losing information"
+    )]
     #[gtest]
     #[ignore = "an integer bound above 2^53 is silently rounded on a float field"]
     fn an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded() {

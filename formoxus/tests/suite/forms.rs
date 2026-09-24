@@ -181,7 +181,7 @@ fn option_fields_are_not_required() {
 
     // `note: Option<String>` is optional, so an empty form only complains
     // about `name` and `guests`.
-    for m in form.members.iter_mut() {
+    for m in &mut form.members {
         m.validate();
     }
     let complaining: Vec<String> = form
@@ -438,7 +438,7 @@ fn a_list_row_gets_no_label() {
     // Rendered, the rows must not pick up "0"/"1" as labels. Note the list's own
     // label doesn't appear either — no container renders one yet, which is the
     // other half of why a form still reads bare.
-    let html = super::render_to_html(QuizForm);
+    let html = render_to_html(QuizForm);
     expect_that!(html, not(contains_substring(">0<")));
     expect_that!(html, not(contains_substring(">1<")));
 }

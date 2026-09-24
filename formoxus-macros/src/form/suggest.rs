@@ -27,6 +27,7 @@ pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     for (i, ca) in a.chars().enumerate() {
         cur[0] = i + 1;
         for (j, cb) in b.iter().enumerate() {
+            #[allow(clippy::bool_to_int_with_if)]
             let cost = if ca == *cb { 0 } else { 1 };
             cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
         }

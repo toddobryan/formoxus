@@ -323,7 +323,7 @@ fn an_unparseable_value_renders_its_error() {
     //
     // Asserted on the wrapper class rather than the message text, because the
     // wording is deliberately still the raw shape name and is expected to change.
-    let html = super::render_to_html(ScoreFormWithBadInput);
+    let html = render_to_html(ScoreFormWithBadInput);
     expect_that!(
         html,
         contains_substring("field-error"),
@@ -344,7 +344,7 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
     form.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
     expect_that!(form.validate(), none());
 
-    let html = super::render_to_html(ScoreFormWithBadInput);
+    let html = render_to_html(ScoreFormWithBadInput);
     expect_that!(html, not(contains_substring("This field is required.")));
     expect_that!(html.matches("field-error\"").count(), eq(1));
 }
@@ -356,7 +356,7 @@ fn an_errored_field_marks_its_widget_aria_invalid() {
     // The widget itself carries the error state, not just the message beside
     // it — this is the half a screen reader announces. Rendering the message
     // alone would serve the sighted case and leave the other unserved.
-    let html = super::render_to_html(ScoreFormWithBadInput);
+    let html = render_to_html(ScoreFormWithBadInput);
     expect_that!(html, contains_substring(r#"aria-invalid="true""#));
     // Immediately after the input, with no wrapper in between, so a plain
     // `input[aria-invalid="true"] + *` sibling selector can reach it. Nesting
@@ -370,7 +370,7 @@ fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
     // NOT `aria-invalid="false"`: per ARIA that asserts "checked and passed",
     // so an untouched form would claim to have validated every field. Absent
     // is the only neutral value.
-    let html = super::render_to_html(EmptyInput);
+    let html = render_to_html(EmptyInput);
     expect_that!(html, not(contains_substring("aria-invalid")));
 }
 
@@ -561,8 +561,7 @@ fn mutations_after_typing(app: fn() -> Element, text: &str) -> String {
         text.to_string(),
         Vec::new(),
     )));
-    let event: dioxus::prelude::Event<dyn Any> =
-        dioxus::prelude::Event::new(Rc::new(payload), true);
+    let event: Event<dyn Any> = Event::new(Rc::new(payload), true);
     dom.runtime().handle_event("input", event, input_id);
     format!("{:?}", dom.render_immediate_to_vec().edits)
 }

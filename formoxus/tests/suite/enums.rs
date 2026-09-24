@@ -31,19 +31,19 @@ use googletest::prelude::*;
 use std::collections::HashMap;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-pub struct Drawing {
+pub(crate) struct Drawing {
     pub name: String,
     pub shape: Shape,
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-pub struct Config {
+pub(crate) struct Config {
     pub shape: Shape,
     pub mode: Mode,
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-pub struct Outer {
+pub(crate) struct Outer {
     pub title: String,
     pub drawing: Drawing,
 }
@@ -52,26 +52,26 @@ pub struct Outer {
 // makes variant discovery iterative rather than one-shot.
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]
-pub enum Inner {
+pub(crate) enum Inner {
     A { x: f64 },
     B { y: f64 },
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]
-pub enum Outer2 {
+pub(crate) enum Outer2 {
     First { inner: Inner },
     Second { n: u32 },
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-pub struct Doc {
+pub(crate) struct Doc {
     pub outer: Outer2,
 }
 
 /// An enum behind an `Option` — the case nothing covered until now.
 #[derive(Facet, Clone, Debug, PartialEq)]
-pub struct Sketch {
+pub(crate) struct Sketch {
     pub name: String,
     pub shape: Option<Shape>,
 }
@@ -199,7 +199,7 @@ fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
     // validation behind the same rule `validate()` enforces.
     let html = render_to_html(UnchosenDrawingForm);
     expect_that!(html, contains_substring("<select required=true>"));
-    expect_that!(html, contains_substring(r#"disabled=true hidden=true"#));
+    expect_that!(html, contains_substring("disabled=true hidden=true"));
     expect_that!(
         html,
         not(contains_substring(ABSENT_DISPLAY)),

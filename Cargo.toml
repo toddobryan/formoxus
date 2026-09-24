@@ -25,6 +25,50 @@ authors = ["Todd O'Bryan <toddobryan@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/toddobryan/formoxus"
 
+# Applied to every member via `lints.workspace = true`. `just ci` runs clippy
+# with `-D warnings`, so everything here fails the build rather than scrolling
+# past.
+[workspace.lints.rust]
+# A group, so it needs a lower priority than the individual lints below it.
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "deny"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+# NOT unused_qualifications. It has a false-positive class in any rsx-heavy
+# crate: it fires inside `rsx!`'s expansion and blames the nearest token it can
+# map back to, so the suggested fix for `onsubmit: move |e| …` is to delete
+# `onsubmit:`. 24 of those, across seven modules, against 13 real findings that
+# were all cosmetic and all in tests. Silencing it would have meant a
+# module-level allow in every widget file — blinding exactly the code most
+# likely to grow a real one.
+#
+# Sweep for new REAL ones now and then; the artifacts all sit on a closure:
+#   cargo clippy --workspace --all-targets -- -W unused_qualifications 2>&1 \
+#     | grep -B1 "move |\||_|" -v
+unused_lifetimes = "warn"
+# NOT trivial_casts: every hit is `Box<FormField<T>> as Box<dyn FormMember>`
+# in `dispatch!`, where the cast is what picks the trait object.
+trivial_numeric_casts = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Bans `mod.rs`. NB both this and `self_named_module_files` are named for the
+# layout they REJECT, not the one they enforce — the other one would demand
+# `form.rs` become `form/mod.rs`.
+mod_module_files = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+# The `must_use` family — 80-odd annotations on a builder-heavy API, none of
+# which would catch a bug the types do not already.
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+# Both want prose this crate has not written yet. They belong to the doc pass
+# (see `.claude/memory/pre_publish_checklist.md`), not to a lint sweep.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
 [workspace.dependencies]
 dioxus = { version = "0.7.10" }
 dioxus-ssr = { version = "0.7" }

@@ -14,6 +14,9 @@ repository.workspace = true
 [lib]
 proc-macro = true
 
+[lints]
+workspace = true
+
 [dependencies]
 # `extra-traits` for `Debug` on syn types: form.rs derives Debug across its
 # parsed spec types, and its 78 parser tests assert on that output. It used to

@@ -46,9 +46,9 @@ impl FormMember for OptionMember {
 
     fn validate(&mut self) {
         if self.is_present() {
-            self.inner.validate()
+            self.inner.validate();
         } else {
-            self.inner.clear_errors()
+            self.inner.clear_errors();
         }
     }
 

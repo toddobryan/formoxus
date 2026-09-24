@@ -117,6 +117,10 @@ impl Parse for SpecPath {
 /// Never executed — it exists so rustc checks the access. `[]` becomes a loop,
 /// which is what lets a row's field be named at all: the element type is
 /// inferred, so nothing has to spell it out.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the recursion builds a fresh `quote!{…}` for `base` at every level, so a reference would need a `let` binding at each of the three call sites to borrow from"
+)]
 pub(crate) fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> TokenStream2 {
     match segments.split_first() {
         None => quote! { let _ = &#base; },

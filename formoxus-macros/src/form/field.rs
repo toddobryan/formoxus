@@ -23,43 +23,42 @@ pub(crate) struct FieldBody {
 impl Parse for FieldBody {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         if !input.peek(syn::token::Brace) {
-            Err(input.error("expected a field specification surrounded by braces"))
-        } else {
-            let body;
-            let braces = braced!(body in input);
-            let mut fb = FieldBody {
-                widget: None,
-                label: None,
-            };
-            while !body.is_empty() {
-                let key: Ident = body.parse()?;
-                let _colon: Token![:] = body.parse()?;
-                match key.to_string().as_str() {
-                    "widget" if fb.widget.is_some() => {
-                        return Err(syn::Error::new_spanned(&key, "duplicate widget key"));
-                    }
-                    "widget" => fb.widget = Some(body.parse()?),
-                    "label" if fb.label.is_some() => {
-                        return Err(syn::Error::new_spanned(&key, "duplicate label"));
-                    }
-                    "label" => fb.label = Some(body.parse()?),
-                    other => {
-                        return Err(syn::Error::new_spanned(
-                            &key,
-                            format!("unknown key {other}, expected widget or label"),
-                        ));
-                    }
-                }
-                if body.peek(Token![,]) {
-                    body.parse::<Token![,]>()?;
-                }
-            }
-
-            if fb.widget.is_none() && fb.label.is_none() {
-                return Err(syn::Error::new(braces.span.join(), "empty field body"));
-            }
-            Ok(fb)
+            return Err(input.error("expected a field specification surrounded by braces"));
         }
+        let body;
+        let braces = braced!(body in input);
+        let mut fb = FieldBody {
+            widget: None,
+            label: None,
+        };
+        while !body.is_empty() {
+            let key: Ident = body.parse()?;
+            let _colon: Token![:] = body.parse()?;
+            match key.to_string().as_str() {
+                "widget" if fb.widget.is_some() => {
+                    return Err(syn::Error::new_spanned(&key, "duplicate widget key"));
+                }
+                "widget" => fb.widget = Some(body.parse()?),
+                "label" if fb.label.is_some() => {
+                    return Err(syn::Error::new_spanned(&key, "duplicate label"));
+                }
+                "label" => fb.label = Some(body.parse()?),
+                other => {
+                    return Err(syn::Error::new_spanned(
+                        &key,
+                        format!("unknown key {other}, expected widget or label"),
+                    ));
+                }
+            }
+            if body.peek(Token![,]) {
+                body.parse::<Token![,]>()?;
+            }
+        }
+
+        if fb.widget.is_none() && fb.label.is_none() {
+            return Err(syn::Error::new(braces.span.join(), "empty field body"));
+        }
+        Ok(fb)
     }
 }
 

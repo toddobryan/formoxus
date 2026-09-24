@@ -46,7 +46,7 @@ impl FormMember for FieldSet {
 
     fn validate(&mut self) {
         self.errors.clear();
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.validate();
         }
     }
@@ -66,27 +66,27 @@ impl FormMember for FieldSet {
 
     fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let nested = qualify(prefix, &self.name);
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_leaves(&nested, out);
         }
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
         let nested = qualify(prefix, &self.name);
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_errors(&nested, out);
         }
     }
 
     fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
         let nested = qualify(prefix, &self.name);
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.apply_leaves(&nested, values);
         }
     }
 
     fn write_value_into<'p>(&self, mut partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
-        for m in self.members.iter() {
+        for m in &self.members {
             partial = m.write_into(partial)?;
         }
         Ok(partial)
@@ -104,7 +104,7 @@ impl FormMember for FieldSet {
         // Paths are unique, so at most one child can own this one. Dispatching
         // by containment rather than trying each in turn is what lets a child's
         // real error ("no such variant") reach the caller intact.
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             if owns(&qualify(&nested, &m.name()), path) {
                 return m.edit(&nested, edit);
             }
@@ -120,7 +120,7 @@ impl FormMember for FieldSet {
     ) -> Result<(), FormAccessError> {
         let nested = qualify(prefix, &self.name);
         ensure_owned(&nested, path)?;
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             if owns(&qualify(&nested, &m.name()), path) {
                 return m.push_field_error(&nested, path, error);
             }
@@ -130,7 +130,7 @@ impl FormMember for FieldSet {
 
     fn clear_errors(&mut self) {
         self.errors.clear();
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.clear_errors();
         }
     }
@@ -151,7 +151,7 @@ impl FormMember for FieldSet {
         // Unlike `edit`, which finds the one member owning a path and stops, a
         // spec may speak about any number of descendants — so every child is
         // visited, with this member's path as their prefix.
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.apply_specs(&my_path, fields);
         }
     }

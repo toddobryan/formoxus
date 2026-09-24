@@ -167,7 +167,7 @@ fn last_segment_string(path: &Path) -> String {
 }
 
 impl Parse for WidgetRef {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
         let kind = input.parse::<WidgetKind>()?;
         let args = if input.peek(syn::token::Brace) {
             parse_widget_args(input, &kind)?
@@ -179,7 +179,7 @@ impl Parse for WidgetRef {
 }
 
 impl Parse for WidgetKind {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
         if input.peek(widget_kw::custom) {
             let kw: widget_kw::custom = input.parse()?;
             if !input.peek(syn::token::Paren) {
@@ -211,7 +211,7 @@ impl Parse for WidgetKind {
 /// Gated by widget rather than accepted everywhere, so `widget: text { choices:
 /// … }` is a compile error naming the widgets that would have worked, instead of
 /// a setting that is silently ignored at render.
-fn parse_widget_args(input: ParseStream, kind: &WidgetKind) -> syn::Result<WidgetArgs> {
+fn parse_widget_args(input: ParseStream<'_>, kind: &WidgetKind) -> syn::Result<WidgetArgs> {
     let body;
     let braces = braced!(body in input);
     let mut args = WidgetArgs::default();

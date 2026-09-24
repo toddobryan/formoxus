@@ -30,7 +30,7 @@ use syn::{Path as TypePath, Result, Token};
 
 use crate::form::{SpecPath, probe};
 
-pub fn impl_path(input: TokenStream2) -> TokenStream2 {
+pub(crate) fn impl_path(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<PathInput>(input) {
         Ok(parsed) => parsed.expand(),
         Err(e) => e.to_compile_error(),

@@ -22,7 +22,7 @@ struct Article {
 ///
 /// Goes through `empty_form` because `FormSpec`'s fields are private — and
 /// that's the right route anyway: it's the one a page takes.
-fn title_of(spec: formoxus::form::FormSpec<Article>) -> Option<String> {
+fn title_of(spec: form::FormSpec<Article>) -> Option<String> {
     empty_form::<Article>(spec).title()
 }
 
@@ -163,7 +163,7 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
         headline: "TREES ARE GOOD".to_string(),
         words: 400,
     };
-    let mut state = formoxus::form_for(
+    let mut state = form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
     );
@@ -463,7 +463,7 @@ fn a_passing_validator_lets_the_model_through() {
         headline: "Trees are good".to_string(),
         words: 400,
     };
-    let mut state = formoxus::form_for(
+    let mut state = form_for(
         &quiet,
         form! { Article { validator: headline_is_not_shouted } },
     );
@@ -481,7 +481,7 @@ fn a_validators_message_lands_where_form_errors_render() {
         headline: "TREES ARE GOOD".to_string(),
         words: 400,
     };
-    let mut state = formoxus::form_for(
+    let mut state = form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
     );
@@ -500,7 +500,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
         headline: "TREES ARE GOOD".to_string(),
         words: 400,
     };
-    let mut state = formoxus::form_for(
+    let mut state = form_for(
         &shouted,
         form! { Article { validator: headline_is_not_shouted } },
     );
@@ -529,7 +529,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
     // field has parsed. Worth pinning as a behaviour rather than leaving it
     // implicit, because a validator may reasonably assume its input is
     // well-formed — `words` here never parsed, so no `Article` exists.
-    let mut state = formoxus::form_for(
+    let mut state = form_for(
         &Article {
             headline: "Trees".to_string(),
             words: 1,

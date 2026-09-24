@@ -30,7 +30,7 @@ use syn::{
     punctuated::Punctuated,
 };
 
-pub fn impl_using_fns(input: TokenStream2) -> TokenStream2 {
+pub(crate) fn impl_using_fns(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FnSet>(input) {
         Ok(set) => set.expand(),
         Err(err) => err.to_compile_error(),

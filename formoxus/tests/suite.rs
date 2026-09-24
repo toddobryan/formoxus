@@ -96,6 +96,17 @@ pub struct Harness {
     listeners: Vec<(String, ElementId)>,
 }
 
+// `VirtualDom` is not `Debug`, so it is left out rather than the whole impl
+// being skipped. The listeners are the part a failing assertion is about
+// anyway: `listeners()` is what these tests read.
+impl std::fmt::Debug for Harness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Harness")
+            .field("listeners", &self.listeners)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Harness {
     pub fn mount(app: fn() -> Element) -> Self {
         // A platform (web, desktop) normally installs this; a bare `VirtualDom`
@@ -114,13 +125,13 @@ impl Harness {
     }
 
     fn absorb(&mut self, mutations: &Mutations) {
-        for edit in mutations.edits.iter() {
+        for edit in &mutations.edits {
             match edit {
                 Mutation::NewEventListener { name, id } => {
-                    self.listeners.push((name.to_string(), *id))
+                    self.listeners.push((name.clone(), *id));
                 }
                 Mutation::RemoveEventListener { name, id } => {
-                    self.listeners.retain(|(n, i)| !(n == name && i == id))
+                    self.listeners.retain(|(n, i)| !(n == name && i == id));
                 }
                 // A torn-down element takes its listeners with it, and dioxus
                 // recycles the id — so dropping these matters for correctness,

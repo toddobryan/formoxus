@@ -42,7 +42,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// whatever it is handed.
     pub(crate) fn apply_specs(&mut self) {
         let fields = &self.spec.fields;
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.apply_specs("", fields);
         }
     }
@@ -85,7 +85,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// point of this check is that it sees across them.
     pub fn validate(&mut self) -> Option<T> {
         self.errors.clear();
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.validate();
         }
         if self.has_errors() {
@@ -93,7 +93,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
 
         let mut partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
-        for m in self.members.iter() {
+        for m in &self.members {
             partial = m
                 .write_into(partial)
                 .expect("write_into should succeed once validate() found no errors");
@@ -119,7 +119,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// list the widget layer turns into one signal apiece.
     pub fn leaves(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_leaves("", &mut out);
         }
         out
@@ -129,7 +129,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// [`leaves`](Self::leaves) hands out. Call this on submit, before
     /// `validate()`.
     pub fn apply(&mut self, values: &HashMap<String, String>) {
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.apply_leaves("", values);
         }
     }
@@ -207,14 +207,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn render_title(&self) -> Element {
-        self.title()
-            .as_ref()
-            .map(|t| {
+        self.title().as_ref().map_or_else(
+            || rsx! {},
+            |t| {
                 rsx! {
                     h2 { class: "form-title", "{t}" }
                 }
-            })
-            .unwrap_or_else(|| rsx! {})
+            },
+        )
     }
 
     pub fn render_fields(&self, ctx: &RenderCtx) -> Element {
@@ -225,7 +225,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn render_errors(&self) -> Element {
-        if !self.errors.is_empty() {
+        if self.errors.is_empty() {
+            rsx! {}
+        } else {
             rsx! {
                 ul {
                     class: "form-errors",
@@ -237,14 +239,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
                     }
                 }
             }
-        } else {
-            rsx! {}
         }
     }
 
     pub fn collect_errors(&self) -> FormErrors {
         let mut field_errors = Vec::new();
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_errors("", &mut field_errors);
         }
         FormErrors {

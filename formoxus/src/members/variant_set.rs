@@ -71,7 +71,7 @@ impl VariantSet {
         // Paths are unique, so at most one child can own this one. Dispatching by
         // containment rather than trying each in turn is what lets a child's real
         // error reach the caller intact.
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             if owns(&qualify(&child_prefix, &m.name()), path) {
                 return m.edit(&child_prefix, edit);
             }
@@ -199,9 +199,9 @@ impl FormMember for VariantSet {
         if matches!(self.choice, VariantChoice::Unchosen) {
             self.errors.push(FieldError(
                 "You must choose a variant for this field.".to_string(),
-            ))
+            ));
         }
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.validate();
         }
     }
@@ -244,7 +244,7 @@ impl FormMember for VariantSet {
         let Some(child_prefix) = self.child_prefix(prefix) else {
             return Err(no_such_path(path)); // unchosen: no children to be inside
         };
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             if owns(&qualify(&child_prefix, &m.name()), path) {
                 return m.push_field_error(&child_prefix, path, error);
             }
@@ -254,7 +254,7 @@ impl FormMember for VariantSet {
 
     fn clear_errors(&mut self) {
         self.errors.clear();
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.clear_errors();
         }
     }
@@ -276,7 +276,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: no members, so no leaves
         };
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_leaves(&nested, out);
         }
     }
@@ -307,7 +307,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: no children, and my own errors are already out
         };
-        for m in self.members.iter() {
+        for m in &self.members {
             m.collect_errors(&nested, out);
         }
     }
@@ -320,7 +320,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: nothing to apply into
         };
-        for m in self.members.iter_mut() {
+        for m in &mut self.members {
             m.apply_leaves(&nested, values);
         }
     }
@@ -332,7 +332,7 @@ impl FormMember for VariantSet {
                 // variant before writing its fields, so `Partial::build`
                 // materializes the right one.
                 partial = partial.select_variant_named(variant)?;
-                for m in self.members.iter() {
+                for m in &self.members {
                     partial = m.write_into(partial)?;
                 }
             }
@@ -355,7 +355,7 @@ impl FormMember for VariantSet {
         // but its children sit one segment deeper under the chosen variant's
         // descriptor. `Unchosen` means there are none to visit.
         if let Some(child_prefix) = self.child_prefix(prefix) {
-            for m in self.members.iter_mut() {
+            for m in &mut self.members {
                 m.apply_specs(&child_prefix, fields);
             }
         }

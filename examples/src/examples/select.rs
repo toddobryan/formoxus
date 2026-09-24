@@ -7,7 +7,7 @@ struct Address {
     last_name: String,
     first_name: String,
     middle_initial: Option<String>,
-    street_address: String,
+    street: String,
     city: String,
     state: String,
     zip: String,

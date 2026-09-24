@@ -306,9 +306,9 @@ impl Edit {
     /// never the kind.
     pub fn path(&self) -> &str {
         match self {
-            Edit::ChooseVariant { path, .. } => path,
-            Edit::AddRow { path, .. } => path,
-            Edit::RemoveRow { path, .. } => path,
+            Edit::ChooseVariant { path, .. }
+            | Edit::AddRow { path, .. }
+            | Edit::RemoveRow { path, .. } => path,
         }
     }
 
