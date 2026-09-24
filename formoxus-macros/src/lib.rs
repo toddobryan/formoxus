@@ -33,6 +33,13 @@ mod form;
 mod path;
 mod using_fns;
 
+// TODO: document the whole grammar here — the form-level keywords (`title`,
+// `label_case`, `browser_validation`, `validator`, `buttons`) and every
+// field-body key (`widget`, `label`, `min`, `max`, `min_length`, `max_length`,
+// `pattern`), including which constraints are legal on which value kinds.
+// This is the only place a user can learn it: `FieldBody` holds the key table
+// but is `pub(crate)`, and a one-line summary is no substitute. Wait until the
+// constraint work is finished so the list is not documented mid-flight.
 /// `form! { Model { … } }` — build a `FormSpec` for `Model`.
 #[proc_macro]
 pub fn form(input: TokenStream) -> TokenStream {

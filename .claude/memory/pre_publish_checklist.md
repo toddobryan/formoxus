@@ -52,12 +52,6 @@ publishing, confirm the macro-side copy does NOT reach the wasm bundle — a
 proc-macro dependency is host-only and should not, but it is worth verifying
 rather than assuming, since it would silently double the cost.
 
-`facet` joined `formoxus-macros` on 2026-09-23 for the same host-only reason —
-`FieldBody`'s own fields are the list of legal `form!` keys, read back off its
-`SHAPE`. It is declared WITHOUT `reflect`, so `facet-core` and the derive are
-all that build there; verified at the time that `facet-reflect` stays out of
-that dependency tree. Check both it and `regress` in the same pass.
-
 Also worth re-checking: `facet-reflect` has `regex` as a DEFAULT feature for its
 own `matches_pattern` validator. It is dead-stripped today (verified: adding a
 `regex` call grew the bundle by the full 784 KiB raw). If formoxus ever routes

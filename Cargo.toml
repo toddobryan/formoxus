@@ -75,10 +75,7 @@ dioxus-ssr = { version = "0.7" }
 # dev-only: the `serialize` feature ships SerializedHtmlEventConverter, which is
 # what lets a bare VirtualDom dispatch a real DOM event in a test.
 dioxus-html = { version = "0.7", features = ["serialize"] }
-# Features are NOT set here: `formoxus` needs `reflect` and `formoxus-macros`
-# does not — it only reads `SHAPE` — and a proc-macro crate builds for the host,
-# so resolver 2 keeps facet-reflect out of that build entirely.
-facet = { version = "0.46.5" }
+facet = { version = "0.46.5", features = ["reflect"] }
 googletest = { version = "0.14.3", features = ["proptest"] }
 heck = { version = "0.5.0" }
 # Ordered map: preserves declaration order (so a `FormSpec`'s Debug output and

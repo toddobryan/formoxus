@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use facet::Facet;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
@@ -18,51 +17,56 @@ pub(crate) struct FieldSpec {
     pub(crate) body: FieldBody,
 }
 
-/// One field's brace block. **These fields ARE the grammar** — the list of
-/// legal keys is read back off this struct's [`Facet`] shape by [`legal_keys`],
-/// so an error message cannot advertise a key that does not exist, and a new
-/// key cannot be added without appearing in that message.
+/// One table generating the struct, the legal-key list and the parse dispatch,
+/// so the three cannot disagree — the same shape as [`widgets!`] and
+/// [`button_types!`], and for the same reason.
 ///
-/// `#[facet(opaque)]` on every field because none of these types implement
-/// `Facet` — `SHAPE` is wanted for the field NAMES, never to look inside a
-/// value. Forgetting one is a loud trait-bound error, not a silent omission.
+/// `$ty` is what makes it work here rather than reflection: a key's value is
+/// parsed into a DIFFERENT type depending on which key it is, and that choice
+/// has to exist at compile time. Nothing about the field names alone could
+/// supply it.
 ///
-/// **Why `Expr` for the bounds and `LitStr` for the pattern.** A bound may be
-/// any expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), and holding it as
-/// an `Expr` is also what lets the literal's own type pick the `Bound` variant
-/// once it reaches `.into()`. A pattern cannot: the macro has to hand the
-/// string to `regress` to check it compiles, and only a literal is readable at
-/// macro time. It also lands in `Constraints::pattern`, which is a
-/// `&'static str`.
-#[derive(Debug, Default, Facet)]
-pub(crate) struct FieldBody {
-    #[facet(opaque)]
-    pub(crate) widget: Option<WidgetRef>,
-    #[facet(opaque)]
-    pub(crate) label: Option<Expr>,
-    #[facet(opaque)]
-    pub(crate) min: Option<Expr>,
-    #[facet(opaque)]
-    pub(crate) max: Option<Expr>,
-    #[facet(opaque)]
-    pub(crate) min_length: Option<Expr>,
-    #[facet(opaque)]
-    pub(crate) max_length: Option<Expr>,
-    #[facet(opaque)]
-    pub(crate) pattern: Option<LitStr>,
+/// The keys are user-facing grammar; they are documented on `form!` itself,
+/// which is where someone writing a form will look.
+macro_rules! field_body {
+    ($( $key:ident : $ty:ty ),* $(,)?) => {
+        /// One field's brace block, as parsed.
+        #[derive(Debug, Default)]
+        pub(crate) struct FieldBody {
+            $( pub(crate) $key: Option<$ty>, )*
+        }
+
+        /// Every key a field body accepts, in declaration order.
+        pub(crate) const LEGAL_KEYS: &[&str] = &[ $( stringify!($key) ),* ];
+
+        impl FieldBody {
+            /// Parse one key's value into its own field. `false` means the key
+            /// is not one of ours, which is the caller's cue to report it.
+            fn set(&mut self, name: &str, body: ParseStream<'_>) -> Result<bool> {
+                match name {
+                    $( stringify!($key) => self.$key = Some(body.parse()?), )*
+                    _ => return Ok(false),
+                }
+                Ok(true)
+            }
+        }
+    };
 }
 
-/// Every key a field body accepts, in declaration order — read off
-/// [`FieldBody`] itself, so the list and the struct cannot drift.
-///
-/// It does not make the `match` in `parse` exhaustive; a field with no arm
-/// would simply never be set. `every_legal_key_parses` closes that, and takes
-/// its input from here, so the test cannot drift either.
-pub(crate) fn legal_keys() -> Vec<&'static str> {
-    match FieldBody::SHAPE.ty {
-        facet::Type::User(facet::UserType::Struct(s)) => s.fields.iter().map(|f| f.name).collect(),
-        _ => unreachable!("FieldBody is a struct"),
-    }
+// **Why `Expr` for the bounds and `LitStr` for the pattern.** A bound may be
+// any expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), and holding it as
+// an `Expr` is also what lets the literal's own type pick the `Bound` variant
+// once it reaches `.into()`. A pattern cannot: the macro has to hand the string
+// to `regress` to check it compiles, and only a literal is readable at macro
+// time. It also lands in `Constraints::pattern`, which is a `&'static str`.
+field_body! {
+    widget: WidgetRef,
+    label: Expr,
+    min: Expr,
+    max: Expr,
+    min_length: Expr,
+    max_length: Expr,
+    pattern: LitStr,
 }
 
 impl FieldBody {
@@ -121,7 +125,7 @@ impl Parse for FieldBody {
         let braces = braced!(body in input);
         let mut fb = FieldBody::default();
         // `insert` returning false IS the duplicate check, so there is no
-        // separate seen-flag per key to keep in step with the arms below.
+        // separate seen-flag per key to keep in step with the table above.
         let mut seen: HashSet<String> = HashSet::new();
         while !body.is_empty() {
             let key: Ident = body.parse()?;
@@ -133,23 +137,14 @@ impl Parse for FieldBody {
                     format!("`{name}` is given twice"),
                 ));
             }
-            match name.as_str() {
-                "widget" => fb.widget = Some(body.parse()?),
-                "label" => fb.label = Some(body.parse()?),
-                "min" => fb.min = Some(body.parse()?),
-                "max" => fb.max = Some(body.parse()?),
-                "min_length" => fb.min_length = Some(body.parse()?),
-                "max_length" => fb.max_length = Some(body.parse()?),
-                "pattern" => fb.pattern = Some(body.parse()?),
-                other => {
-                    return Err(syn::Error::new_spanned(
-                        &key,
-                        format!(
-                            "unknown key {other}, expected one of: {}",
-                            legal_keys().join(", ")
-                        ),
-                    ));
-                }
+            if !fb.set(&name, &body)? {
+                return Err(syn::Error::new_spanned(
+                    &key,
+                    format!(
+                        "unknown key {name}, expected one of: {}",
+                        LEGAL_KEYS.join(", ")
+                    ),
+                ));
             }
             if body.peek(Token![,]) {
                 body.parse::<Token![,]>()?;
@@ -167,7 +162,7 @@ impl Parse for FieldBody {
 
 #[cfg(test)]
 mod tests {
-    use super::legal_keys;
+    use super::LEGAL_KEYS;
     use crate::form::tests::{err_of, parse};
     use googletest::prelude::*;
     use quote::quote;
@@ -219,18 +214,19 @@ mod tests {
 
     // ── The keys are the struct ──────────────────────────────────────────
 
-    /// **The other half of `legal_keys`.** Reading names off `FieldBody`'s
-    /// shape stops the error message advertising a key that does not exist; it
-    /// does NOT stop a field being declared with no arm in `parse`, which would
-    /// leave it silently `None`. This walks the same list the message does and
-    /// proves each name is actually accepted.
+    /// Not a drift guard — `field_body!` makes drift impossible, since the
+    /// struct, `LEGAL_KEYS` and the dispatch all come from one table. What this
+    /// still earns is the `$ty` column: it proves each key accepts the shape of
+    /// value someone will actually write, which the table asserts but does not
+    /// check. `pattern: "x"` passing is the evidence that `LitStr` was the
+    /// right choice there and `Expr` would have been wrong.
     ///
     /// Adding a key with no sample here panics by name rather than passing
-    /// quietly, which is the point.
+    /// quietly, so a new key cannot arrive untested.
     #[gtest]
     fn every_legal_key_parses() {
-        for key in legal_keys() {
-            let value = match key {
+        for key in LEGAL_KEYS {
+            let value = match *key {
                 "widget" => quote!(textarea),
                 "label" => quote!("A label"),
                 "min" | "max" | "min_length" | "max_length" => quote!(1),
@@ -250,10 +246,10 @@ mod tests {
     #[gtest]
     fn an_unknown_key_lists_every_legal_one() {
         let msg = err_of(quote! { Source { notes => { maxlen: 3 } } });
-        for key in legal_keys() {
+        for key in LEGAL_KEYS {
             expect_that!(
                 msg,
-                contains_substring(key),
+                contains_substring(*key),
                 "the message should name `{key}`"
             );
         }

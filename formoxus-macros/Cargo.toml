@@ -26,10 +26,6 @@ quote = "1"
 proc-macro2 = "1"
 heck = { workspace = true }
 regress = { workspace = true }
-# Host-only, and deliberately without `reflect`: the only thing needed here is
-# `Facet`'s derive and `SHAPE`, so `FieldBody`'s own fields can BE the list of
-# legal keys rather than a hand-kept copy of it.
-facet = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }

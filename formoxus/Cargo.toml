@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 dioxus = { workspace = true }
-facet = { workspace = true, features = ["reflect"] }
+facet = { workspace = true }
 heck = { workspace = true }
 indexmap = { workspace = true }
 regress = { workspace = true }
