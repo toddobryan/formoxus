@@ -1,8 +1,14 @@
 # What `form!` should accept
 
 An inventory of every constraint and setting, and which of the three tiers it
-belongs to. Status as of 2026-09-21: tier 3 is mostly built, tier 1 is validated
-but unreachable (nothing sets it), tier 2 has its syntax but no attributes.
+belongs to.
+
+> **Status, 2026-09-24.** Tier 1 is now REACHABLE — `form!` accepts the five
+> constraint keys and they reach `ValueKind::check` on both sides of the wire.
+> What is missing is every compile-time check in "Compile-time checks" below.
+> Tier 3 is mostly built; tier 2 has its syntax but no attributes.
+> **`CONSTRAINTS_NEXT.md` is the build order** for what remains; this file
+> stays the inventory.
 
 ## The three questions that decide the tier
 
