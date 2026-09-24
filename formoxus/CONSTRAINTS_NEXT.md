@@ -25,53 +25,71 @@ That is all that is left, and it splits into three pieces.
 
 ---
 
-## Step 5 — what the macro can check by itself
+## Step 5 — the pattern check
+
+> **Revised 2026-09-24.** This step used to include `min > max` and
+> `min_length > max_length` as parse-time comparisons. It does not: those belong
+> in the const witness with the rest of step 6, for the reason below. Step 5 is
+> now just the regex.
 
 **Where:** at the end of `FieldBody::parse`, in `formoxus-macros/src/form/field.rs`,
-just before `Ok(fb)`. Every key and its span is in scope there.
+just before `Ok(fb)`.
 
 **Why there and not in `expand`:** `expand()` returns `TokenStream2`, not a
 `Result`. `impl_form` only turns an `Err` into a compile error, and only from
-parsing. There is no error channel after that point. Anything the macro wants
-to reject has to be rejected during parse.
+parsing. There is no error channel after that point.
 
-Three checks:
+**The check:** `pattern` compiles. `regress` is already a dependency of
+`formoxus-macros`, and it is the same engine `ValueKind::check` runs at
+runtime — so "compiles at build time" really does mean "will compile at
+runtime". Wrap it the way `check` does: `^(?:{pattern})$`.
 
-1. **`min_length > max_length`** and **`min > max`**.
-2. **`pattern` compiles.** `regress` is already a dependency of
-   `formoxus-macros`, and it is the same engine `ValueKind::check` runs at
-   runtime — so "compiles at build time" really does mean "will compile at
-   runtime". Wrap it the way `check` does: `^(?:{pattern})$`.
-3. Duplicate and unknown keys — **already done**, via the `HashSet` in `parse`
-   and `LEGAL_KEYS`.
+This one *cannot* move to a const block: regex parsing allocates, and const
+forbids allocation. That is the whole reason `pattern` is a `LitStr` while the
+bounds are `Expr` — the macro has to read the string itself.
 
-### The catch on 1
+`syn::Error::new_spanned(&lit, …)` puts the caret on the author's pattern. The
+field name is not in scope in `FieldBody::parse` — it lives in
+`Entry::parse_field` one level up — but the span points at the right line, so
+try without it first.
 
-The bounds are `Expr`, not literals. `min: MIN_AGE` and `min: 2 * N` are legal
-and deliberate, and the macro cannot evaluate them. So the comparison is only
-possible when **both** sides are literals:
-
-```rust
-// Roughly: syn::Lit::Int / syn::Lit::Float, else skip the check.
-```
-
-That is not a hole — an expression bound still gets caught by step 6b at
-compile time, just with a worse message. Write the check as "compare when we
-can" rather than trying to force literals, which would break `min: MIN_AGE`.
-
-### Message and span
-
-`syn::Error::new_spanned(&offending_expr, …)` puts the caret on the author's
-tokens. The field name is *not* in scope in `FieldBody::parse` — it lives in
-`Entry::parse_field` one level up. Try the span alone first; it points at the
-right line, and the name may be redundant. If it reads badly, move the check up
-to `parse_field`, which has both.
-
-**Checkpoint:** unit tests in `field.rs` for each, plus one trybuild golden in
-`formoxus/tests/ui/` so the rendered message is pinned. Regenerate goldens with
+**Checkpoint:** a unit test in `field.rs`, plus a trybuild golden in
+`formoxus/tests/ui/` pinning the rendered message. Regenerate goldens with
 `TRYBUILD=overwrite`, then *read the diff*.
 
----
+### Why the bound comparisons moved
+
+A parse-time comparison can only work when both sides are literals, because
+`min: MIN_AGE` and `min: 2 * N` are legal and the macro cannot evaluate them. A
+`const {}` assertion has no such limit — rustc evaluates the expression.
+Verified:
+
+```rust
+const { assert!((MIN_AGE as f64) <= ((2 * N) as f64), "min must not exceed max") }
+```
+
+- named consts and const arithmetic: **work**
+- mixed int and float literals, via `as f64` on both sides: **work**
+- a violated bound: `E0080: evaluation panicked: min must not exceed max`
+- a *runtime* expression: `E0015: cannot call non-const function` — rejected,
+  which is arguably correct, since a bound that is not a compile-time constant
+  cannot be checked at all
+
+So emit these alongside the step-6 asserts, in the same generated fn:
+
+```rust
+const { assert!((#min as f64) <= (#max as f64), "min must not exceed max") }
+const { assert!(#min_length <= #max_length, "min_length must not exceed max_length") }
+```
+
+The `as f64` on both sides is what lets `min: 3, max: 120.5` compare at all.
+Lengths are both `usize`, so they need no cast.
+
+**The one thing lost:** a const panic message takes a `&'static str` and nothing
+else, so it cannot say *"min (10) exceeds max (5)"*. If the fixed sentence proves
+annoying in practice, layer a parse-time comparison on top for the
+both-are-literals case purely to get the better message — but do the const
+assert first, because it is the one that is actually complete.
 
 ## Step 6a — constraint versus value kind
 
@@ -175,6 +193,39 @@ Revisit both when the tests go — and note the runtime cast itself stays, so th
 first `expect` probably stays with it.
 
 ---
+
+## A cleanup worth doing, independent of all of the above
+
+`FormAttribute`'s duplicate tracking can collapse the way `FieldBody`'s did, and
+it needs no macro table — the enum is not the obstacle it looks like, because
+**`Entry::name()` is already the variant-to-string map**. It returns `"title"`,
+`"label_case"` and so on for attributes, and `path.key()` for a field.
+
+So the five `bool` fields and both twelve-arm matches inside
+`check_seen_and_set` reduce to one line:
+
+```rust
+struct FormAttribute { seen: HashSet<String> }
+
+// `insert` returning false IS the duplicate check.
+if !self.seen.insert(entry.name()) { /* the existing message branch */ }
+```
+
+`check_duplicate` still branches on `Entry::Field` for its message and span,
+which is already there and stays. This also removes the
+`#[allow(clippy::struct_excessive_bools)]` on `FormAttribute`.
+
+**Why it is worth it:** adding a form-level keyword today touches the `kw`
+module, an `Entry` variant, a `parse_*` fn, the dispatch chain, a
+`FormAttribute` field, **two** arms in `check_seen_and_set`, an arm in `name()`,
+and an arm in `expand`. Afterwards it touches five, and four of those five are
+exhaustive matches that rustc forces you to fill. Only the dispatch chain is
+left unguarded, and any test of the new keyword catches that.
+
+A `macro_rules!` table over the entries was the other option and is not worth
+it: unlike `FieldBody`'s keys, each form-level entry parses *different syntax*,
+not merely a different type, so the bespoke `parse_*` fns stay either way and
+the table would only generate what this does for free.
 
 ## After that
 
