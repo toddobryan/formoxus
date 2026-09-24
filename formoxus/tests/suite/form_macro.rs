@@ -5,9 +5,11 @@
 //! Inside the library they would not compile, so this file is the only place
 //! the expansion is exercised end to end rather than as tokens.
 
+use std::collections::HashMap;
+
 use facet::Facet;
 use formoxus::form;
-use formoxus::{empty_form, form_for, use_form};
+use formoxus::{FormErrors, Submission, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
 use super::render_to_html;
@@ -674,4 +676,73 @@ fn a_keyword_named_field_is_addressable_bare() {
     let html = render_to_html(BareSpelling);
     expect_that!(html, contains_substring("Kind"));
     expect_that!(html, not(contains_substring(">Type<")));
+}
+
+// ── Constraints ──────────────────────────────────────────────────────────
+
+fn wire(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+fn failing_paths(errors: &FormErrors) -> Vec<String> {
+    errors.fields.iter().map(|(p, _)| p.clone()).collect()
+}
+
+/// The whole chain the macro was the last missing link in: `form!` -> the
+/// `.with_constraints` call -> `FieldSpec` -> `apply_specs` -> `FormField` ->
+/// `ValueKind::check`. `specs.rs` covers the same ground through a hand-built
+/// `FormSpec`; this is the only test that proves the macro reaches it.
+#[gtest]
+fn constraints_from_the_macro_reach_validation() {
+    let spec = || {
+        form! {
+            Article {
+                headline => { max_length: 5 },
+                words => { min: 10, max: 100 },
+            }
+        }
+    };
+
+    let ok = wire(&[("headline", "Short"), ("words", "42")]);
+    expect_that!(
+        Submission::accept(spec(), &ok).is_ok(),
+        eq(true),
+        "both values are inside the stated bounds"
+    );
+
+    let bad = wire(&[("headline", "Much too long"), ("words", "3")]);
+    let errors = Submission::accept(spec(), &bad).expect_err("both values are outside them");
+    expect_that!(
+        failing_paths(&errors),
+        unordered_elements_are![eq("headline"), eq("words")]
+    );
+}
+
+/// `min: 10` on a `u32` is an unsuffixed integer literal, so it arrives as
+/// `Bound::Int` — and a float field would need it widened. This is the same
+/// conversion `a_bound_is_converted_rather_than_classified` pins in tokens,
+/// seen from the far end.
+#[gtest]
+fn an_integer_bound_written_bare_lands_on_the_right_field() {
+    let spec = || form! { Article { words => { min: 10 } } };
+    let under = wire(&[("headline", "Fine"), ("words", "9")]);
+    let errors = Submission::accept(spec(), &under).expect_err("9 is below the stated minimum");
+    expect_that!(failing_paths(&errors), elements_are![eq("words")]);
+}
+
+/// A pattern is a literal so the macro can hand it to `regress`; it reaches the
+/// field as a `&'static str` and is anchored at check time.
+#[gtest]
+fn a_pattern_from_the_macro_reaches_validation() {
+    let spec = || form! { Article { headline => { pattern: r"[A-Z].*" } } };
+
+    let ok = wire(&[("headline", "Capitalized"), ("words", "1")]);
+    expect_that!(Submission::accept(spec(), &ok).is_ok(), eq(true));
+
+    let bad = wire(&[("headline", "lowercase"), ("words", "1")]);
+    let errors = Submission::accept(spec(), &bad).expect_err("it does not start with a capital");
+    expect_that!(failing_paths(&errors), elements_are![eq("headline")]);
 }

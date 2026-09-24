@@ -106,11 +106,11 @@ impl FormSpecInput {
                 Entry::BrowserValidation(value) => fsm.use_browser_validation = Some(value),
                 Entry::LabelCase(ident) => fsm.label_case = Some(ident),
                 Entry::Validator(expr) => fsm.validator = Some(expr),
-                Entry::Field { path, body } => fsm.field_specs.push(FieldSpec {
-                    path,
-                    label: body.label,
-                    widget: body.widget,
-                }),
+                // The whole body, not field by field: adding a key should touch
+                // `FieldBody` and nothing else.
+                Entry::Field { path, body } => {
+                    fsm.field_specs.push(FieldSpec { path, body: *body });
+                }
                 Entry::Buttons(buttons) => fsm.buttons = buttons,
             }
         }
@@ -147,19 +147,28 @@ impl FormSpecInput {
             .iter()
             .map(|f| {
                 let key = f.path.key();
-                let label = f.label.as_ref().map(|l| quote! { .with_label(#key, &#l) });
-                let widget = f.widget.as_ref().map(|c| {
+                let label = f
+                    .body
+                    .label
+                    .as_ref()
+                    .map(|l| quote! { .with_label(#key, &#l) });
+                let widget = f.body.widget.as_ref().map(|c| {
                     let c = c.path();
                     quote! { .with_custom_widget(#key, #c) }
                 });
                 let choices = f
+                    .body
                     .widget
                     .as_ref()
                     .and_then(|w| w.args.choices.as_ref())
                     .map(|c| {
                         quote! { .with_choices(#key, #c) }
                     });
-                quote! { #label #widget #choices }
+                let constraints = f
+                    .body
+                    .constraints_tokens()
+                    .map(|c| quote! { .with_constraints(#key, #c) });
+                quote! { #label #widget #choices #constraints }
             })
             .collect();
         let witnesses: Vec<TokenStream2> = fsm

@@ -1477,6 +1477,7 @@ dependencies = [
 name = "formoxus-macros"
 version = "0.1.0"
 dependencies = [
+ "facet",
  "googletest",
  "heck",
  "proc-macro2",
