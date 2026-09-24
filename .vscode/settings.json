@@ -1,0 +1,17 @@
+{
+  // rust-analyzer runs `cargo check` by default, which silently ignores every
+  // `clippy::` entry in [workspace.lints] — rustc tolerates unknown tool lints
+  // rather than erroring. That is why rustc lints have been reaching the
+  // Problems view and the pedantic ones have not.
+  "rust-analyzer.check.command": "clippy",
+
+  // Explicit, because the default leaves it to rust-analyzer to decide. A lot
+  // of this workspace's findings are in tests/ and examples/, and `just ci`
+  // lints them, so the editor should too.
+  "rust-analyzer.check.allTargets": true,
+
+  // Its own target dir, so rust-analyzer's flycheck and a `cargo`/`just ci` in
+  // the terminal stop taking turns on the build lock and invalidating each
+  // other's artifacts. Costs disk, saves a lot of waiting.
+  "rust-analyzer.cargo.targetDir": true
+}
