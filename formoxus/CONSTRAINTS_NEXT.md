@@ -5,8 +5,9 @@ should accept and which tier each setting belongs to. This file is the **build
 order**: what is done, what is next, and the things already worked out or
 verified so they do not have to be rediscovered.
 
-Status as of 2026-09-25: steps 5 and 6a are done, and so are the `min <= max`
-and `min_length <= max_length` checks. Step 6b is what is left.
+Status as of 2026-09-25: **every step is done**, 5, 6a and 6b, along with the
+`min <= max` and `min_length <= max_length` checks. What is left is under
+"After that" at the end.
 
 ## What is built
 
@@ -184,6 +185,22 @@ but it is a public-API addition, so it is yours to make.
 ---
 
 ## Step 6b — does the bound fit the type
+
+> **Done 2026-09-25.** Both decisions went the recommended way. A vacuous
+> bound fails the build. A bound AT the type's limit (`min: 0` on a `u32`) is
+> fine, so the range check is inclusive. `value_kind()` now accepts a WHOLE
+> float bound on an integer field (`min: 2.0` is 2) instead of panicking,
+> because `form!` cannot tell `2.0` from `2` when the bound is a named const.
+> A fractional one still panics, and `form!` rejects it at compile time.
+>
+> Each `min`/`max` gets three more `const _` asserts, fed the bound cast two
+> ways, `(e) as f64` and `(e) as i128`, which is all a const fn can take since
+> it cannot be generic over "some number". `field_kind::bound_in_range`,
+> `bound_is_whole` and `bound_is_exact` each return `true` on a non-number, so
+> one mistake reports once. The three ignored tests are deleted, replaced by
+> goldens as planned. Because every bound is now const-evaluated, a bound that
+> is not a compile-time constant is rejected everywhere, not just when both
+> `min` and `max` are given.
 
 Independent of 6a; do it second only because it is fiddlier.
 

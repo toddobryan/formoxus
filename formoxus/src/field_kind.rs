@@ -45,12 +45,88 @@ pub const fn takes_length(shape: &Shape) -> bool {
 
 /// Whether `min` or `max` can apply to this field.
 pub const fn takes_bound(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Number | Kind::Unknown)
+    matches!(
+        kind(shape),
+        Kind::Int { .. } | Kind::Float { .. } | Kind::Unknown
+    )
+}
+
+// ── Does a bound fit the field's type? ──────────────────────────────────
+//
+// `form!` passes each `min`/`max` twice, as `(e) as f64` and `(e) as i128`,
+// because a const fn cannot be generic over "some number". Between them the
+// two casts answer every question below, whatever type the bound was written
+// in. Each check is `true` for a field that is not a number, so a bound on the
+// wrong kind of field reports once, from `takes_bound`, not four times.
+
+/// Whether the bound lies within the values the field's type can hold. One
+/// outside it either excludes nothing (`min: -1000` on an `i8`) or excludes
+/// everything (`min: 1000` on an `i8`), and either way it is a mistake. A bound
+/// AT the limit, like `min: 0` on a `u32`, is fine: that is ordinary.
+///
+/// For a float field this is also what catches `max: 1e50` on an `f32`. Parsing
+/// saturates, so `1e39` arrives as `inf` and is refused by a bound it is visibly
+/// inside.
+pub const fn bound_in_range(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
+    if as_f64.is_nan() {
+        return !is_number(shape);
+    }
+    match kind(shape) {
+        // `as i128` saturates, so a float bound far outside `i128` still lands
+        // outside every integer type's range.
+        Kind::Int { min, max } => min <= as_i128 && as_i128 <= max,
+        Kind::Float { max } => -max <= as_f64 && as_f64 <= max,
+        _ => true,
+    }
+}
+
+/// Whether a bound on an integer field is a whole number. `min: 2.0` is, and
+/// the runtime accepts it; `min: 1.5` would have to be rounded, and rounding
+/// either way changes which values pass.
+pub const fn bound_is_whole(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
+    match kind(shape) {
+        #[expect(
+            clippy::cast_precision_loss,
+            clippy::float_cmp,
+            reason = "exact equality is the question: both sides round the same way, so \
+            an integer bound compares equal and a fractional one cannot"
+        )]
+        Kind::Int { .. } => as_f64 == as_i128 as f64,
+        _ => true,
+    }
+}
+
+/// Whether a bound on a float field survives the runtime's widening to `f64`.
+/// An integer above 2^53 does not: `min: 9_007_199_254_740_993` is stored as
+/// ...992, and the value one below the stated minimum gets in. A bound written
+/// as a float is already an `f64`, and both casts truncate it alike.
+pub const fn bound_is_exact(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
+    match kind(shape) {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "truncation is the comparison: it matches `as_i128` exactly when nothing was rounded"
+        )]
+        Kind::Float { .. } => as_f64 as i128 == as_i128,
+        _ => true,
+    }
+}
+
+const fn is_number(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Int { .. } | Kind::Float { .. })
 }
 
 enum Kind {
     Text,
-    Number,
+    /// The range of the integer type, widened to `i128` since every supported
+    /// integer fits.
+    Int {
+        min: i128,
+        max: i128,
+    },
+    /// The largest finite value of the float type, as an `f64`.
+    Float {
+        max: f64,
+    },
     /// Something no constraint applies to: `bool`, a struct, a list, or a
     /// scalar formoxus does not support.
     Other,
@@ -87,18 +163,35 @@ const fn kind(shape: &Shape) -> Kind {
     }
 }
 
-/// The scalars `build::scalar_member` supports. `usize`/`isize` are absent there
-/// on purpose, so they are absent here too.
+/// The scalars `build::scalar_member` supports, with their limits.
+/// `usize`/`isize` are absent there on purpose, so they are absent here too.
 const fn primitive(name: &str) -> Kind {
-    const NUMBERS: [&str; 10] = [
-        "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64",
+    // `i128::from` is not const, and every one of these widens losslessly.
+    const INTS: [(&str, i128, i128); 8] = [
+        ("i8", i8::MIN as i128, i8::MAX as i128),
+        ("i16", i16::MIN as i128, i16::MAX as i128),
+        ("i32", i32::MIN as i128, i32::MAX as i128),
+        ("i64", i64::MIN as i128, i64::MAX as i128),
+        ("u8", 0, u8::MAX as i128),
+        ("u16", 0, u16::MAX as i128),
+        ("u32", 0, u32::MAX as i128),
+        ("u64", 0, u64::MAX as i128),
     ];
     let mut i = 0;
-    while i < NUMBERS.len() {
-        if str_eq(name, NUMBERS[i]) {
-            return Kind::Number;
+    while i < INTS.len() {
+        let (int, min, max) = INTS[i];
+        if str_eq(name, int) {
+            return Kind::Int { min, max };
         }
         i += 1;
+    }
+    if str_eq(name, "f32") {
+        return Kind::Float {
+            max: f32::MAX as f64,
+        };
+    }
+    if str_eq(name, "f64") {
+        return Kind::Float { max: f64::MAX };
     }
     Kind::Other
 }
@@ -132,7 +225,7 @@ const fn str_eq(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{takes_bound, takes_length};
+    use super::{bound_in_range, bound_is_exact, bound_is_whole, takes_bound, takes_length};
     use facet::Facet;
     use googletest::prelude::*;
 
@@ -182,6 +275,87 @@ mod tests {
             expect_that!(takes_bound(shape), eq(true), "{shape}");
             expect_that!(takes_length(shape), eq(false), "{shape}");
         }
+    }
+
+    // ── Bounds ───────────────────────────────────────────────────────────
+
+    /// What `form!` passes: the bound cast both ways.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "this is the cast form! emits"
+    )]
+    fn casts(bound: f64) -> (f64, i128) {
+        (bound, bound as i128)
+    }
+
+    #[gtest]
+    fn a_bound_at_the_limit_of_the_type_fits() {
+        expect_that!(bound_in_range(u32::SHAPE, 0.0, 0), eq(true));
+        expect_that!(bound_in_range(i8::SHAPE, -128.0, -128), eq(true));
+        expect_that!(
+            bound_in_range(std::primitive::u8::SHAPE, 255.0, 255),
+            eq(true)
+        );
+    }
+
+    #[gtest]
+    fn a_bound_past_the_limit_of_the_type_does_not() {
+        expect_that!(bound_in_range(i8::SHAPE, -1000.0, -1000), eq(false));
+        expect_that!(bound_in_range(u32::SHAPE, -1.0, -1), eq(false));
+        expect_that!(
+            bound_in_range(std::primitive::u8::SHAPE, 256.0, 256),
+            eq(false)
+        );
+        let (f, i) = casts(1e30);
+        expect_that!(bound_in_range(i32::SHAPE, f, i), eq(false));
+    }
+
+    #[gtest]
+    fn a_float_bound_must_be_finite_within_the_float_type() {
+        let (f, i) = casts(1e50);
+        expect_that!(bound_in_range(f32::SHAPE, f, i), eq(false));
+        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(true));
+        let (f, i) = casts(f64::INFINITY);
+        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(false));
+        let (f, i) = casts(f64::NAN);
+        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(false));
+    }
+
+    #[gtest]
+    fn a_bound_on_an_integer_must_be_whole() {
+        let (f, i) = casts(2.0);
+        expect_that!(bound_is_whole(u32::SHAPE, f, i), eq(true));
+        let (f, i) = casts(1.5);
+        expect_that!(bound_is_whole(u32::SHAPE, f, i), eq(false));
+        expect_that!(bound_is_whole(f64::SHAPE, f, i), eq(true));
+    }
+
+    /// 2^53 + 1 is the first integer an `f64` cannot hold.
+    #[expect(clippy::cast_precision_loss, reason = "the rounding is the point")]
+    #[gtest]
+    fn an_integer_bound_on_a_float_must_survive_the_widening() {
+        let exact: i128 = 1 << 53;
+        let inexact = exact + 1;
+        expect_that!(bound_is_exact(f64::SHAPE, exact as f64, exact), eq(true));
+        expect_that!(
+            bound_is_exact(f64::SHAPE, inexact as f64, inexact),
+            eq(false)
+        );
+        expect_that!(
+            bound_is_exact(i64::SHAPE, inexact as f64, inexact),
+            eq(true)
+        );
+    }
+
+    /// Every bound check passes on a field that is not a number, so a bound on
+    /// the wrong kind of field reports once, from `takes_bound`.
+    #[gtest]
+    fn the_bound_checks_leave_a_non_number_to_takes_bound() {
+        let (f, i) = casts(f64::NAN);
+        let text = std::string::String::SHAPE;
+        expect_that!(bound_in_range(text, f, i), eq(true));
+        expect_that!(bound_is_whole(text, 1.5, 1), eq(true));
+        expect_that!(bound_is_exact(text, 0.0, 1), eq(true));
     }
 
     #[gtest]

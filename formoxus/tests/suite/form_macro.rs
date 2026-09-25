@@ -801,3 +801,40 @@ fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
     let errors = Submission::accept(spec(), &bad).expect_err("`note` is over its limit");
     expect_that!(failing_paths(&errors), elements_are![eq("note")]);
 }
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Gauge {
+    count: u32,
+    small: u8,
+    wide: i64,
+    level: f32,
+}
+
+/// A bound AT the limit of the field's type is ordinary (`min: 0` on a `u32`
+/// most of all), so the range check is inclusive. And `min: 2.0` on an integer
+/// field is whole, so it is used as 2 rather than rejected.
+#[gtest]
+fn bounds_at_the_limits_of_the_type_are_accepted() {
+    let spec = || {
+        form! {
+            Gauge {
+                count => { min: 2.0, max: u32::MAX },
+                small => { min: 0, max: u8::MAX },
+                wide => { min: i64::MIN, max: i64::MAX },
+                level => { min: -f32::MAX, max: f32::MAX },
+            }
+        }
+    };
+
+    let fields = |count: &str| {
+        wire(&[
+            ("count", count),
+            ("small", "0"),
+            ("wide", "0"),
+            ("level", "0"),
+        ])
+    };
+    expect_that!(Submission::accept(spec(), &fields("2")).is_ok(), eq(true));
+    let errors = Submission::accept(spec(), &fields("1")).expect_err("1 is below `min: 2.0`");
+    expect_that!(failing_paths(&errors), elements_are![eq("count")]);
+}

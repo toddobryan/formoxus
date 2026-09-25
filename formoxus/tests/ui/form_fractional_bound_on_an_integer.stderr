@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min` must be a whole number, because the field is an integer
+  --> tests/ui/form_fractional_bound_on_an_integer.rs:14:32
+   |
+14 |             quantity => { min: 1.5 },
+   |                                ^^^ evaluation of `main::_` failed here

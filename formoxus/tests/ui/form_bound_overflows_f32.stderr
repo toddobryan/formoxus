@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `max` is outside the range of the field's type
+  --> tests/ui/form_bound_overflows_f32.rs:15:29
+   |
+15 |             level => { max: 1e50 },
+   |                             ^^^^ evaluation of `main::_` failed here

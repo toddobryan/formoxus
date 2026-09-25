@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min` is outside the range of the field's type
+  --> tests/ui/form_vacuous_bound.rs:16:30
+   |
+16 |             offset => { min: LOWEST },
+   |                              ^^^^^^ evaluation of `main::_` failed here

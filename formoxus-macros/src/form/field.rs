@@ -118,6 +118,24 @@ impl FieldBody {
     }
 }
 
+/// Lints the bound checks allow, whatever type the author wrote the bound in.
+///
+/// They matter because each check carries the author's span, so a lint on it
+/// lands in THEIR crate: `max: 100` as f64 is an `unnecessary_cast` of a
+/// literal, an `f64` bound `as f64` a trivial cast, a `u64` `as i128` a
+/// lossless one, a float `as i128` a truncation.
+fn cast_lints() -> TokenStream2 {
+    quote! {
+        trivial_numeric_casts,
+        clippy::unnecessary_cast,
+        clippy::cast_precision_loss,
+        clippy::cast_lossless,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss
+    }
+}
+
 impl FieldBody {
     /// One free `const _` assertion per constraint key, checking that the
     /// field at `place` can take it, plus `min <= max` and
@@ -142,6 +160,7 @@ impl FieldBody {
                 const _: () = ::core::assert!(#test(#shape), #message);
             }
         };
+        let cast_lints = cast_lints();
         let length = quote!(::formoxus::field_kind::takes_length);
         let bound = quote!(::formoxus::field_kind::takes_bound);
 
@@ -166,19 +185,38 @@ impl FieldBody {
             let msg = "`max` applies only to a number field";
             checks.push(takes(e.span(), bound.clone(), msg));
         }
+        // Does each bound fit the field's type? The bound goes in cast both
+        // ways, since a const fn cannot be generic over "some number";
+        // `field_kind` explains what each pair of casts answers.
+        for (key, bound) in [("min", &self.min), ("max", &self.max)] {
+            let Some(e) = bound else { continue };
+            for (test, problem) in [
+                ("bound_in_range", "is outside the range of the field's type"),
+                (
+                    "bound_is_whole",
+                    "must be a whole number, because the field is an integer",
+                ),
+                (
+                    "bound_is_exact",
+                    "is an integer too large to hold exactly as an f64",
+                ),
+            ] {
+                let test = Ident::new(test, Span::call_site());
+                let message = format!("`{key}` {problem}");
+                checks.push(quote_spanned! { e.span()=>
+                    #[allow(#cast_lints)]
+                    const _: () = ::core::assert!(
+                        ::formoxus::field_kind::#test(#shape, (#e) as f64, (#e) as i128),
+                        #message
+                    );
+                });
+            }
+        }
         // `as f64` on both sides is what lets `min: 3, max: 120.5` compare at
-        // all. The allows matter because the item carries the author's span,
-        // so lints on it land in THEIR crate: `max: 100` is an
-        // `unnecessary_cast` of a literal, an `f64` side a trivial cast, a
-        // large `i64` a precision loss.
+        // all.
         if let (Some(min), Some(max)) = (&self.min, &self.max) {
             checks.push(quote_spanned! { max.span()=>
-                #[allow(
-                    trivial_numeric_casts,
-                    clippy::unnecessary_cast,
-                    clippy::cast_precision_loss,
-                    clippy::cast_lossless
-                )]
+                #[allow(#cast_lints)]
                 const _: () = ::core::assert!(
                     ((#min) as f64) <= ((#max) as f64),
                     "`min` must not exceed `max`"

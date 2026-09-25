@@ -5,8 +5,8 @@ belongs to.
 
 > **Status, 2026-09-25.** Tier 1 is reachable and CHECKED: `form!` accepts the
 > five constraint keys, they reach `ValueKind::check` on both sides of the wire,
-> and "Compile-time checks" below are built, except whether a bound fits the
-> field's type. Tier 3 is mostly built. Tier 2 has its syntax but no attributes,
+> and every check in "Compile-time checks" below is built except the validator
+> one, which belongs to the error model. Tier 3 is mostly built. Tier 2 has its syntax but no attributes,
 > and no widget renders any constraint attribute yet either. **`CONSTRAINTS_NEXT.md`
 > is the build order** for what remains; this file stays the inventory.
 
@@ -211,8 +211,11 @@ assertion is spanned onto the author's value, so the caret lands there.
   token comparisons so that `min: MIN_AGE` and `max: 2 * N` are evaluated too,
   with `as f64` letting an integer and a float compare. The cost is a fixed
   message that cannot quote the values. *Built.*
-- **Does a bound fit the field's type?** `max: 1e50` on an `f32`, or
-  `min: -1000` on an `i8`, which is vacuous. *Not built; step 6b.*
+- **Does a bound fit the field's type?** One outside the type's range, which
+  is `max: 1e50` on an `f32` or the vacuous `min: -1000` on an `i8`. A
+  fractional bound on an integer field. An integer bound too large for an
+  `f64` to hold exactly. The bound is passed cast both ways, `as f64` and
+  `as i128`. *Built.*
 - the validator's parameter type matching the field's, via a witness call.
   *Not built; belongs to the error model.*
 

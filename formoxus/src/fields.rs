@@ -231,31 +231,15 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             | ScalarType::U16
             | ScalarType::U32
             | ScalarType::U64 => {
-                let (min, max) = match (self.constraints.min, self.constraints.max) {
-                    (None, None) => (None, None),
-                    (Some(Bound::Int(min)), None) => (Some(min), None),
-                    (None, Some(Bound::Int(max))) => (None, Some(max)),
-                    (Some(Bound::Int(min)), Some(Bound::Int(max))) => (Some(min), Some(max)),
-                    (Some(Bound::Float(min)), _) => panic!(
-                        "Integer field {} does not support float min {min}",
-                        self.name
-                    ),
-                    (_, Some(Bound::Float(max))) => panic!(
-                        "Integer field {} does not support float max {max}",
-                        self.name
-                    ),
-                };
-                // TODO: check that the constraints do something
-                // For example a min of -1000 on i8 should produce an error like,
-                // "A bound of -1000 on an i8 is always true; this constraint does nothing"
+                let min = self.constraints.min.map(|b| self.int_bound(b, "min"));
+                let max = self.constraints.max.map(|b| self.int_bound(b, "max"));
                 ValueKind::Int { min, max }
             }
             #[expect(
                 clippy::cast_precision_loss,
-                reason = "known gap, pinned by the ignored \
-                `an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded`: a bound \
-                above 2^53 does not survive this widening. Closing it belongs upstream, in \
-                the macro's compile-time check"
+                reason = "a bound above 2^53 does not survive this widening; form! rejects \
+                one at compile time (`field_kind::bound_is_exact`), so only a hand-built \
+                spec can still reach here with one"
             )]
             ScalarType::F32 | ScalarType::F64 => {
                 let min = match self.constraints.min {
@@ -268,11 +252,32 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                     Some(Bound::Int(max)) => Some(max as f64),
                     Some(Bound::Float(max)) => Some(max),
                 };
-                // TODO: check constraints on f32s to make sure they're not out of range
                 ValueKind::Float { min, max }
             }
             other => panic!(
                 "scalar type {other:?} is not supported in FormField (field {})",
+                self.name
+            ),
+        }
+    }
+
+    /// A bound on an integer field, as the `i128` `ValueKind::Int` holds.
+    ///
+    /// A whole float bound is accepted, because `min: 2.0` means what it says
+    /// and `form!` cannot reject it: it cannot tell `2.0` from `2` when the
+    /// bound is a named const. A fractional one still panics. `form!` rejects
+    /// that at compile time (`field_kind::bound_is_whole`), so only a hand-built
+    /// spec can reach the panic.
+    fn int_bound(&self, bound: Bound, which: &str) -> i128 {
+        match bound {
+            Bound::Int(n) => n,
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "only reached once `fract() == 0.0` says nothing is truncated"
+            )]
+            Bound::Float(x) if x.is_finite() && x.fract() == 0.0 => x as i128,
+            Bound::Float(x) => panic!(
+                "Integer field {} does not support the fractional {which} {x}",
                 self.name
             ),
         }
@@ -854,110 +859,6 @@ mod tests {
         expect_that!(messages(&capped, "-inf"), is_empty());
     }
 
-    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** Nothing yet
-    /// rejects a bound that does not fit the field's own type.
-    ///
-    /// `max: 1e50` on an `f32` field looks satisfiable and is not: `1e39` sits
-    /// comfortably inside the stated bound, but f32 parsing SATURATES rather
-    /// than erroring, so it arrives as `inf`, and `inf > 1e50` rejects it. The
-    /// author allowed a value the form then refuses, and the error message says
-    /// it is out of a range it is visibly inside.
-    ///
-    /// The fix is upstream of `check`, which only ever sees the canonical
-    /// display and cannot tell `inf`-the-answer from `inf`-the-overflow.
-    /// `value_kind`'s doc already promises the macro will "check to make sure
-    /// the constraints fit" the field's type — un-ignore this when that lands.
-    #[gtest]
-    #[ignore = "a bound that overflows the field's own type is not rejected yet"]
-    fn a_bound_that_overflows_f32_is_caught_before_it_can_bite() {
-        // The bound is fine as an f64, which is all `ValueKind::Float` stores.
-        let stated_max = 1e50_f64;
-        let inside: f64 = "1e39".parse().expect("parses as f64");
-        expect_that!(inside < stated_max, eq(true));
-
-        // But the field is an f32, and the same text does not survive the trip.
-        let as_f32: f32 = "1e39".parse().expect("parses as f32, saturating");
-        expect_that!(
-            as_f32.is_finite(),
-            eq(true),
-            "saturation to inf is what makes the stated bound unreachable"
-        );
-    }
-
-    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** `value_kind()`
-    /// widens a `Bound::Int` to `f64` with a plain `as`, which is exact only
-    /// below 2^53.
-    ///
-    /// So `min: 9_007_199_254_740_993` on an `f64` field is stored as
-    /// ...992, and the value one below the stated minimum is then accepted.
-    /// The author wrote a bound the form does not enforce — and unlike a bound
-    /// that is merely wrong, this one reads as correct at the call site.
-    ///
-    /// Both TODOs in `value_kind`'s `Float` arm point here. The fix is upstream
-    /// of `check`, which only ever sees the `f64` that survived the widening.
-    #[expect(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        reason = "this test exists to demonstrate exactly these two casts losing information"
-    )]
-    #[gtest]
-    #[ignore = "an integer bound above 2^53 is silently rounded on a float field"]
-    fn an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded() {
-        let stated_min: i128 = (1i128 << 53) + 1;
-        // Exactly what `value_kind()`'s `Float` arm does with a `Bound::Int`.
-        let as_stored = stated_min as f64;
-
-        expect_that!(
-            as_stored as i128,
-            eq(stated_min),
-            "the stated bound does not survive the widening"
-        );
-
-        // And the consequence, which is what actually matters: a value the
-        // author excluded gets in.
-        let kind = ValueKind::Float {
-            min: Some(as_stored),
-            max: None,
-        };
-        expect_that!(
-            messages(&kind, &(stated_min - 1).to_string()),
-            len(eq(1)),
-            "a value below the stated minimum is accepted anyway"
-        );
-    }
-
-    /// **KNOWN GAP — deliberately failing, hence `#[ignore]`.** Nothing rejects
-    /// a bound that no value of the field's own type could ever violate.
-    ///
-    /// `min: -1000` on an `i8` field excludes nothing — `i8::MIN` is -128 — so
-    /// the constraint is dead weight that still renders as `min="-1000"` on the
-    /// input. It is almost always a typo: a digit too many, or a bound left
-    /// behind when the field changed type.
-    ///
-    /// `ValueKind::Int` cannot catch this, since it holds the bound but not the
-    /// type; only `value_kind()`, which has `T`, knows both. Its `Int` arm
-    /// carries the TODO. Note this is the SAME comparison that rejects an
-    /// overflowing bound, read in the other direction — one check against the
-    /// type's range, two ways to fail it.
-    ///
-    /// Unlike the overflow case, a vacuous bound is arguably a warning, and a
-    /// `const {}` block can only hard-error. Closing this means deciding that
-    /// it fails the build.
-    #[gtest]
-    #[ignore = "a bound that excludes no value of the field's type is not rejected yet"]
-    fn a_bound_no_value_of_the_field_type_could_violate_is_caught() {
-        let stated_min: i128 = -1000;
-        let excluded = (i8::MIN..=i8::MAX)
-            .filter(|v| i128::from(*v) < stated_min)
-            .count();
-
-        expect_that!(
-            excluded,
-            gt(0),
-            "no i8 can fail this bound, so stating it does nothing"
-        );
-    }
-
     // ── Bool ─────────────────────────────────────────────────────────────
 
     #[gtest]
@@ -1073,17 +974,30 @@ mod tests {
         expect_that!(validated(0.5_f64, non_negative), is_empty());
     }
 
-    /// The other direction has no sensible answer, so it is a panic rather than
-    /// a silent drop. Rounding would invent a bound the author did not write,
-    /// and the correct direction differs by end — a `min` would ceil where a
-    /// `max` would floor.
-    ///
-    /// Only a hand-built `FormSpec` can reach this; `form!` is meant to reject
-    /// it at compile time, which is why the message is for a caller and not for
-    /// the person filling in the form.
+    /// The other direction, when the float is whole: `min: 2.0` means 2, so
+    /// it is used as 2. `form!` cannot reject it, because it cannot tell `2.0`
+    /// from `2` when the bound is a named const.
     #[gtest]
-    #[should_panic(expected = "does not support float min")]
-    fn a_float_bound_on_an_integer_field_is_a_caller_bug() {
+    fn a_whole_float_bound_on_an_integer_field_is_used_as_an_integer() {
+        let at_least_two = Constraints {
+            min: Some(Bound::Float(2.0)),
+            ..Default::default()
+        };
+        expect_that!(validated(1_i32, at_least_two.clone()), len(eq(1)));
+        expect_that!(validated(2_i32, at_least_two), is_empty());
+    }
+
+    /// A FRACTIONAL float bound on an integer field has no sensible answer, so
+    /// it is a panic rather than a silent drop. Rounding would invent a bound
+    /// the author did not write, and the correct direction differs by end: a
+    /// `min` would ceil where a `max` would floor.
+    ///
+    /// Only a hand-built `FormSpec` can reach this, since `form!` rejects it at
+    /// compile time. That is why the message is for a caller and not for the
+    /// person filling in the form.
+    #[gtest]
+    #[should_panic(expected = "does not support the fractional min")]
+    fn a_fractional_bound_on_an_integer_field_is_a_caller_bug() {
         let fractional = Constraints {
             min: Some(Bound::Float(1.5)),
             ..Default::default()

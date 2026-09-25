@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min` is an integer too large to hold exactly as an f64
+  --> tests/ui/form_integer_bound_too_big_for_f64.rs:15:31
+   |
+15 |             balance => { min: 9_007_199_254_740_993_i64 },
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here
