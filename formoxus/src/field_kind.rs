@@ -288,8 +288,8 @@ const fn str_eq(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_single_value, renders,
-        takes_bound, takes_length,
+        WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_optional, is_single_value,
+        renders, takes_bound, takes_length,
     };
     use facet::Facet;
     use googletest::prelude::*;
@@ -472,6 +472,17 @@ mod tests {
             renders(std::string::String::SHAPE, WidgetClass::Chooser, true),
             eq(true)
         );
+    }
+
+    /// Reads `def` directly, so — unlike every other predicate here — it does
+    /// NOT look through the `Option`. That is the whole point: `radio_group` is
+    /// rejected on an optional field however renderable the inner type is.
+    #[gtest]
+    fn is_optional_sees_the_option_itself_not_what_it_holds() {
+        expect_that!(is_optional(<Option<bool>>::SHAPE), eq(true));
+        expect_that!(is_optional(<Option<std::string::String>>::SHAPE), eq(true));
+        expect_that!(is_optional(bool::SHAPE), eq(false));
+        expect_that!(is_optional(std::string::String::SHAPE), eq(false));
     }
 
     #[gtest]

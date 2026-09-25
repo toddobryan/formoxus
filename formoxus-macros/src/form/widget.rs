@@ -216,7 +216,7 @@ impl WidgetRef {
                 .last()
                 .map_or_else(proc_macro2::Span::call_site, |s| s.ident.span()),
         };
-        let single = quote_spanned! { span=>
+        let single = quote_spanned! { span =>
             const _: () = ::core::assert!(
                 ::formoxus::field_kind::is_single_value(#shape),
                 "a widget applies only to a single-value field, not a struct, list or enum"
@@ -225,6 +225,16 @@ impl WidgetRef {
         let WidgetKind::Named(name) = &self.kind else {
             return single;
         };
+        let not_optional = if &name.to_string() == "radio_group" {
+            quote_spanned! { span =>
+                const _: () = ::core::assert!(
+                    !::formoxus::field_kind::is_optional(#shape),
+                    "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`"
+                );
+            }
+        } else {
+            TokenStream2::new()
+        };
         let Rule::Checked { class, message } = rule(&name.to_string()) else {
             unreachable!("parse rejects widgets that render nothing");
         };
@@ -232,6 +242,7 @@ impl WidgetRef {
         let has_choices = self.args.choices.is_some();
         quote_spanned! { span=>
             #single
+            #not_optional
             const _: () = ::core::assert!(
                 ::formoxus::field_kind::renders(
                     #shape,

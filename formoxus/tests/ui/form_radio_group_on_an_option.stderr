@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`
+  --> tests/ui/form_radio_group_on_an_option.rs:22:32
+   |
+22 |             state => { widget: radio_group { choices: STATES } },
+   |                                ^^^^^^^^^^^ evaluation of `main::_` failed here
