@@ -6,7 +6,7 @@
  * theme formoxus with whatever you already use, or with nothing at all.
  *
  * The complete vocabulary:
- *   .form  .form-title  .form-field  .field-label  .required
+ *   .form  .form-title  .form-field  .field-label  .required  .radio-group
  *   .field-errors  .field-error  .form-errors  .form-error
  *   .form-row  .add-row  .remove-row
  *   .formoxus-buttons  .formoxus-button-problems
@@ -62,6 +62,31 @@ body {
     background: transparent;
     color: inherit;
     font: inherit;
+}
+
+/* A radio group's fieldset carries `.form-field` too, so the rule above would
+   otherwise stretch every radio button to 100% width and give it a border and
+   padding. Undo that for the radios, then lay the group out. */
+.radio-group {
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius);
+    padding: 0.25rem 0.75rem 0.5rem;
+}
+
+.radio-group legend { font-weight: 500; padding-inline: 0.25rem; }
+
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-block: 0.25rem;
+}
+
+.radio-group input[type="radio"] {
+    width: auto;
+    padding: 0;
+    border: 0;
+    accent-color: currentColor;
 }
 
 /* The error state lives on the widget, so a sibling selector reaches the

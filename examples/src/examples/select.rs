@@ -13,6 +13,7 @@ struct Address {
     zip: String,
     telephone_number: String,
     email: String,
+    gender: String,
 }
 
 /// The choice list, as a plain `const` table.
@@ -75,6 +76,15 @@ const STATES: &[(&str, &str)] = &[
     ("WY", "Wyoming"),
 ];
 
+/// A second choice list, for the radio group.
+///
+/// A `String` field rather than a three-variant `enum`, which is what it wants
+/// to be: an enum field is a SHAPE choice, so it becomes a `VariantSet` with a
+/// `<select>` over its variant names and cannot take a widget at all. A radio
+/// group is a VALUE choice, and a value is a string on the wire. The stored
+/// value is lowercase so it reads as data rather than as a label.
+const GENDERS: &[(&str, &str)] = &[("male", "Male"), ("female", "Female"), ("other", "Other")];
+
 fn address() -> FormSpec<Address> {
     form! {
         Address {
@@ -87,7 +97,8 @@ fn address() -> FormSpec<Address> {
             },
             telephone_number => { widget: tel },
             email => { widget: email },
-            // zip => { pattern: "^\d{5}(-\d{4})?"},
+            gender => { widget: radio_group { choices: GENDERS } },
+            zip => { pattern: r"\d{5}(-\d{4})?" },
             buttons: {
                 reset: { type: reset, },
                 submit: { type: submit },
