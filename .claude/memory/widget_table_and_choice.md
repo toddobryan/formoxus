@@ -1,9 +1,23 @@
 ---
 name: widget-table-and-choice
-description: "NEXT UP (queued 2026-09-19, nothing built). Only 45 of 84 (value kind, widget) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
+description: "UPDATED 2026-09-25: every unrenderable (kind, widget) pair is now a COMPILE ERROR, except radio_group, which gets select's rule while Todd builds it. Original (2026-09-19): Only 45 of 84 (value kind, widget) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
 metadata:
   type: project
 ---
+
+**UPDATE 2026-09-25: the silent vanishing is now a compile error.** `form!`
+rejects every pair `ScalarWidget` cannot render, with the caret on the widget
+name. `field_kind::renders` and `is_single_value` are const checks; the rules
+come from the macro's `widget.rs::rule`, derived from the `WidgetType` variant.
+`select_multiple`, `checkbox_multiple` and `file` are refused while the macro
+parses. A widget on a struct, list or enum is refused too. On an enum it was
+silently IGNORED before, since `VariantSet` stores `custom_widget` and never
+reads it. ONE deliberate divergence: `radio_group` gets `select`'s rule
+(`bool` always, anything else only with `choices`) because Todd is building
+it; until that lands, it passes the check and still vanishes. `widget_matrix`
+still measures the runtime match directly, so the two tables can be compared.
+Also, `ValueKind::Choice`/`MultiChoice` were settled as DELETE rather than fill
+in: choices attach to the widget ([[choice-fields-design]]).
 
 ## The measurement
 

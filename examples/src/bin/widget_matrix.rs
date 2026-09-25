@@ -1,10 +1,11 @@
 //! Which `(value kind, widget)` pairs actually render, and which panic.
 //!
-//! `form!` accepts every widget name in its table against every field. Whether
-//! the pair then *renders* is decided at runtime, by a match in `ScalarWidget`
-//! whose fallthrough arm panics. So the set of combinations that really work is
-//! not written down anywhere — it is implied by that match, and a reader of the
-//! macro's table cannot see it.
+//! Whether a pair *renders* is decided at runtime, by a match in `ScalarWidget`
+//! whose fallthrough arm panics. `form!` now rejects the pairs that fall through
+//! at compile time (`formoxus::field_kind::renders`), but that check is a hand
+//! copy of the match, and this tool builds its forms with `FormSpec` directly,
+//! so it still measures what the match itself does. The two tables should
+//! agree; when they don't, the check needs updating.
 //!
 //! This prints it. Run with:
 //!
@@ -157,6 +158,6 @@ fn main() {
     let total = ok + bad;
     println!(
         "\n{ok}/{total} pairs render; {bad} panic.\n\
-         Every one of them is spellable in `form!` today.\n"
+         `form!` rejects every panicking pair at compile time.\n"
     );
 }

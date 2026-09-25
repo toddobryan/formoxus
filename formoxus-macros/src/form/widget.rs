@@ -2,7 +2,7 @@
 //! vocabulary, and the arguments a widget accepts.
 
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{
     Expr, Ident, Path, Token, braced, parenthesized,
     parse::{Parse, ParseStream},
@@ -48,6 +48,15 @@ macro_rules! widgets {
         /// Every accepted name, for the "unknown widget" message. Generated from
         /// the same table as the match, so the two cannot disagree.
         const WIDGET_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
+
+        /// The `WidgetType` variant a known name maps to, which is what decides
+        /// which fields it can render (see [`rule`]).
+        fn widget_variant(name: &str) -> Option<&'static str> {
+            match name {
+                $( stringify!($name) => Some(stringify!($variant)), )*
+                _ => None,
+            }
+        }
     };
 }
 
@@ -157,6 +166,84 @@ impl WidgetRef {
     }
 }
 
+/// Which fields a named widget can render, mirroring `ScalarWidget`'s match
+/// arms in formoxus. Derived from the `WidgetType` variant, so a widget added to
+/// [`widgets!`] gets a rule without a second list to keep in step.
+enum Rule {
+    /// Checked against the field's type, with this `field_kind::WidgetClass`
+    /// and the fixed message a failed check shows.
+    Checked {
+        class: &'static str,
+        message: &'static str,
+    },
+    /// Nothing renders it for any field, so `form!` rejects it while parsing.
+    NotYet,
+}
+
+fn rule(name: &str) -> Rule {
+    let variant = widget_variant(name).expect("only called with names from the table");
+    match variant {
+        "Input" => Rule::Checked {
+            class: "Input",
+            message: "an `<input>` widget cannot render a bool field; use `checkbox` or `select`",
+        },
+        "Textarea" => Rule::Checked {
+            class: "Textarea",
+            message: "`textarea` can only render a String field",
+        },
+        "Checkbox" => Rule::Checked {
+            class: "Checkbox",
+            message: "`checkbox` can only render a bool field",
+        },
+        "Select" | "RadioGroup" => Rule::Checked {
+            class: "Chooser",
+            message: "this widget needs `choices` unless the field is a bool",
+        },
+        "SelectMultiple" | "CheckboxMultiple" | "File" => Rule::NotYet,
+        other => unreachable!("widget variant `{other}` has no rule; add one here"),
+    }
+}
+
+impl WidgetRef {
+    /// Free `const _` assertions that the field at `shape` can be rendered by
+    /// this widget, with the caret on the widget's name. `shape` is a
+    /// `field_kind::shape_of(…)` expression; see `FieldBody::type_checks`.
+    pub(crate) fn checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let span = match &self.kind {
+            WidgetKind::Named(name) => name.span(),
+            WidgetKind::Custom(path) => path
+                .segments
+                .last()
+                .map_or_else(proc_macro2::Span::call_site, |s| s.ident.span()),
+        };
+        let single = quote_spanned! { span=>
+            const _: () = ::core::assert!(
+                ::formoxus::field_kind::is_single_value(#shape),
+                "a widget applies only to a single-value field, not a struct, list or enum"
+            );
+        };
+        let WidgetKind::Named(name) = &self.kind else {
+            return single;
+        };
+        let Rule::Checked { class, message } = rule(&name.to_string()) else {
+            unreachable!("parse rejects widgets that render nothing");
+        };
+        let class = Ident::new(class, span);
+        let has_choices = self.args.choices.is_some();
+        quote_spanned! { span=>
+            #single
+            const _: () = ::core::assert!(
+                ::formoxus::field_kind::renders(
+                    #shape,
+                    ::formoxus::field_kind::WidgetClass::#class,
+                    #has_choices,
+                ),
+                #message
+            );
+        }
+    }
+}
+
 /// The last segment of a path, as a string — `"MarkdownWidget"` for
 /// `inputs::MarkdownWidget`.
 fn last_segment_string(path: &Path) -> String {
@@ -198,11 +285,19 @@ impl Parse for WidgetKind {
         }
 
         let name: Ident = input.parse()?;
-        if widget_tokens(&name).is_some() {
-            Ok(Self::Named(name))
-        } else {
-            Err(syn::Error::new(name.span(), unknown_widget(&name)))
+        if widget_tokens(&name).is_none() {
+            return Err(syn::Error::new(name.span(), unknown_widget(&name)));
         }
+        if matches!(rule(&name.to_string()), Rule::NotYet) {
+            return Err(syn::Error::new(
+                name.span(),
+                format!(
+                    "`{name}` is not supported yet — nothing renders it, so the field \
+                     would silently vanish from the form"
+                ),
+            ));
+        }
+        Ok(Self::Named(name))
     }
 }
 
@@ -257,6 +352,7 @@ fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<
                 "`{name}` takes no `choices` — they apply to {}",
                 CHOOSERS
                     .iter()
+                    .filter(|c| !matches!(rule(c), Rule::NotYet))
                     .map(|c| format!("`{c}`"))
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -321,11 +417,21 @@ mod tests {
     #[gtest]
     fn every_name_in_the_table_parses_and_resolves() {
         // Generated from `WIDGET_NAMES`, so a name added to the table without a
-        // match arm — or the reverse — fails here rather than at a call site.
+        // match arm, or without a `rule`, fails here rather than at a call site.
+        // A name whose rule is `NotYet` must instead be refused, by name.
         for name in WIDGET_NAMES {
             let id = Ident::new(name, proc_macro2::Span::call_site());
-            let spec = parse(quote! { Source { f => { widget: #id } } })
-                .unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
+            let parsed = parse(quote! { Source { f => { widget: #id } } });
+            if matches!(rule(name), Rule::NotYet) {
+                let err = parsed.err().map(|e| e.to_string()).unwrap_or_default();
+                expect_that!(
+                    err,
+                    contains_substring("is not supported yet"),
+                    "`{name}` renders nothing, so it should be refused"
+                );
+                continue;
+            }
+            let spec = parsed.unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
             let tokens = widget_of(&spec).path().to_string();
             expect_that!(
                 &tokens,

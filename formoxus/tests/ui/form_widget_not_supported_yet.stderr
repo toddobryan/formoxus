@@ -1,0 +1,5 @@
+error: `file` is not supported yet — nothing renders it, so the field would silently vanish from the form
+  --> tests/ui/form_widget_not_supported_yet.rs:14:35
+   |
+14 |             document => { widget: file },
+   |                                   ^^^^

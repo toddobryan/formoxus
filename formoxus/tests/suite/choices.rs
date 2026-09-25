@@ -146,22 +146,9 @@ fn an_explicit_list_overrides_a_bools_derived_one() {
     expect_that!(html, not(contains_substring("True</option>")));
 }
 
-/// A `select` with nothing to choose from is a declaration the author did not
-/// finish, so `ScalarWidget` panics rather than rendering an empty control.
-///
-/// **Dioxus contains a component panic**, so what a reader sees is the field
-/// silently missing — which is exactly why the panic message names the field
-/// and the fix. Asserting on absence is the only thing a test can do from out
-/// here; `catch_unwind` never sees it.
-#[gtest]
-fn a_select_with_no_choices_renders_nothing_at_all() {
-    #[component]
-    fn App() -> Element {
-        let form = use_form(|| empty_form(form! { Address { state => { widget: select } } }));
-        form.render_fragment()
-    }
-    expect_that!(render(App), not(contains_substring(r#"name="state""#)));
-}
+// A `select` with nothing to choose from used to be tested here by rendering
+// it and asserting the field was missing. `form!` now rejects it at compile
+// time, so the case lives in `tests/ui/form_select_without_choices.rs`.
 
 // ── The list itself ──────────────────────────────────────────────────────
 

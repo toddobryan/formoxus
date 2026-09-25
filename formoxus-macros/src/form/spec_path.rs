@@ -151,13 +151,19 @@ pub(crate) fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> T
 /// closure and not a witness like [`probe`]. `[]` goes through
 /// `field_kind::row`, which stands for one element, so the element's own
 /// fields can follow it. Like `probe`, it is only ever type-checked.
+///
+/// `[]` calls `.iter()` with the segment's own span, exactly as `probe` does, so
+/// a `[]` on something that is not a list fails here with the SAME error at the
+/// same place, and rustc shows it once. Passing `&list` to `row` instead would
+/// add a second, different error pointing at the whole `form!`.
 pub(crate) fn project(segments: &[Segment]) -> TokenStream2 {
     let mut place = quote!(__m);
     for seg in segments {
         let id = &seg.ident;
         place = quote! { #place.#id };
         if seg.each {
-            place = quote! { (*::formoxus::field_kind::row(&#place)) };
+            let iter = quote_spanned! { seg.ident.span()=> #place.iter() };
+            place = quote! { (*::formoxus::field_kind::row(#iter)) };
         }
     }
     place
@@ -406,7 +412,7 @@ mod tests {
     fn a_row_segment_projects_through_row() {
         expect_that!(
             projection_of(quote! { Trip { venues[].city => { label: "City" } } }),
-            eq("(* :: formoxus :: field_kind :: row (& __m . venues)) . city")
+            eq("(* :: formoxus :: field_kind :: row (__m . venues . iter ())) . city")
         );
     }
 

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: an `<input>` widget cannot render a bool field; use `checkbox` or `select`
+  --> tests/ui/form_input_widget_on_a_bool.rs:13:37
+   |
+13 |             subscribed => { widget: text },
+   |                                     ^^^^ evaluation of `main::_` failed here

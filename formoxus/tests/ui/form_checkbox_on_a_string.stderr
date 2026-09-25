@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox` can only render a bool field
+  --> tests/ui/form_checkbox_on_a_string.rs:13:35
+   |
+13 |             nickname => { widget: checkbox },
+   |                                   ^^^^^^^^ evaluation of `main::_` failed here

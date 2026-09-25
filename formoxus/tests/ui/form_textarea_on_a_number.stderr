@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `textarea` can only render a String field
+  --> tests/ui/form_textarea_on_a_number.rs:13:32
+   |
+13 |             score => { widget: textarea },
+   |                                ^^^^^^^^ evaluation of `main::_` failed here

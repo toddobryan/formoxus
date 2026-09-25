@@ -137,9 +137,10 @@ fn cast_lints() -> TokenStream2 {
 }
 
 impl FieldBody {
-    /// One free `const _` assertion per constraint key, checking that the
-    /// field at `place` can take it, plus `min <= max` and
-    /// `min_length <= max_length` when both sides are given.
+    /// Free `const _` assertions that the field at `place` can take what this
+    /// body declares: one per constraint key, the bound checks, `min <= max`
+    /// and `min_length <= max_length`, and whether the widget can render it
+    /// (see `WidgetRef::checks`).
     ///
     /// Free const items rather than anything in `__paths_exist`, because only
     /// a free const item is evaluated by `cargo check` or when nothing calls
@@ -149,11 +150,7 @@ impl FieldBody {
     ///
     /// A const panic takes a fixed `&'static str`, so the messages cannot
     /// name the field or the values; the span has to do that.
-    pub(crate) fn constraint_checks(
-        &self,
-        model: &impl ToTokens,
-        place: &TokenStream2,
-    ) -> TokenStream2 {
+    pub(crate) fn type_checks(&self, model: &impl ToTokens, place: &TokenStream2) -> TokenStream2 {
         let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
         let takes = |span: Span, test: TokenStream2, message: &str| {
             quote_spanned! { span=>
@@ -230,6 +227,9 @@ impl FieldBody {
                     "`min_length` must not exceed `max_length`"
                 );
             });
+        }
+        if let Some(widget) = &self.widget {
+            checks.push(widget.checks(&shape));
         }
         quote! { #(#checks)* }
     }

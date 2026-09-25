@@ -1,4 +1,4 @@
-error: `text` takes no `choices` — they apply to `select`, `select_multiple`, `checkbox_multiple`, `radio_group`
+error: `text` takes no `choices` — they apply to `select`, `radio_group`
   --> tests/ui/form_choices_on_a_non_chooser.rs:17:39
    |
 17 |             state => { widget: text { choices: STATES } },

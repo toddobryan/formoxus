@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: this widget needs `choices` unless the field is a bool
+  --> tests/ui/form_select_without_choices.rs:16:32
+   |
+16 |             state => { widget: select },
+   |                                ^^^^^^ evaluation of `main::_` failed here

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a widget applies only to a single-value field, not a struct, list or enum
+  --> tests/ui/form_widget_on_a_struct.rs:19:34
+   |
+19 |             address => { widget: textarea },
+   |                                  ^^^^^^^^ evaluation of `main::_` failed here

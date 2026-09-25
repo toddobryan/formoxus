@@ -111,6 +111,60 @@ pub const fn bound_is_exact(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
     }
 }
 
+// ── Can this widget render this field? ──────────────────────────────────
+//
+// Mirrors `widgets::scalar::ScalarWidget`'s match arms, which are the only
+// place that decides which (value kind, widget) pairs render. A pair with no
+// arm panics there, and Dioxus contains the panic to that one component, so
+// the field silently vanishes from the form. These checks turn that into a
+// build error instead. **Keep them in step with that match.**
+
+/// The widgets `form!` can check, grouped by the rule they share.
+///
+/// `select_multiple`, `checkbox_multiple` and `file` are absent because nothing
+/// renders them for any field; `form!` rejects those while it parses, without
+/// needing the field's type. `custom(…)` is absent because it renders whatever
+/// it is given, and needs only [`is_single_value`].
+#[derive(Clone, Copy, Debug)]
+pub enum WidgetClass {
+    /// Every `<input type=…>`.
+    Input,
+    Textarea,
+    Checkbox,
+    /// `select` and `radio_group`, which pick one value from `choices`.
+    Chooser,
+}
+
+/// Whether the field is one value, and so can have a widget at all. A struct,
+/// list or enum is several, and a widget on one is either rejected at runtime
+/// (a field set or list asserts) or silently ignored (an enum always renders its
+/// variant picker).
+pub const fn is_single_value(shape: &Shape) -> bool {
+    !matches!(kind(shape), Kind::Other)
+}
+
+/// Whether `widget` can render a single-value field of this type. `has_choices`
+/// is whether `form!` was given `choices` for it.
+///
+/// `true` for anything [`is_single_value`] rejects, so a widget on a struct
+/// reports once, from there. `true` for a newtype whose inside is out of reach,
+/// for the reason `Kind::Unknown` gives.
+pub const fn renders(shape: &Shape, widget: WidgetClass, has_choices: bool) -> bool {
+    let kind = kind(shape);
+    if matches!(kind, Kind::Other | Kind::Unknown) {
+        return true;
+    }
+    let is_bool = matches!(kind, Kind::Bool);
+    match widget {
+        WidgetClass::Input => !is_bool,
+        WidgetClass::Textarea => matches!(kind, Kind::Text),
+        WidgetClass::Checkbox => is_bool,
+        // A bool's choices can be derived, so it is the one kind that renders
+        // without a list.
+        WidgetClass::Chooser => is_bool || has_choices,
+    }
+}
+
 const fn is_number(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Int { .. } | Kind::Float { .. })
 }
@@ -127,8 +181,9 @@ enum Kind {
     Float {
         max: f64,
     },
-    /// Something no constraint applies to: `bool`, a struct, a list, or a
-    /// scalar formoxus does not support.
+    Bool,
+    /// Something that is not one value: a struct, a list, an enum, or a scalar
+    /// formoxus does not support.
     Other,
     /// A newtype whose inner type is out of reach. A tuple struct's field shape
     /// sits behind a `ShapeRef` fn pointer, and const code cannot call one. The
@@ -193,6 +248,9 @@ const fn primitive(name: &str) -> Kind {
     if str_eq(name, "f64") {
         return Kind::Float { max: f64::MAX };
     }
+    if str_eq(name, "bool") {
+        return Kind::Bool;
+    }
     Kind::Other
 }
 
@@ -225,7 +283,10 @@ const fn str_eq(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{bound_in_range, bound_is_exact, bound_is_whole, takes_bound, takes_length};
+    use super::{
+        WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_single_value, renders,
+        takes_bound, takes_length,
+    };
     use facet::Facet;
     use googletest::prelude::*;
 
@@ -356,6 +417,79 @@ mod tests {
         expect_that!(bound_in_range(text, f, i), eq(true));
         expect_that!(bound_is_whole(text, 1.5, 1), eq(true));
         expect_that!(bound_is_exact(text, 0.0, 1), eq(true));
+    }
+
+    // ── Widgets ──────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn an_input_renders_text_and_numbers_but_not_a_bool() {
+        for shape in [std::string::String::SHAPE, u32::SHAPE, f64::SHAPE] {
+            expect_that!(
+                renders(shape, WidgetClass::Input, false),
+                eq(true),
+                "{shape}"
+            );
+        }
+        expect_that!(renders(bool::SHAPE, WidgetClass::Input, false), eq(false));
+    }
+
+    #[gtest]
+    fn a_textarea_renders_only_text() {
+        expect_that!(
+            renders(std::string::String::SHAPE, WidgetClass::Textarea, false),
+            eq(true)
+        );
+        expect_that!(renders(u32::SHAPE, WidgetClass::Textarea, false), eq(false));
+        expect_that!(
+            renders(bool::SHAPE, WidgetClass::Textarea, false),
+            eq(false)
+        );
+    }
+
+    #[gtest]
+    fn a_checkbox_renders_only_a_bool_optional_or_not() {
+        expect_that!(renders(bool::SHAPE, WidgetClass::Checkbox, false), eq(true));
+        expect_that!(
+            renders(<Option<bool>>::SHAPE, WidgetClass::Checkbox, false),
+            eq(true)
+        );
+        expect_that!(
+            renders(std::string::String::SHAPE, WidgetClass::Checkbox, false),
+            eq(false)
+        );
+    }
+
+    #[gtest]
+    fn a_chooser_needs_choices_except_for_a_bool() {
+        expect_that!(renders(bool::SHAPE, WidgetClass::Chooser, false), eq(true));
+        expect_that!(renders(u32::SHAPE, WidgetClass::Chooser, false), eq(false));
+        expect_that!(renders(u32::SHAPE, WidgetClass::Chooser, true), eq(true));
+        expect_that!(
+            renders(std::string::String::SHAPE, WidgetClass::Chooser, true),
+            eq(true)
+        );
+    }
+
+    #[gtest]
+    fn only_a_single_value_can_have_a_widget() {
+        expect_that!(is_single_value(std::string::String::SHAPE), eq(true));
+        expect_that!(is_single_value(<Option<bool>>::SHAPE), eq(true));
+        expect_that!(is_single_value(Markdown::SHAPE), eq(true));
+        expect_that!(
+            is_single_value(<Vec<std::string::String>>::SHAPE),
+            eq(false)
+        );
+    }
+
+    /// Reported once, from `is_single_value`, and let through as "can't tell".
+    #[gtest]
+    fn renders_leaves_structs_and_opaque_newtypes_to_other_checks() {
+        let list = <Vec<std::string::String>>::SHAPE;
+        expect_that!(renders(list, WidgetClass::Textarea, false), eq(true));
+        expect_that!(
+            renders(Markdown::SHAPE, WidgetClass::Checkbox, false),
+            eq(true)
+        );
     }
 
     #[gtest]
