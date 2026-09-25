@@ -47,6 +47,7 @@ Rendered as an HTML attribute *only where the element accepts one* — see
 | `validator` | any | — | not built |
 | `help_text` | any | — | not built |
 | `initial` | any | — | not built |
+| `no_trim` | Text | — | not built, see below |
 | `choices` | — | — | stays TIER 2, see below |
 
 Notes:
@@ -66,6 +67,39 @@ Notes:
   `aria-describedby` wiring to be worth anything.
 - **`initial`** is a create-mode default. `empty_form` currently starts every
   field empty.
+
+### Trimming, and `no_trim` — REQUESTED 2026-09-25, not built
+
+Todd wants string fields **trimmed by default**, like Django's
+`CharField(strip=True)`, with `no_trim: true` as a field-body key for a field
+where leading or trailing whitespace is meaningful. It sits in tier 1 because it
+changes the value itself, not just how the field looks. Notes from scoping it,
+before building was paused:
+
+- **Trim before validation**, as Django does, so `max_length` and `pattern` see
+  the trimmed value and a whitespace-only entry counts as empty. That makes it
+  "required" on a `String` and `None` on an `Option<String>`, per the rule that
+  `""` IS absence.
+- **One place to do it: `FormField::apply_leaves`.** Every raw string enters
+  there, from client edits, the collect-and-rebuild cycle, and the server's
+  `Submission`. Trim when `value_kind()` is `Text` and the field is not
+  `no_trim`. `str::trim` strips Unicode `White_Space`, which matches Python's
+  `str.strip()`.
+- **Its own field, not part of `Constraints`**: `no_trim: bool` on both
+  `FieldSpec` and `FormField`. It is not a validity rule, and `no_trim`, rather
+  than `trim`, keeps `false` as the default, so `#[derive(Default)]` on
+  `FieldSpec` and the existing constructors mean "trim" unchanged. Direct
+  constructions to update: `build::scalar_member`, `fields.rs`'s `a_field`, and
+  `tests/suite/forms.rs`'s `text_field`.
+- **In `form!`:** `no_trim: LitBool` in the `field_body!` table, emitting a
+  `FormSpec::without_trim(path)` builder call when it is true. Reject it on a
+  non-text field with the same `field_kind::takes_length` const check the
+  length keys use. A newtype over `String` classifies as text, so it is trimmed
+  too.
+- **Open question: should numbers be trimmed too?** Django effectively accepts
+  `" 5 "` in an `IntegerField`, but we reject it today as unparseable.
+  Whitespace around a number is never meaningful, so trimming every scalar,
+  with `no_trim` accepted only on text, may be the better default.
 
 ### `choices` stays in tier 2 — SETTLED 2026-09-21
 

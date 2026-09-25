@@ -21,3 +21,4 @@
 - [facet re-export needs a direct dep](facet_reexport_needs_direct_dep.md) — 2026-09-25: `pub use facet` is for the MACRO's generated code (6a); users STILL need `facet` directly, because the derive hard-codes `::facet` and `#[facet(crate = ::formoxus::facet)]` does not cover builtin attrs like `transparent` (fix is facet-rs/facet#2662, pending)
 
 - [Formoxus feature parity](formoxus_feature_parity.md) — RE-SURVEYED 2026-09-25 vs Django + leptos_form (unmaintained since Feb 2024): ahead on compile-time checks/enums/one validation; gaps = 4 widgets form! accepts but can't render, per-field validators, typed dates/decimals/uuids, help text + widget attrs, change tracking, formset bounds, undocumented grammar
+- [No PR per change](no_pr_per_change.md) — commit/push when told; open a PR only when Todd explicitly asks (2026-09-25: he wanted ONE example PR, not one per task)
