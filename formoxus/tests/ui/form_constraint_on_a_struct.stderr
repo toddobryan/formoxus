@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `max_length` applies only to a String field
+  --> tests/ui/form_constraint_on_a_struct.rs:19:38
+   |
+19 |             address => { max_length: 100 },
+   |                                      ^^^ evaluation of `main::_` failed here

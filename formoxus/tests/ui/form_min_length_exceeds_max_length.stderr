@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min_length` must not exceed `max_length`
+  --> tests/ui/form_min_length_exceeds_max_length.rs:13:52
+   |
+13 |             title => { min_length: 20, max_length: 10 },
+   |                                                    ^^ evaluation of `main::_` failed here

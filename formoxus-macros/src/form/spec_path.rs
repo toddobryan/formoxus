@@ -144,6 +144,25 @@ pub(crate) fn probe(segments: &[Segment], base: TokenStream2, depth: usize) -> T
     }
 }
 
+/// The field a spec path names, as a place expression on `__m`.
+///
+/// For the projection closures `form!`'s constraint checks are built from
+/// (`|__m: &Model| &<this>`); see `formoxus::field_kind` for why those are a
+/// closure and not a witness like [`probe`]. `[]` goes through
+/// `field_kind::row`, which stands for one element, so the element's own
+/// fields can follow it. Like `probe`, it is only ever type-checked.
+pub(crate) fn project(segments: &[Segment]) -> TokenStream2 {
+    let mut place = quote!(__m);
+    for seg in segments {
+        let id = &seg.ident;
+        place = quote! { #place.#id };
+        if seg.each {
+            place = quote! { (*::formoxus::field_kind::row(&#place)) };
+        }
+    }
+    place
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +381,40 @@ mod tests {
         expect_that!(
             witness_of(quote! { Model { type => { label: "Kind" } } }),
             contains_substring("__s . r#type")
+        );
+    }
+
+    // ── The projection ───────────────────────────────────────────────────
+
+    fn projection_of(src: TokenStream2) -> String {
+        let spec = parse(src).expect("should parse");
+        let path = spec
+            .entries
+            .iter()
+            .find_map(|e| match e {
+                Entry::Field { path, .. } => Some(path),
+                _ => None,
+            })
+            .expect("a field entry");
+        project(&path.segments).to_string()
+    }
+
+    /// A place, not a reference: `row` yields `&T`, so it is dereferenced to
+    /// let the next field follow, and the closure's own `&` then makes the
+    /// field's type `T` rather than `&T`.
+    #[gtest]
+    fn a_row_segment_projects_through_row() {
+        expect_that!(
+            projection_of(quote! { Trip { venues[].city => { label: "City" } } }),
+            eq("(* :: formoxus :: field_kind :: row (& __m . venues)) . city")
+        );
+    }
+
+    #[gtest]
+    fn a_nested_path_projects_as_plain_field_access() {
+        expect_that!(
+            projection_of(quote! { Trip { venue.city => { label: "City" } } }),
+            eq("__m . venue . city")
         );
     }
 }

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min` must not exceed `max`
+  --> tests/ui/form_min_exceeds_max.rs:17:39
+   |
+17 |             age => { min: FLOOR, max: CEILING },
+   |                                       ^^^^^^^ evaluation of `main::_` failed here

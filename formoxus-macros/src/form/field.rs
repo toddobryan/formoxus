@@ -2,12 +2,13 @@
 
 use std::collections::HashSet;
 
-use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::{ToTokens, quote, quote_spanned};
 use regress::Regex;
 use syn::{
     Expr, Ident, LitStr, Result, Token, braced,
     parse::{Parse, ParseStream},
+    spanned::Spanned,
 };
 
 use super::{SpecPath, WidgetRef};
@@ -114,6 +115,85 @@ impl FieldBody {
                 ..::core::default::Default::default()
             }
         })
+    }
+}
+
+impl FieldBody {
+    /// One free `const _` assertion per constraint key, checking that the
+    /// field at `place` can take it, plus `min <= max` and
+    /// `min_length <= max_length` when both sides are given.
+    ///
+    /// Free const items rather than anything in `__paths_exist`, because only
+    /// a free const item is evaluated by `cargo check` or when nothing calls
+    /// it. `formoxus::field_kind` has the details. Each assertion is spanned
+    /// onto the author's value, so the caret lands on `500` in
+    /// `max_length: 500` rather than on the whole `form!`.
+    ///
+    /// A const panic takes a fixed `&'static str`, so the messages cannot
+    /// name the field or the values; the span has to do that.
+    pub(crate) fn constraint_checks(
+        &self,
+        model: &impl ToTokens,
+        place: &TokenStream2,
+    ) -> TokenStream2 {
+        let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
+        let takes = |span: Span, test: TokenStream2, message: &str| {
+            quote_spanned! { span=>
+                const _: () = ::core::assert!(#test(#shape), #message);
+            }
+        };
+        let length = quote!(::formoxus::field_kind::takes_length);
+        let bound = quote!(::formoxus::field_kind::takes_bound);
+
+        let mut checks = Vec::new();
+        if let Some(e) = &self.min_length {
+            let msg = "`min_length` applies only to a String field";
+            checks.push(takes(e.span(), length.clone(), msg));
+        }
+        if let Some(e) = &self.max_length {
+            let msg = "`max_length` applies only to a String field";
+            checks.push(takes(e.span(), length.clone(), msg));
+        }
+        if let Some(s) = &self.pattern {
+            let msg = "`pattern` applies only to a String field";
+            checks.push(takes(s.span(), length.clone(), msg));
+        }
+        if let Some(e) = &self.min {
+            let msg = "`min` applies only to a number field";
+            checks.push(takes(e.span(), bound.clone(), msg));
+        }
+        if let Some(e) = &self.max {
+            let msg = "`max` applies only to a number field";
+            checks.push(takes(e.span(), bound.clone(), msg));
+        }
+        // `as f64` on both sides is what lets `min: 3, max: 120.5` compare at
+        // all. The allows matter because the item carries the author's span,
+        // so lints on it land in THEIR crate: `max: 100` is an
+        // `unnecessary_cast` of a literal, an `f64` side a trivial cast, a
+        // large `i64` a precision loss.
+        if let (Some(min), Some(max)) = (&self.min, &self.max) {
+            checks.push(quote_spanned! { max.span()=>
+                #[allow(
+                    trivial_numeric_casts,
+                    clippy::unnecessary_cast,
+                    clippy::cast_precision_loss,
+                    clippy::cast_lossless
+                )]
+                const _: () = ::core::assert!(
+                    ((#min) as f64) <= ((#max) as f64),
+                    "`min` must not exceed `max`"
+                );
+            });
+        }
+        if let (Some(min), Some(max)) = (&self.min_length, &self.max_length) {
+            checks.push(quote_spanned! { max.span()=>
+                const _: () = ::core::assert!(
+                    (#min) <= (#max),
+                    "`min_length` must not exceed `max_length`"
+                );
+            });
+        }
+        quote! { #(#checks)* }
     }
 }
 

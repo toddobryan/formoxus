@@ -1,9 +1,27 @@
 ---
 name: const-shape-walk-blocked
-description: "Compile-time checking against facet's Shape. VERIFIED 2026-09-21: a const fn CAN classify one shape, and an inline const{} block in a generated generic fn sees both T::SHAPE and a literal baked into it — which closes BOTH the constraint-vs-value-kind check and the bound-fits-the-type check at compile time. What is blocked is only CROSSING a ShapeRef to reach a field's type, which classification never needs. Supersedes the earlier marker-trait recommendation"
+description: "Compile-time checking against facet's Shape. CORRECTED 2026-09-25: use a FREE const item with a projection closure (shape_of), NOT a const{} block in a generic fn, which cargo check never evaluates and an uncalled fn never triggers. VERIFIED 2026-09-21: a const fn CAN classify one shape, and an inline const{} block in a generated generic fn sees both T::SHAPE and a literal baked into it — which closes BOTH the constraint-vs-value-kind check and the bound-fits-the-type check at compile time. What is blocked is only CROSSING a ShapeRef to reach a field's type, which classification never needs. Supersedes the earlier marker-trait recommendation"
 metadata:
   type: project
 ---
+
+**CORRECTION 2026-09-25 — read this before the rest.** The `const {}` block in
+a generic fn below DOES fire, but only when that fn is monomorphized. That
+means (a) never under `cargo check`, so never in rust-analyzer, and (b) never at
+all when nothing calls it, which is true of `form!`'s `__paths_exist` witness.
+Verified: placed in `__paths_exist`, 0 errors under check AND build. What
+works, and what shipped as step 6a, is a FREE `const _` item calling a generic
+const fn with a projection closure. It fires under `cargo check`, in libs and
+bins, nested inside closures:
+
+```rust
+const _: () = assert!(takes_length(shape_of(|__m: &Model| &__m.bio)), "…");
+pub const fn shape_of<M, F: for<'a> Facet<'a>>(_: fn(&M) -> &F) -> &'static Shape { F::SHAPE }
+```
+
+The classifier is `formoxus::field_kind`. Everything below about WHAT const
+code can see (one shape yes; `OptionDef::t` yes, it is a plain `&Shape`; a
+tuple struct's field shape no, it is a `ShapeRef`) still holds.
 
 **Read the update first — this file's original conclusion was wrong.** It said
 the const route was a dead end and to use marker traits. That over-applied a

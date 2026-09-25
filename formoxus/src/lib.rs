@@ -50,6 +50,10 @@ pub mod build;
 pub mod buttons;
 pub mod defaults;
 pub mod error;
+// Support for `form!`'s compile-time constraint checks, which name it from
+// the consumer's crate. Not API.
+#[doc(hidden)]
+pub mod field_kind;
 pub mod fields;
 pub mod form;
 pub mod label_case;

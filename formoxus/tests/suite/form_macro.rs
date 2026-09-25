@@ -746,3 +746,58 @@ fn a_pattern_from_the_macro_reaches_validation() {
     let errors = Submission::accept(spec(), &bad).expect_err("it does not start with a capital");
     expect_that!(failing_paths(&errors), elements_are![eq("headline")]);
 }
+
+// ── The compile-time constraint checks ───────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Hall {
+    city: String,
+    seats: u32,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct PriceRow {
+    price: f64,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Blurb(String);
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Listing {
+    note: Option<String>,
+    hall: Hall,
+    tags: Vec<String>,
+    rows: Vec<PriceRow>,
+    bio: Blurb,
+}
+
+/// Every place a constraint may legitimately sit, so the `const _` checks
+/// `form!` emits must let each through: an `Option` is judged by what it
+/// holds, a nested field and a `[]` row by the leaf's own type, and a newtype
+/// is let through because its inside is out of reach at compile time. The
+/// rejections are trybuild goldens in `tests/ui/`, since they cannot compile.
+#[gtest]
+fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
+    let spec = || {
+        form! {
+            Listing {
+                note => { max_length: 3 },
+                hall.city => { min_length: 1 },
+                hall.seats => { min: 1, max: 500 },
+                tags[] => { pattern: "[a-z]+" },
+                rows[].price => { min: 0, max: 99.5 },
+                bio => { max_length: 280 },
+            }
+        }
+    };
+
+    let bad = wire(&[
+        ("note", "too long"),
+        ("hall.city", "Paris"),
+        ("hall.seats", "10"),
+        ("bio", "fine"),
+    ]);
+    let errors = Submission::accept(spec(), &bad).expect_err("`note` is over its limit");
+    expect_that!(failing_paths(&errors), elements_are![eq("note")]);
+}

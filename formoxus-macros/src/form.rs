@@ -11,7 +11,7 @@ mod widget;
 
 pub(crate) use button::ButtonInfo;
 pub(crate) use field::{FieldBody, FieldSpec};
-pub(crate) use spec_path::{SpecPath, probe};
+pub(crate) use spec_path::{SpecPath, probe, project};
 pub(crate) use widget::WidgetRef;
 
 use std::collections::HashSet;
@@ -176,6 +176,14 @@ impl FormSpecInput {
             .iter()
             .map(|f| probe(&f.path.segments, quote!(__s), 0))
             .collect();
+        let constraint_checks: Vec<TokenStream2> = fsm
+            .field_specs
+            .iter()
+            .map(|f| {
+                f.body
+                    .constraint_checks(&model_type, &project(&f.path.segments))
+            })
+            .collect();
 
         quote! {
             {
@@ -183,6 +191,7 @@ impl FormSpecInput {
                 fn __paths_exist(__s: &#model_type) {
                     #(#witnesses)*
                 }
+                #(#constraint_checks)*
 
                 ::formoxus::form::FormSpec::<#model_type>::new()
                 #title

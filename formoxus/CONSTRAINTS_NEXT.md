@@ -5,7 +5,8 @@ should accept and which tier each setting belongs to. This file is the **build
 order**: what is done, what is next, and the things already worked out or
 verified so they do not have to be rediscovered.
 
-Status as of 2026-09-24, commit `693ff6b`. `just ci` green at 38 + 282 + 100.
+Status as of 2026-09-25: steps 5 and 6a are done, and so are the `min <= max`
+and `min_length <= max_length` checks. Step 6b is what is left.
 
 ## What is built
 
@@ -100,6 +101,37 @@ both-are-literals case purely to get the better message — but do the const
 assert first, because it is the one that is actually complete.
 
 ## Step 6a — constraint versus value kind
+
+> **Done 2026-09-25, and NOT the way described below.** The design below puts a
+> `const {}` block in a generic helper called from `__paths_exist`. Tested, that
+> never fires: `__paths_exist` is never called, so the helper is never
+> monomorphized and the const is never evaluated, even under `cargo build`.
+> Calling it from reachable code fixes `cargo build`, but `cargo check` does
+> no monomorphization at all, so rust-analyzer would never show the error.
+>
+> What shipped is a **free `const _` item** per key, which `cargo check`
+> does evaluate:
+>
+> ```rust
+> const _: () = assert!(
+>     takes_length(shape_of(|__m: &Profile| &__m.bio)),
+>     "`max_length` applies only to a String field",
+> );
+> ```
+>
+> `shape_of<M, F: Facet>(fn(&M) -> &F)` is a const fn, and the projection
+> closure lets `F` be inferred, so the macro never names the field's type.
+> **It never names `Facet` either**, so the re-export decision below turned out
+> not to matter for this step. The classifier is `formoxus::field_kind`, which
+> documents all of this. `[]` segments project through
+> `field_kind::row(&list)`, a never-called fn, instead of `.unwrap()`, so no
+> user lint fires. The ordering checks from step 5's revision live beside it
+> and carry `#[allow(clippy::unnecessary_cast, …)]`. That is needed because
+> the item has the author's span, so lints on it land in their crate: `max: 100`
+> as f64 is an `unnecessary_cast`.
+>
+> The rest of this section is kept for the reasoning about classification,
+> which still holds.
 
 Rejecting `max_length` on a `bool` at compile time. This is the one that needs
 `T::SHAPE`, and it is worth reading `.claude/memory/const_shape_walk_blocked.md`

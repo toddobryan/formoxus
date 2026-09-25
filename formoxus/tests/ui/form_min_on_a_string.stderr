@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min` applies only to a number field
+  --> tests/ui/form_min_on_a_string.rs:14:32
+   |
+14 |             nickname => { min: 3 },
+   |                                ^ evaluation of `main::_` failed here
