@@ -189,3 +189,146 @@ fn a_chosen_value_validates_into_the_model() {
     let submission = Submission::accept(spec(), &values).expect("a chosen value is a valid value");
     expect_that!(submission.model().state, eq("AK"));
 }
+
+// ── Radio groups ─────────────────────────────────────────────────────────
+//
+// The same choice list, rendered as radios. An `Option` field is missing from
+// this section on purpose: `radio_group` rejects one at compile time, so that
+// case is `tests/ui/form_radio_group_on_an_option.rs`. There is no round-trip
+// test either — a radio writes the raw value to the same path through the same
+// `write_value`, so `a_chosen_value_validates_into_the_model` already covers it.
+
+#[gtest]
+fn a_radio_group_renders_one_radio_per_choice() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    let html = render(App);
+    expect_that!(
+        html,
+        contains_substring(r#"type="radio" name="state" value="AL""#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"type="radio" name="state" value="AK""#)
+    );
+    // Value and display stay separate, exactly as in the `<select>`.
+    expect_that!(html, contains_substring("Alabama"));
+    expect_that!(html, not(contains_substring(r#"value="Alabama""#)));
+}
+
+/// Every radio in the group shares one `name` — that is what makes them one
+/// group to the browser, and what the submitted value comes back under.
+#[gtest]
+fn every_radio_shares_the_fields_name() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    expect_that!(render(App).matches(r#"name="state""#).count(), eq(2));
+}
+
+/// **Nothing is pre-selected.** A library that checked the first choice would
+/// make a required radio field unable to fail its own required check, and it
+/// would submit an answer the user never gave.
+#[gtest]
+fn no_radio_is_checked_before_the_user_picks() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    expect_that!(render(App), not(contains_substring("checked")));
+}
+
+#[gtest]
+fn the_stored_value_is_the_checked_radio() {
+    #[component]
+    fn App() -> Element {
+        let address = Address {
+            state: "AK".into(),
+            zip: "99501".into(),
+        };
+        let form = use_form(move || {
+            form_for(
+                &address,
+                form! { Address { state => { widget: radio_group { choices: STATES } } } },
+            )
+        });
+        form.render_fragment()
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="AK" checked=true"#));
+    // Exactly that one, not both.
+    expect_that!(html.matches("checked=true").count(), eq(1));
+}
+
+/// A `bool` derives its own choices, so it is the one kind that renders as
+/// radios without a list.
+#[gtest]
+fn a_bool_derives_true_and_false_radios() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Flagged { agreed => { widget: radio_group } } }));
+        form.render_fragment()
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="true""#));
+    expect_that!(html, contains_substring("True"));
+    expect_that!(html, contains_substring(r#"value="false""#));
+    expect_that!(html, contains_substring("False"));
+}
+
+/// `required` on each input, and NO absent entry. On a radio group `required`
+/// applies to the whole group, so the browser blocks submit until one is
+/// picked — which is the only thing standing in for the `--none--` option a
+/// `<select>` offers, and the reason an optional field is rejected outright.
+#[gtest]
+fn every_radio_is_required_and_nothing_offers_absence() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    let html = render(App);
+    // Per radio, not a count over the whole form: `zip` is a required field
+    // too, so its `<input>` carries `required=true` as well.
+    expect_that!(html, contains_substring(r#"value="AL" required=true"#));
+    expect_that!(html, contains_substring(r#"value="AK" required=true"#));
+    expect_that!(html, not(contains_substring(formoxus::ABSENT_DISPLAY)));
+}
+
+/// The group's label is a `legend`, not a `label`: a `<label>` names one
+/// control and there are several here.
+#[gtest]
+fn the_group_label_is_a_legend() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    expect_that!(render(App), contains_substring("<legend>State"));
+}
