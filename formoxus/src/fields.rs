@@ -133,7 +133,7 @@ impl ValueKind {
                     errors.push(FieldError(format!("length must be at most {max}")));
                 }
                 if let Some(patt) = pattern {
-                    let re = Regex::new(&format!("^(?:{patt})$"))
+                    let re = Regex::with_flags(&format!("^(?:{patt})$"), "v")
                         .expect("this regex should have parsed at compile time");
                     if re.find(raw_value).is_none() {
                         errors.push(FieldError(format!(
@@ -715,6 +715,16 @@ mod tests {
             messages(&text(None, None, Some(r"(.|\n)+")), "a\nb"),
             is_empty()
         );
+    }
+
+    /// HTML compiles `pattern` with the `v` flag, so this must too. Without
+    /// it, `\p{L}` is an escaped `p` followed by a literal `{L}`, and the
+    /// server would reject a value every browser accepts.
+    #[gtest]
+    fn a_pattern_is_compiled_with_the_v_flag() {
+        let letters = text(None, None, Some(r"\p{L}+"));
+        expect_that!(messages(&letters, "héllo"), is_empty());
+        expect_that!(messages(&letters, "p{L}"), len(eq(1)));
     }
 
     // ── Int ──────────────────────────────────────────────────────────────

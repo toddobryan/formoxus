@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use regress::Regex;
 use syn::{
     Expr, Ident, LitStr, Result, Token, braced,
     parse::{Parse, ParseStream},
@@ -156,6 +157,26 @@ impl Parse for FieldBody {
         if seen.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
+
+        // Checked here, while the macro parses, rather than in the const
+        // witness with the other constraints: compiling a regex allocates, and
+        // const evaluation cannot.
+        //
+        // Bare, then wrapped, both with `v`, as HTML's "compiled pattern
+        // regular expression" does: `a)|(b` fails alone but compiles as
+        // `^(?:a)|(b)$`, and a browser ignores it, so we must reject it too.
+        if let Some(pattern) = &fb.pattern {
+            let patt_str = pattern.value();
+            if let Err(e) = Regex::with_flags(&patt_str, "v")
+                .and_then(|_| Regex::with_flags(&format!("^(?:{patt_str})$"), "v"))
+            {
+                return Err(syn::Error::new_spanned(
+                    pattern,
+                    format!("`pattern` is not a valid regular expression: {e}"),
+                ));
+            }
+        }
+
         Ok(fb)
     }
 }
@@ -311,6 +332,59 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { zip => { pattern: ZIP_RE } } }),
             contains_substring("expected string literal")
+        );
+    }
+
+    // ── A pattern must compile ───────────────────────────────────────────
+
+    #[gtest]
+    fn a_pattern_that_does_not_compile_is_rejected() {
+        let msg = err_of(quote! { Source { zip => { pattern: "(\\d{5}" } } });
+        expect_that!(
+            msg,
+            contains_substring("`pattern` is not a valid regular expression")
+        );
+        // `regress`'s own reason is passed through.
+        expect_that!(msg, contains_substring("Unbalanced parenthesis"));
+    }
+
+    #[gtest]
+    fn a_pattern_that_compiles_is_accepted() {
+        expect_that!(
+            parse(quote! { Source { zip => { pattern: "\\d{5}(-\\d{4})?" } } }).is_ok(),
+            eq(true)
+        );
+    }
+
+    /// `a)|(b` compiles once wrapped as `^(?:a)|(b)$`, and so would pass
+    /// `ValueKind::check`, but not alone. HTML compiles the bare pattern first
+    /// and drops the constraint if that fails, so accepting it would leave the
+    /// browser checking nothing while the server checks something.
+    #[gtest]
+    fn a_pattern_must_compile_before_it_is_wrapped() {
+        expect_that!(
+            err_of(quote! { Source { code => { pattern: "a)|(b" } } }),
+            contains_substring("`pattern` is not a valid regular expression")
+        );
+    }
+
+    /// Legal with no flags, illegal under `v`, which is the flag HTML compiles
+    /// a `pattern` with — an unescaped `-` is a class-set syntax character.
+    #[gtest]
+    fn a_pattern_is_checked_with_the_v_flag() {
+        expect_that!(
+            err_of(quote! { Source { code => { pattern: "[a-z-]" } } }),
+            contains_substring("Invalid class set character")
+        );
+    }
+
+    /// Checked even when `pattern` is not the last key, so the check sits after
+    /// the key loop rather than inside the `pattern` arm.
+    #[gtest]
+    fn a_bad_pattern_is_caught_among_other_keys() {
+        expect_that!(
+            err_of(quote! { Source { zip => { pattern: "[", max_length: 10 } } }),
+            contains_substring("`pattern` is not a valid regular expression")
         );
     }
 }

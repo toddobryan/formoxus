@@ -27,6 +27,14 @@ That is all that is left, and it splits into three pieces.
 
 ## Step 5 — the pattern check
 
+> **Done 2026-09-25**, and it goes further than the plan below. It follows
+> HTML's "compiled pattern regular expression" algorithm exactly: compile the
+> BARE pattern, then the wrapped one, both with the `v` flag. Bare-first
+> rejects `a)|(b`, which compiles only once wrapped and which a browser
+> ignores. `v` is what browsers use, and `ValueKind::check` now uses it too.
+> Without it, `\p{L}` means a literal `p{L}` on the server and a letter in the
+> browser.
+
 > **Revised 2026-09-24.** This step used to include `min > max` and
 > `min_length > max_length` as parse-time comparisons. It does not: those belong
 > in the const witness with the rest of step 6, for the reason below. Step 5 is

@@ -1,0 +1,5 @@
+error: `pattern` is not a valid regular expression: Unbalanced parenthesis
+  --> tests/ui/form_pattern_does_not_compile.rs:15:31
+   |
+15 |             zip => { pattern: "(\\d{5}" },
+   |                               ^^^^^^^^^
