@@ -10,7 +10,6 @@ use super::textarea::Textarea;
 use super::types::{FieldProps, WidgetProps, WidgetType};
 use crate::ValuesByPath;
 use crate::fields::ValueKind;
-use crate::widgets::WidgetType::RadioGroup;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
 ///
@@ -64,22 +63,16 @@ pub fn ScalarWidget(
         ) => {
             let Some(choices) = choices else {
                 panic!(
-                    "`select` needs choices (field {}) — add `widget: select {{ choices: … }}`",
+                    "in field {}, `select` needs choices — add `widget: select {{ choices: … }}`",
                     props.path
                 )
             };
             rsx! { Select { values, choices, props } }
         }
-        // A bool's choices are derivable, so it is the one kind that renders
-        // without a list — but an explicit one still wins, for a form that would
-        // rather say "Yes"/"No".
-        (ValueKind::Bool, WidgetType::Select) => {
-            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props } }
-        }
-        // Any single scalar can be chosen from a list, because a choice's value
-        // is just the raw string this field already parses. The list is the only
-        // thing that makes the pair renderable, hence the panic rather than an
-        // empty `<select>` — a chooser with nothing to choose is a declaration
+        // Any single scalar can be chosen from a list of radio buttons, because a
+        // choice's value is just the raw string this field already parses. The list
+        // is the only thing that makes the pair renderable, hence the panic rather
+        // than an empty radio group — a group with nothing to choose is a declaration
         // the author did not finish.
         (
             ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
@@ -87,17 +80,23 @@ pub fn ScalarWidget(
         ) => {
             let Some(choices) = choices else {
                 panic!(
-                    "`select` needs choices (field {}) — add `widget: radio_group {{ choices: … }}`",
+                    "in field {}, `radio_group` needs choices — add `widget: radio_group {{ choices: … }}`",
                     props.path
                 )
             };
+            reject_if_not_required(&props);
             rsx! { RadioGroup { values, choices, props } }
         }
+
         // A bool's choices are derivable, so it is the one kind that renders
         // without a list — but an explicit one still wins, for a form that would
         // rather say "Yes"/"No".
+        (ValueKind::Bool, WidgetType::Select) => {
+            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props } }
+        }
         (ValueKind::Bool, WidgetType::RadioGroup) => {
-            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props } }
+            reject_if_not_required(&props);
+            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props }}
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
         // because the built-in widgets can't serve its type, so gating it on
@@ -110,4 +109,12 @@ pub fn ScalarWidget(
             props.path
         ),
     }
+}
+
+fn reject_if_not_required(props: &FieldProps) {
+    assert!(
+        props.required,
+        "do not use `radio_group` because the field {} is not required - use `select` instead",
+        props.path
+    );
 }
