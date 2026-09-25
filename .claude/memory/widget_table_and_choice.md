@@ -1,6 +1,6 @@
 ---
 name: widget-table-and-choice
-description: "UPDATED 2026-09-25: every unrenderable (kind, widget) pair is now a COMPILE ERROR, except radio_group, which gets select's rule while Todd builds it. Original (2026-09-19): Only 45 of 84 (value kind, widget) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
+description: "UPDATED 2026-09-25: every unrenderable (kind, widget) pair is now a COMPILE ERROR, and radio_group SHIPPED (46 of 84; it also refuses an optional field). Original (2026-09-19): Only 45 of 84 (value kind, widget) pairs render; the other 39 fail by the field SILENTLY VANISHING, not by crashing. The blocker is not missing match arms: ValueKind::Choice/MultiChoice/File are never constructed anywhere, so there is nothing for an arm to match. The design fork — SHAPE choice vs VALUE choice — needs Todd before any code"
 metadata:
   type: project
 ---
@@ -12,10 +12,19 @@ come from the macro's `widget.rs::rule`, derived from the `WidgetType` variant.
 `select_multiple`, `checkbox_multiple` and `file` are refused while the macro
 parses. A widget on a struct, list or enum is refused too. On an enum it was
 silently IGNORED before, since `VariantSet` stores `custom_widget` and never
-reads it. ONE deliberate divergence: `radio_group` gets `select`'s rule
-(`bool` always, anything else only with `choices`) because Todd is building
-it; until that lands, it passes the check and still vanishes. `widget_matrix`
-still measures the runtime match directly, so the two tables can be compared.
+reads it. `widget_matrix` still measures the runtime match directly, so the two
+tables can be compared.
+
+**`radio_group` SHIPPED 2026-09-25**, and the divergence noted here is gone. It
+keeps `select`'s choices rule (`bool` always, anything else only with `choices`)
+and adds one of its own: **an optional field is refused**, by a second `const _`
+calling `field_kind::is_optional`, because a picked radio cannot be un-picked.
+Nothing is ever pre-selected, for the same reason. The matrix now reads **46 of
+84** — `(Bool, RadioGroup)` renders, and Text/Int/Float still show PANIC there
+only because the matrix passes no choices, exactly as `select` does. See
+[[hand-written-rsx-gotchas]] for what building it taught, and
+[[enum-as-a-value-choice]] for the gap it exposed: an enum field cannot take a
+widget at all, so there is no radio group over an enum.
 Also, `ValueKind::Choice`/`MultiChoice` were settled as DELETE rather than fill
 in: choices attach to the widget ([[choice-fields-design]]).
 
@@ -27,7 +36,8 @@ number is **45 of 84**. `form!` accepts all 84 today.
 - all 14 `<input type=…>` work on Text/Int/Float, and **panic on Bool**
 - `textarea` works only on a string
 - `select` and `checkbox` work only on `bool`
-- `select_multiple`, `checkbox_multiple`, `radio_group`, `file` never work
+- `select_multiple`, `checkbox_multiple`, `file` never work; `radio_group`
+  did not either until 2026-09-25, and now renders (46 of 84)
 
 45 was predicted by reading `ScalarInput`'s match arms *before* the tool was
 run, and the tool agreed exactly — that agreement is the reason to trust
@@ -67,8 +77,8 @@ There are already **two different notions of "choice"**, and only one is built:
    containment).
 2. **Value choice — which of these N runtime candidates?** NOT built. A
    `Ref<Source>` picked from a course's sources, a country from a list. This
-   is what `radio_group` / `select_multiple` / `checkbox_multiple` would all
-   render, and it is where the real parity gap with Django and leptos_form
+   is what `select_multiple` / `checkbox_multiple` would render, and what
+   `radio_group` DOES render as of 2026-09-25 for a static list, and it is where the real parity gap with Django and leptos_form
    lives ([[formoxus-feature-parity]]).
 
 The candidate list for (2) usually isn't knowable from the shape, so it
