@@ -59,16 +59,19 @@ pub mod submission;
 pub mod widgets;
 pub mod wire;
 
-/// The `facet` formoxus is built against, so macro-generated code can name it
-/// as `::formoxus::facet` without assuming the consumer spells it `facet`.
+/// The `facet` formoxus is built against, so a crate using formoxus can name it
+/// as `formoxus::facet` and always get the version formoxus's own bounds use.
 ///
-/// This does NOT spare a model crate its own `facet` dependency.
-/// `#[derive(Facet)]` emits `::facet::…`, so it resolves only through a direct
-/// dependency. `#[facet(crate = ::formoxus::facet)]` redirects the derive's
-/// own output but not what attributes such as `rename` or `transparent` expand
-/// to: those hard-code `::facet::` in 0.46.5 and 0.50.0-rc.7 (fixed by
-/// facet-rs/facet#2662, not yet released). Depend on a `facet` version
-/// compatible with formoxus's, or the two `Facet` traits are different traits.
+/// The goal is for a model crate to need no `facet` dependency of its own,
+/// deriving through `#[facet(crate = ::formoxus::facet)]`. That does not work
+/// yet. The attribute redirects the derive's own output, but in facet 0.46.5
+/// and 0.50.0-rc.7 attributes such as `rename` and `transparent` still expand
+/// to a hard-coded `::facet::…`. facet-rs/facet#2662 fixes that and is not yet
+/// released. Until then, depend on `facet` directly, at a version compatible
+/// with formoxus's, or the two `Facet` traits are different traits.
+///
+/// `form!` does not need this. Its compile-time checks name `Facet` only inside
+/// formoxus, through `field_kind::shape_of`.
 pub use facet;
 
 /// `form! { Model { … } }` — build a [`FormSpec`] for `Model`.
