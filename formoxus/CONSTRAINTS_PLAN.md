@@ -3,12 +3,12 @@
 An inventory of every constraint and setting, and which of the three tiers it
 belongs to.
 
-> **Status, 2026-09-24.** Tier 1 is now REACHABLE — `form!` accepts the five
-> constraint keys and they reach `ValueKind::check` on both sides of the wire.
-> What is missing is every compile-time check in "Compile-time checks" below.
-> Tier 3 is mostly built; tier 2 has its syntax but no attributes.
-> **`CONSTRAINTS_NEXT.md` is the build order** for what remains; this file
-> stays the inventory.
+> **Status, 2026-09-25.** Tier 1 is reachable and CHECKED: `form!` accepts the
+> five constraint keys, they reach `ValueKind::check` on both sides of the wire,
+> and "Compile-time checks" below are built, except whether a bound fits the
+> field's type. Tier 3 is mostly built. Tier 2 has its syntax but no attributes,
+> and no widget renders any constraint attribute yet either. **`CONSTRAINTS_NEXT.md`
+> is the build order** for what remains; this file stays the inventory.
 
 ## The three questions that decide the tier
 
@@ -182,22 +182,39 @@ The same table drives tier 2, so build it once.
 
 ## Compile-time checks
 
-**The macro can do these itself**, from tokens, at parse time (`expand` has no
-error channel — `impl_form` only returns `Err` from parsing):
+Every one of these is about the field's TYPE or the constraint's own values,
+never the widget. Where HTML accepts an attribute is a render-time question;
+see "Rendering" above.
 
-- `min_length > max_length`, `min > max` — unsatisfiable in any widget
-- `pattern` parses under `regress` — same engine that runs it, so "compiles at
-  build time" means "compiles at runtime"
+**The macro does these itself, from tokens, while it parses.** It has to be
+at parse time because `expand` has no error channel, and `impl_form` only
+returns `Err` from parsing.
+
 - duplicate and unknown keys
+- `pattern` compiles under `regress`, exactly as HTML's "compiled pattern
+  regular expression" does it: the bare pattern, then `^(?:…)$`, both with the
+  `v` flag. This one cannot be a const check, because compiling a regex
+  allocates. It is also why `pattern` is a `LitStr` and not an `Expr`. *Built.*
 
-**rustc does these**, via a `const {}` block in a generated generic fn that reads
-`T::SHAPE` — verified working, including the bound-fits-the-type case:
+**rustc does these, through free `const _` items that `form!` emits.**
+`formoxus::field_kind` explains why they are free const items and not a
+`const {}` block in a generated generic fn: `cargo check` never evaluates the
+latter, and nothing ever evaluates it inside the uncalled `__paths_exist`. Each
+assertion is spanned onto the author's value, so the caret lands there.
 
-- constraint vs. value kind (`max_length` on a `bool`)
-- a bound that overflows the field's own type (`max: 1e50` on an `f32`) — the
-  bound is emitted as a literal INSIDE the const block, so const eval sees both
-  it and `T`; no const generics needed
-- the validator's parameter type matching the field's, via a witness call
+- **Constraint vs. value kind.** `max_length` on a `bool`, `min` on a `String`,
+  or anything on a struct path. The field's type is inferred from a projection
+  closure, `shape_of(|__m: &Model| &__m.field)`, and classified the way
+  `member_for_shape` classifies it. A plain newtype is let through as "can't
+  tell". *Built.*
+- **`min > max`, `min_length > max_length`.** These are const asserts rather than
+  token comparisons so that `min: MIN_AGE` and `max: 2 * N` are evaluated too,
+  with `as f64` letting an integer and a float compare. The cost is a fixed
+  message that cannot quote the values. *Built.*
+- **Does a bound fit the field's type?** `max: 1e50` on an `f32`, or
+  `min: -1000` on an `i8`, which is vacuous. *Not built; step 6b.*
+- the validator's parameter type matching the field's, via a witness call.
+  *Not built; belongs to the error model.*
 
 A shape-based check beats marker traits here: one source of truth with
 `value_kind()`, no hand-kept impl list, no orphan problem, and it can say "can't
