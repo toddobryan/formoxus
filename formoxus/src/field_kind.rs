@@ -169,6 +169,10 @@ const fn is_number(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Int { .. } | Kind::Float { .. })
 }
 
+pub const fn is_optional(shape: &Shape) -> bool {
+    matches!(shape.def, Def::Option(_))
+}
+
 enum Kind {
     Text,
     /// The range of the integer type, widened to `i128` since every supported

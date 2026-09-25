@@ -4,11 +4,13 @@ use dioxus::prelude::*;
 
 use super::checkbox::Checkbox;
 use super::input::Input;
+use super::radio_group::RadioGroup;
 use super::select::{Select, SelectChoice, bool_choices};
 use super::textarea::Textarea;
 use super::types::{FieldProps, WidgetProps, WidgetType};
 use crate::ValuesByPath;
 use crate::fields::ValueKind;
+use crate::widgets::WidgetType::RadioGroup;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
 ///
@@ -73,6 +75,29 @@ pub fn ScalarWidget(
         // rather say "Yes"/"No".
         (ValueKind::Bool, WidgetType::Select) => {
             rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props } }
+        }
+        // Any single scalar can be chosen from a list, because a choice's value
+        // is just the raw string this field already parses. The list is the only
+        // thing that makes the pair renderable, hence the panic rather than an
+        // empty `<select>` — a chooser with nothing to choose is a declaration
+        // the author did not finish.
+        (
+            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
+            WidgetType::RadioGroup,
+        ) => {
+            let Some(choices) = choices else {
+                panic!(
+                    "`select` needs choices (field {}) — add `widget: radio_group {{ choices: … }}`",
+                    props.path
+                )
+            };
+            rsx! { RadioGroup { values, choices, props } }
+        }
+        // A bool's choices are derivable, so it is the one kind that renders
+        // without a list — but an explicit one still wins, for a form that would
+        // rather say "Yes"/"No".
+        (ValueKind::Bool, WidgetType::RadioGroup) => {
+            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props } }
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
         // because the built-in widgets can't serve its type, so gating it on

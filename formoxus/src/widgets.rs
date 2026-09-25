@@ -50,6 +50,7 @@
 pub mod checkbox;
 pub mod errors;
 pub mod input;
+pub mod radio_group;
 pub mod scalar;
 pub mod select;
 pub mod structure;
@@ -62,6 +63,7 @@ pub mod values;
 pub use checkbox::Checkbox;
 pub use errors::FieldErrors;
 pub use input::Input;
+pub use radio_group::RadioGroup;
 pub use scalar::ScalarWidget;
 pub use select::{ABSENT_DISPLAY, Select, SelectChoice};
 pub use structure::{AddRowButton, RemoveRowButton, VariantSelect};
