@@ -1,9 +1,35 @@
 ---
 name: config-cascade
-description: "2026-09-19 — three separate questions (novalidate, label_case, the widget registry) turn out to want ONE mechanism: an app-level default that a form, then a field, can override. Direction agreed with Todd: Dioxus CONTEXT, not a global OnceLock and not threading through RenderCtx. Supersedes the open fork in widget-registry-idea. Nothing built"
+description: "2026-09-19 — three separate questions (novalidate, label_case, the widget registry) turn out to want ONE mechanism: an app-level default that a form, then a field, can override. Direction agreed with Todd: Dioxus CONTEXT, not a global OnceLock and not threading through RenderCtx. Supersedes the open fork in widget-registry-idea. BUILT as of 2026-09-26 (defaults.rs + provide_defaults + form! tier); two label_case leaks remain"
 metadata:
   type: project
 ---
+
+## BUILT — status as of 2026-09-26
+
+**The mechanism shipped**, contrary to the "nothing built" above. `src/defaults.rs`
+holds a `Formoxus` config struct (`label_case`, `use_browser_validation`),
+`provide_defaults(Formoxus::new()…)` puts it in Dioxus context, and `defaults()`
+reads it — the agreed design, via context rather than a OnceLock. `form!` carries
+the per-form tier (`browser_validation: on|off`, `label_case: "…"`), and
+`tests/suite/browser_validation.rs` pins all of it including an app default
+reaching a silent form and a form overriding that default.
+
+`LabelCase::Title` is no longer hardcoded at `members.rs:144`; that tier works.
+
+**Two leaks remain**, both ignoring the configured case and using
+`LabelCase::Title` directly:
+
+- `buttons.rs:56` — a button with no explicit `text` falls back to
+  `self.name.to_case(LabelCase::Title)`.
+- `widgets/structure.rs:56` — `VariantSelect` displays a variant name as
+  `"{v.to_case(LabelCase::Title)}"`.
+
+So a form asking for `kebab-case` still gets Title-cased button labels and
+variant names. Small and self-contained now that there is a right answer to read.
+
+The third customer named below, the **widget registry**, is still unbuilt — but
+it no longer needs a design decision, only the work: it rides this mechanism.
 
 ## What forced the question
 
