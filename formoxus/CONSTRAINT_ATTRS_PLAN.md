@@ -47,16 +47,39 @@ errors)` — see `FormField::validate`'s comment on why that is deliberate.
 
 ## Decisions to make (recommendations, change them if you disagree)
 
-1. **How the constraints reach `Input`.** *Recommended:* a new prop struct, one
-   `Option` per attribute, built in `ScalarWidget` from `value_kind` and passed
-   as a single prop. Name it something other than `Constraints` — that is taken
-   by `fields::Constraints`, which is the *spec* side; this is the *render* side.
-   `HtmlConstraints` or `ConstraintAttrs`.
-   - Not on `FieldProps`: that would hand them to `Checkbox`, `Select` and
-     `RadioGroup`, none of which can use one, and it would break the documented
-     four-field boundary.
-   - Not `value_kind` itself: that couples a widget to the parse-side enum, and
-     a `custom(…)` widget would then need it too.
+1. **How the constraints reach `Input`: an open `Vec<Attribute>`, not a closed
+   struct.** Decided 2026-09-26 — Todd's objection to a struct is that it fixes
+   the set of attributes ahead of time, and a consumer may want one formoxus
+   never thought of (an `hx-*`, a `data-*`, an `autocomplete`). Dioxus supports
+   this directly, and three things were verified by probe:
+
+   - `#[props(extends = input)] attributes: Vec<Attribute>` on the component,
+     spread as `input { ..attributes }`, renders both attributes written at the
+     call site (including arbitrary quoted names — `"data-hx-post": "/save"`
+     works) and a `Vec` built in Rust (`Attribute::new(name, value, None, false)`).
+   - A programmatic `Vec` and call-site attributes **combine**; both appear.
+   - **`Vec<Attribute>` is safe on the spec side.** It satisfies
+     `Clone + Debug + PartialEq` and constructs with NO Dioxus runtime, so a
+     `FieldSpec` could carry author-supplied attributes and `Submission::accept`
+     rebuilding a spec server-side stays fine. That is what makes the author half
+     (below) possible later rather than blocked.
+
+   **The trap this creates, and it is on us:** Dioxus does NOT dedupe. Two
+   `maxlength` attributes render as
+   `<input maxlength="5" maxlength="99">`, and HTML takes the FIRST — so a
+   formoxus-derived value would silently beat an author's override. **Merge by
+   name in Rust before rendering**, with the author's winning. Do not rely on
+   source order.
+
+   A closed struct still has a job, just not as the prop type: keep the
+   `ValueKind -> attributes` mapping in one plain function so it is unit-testable
+   with no runtime. The prop is `Vec<Attribute>`; the mapping is a `fn`.
+
+   **Author-supplied attributes are NOT in this plan.** Letting `form!` declare
+   them needs new grammar and a `FieldSpec` field, and it is already tracked as
+   the "widget attrs" parity gap in [[formoxus-feature-parity]]. The point of
+   choosing `Vec<Attribute>` now is that it slots in later with no rework.
+
 2. **`step` on a float.** `<input type="number">` has an implicit `step=1`, so a
    browser REJECTS `2.5` in a number input unless `step` says otherwise. Today
    that is invisible because nothing constrains the input; the moment you emit
@@ -74,33 +97,38 @@ errors)` — see `FormField::validate`'s comment on why that is deliberate.
 
 ## Steps
 
-**1. The prop struct.** In `formoxus/src/widgets/types.rs`, beside `FieldProps`,
-add the struct from decision 1 with one field per attribute (`min_length`,
-`max_length`, `pattern`, `min`, `max`, and `step` if you took decision 2).
-Derive `Clone, Debug, PartialEq, Default` — `Default` is what lets a widget that
-has no constraints pass `..Default::default()`.
-- Give it a `From<&ValueKind>` (or an inherent `fn from_value_kind`) so the
-  mapping lives in one place rather than in each dispatch arm.
-- Done when: `cargo check -p formoxus` passes and a unit test in `types.rs`
-  shows `Text { max_length: Some(10), .. }` producing the right struct and
-  `Bool` producing an empty one.
+**1. The mapping.** In `formoxus/src/widgets/types.rs` (or a new
+`widgets/attrs.rs`), a plain function from `&ValueKind` to `Vec<Attribute>`:
+`min_length -> minlength`, `max_length -> maxlength`, `pattern -> pattern`,
+`min`/`max` -> `min`/`max`, plus `step="any"` for `Float` if you took decision 2.
+Not a component and not a prop type — a function, so it tests without a runtime.
+- Also write the merge helper here: given two `Vec<Attribute>`, later wins,
+  deduped by name. That is the fix for the duplicate-attribute trap above, and it
+  wants its own test.
+- Done when: unit tests show `Text { max_length: Some(10), .. }` producing one
+  `maxlength` attribute, `Bool` producing none, and the merge keeping the
+  author's value over the derived one.
 
-**2. Render them in `Input`.** Add the prop to `Input`, destructure it, and put
-the attributes on the `<input>`. Bind each as `Option` so Dioxus omits the
-attribute when it is `None` — the same mechanism `aria_invalid` already uses, and
-the reason `novalidate` is `Option`-shaped rather than `false`.
+**2. Render them in `Input`.** Add `#[props(extends = input)] attributes:
+Vec<Attribute>` to `Input` and spread it: `input { …, ..attributes }`. Put the
+spread LAST so a hand-passed attribute sits after the ones formoxus sets — but do
+not depend on that for correctness, since HTML takes the first duplicate; the
+merge in step 1 is what actually decides.
 - The hidden-input early return at `input.rs:60` should NOT get them: a hidden
   input is not user-editable and browsers do not validate it.
-- Done when: `cargo run -q -p formoxus-examples --bin widget_matrix` still
-  prints 46/84 — this step must not change which pairs render.
+- Done when: `cargo run -q -p formoxus-examples --bin widget_matrix` still prints
+  46/84 — this step must not change which pairs render.
 
 **3. Pass them from dispatch.** In `formoxus/src/widgets/scalar.rs`, the `Input`
-arm currently discards the constraints via `..`. Build the struct from
-`value_kind` and pass it. The `Textarea` arm gets one too, with `pattern`
-cleared per the decision above.
-- Leave the `Checkbox`, `Select`, `RadioGroup` and `Custom` arms alone.
+arm currently discards the constraints via `..`. Call step 1's function on
+`value_kind` and pass the result. The `Textarea` arm gets the same treatment with
+`pattern` dropped, per the decision above.
+- Leave the `Checkbox`, `Select`, `RadioGroup` and `Custom` arms alone. `Custom`
+  is worth a comment: a custom widget gets `WidgetProps` and no attributes yet,
+  which is the same open question as the author half.
 - Done when: a scratch SSR render of a `String` field with
-  `max_length: 10, pattern: r"\d+"` shows both attributes on the `<input>`.
+  `max_length: 10, pattern: r"\d+"` shows both attributes on the `<input>`, once
+  each.
 
 **4. Tests.** A new `formoxus/tests/suite/constraint_attrs.rs`, registered in
 `suite.rs` with its `#[path]` (cargo makes one binary per `tests/*.rs`, which is
@@ -114,7 +142,9 @@ why every module needs one).
   attributes are STILL rendered and `novalidate` is on the form; with it `on`,
   attributes rendered and no `novalidate`. Four assertions, and they are the
   reason this feature makes `tests/suite/browser_validation.rs` meaningful;
-- a hidden input gets none of them.
+- a hidden input gets none of them;
+- **no attribute is emitted twice** — the regression test for the Dioxus
+  no-dedupe trap.
 - Done when: `cargo test -p formoxus --test suite constraint_attrs` passes.
 
 **5. Check it for real.** `just serve`. The address example already has
