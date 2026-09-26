@@ -18,6 +18,10 @@ pub fn VariantSelect(
     errors: Vec<FieldError>,
     variants: Vec<&'static str>,
     selected: Option<String>,
+    /// The form's resolved casing, for the variant names below. A prop rather
+    /// than a `defaults()` call, so the per-form tier is not skipped — see
+    /// [`crate::buttons::ButtonSpec::label`].
+    label_case: LabelCase,
     on_edit: Callback<Edit>,
 ) -> Element {
     let label_text = label;
@@ -53,7 +57,7 @@ pub fn VariantSelect(
                     option {
                         value: "{v}",
                         selected: selected.as_deref() == Some(v),
-                        "{v.to_case(LabelCase::Title)}"
+                        "{v.to_case(label_case)}"
                     }
                 }
             }

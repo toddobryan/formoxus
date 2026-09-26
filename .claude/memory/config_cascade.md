@@ -17,16 +17,26 @@ reaching a silent form and a form overriding that default.
 
 `LabelCase::Title` is no longer hardcoded at `members.rs:144`; that tier works.
 
-**Two leaks remain**, both ignoring the configured case and using
-`LabelCase::Title` directly:
+**Both leaks FIXED 2026-09-26.** A textless button label and a `VariantSelect`'s
+variant names now use the form's case.
 
-- `buttons.rs:56` — a button with no explicit `text` falls back to
-  `self.name.to_case(LabelCase::Title)`.
-- `widgets/structure.rs:56` — `VariantSelect` displays a variant name as
-  `"{v.to_case(LabelCase::Title)}"`.
+The instructive part is what does NOT work: reading `defaults()` at the point of
+use. `defaults()` is only the APP tier, so a form stating its own `label_case`
+is still ignored — and the result is worse than the original bug, because within
+one rendered form the field labels obey the form and the buttons do not.
+`tests/suite/label_case.rs::a_textless_button_uses_the_forms_case` was written to
+fail against exactly that, and does.
 
-So a form asking for `kebab-case` still gets Title-cased button labels and
-variant names. Small and self-contained now that there is a right answer to read.
+So both take the case as a parameter: `ButtonSpec::label(&self, case)` fed from
+`Form::label_case()` (resolved ONCE per button row), and `VariantSelect` gets a
+`label_case` prop fed from `ctx.label_case`. That also keeps `ButtonSpec` plain
+data — `defaults()` needs a live Dioxus runtime and a `ButtonSpec` outlives any
+render, which is the same reason the cascade is resolved on `Form` and not
+`FormState`.
+
+**The rule, for the next derived-text site:** resolve the cascade at the `Form`
+boundary and hand the answer down. Never reach for `defaults()` from inside
+something that renders.
 
 The third customer named below, the **widget registry**, is still unbuilt — but
 it no longer needs a design decision, only the work: it rides this mechanism.

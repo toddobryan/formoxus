@@ -332,6 +332,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             return rsx! {};
         }
         let handle = *self;
+        // Resolved once for the row, not per button: it is the same cascade
+        // answer for all of them, and `defaults()` needs a runtime.
+        let label_case = self.label_case();
         let rendered = buttons
             .iter()
             .map(|b| {
@@ -356,7 +359,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                                 }
                             }
                         },
-                        "{b.label()}"
+                        "{b.label(label_case)}"
                     }
                 }
             })

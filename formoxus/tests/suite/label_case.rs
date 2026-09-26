@@ -240,3 +240,80 @@ fn a_nested_provider_shadows_an_outer_one() {
     expect_that!(html, contains_substring("FIRST_NAME"));
     expect_that!(html, contains_substring("FIRST-NAME"));
 }
+
+// ── Where the case has to reach, beyond a field label ────────────────────
+//
+// A field label is not the only derived text. A button with no `text` and a
+// variant name in a `VariantSelect` are both derived from an identifier, and
+// both used to be hardcoded to `Title`. Reading `defaults()` at the point of
+// use is NOT enough for either: that is only the app tier, so a form stating
+// its own case would still be ignored. These pin the full cascade.
+
+#[gtest]
+fn a_textless_button_uses_the_forms_case() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Account {
+        nickname: String,
+    }
+
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Account {
+                    label_case: "label-case",
+                    buttons: { sign_in: { type: submit } }
+                }
+            })
+        });
+        form.render(formoxus::using_fns! { sign_in: |_m| async move {} })
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring(">sign-in<"));
+    expect_that!(html, not(contains_substring("Sign In")));
+}
+
+/// And the app tier still reaches a button, for a form that states nothing.
+#[gtest]
+fn a_textless_button_uses_the_app_default() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Account {
+        nickname: String,
+    }
+
+    #[component]
+    fn App() -> Element {
+        provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
+        let form = use_form(|| {
+            empty_form(form! {
+                Account { buttons: { sign_in: { type: submit } } }
+            })
+        });
+        form.render(formoxus::using_fns! { sign_in: |_m| async move {} })
+    }
+    expect_that!(super::render_to_html(App), contains_substring(">SIGN_IN<"));
+}
+
+#[gtest]
+fn a_variant_name_uses_the_forms_case() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    #[repr(u8)]
+    enum Billing {
+        CreditCard { number: String },
+        BankTransfer { account: String },
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Order {
+        billing: Billing,
+    }
+
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Order { label_case: "label-case" } }));
+        form.render_fragment()
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring(">credit-card<"));
+    expect_that!(html, not(contains_substring(">Credit Card<")));
+}

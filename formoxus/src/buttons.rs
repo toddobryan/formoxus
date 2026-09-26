@@ -47,13 +47,20 @@ impl ButtonSpec {
         self
     }
 
-    /// What the button reads. Explicit `text` wins; otherwise the name in
-    /// title case, so `sign_in` reads "Sign In" rather than `sign_in` — the
-    /// same fallback a field label gets.
-    pub fn label(&self) -> String {
-        self.text
-            .clone()
-            .unwrap_or_else(|| self.name.to_case(LabelCase::Title))
+    /// What the button reads. Explicit `text` wins; otherwise the name in the
+    /// form's casing — so `sign_in` reads "Sign In" under the default, and
+    /// `sign-in` under `label_case: "label-case"`. The same fallback a field
+    /// label gets, and it has to agree with one: a form whose fields are kebab
+    /// and whose buttons are title case looks broken.
+    ///
+    /// Takes the case rather than reading it, because `defaults()` is only the
+    /// APP tier — a form stating its own `label_case` would be ignored. The
+    /// whole cascade is resolved once by [`crate::Form::label_case`] and handed
+    /// down, exactly as `RenderCtx` carries it to a field label. It also keeps
+    /// `ButtonSpec` plain data: `defaults()` needs a live Dioxus runtime, and a
+    /// `ButtonSpec` outlives any render.
+    pub fn label(&self, case: LabelCase) -> String {
+        self.text.clone().unwrap_or_else(|| self.name.to_case(case))
     }
 
     /// The `invocation` if one was given, else what the type implies.

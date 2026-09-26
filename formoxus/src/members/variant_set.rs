@@ -187,6 +187,7 @@ impl FormMember for VariantSet {
                     errors: self.errors.clone(),
                     variants: self.variants(),
                     selected: self.chosen(),
+                    label_case: ctx.label_case,
                     on_edit: ctx.on_edit,
                 }
                 { members.into_iter() }
