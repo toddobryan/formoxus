@@ -213,7 +213,7 @@ impl FieldBody {
         // all.
         if let (Some(min), Some(max)) = (&self.min, &self.max) {
             checks.push(quote_spanned! { max.span()=>
-                #[allow(#cast_lints)]
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
                 const _: () = ::core::assert!(
                     ((#min) as f64) <= ((#max) as f64),
                     "`min` must not exceed `max`"
@@ -222,6 +222,7 @@ impl FieldBody {
         }
         if let (Some(min), Some(max)) = (&self.min_length, &self.max_length) {
             checks.push(quote_spanned! { max.span()=>
+                #[allow(clippy::assertions_on_constants)]
                 const _: () = ::core::assert!(
                     (#min) <= (#max),
                     "`min_length` must not exceed `max_length`"
