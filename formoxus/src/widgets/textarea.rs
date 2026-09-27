@@ -15,7 +15,11 @@ use crate::ValuesByPath;
 /// nothing here needs the extra `InputType` cases (`Password`'s masking,
 /// `Hidden`'s bare markup) that make `Input` carry one.
 #[component]
-pub fn Textarea(values: ValuesByPath, props: FieldProps) -> Element {
+pub fn Textarea(
+    values: ValuesByPath,
+    props: FieldProps,
+    #[props(extends = textarea)] attrs: Vec<Attribute>,
+) -> Element {
     let FieldProps {
         path,
         label: label_text,
@@ -44,6 +48,8 @@ pub fn Textarea(values: ValuesByPath, props: FieldProps) -> Element {
                     let raw = e.value();
                     write_value(&path, values, raw);
                 },
+                // TODO: delete pattern, since not allowed in HTML
+                ..attrs,
             }
             FieldErrors { errors }
         }

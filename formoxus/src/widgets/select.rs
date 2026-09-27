@@ -97,7 +97,12 @@ pub(super) fn bool_choices() -> Vec<SelectChoice> {
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub fn Select(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProps) -> Element {
+pub fn Select(
+    values: ValuesByPath,
+    choices: Vec<SelectChoice>,
+    props: FieldProps,
+    #[props(extends = select)] attrs: Vec<Attribute>,
+) -> Element {
     let FieldProps {
         path,
         label: label_text,
@@ -128,6 +133,10 @@ pub fn Select(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProp
                 // and `""` IS absence at both boundaries, so the same write does
                 // for every option.
                 onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+                // Last among attributes, before the options: rsx! reads
+                // anything after a spread as children, and the options ARE
+                // children, so this sits between the two.
+                ..attrs,
                 // Required and unanswered: an unselectable placeholder, so the
                 // browser's own validation blocks submit and the user can't
                 // choose their way back to "unanswered". Optional: a real

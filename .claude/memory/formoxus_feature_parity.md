@@ -1,6 +1,6 @@
 ---
 name: formoxus-feature-parity
-description: "Formoxus vs. Django forms and leptos_form, RE-SURVEYED 2026-09-25 against the reflection-path code (after constraints landed). leptos_form is effectively unmaintained (last release 0.2.0-rc1, Feb 2024). Ahead: compile-time checks, enums, one validation on both sides. Biggest gaps: 4 widgets form! accepts but cannot render, per-field validators, typed dates/decimals/uuids, help text and widget attrs, change tracking, formset bounds"
+description: "Formoxus vs. Django forms and leptos_form, RE-SURVEYED 2026-09-25 against the reflection-path code (after constraints landed). leptos_form is effectively unmaintained (last release 0.2.0-rc1, Feb 2024). Ahead: compile-time checks, enums, one validation on both sides. Biggest gaps: 4 widgets form! accepts but cannot render, per-field validators, typed dates/decimals/uuids, help text and AUTHOR-SUPPLIED widget attrs, change tracking, formset bounds (formoxus's OWN constraint attributes landed 2026-09-27)"
 metadata:
   type: project
 ---
@@ -38,8 +38,12 @@ Useful for ideas, but Django is the real bar.
    (Django Date/DateTime/Time/Duration, leptos_form chrono), Decimal, Uuid,
    multi-value (a leaf holds ONE string), or files.
 6. **Presentation:** no help_text; no widget attrs (class, placeholder, style,
-   rows; tier 2 is unbuilt); constraint attributes (maxlength, min, pattern)
-   never rendered; fixed error markup (leptos_form has 5 error modes); no
+   rows; tier 2 is unbuilt); **constraint attributes now ARE rendered, 2026-09-27
+   — `minlength`/`maxlength`/`pattern`/`min`/`max` reach the DOM via
+   `ValueKind::attrs`, so the browser enforces them; what remains is emitting
+   only the ones VALID for the element (issue #4) and letting an author pass
+   arbitrary attributes through**; fixed error markup (leptos_form has 5 error
+   modes); no
    label placement options; no disabled/readonly fields; no field exclusion.
 7. **State:** no change tracking (Django `has_changed`/`changed_data`,
    leptos_form `field_changed_class`); no draft persistence (leptos_form

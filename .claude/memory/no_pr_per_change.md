@@ -17,3 +17,15 @@ wanted to see that one example."
 **How to apply:** A request like "make a PR for me to review" applies to that
 piece of work only. Otherwise, finish with a commit on a branch or on `main`,
 say what is committed and pushed, and ask before pushing if he hasn't said to.
+
+## Plans and memory ride along with a code commit (2026-09-26)
+
+Do NOT make a standalone commit for a `*_PLAN.md` or a `.claude/memory/` edit.
+Write them, leave them in the working tree, and include them in the next commit
+that carries code. Todd: "No need to commit when you create them. When we commit
+the project, please do commit them."
+
+So they DO still get committed and pushed, which is what keeps `.claude/memory/`
+authoritative and able to cross machines — the radio-group handover worked
+because the plan and the resume entry had been pushed. The rule is about commit
+granularity, not about keeping them out of git.

@@ -90,6 +90,9 @@ impl PartialEq for WidgetType {
 pub struct WidgetProps {
     pub values: ValuesByPath,
     pub props: FieldProps,
+    /// Pass-through attributes for the element this widget puts them on. A
+    /// custom widget decides that for itself, the same way each built-in does.
+    pub attrs: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -30,7 +30,16 @@ pub fn ScalarWidget(
     choices: Option<Vec<SelectChoice>>,
     values: ValuesByPath,
     props: FieldProps,
+    #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let mut mapped_attrs = value_kind.attrs();
+
+    for attr in attrs {
+        mapped_attrs.insert(attr.name, attr);
+    }
+
+    let attrs = mapped_attrs.into_values().collect();
+
     match (&value_kind, &widget) {
         // One arm for every `<input type=…>`, over any value kind that is a
         // single scalar. The value crosses as a string either way — `ValueKind`
@@ -44,13 +53,13 @@ pub fn ScalarWidget(
             ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
             WidgetType::Input(input_type),
         ) => {
-            rsx! { Input { input_type: input_type.clone(), values, props } }
+            rsx! { Input { input_type: input_type.clone(), values, props, attrs } }
         }
         (ValueKind::Text { .. }, WidgetType::Textarea) => {
-            rsx! { Textarea { values, props } }
+            rsx! { Textarea { values, props, attrs } }
         }
         (ValueKind::Bool, WidgetType::Checkbox) => {
-            rsx! { Checkbox { values, props } }
+            rsx! { Checkbox { values, props, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. The list is the only
@@ -67,7 +76,7 @@ pub fn ScalarWidget(
                     props.path
                 )
             };
-            rsx! { Select { values, choices, props } }
+            rsx! { Select { values, choices, props, attrs } }
         }
         // Any single scalar can be chosen from a list of radio buttons, because a
         // choice's value is just the raw string this field already parses. The list
@@ -85,25 +94,29 @@ pub fn ScalarWidget(
                 )
             };
             reject_if_not_required(&props);
-            rsx! { RadioGroup { values, choices, props } }
+            rsx! { RadioGroup { values, choices, props, attrs } }
         }
 
         // A bool's choices are derivable, so it is the one kind that renders
         // without a list — but an explicit one still wins, for a form that would
         // rather say "Yes"/"No".
         (ValueKind::Bool, WidgetType::Select) => {
-            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props } }
+            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props, attrs } }
         }
         (ValueKind::Bool, WidgetType::RadioGroup) => {
             reject_if_not_required(&props);
-            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props }}
+            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props, attrs }}
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
         // because the built-in widgets can't serve its type, so gating it on
         // the kinds we happen to enumerate would defeat it — `Markdown` and
         // `Ref<Source>` are `Text` to the parser and nothing to a `<select>`.
         // The author named this input for this field; that IS the evidence.
-        (_, WidgetType::Custom { render, .. }) => render(WidgetProps { values, props }),
+        (_, WidgetType::Custom { render, .. }) => render(WidgetProps {
+            values,
+            props,
+            attrs,
+        }),
         _ => panic!(
             "{widget:?} cannot render a {value_kind:?} (field {})",
             props.path
@@ -115,6 +128,6 @@ fn reject_if_not_required(props: &FieldProps) {
     assert!(
         props.required,
         "do not use `radio_group` because the field {} is not required - use `select` instead",
-        props.path
+        props.path,
     );
 }

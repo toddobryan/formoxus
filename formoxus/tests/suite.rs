@@ -27,6 +27,8 @@ mod browser_validation;
 mod buttons;
 #[path = "suite/choices.rs"]
 mod choices;
+#[path = "suite/constraint_attrs.rs"]
+mod constraint_attrs;
 #[path = "suite/empty_strings.rs"]
 mod empty_strings;
 #[path = "suite/enums.rs"]

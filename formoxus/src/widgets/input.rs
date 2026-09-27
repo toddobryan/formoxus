@@ -9,7 +9,12 @@ use super::values::{get_current, write_value};
 use crate::ValuesByPath;
 
 #[component]
-pub fn Input(input_type: InputType, values: ValuesByPath, props: FieldProps) -> Element {
+pub fn Input(
+    input_type: InputType,
+    values: ValuesByPath,
+    props: FieldProps,
+    #[props(extends = input)] attrs: Vec<Attribute>,
+) -> Element {
     let FieldProps {
         path,
         label: label_text,
@@ -88,6 +93,9 @@ pub fn Input(input_type: InputType, values: ValuesByPath, props: FieldProps) -> 
                     let raw = e.value();
                     write_value(&path, values, raw);
                 },
+                // Last, and it has to be: rsx! treats everything after a spread
+                // as children, so an attribute below this is a parse error.
+                ..attrs,
             }
             FieldErrors { errors }
         }

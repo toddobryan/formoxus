@@ -8,7 +8,11 @@ use super::values::{get_current, write_value};
 use crate::ValuesByPath;
 
 #[component]
-pub fn Checkbox(mut values: ValuesByPath, props: FieldProps) -> Element {
+pub fn Checkbox(
+    mut values: ValuesByPath,
+    props: FieldProps,
+    #[props(extends = input)] attrs: Vec<Attribute>,
+) -> Element {
     let FieldProps {
         path,
         label,
@@ -31,7 +35,9 @@ pub fn Checkbox(mut values: ValuesByPath, props: FieldProps) -> Element {
             r#type: "checkbox",
             checked: get_current(&path, values) == "true",
             aria_invalid: invalid,
-            onchange: move |e: FormEvent| write_value(&path, values, e.value())
+            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            // Last: rsx! reads anything after a spread as children.
+            ..attrs,
         }
         FieldErrors { errors: errors.clone() }
     };

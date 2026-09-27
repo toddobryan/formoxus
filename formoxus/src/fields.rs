@@ -1,13 +1,14 @@
 //! Leaf members: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
-
 use crate::RenderCtx;
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
 use crate::widgets::{FieldProps, InputType, ScalarWidget, SelectChoice, WidgetType};
+use dioxus::core::IntoAttributeValue;
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
+use indexmap::IndexMap;
 use regress::Regex;
 use std::{collections::HashMap, fmt::Debug};
 
@@ -195,6 +196,81 @@ impl ValueKind {
             ValueKind::Bool => (),
         }
         errors
+    }
+
+    /// This kind's constraints as HTML attributes, for the element a widget
+    /// renders.
+    ///
+    /// The render-side half of a constraint: `check` enforces it in Rust, and
+    /// these hand the same rule to the browser so it can give instant feedback
+    /// and block submit. `browser_validation: off` does NOT gate them, and must
+    /// not — `novalidate` on the `<form>` disables constraint validation
+    /// form-wide, so it already neutralizes every one of these, and threading the
+    /// flag down here would duplicate what one attribute does.
+    ///
+    /// A `pattern` arrives UNANCHORED. HTML wraps one as `^(?:…)$` implicitly and
+    /// `check` wraps it Rust-side to match, so anchoring it here too
+    /// would make the two disagree — which is the thing `regress` is a dependency
+    /// to prevent.
+    ///
+    /// **Every attribute is emitted regardless of whether it is valid on the
+    /// element that ends up carrying it**, and the browser ignores what does not
+    /// apply. That is deliberate but not ideal: the W3C validator rejects most of
+    /// the combinations, so this produces invalid HTML. See
+    /// <https://github.com/toddobryan/formoxus/issues/4>.
+    ///
+    /// **No `step` is emitted for a float.** `<input type="number">` has an
+    /// implicit `step=1`, so a browser rejects `2.5` in one. formoxus never
+    /// defaults a number to `type="number"` — [`ValueKind::Int`] and
+    /// [`ValueKind::Float`] default to a text input, because `type="number"` eats
+    /// a half-typed value — so this is only reachable by asking for
+    /// `widget: number` explicitly, and an author who does needs to supply `step`
+    /// themselves. Issue #4 covers making that unnecessary.
+    pub fn attrs(&self) -> IndexMap<&'static str, Attribute> {
+        let mut map = IndexMap::<&'static str, Attribute>::new();
+        match self {
+            ValueKind::Text {
+                min_length,
+                max_length,
+                pattern,
+            } => {
+                if let Some(ml) = min_length {
+                    Self::add_attr(&mut map, "minlength", ml);
+                }
+                if let Some(ml) = max_length {
+                    Self::add_attr(&mut map, "maxlength", ml);
+                }
+                if let Some(patt) = pattern {
+                    Self::add_attr(&mut map, "pattern", patt);
+                }
+            }
+            ValueKind::Int { min, max } => {
+                if let Some(m) = min {
+                    Self::add_attr(&mut map, "min", m);
+                }
+                if let Some(m) = max {
+                    Self::add_attr(&mut map, "max", m);
+                }
+            }
+            ValueKind::Float { min, max } => {
+                if let Some(m) = min {
+                    Self::add_attr(&mut map, "min", m);
+                }
+                if let Some(m) = max {
+                    Self::add_attr(&mut map, "max", m);
+                }
+            }
+            ValueKind::Bool => (),
+        }
+        map
+    }
+
+    fn add_attr(
+        map: &mut IndexMap<&'static str, Attribute>,
+        name: &'static str,
+        v: impl IntoAttributeValue,
+    ) {
+        map.insert(name, Attribute::new(name, v, None, false));
     }
 }
 
@@ -589,6 +665,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dioxus::core::AttributeValue;
     use googletest::prelude::*;
 
     fn text(
@@ -605,6 +682,116 @@ mod tests {
 
     fn messages(kind: &ValueKind, raw: &str) -> Vec<String> {
         kind.check(raw).into_iter().map(|e| e.0).collect()
+    }
+
+    // ── Constraint attributes ────────────────────────────────────────────
+    //
+    // `attrs` is the render-side half of a constraint: the same `min_length`
+    // that `check` enforces in Rust also has to reach the browser, or the two
+    // disagree about what the field allows. These pin the mapping. That an
+    // attribute then lands on the right element is a widget question, tested
+    // from outside in `tests/suite/`.
+
+    /// Constructing an `Attribute` needs no Dioxus runtime, which is why this
+    /// mapping is a plain function and lives here rather than in a widget.
+    #[gtest]
+    fn a_field_with_no_constraints_gets_no_attributes() {
+        expect_that!(text(None, None, None).attrs().len(), eq(0));
+        // A bool never has one: none of the five applies to a checkbox.
+        expect_that!(ValueKind::Bool.attrs().len(), eq(0));
+    }
+
+    #[gtest]
+    fn each_text_constraint_becomes_its_html_attribute() {
+        let attrs = text(Some(3), Some(10), Some(r"\d{5}")).attrs();
+        expect_that!(
+            attrs.keys().copied().collect::<Vec<_>>(),
+            elements_are![eq(&"minlength"), eq(&"maxlength"), eq(&"pattern")]
+        );
+    }
+
+    /// One `max_length` means ONE `maxlength`, which is the whole point of
+    /// keying the map: HTML takes the first of a duplicated attribute, so a
+    /// second entry would be silently dropped rather than loudly wrong.
+    #[gtest]
+    fn a_repeated_name_replaces_rather_than_duplicating() {
+        let mut map = IndexMap::new();
+        ValueKind::add_attr(&mut map, "maxlength", 5usize);
+        ValueKind::add_attr(&mut map, "maxlength", 99usize);
+        expect_that!(map.len(), eq(1));
+        expect_that!(
+            map["maxlength"].value,
+            eq(&AttributeValue::Int(99)),
+            "the later insert should win"
+        );
+    }
+
+    /// The key IS the attribute's own name, so the two cannot drift apart —
+    /// the failure a `String` key invited was inserting under one name while
+    /// the attribute called itself another.
+    #[gtest]
+    fn every_key_is_its_attributes_name() {
+        let all = [
+            text(Some(1), Some(2), Some("x")),
+            ValueKind::Int {
+                min: Some(1),
+                max: Some(2),
+            },
+            ValueKind::Float {
+                min: Some(1.0),
+                max: Some(2.0),
+            },
+        ];
+        for kind in all {
+            for (key, attr) in kind.attrs() {
+                expect_that!(attr.name, eq(key));
+            }
+        }
+    }
+
+    /// A length is a NUMBER, not a stringified one. It matters beyond tidiness:
+    /// a numeric `AttributeValue` renders unquoted (`maxlength=10`), so a test
+    /// asserting `maxlength="10"` against the markup would not match.
+    #[gtest]
+    fn a_length_is_a_number_not_a_string() {
+        let attrs = text(None, Some(10), None).attrs();
+        expect_that!(attrs["maxlength"].value, eq(&AttributeValue::Int(10)));
+    }
+
+    /// **The pattern reaches the DOM UNANCHORED.** `check` wraps it as
+    /// `^(?:…)$` because HTML does the same implicitly — so handing the browser
+    /// an already-wrapped pattern would anchor it twice. The raw pattern is what
+    /// keeps the two in agreement, which is the reason `regress` was chosen over
+    /// `regex` in the first place.
+    #[gtest]
+    fn a_pattern_reaches_the_attribute_unanchored() {
+        let attrs = text(None, None, Some(r"\d{5}")).attrs();
+        expect_that!(
+            attrs["pattern"].value,
+            eq(&AttributeValue::Text(r"\d{5}".to_string()))
+        );
+    }
+
+    /// An int bound stays an int and a float bound stays a float, rather than
+    /// both widening to text. `Float` is also why no `step` is emitted — see the
+    /// note in `attrs`.
+    #[gtest]
+    fn a_numeric_bound_keeps_its_kind() {
+        let ints = ValueKind::Int {
+            min: Some(1),
+            max: Some(9),
+        }
+        .attrs();
+        expect_that!(ints["min"].value, eq(&AttributeValue::Int(1)));
+        expect_that!(ints["max"].value, eq(&AttributeValue::Int(9)));
+
+        let floats = ValueKind::Float {
+            min: Some(1.5),
+            max: None,
+        }
+        .attrs();
+        expect_that!(floats["min"].value, eq(&AttributeValue::Float(1.5)));
+        expect_that!(floats.len(), eq(1), "an absent bound emits nothing");
     }
 
     // ── Text: lengths ────────────────────────────────────────────────────

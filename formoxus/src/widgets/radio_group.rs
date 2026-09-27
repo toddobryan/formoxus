@@ -21,7 +21,15 @@ use crate::widgets::{FieldErrors, FieldProps, SelectChoice, get_current, write_v
 /// makes the browser block submit until the user picks; in edit mode the stored
 /// value comes back as `current` and checks its own radio.
 #[component]
-pub fn RadioGroup(values: ValuesByPath, choices: Vec<SelectChoice>, props: FieldProps) -> Element {
+pub fn RadioGroup(
+    values: ValuesByPath,
+    choices: Vec<SelectChoice>,
+    props: FieldProps,
+    #[props(extends = fieldset)] attrs: Vec<Attribute>,
+) -> Element {
+    // TODO: figure out where to put the attributes. Currently in the fieldset,
+    //       but we might want people to be able to set attrs on each input
+
     let FieldProps {
         path,
         label: label_text,
@@ -66,7 +74,9 @@ pub fn RadioGroup(values: ValuesByPath, choices: Vec<SelectChoice>, props: Field
         .collect();
 
     rsx! {
-        fieldset { class: "form-field radio-group",
+        fieldset {
+            class: "form-field radio-group",
+            ..attrs,
             // The group's label is the `legend`, not a `label` — a `<label>`
             // can only name a single control, and there are several here.
             legend {
