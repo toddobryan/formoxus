@@ -34,10 +34,19 @@ pub fn Textarea(
     rsx! {
         label { class: "form-field",
             if let Some(text) = label_text {
-                span { class: "field-label", "{text}" }
-            }
-            if required {
-                span { class: "required", " *" }
+                // The marker is INSIDE the label span, not a sibling: a
+                // consumer who makes `.field-label` a block — the natural
+                // choice above an input — would otherwise push a lone asterisk
+                // onto its own line. `aria-hidden` because it is a VISUAL
+                // convention only; `required` on the input is what tells a
+                // screen reader, so the asterisk would just be noise in the
+                // accessible name.
+                span { class: "field-label",
+                    "{text}"
+                    if required {
+                        span { class: "required", aria_hidden: "true", " *" }
+                    }
+                }
             }
             textarea {
                 name: "{path}",

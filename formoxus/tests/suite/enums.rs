@@ -217,12 +217,14 @@ fn the_select_and_the_fields_it_reveals_render_as_one_group() {
     expect_that!(
         html,
         contains_substring(
-            r#"<fieldset><legend>Outer<span class="required"> *</span></legend><label"#
+            r#"<fieldset><legend>Outer<span class="required" aria-hidden="true"> *</span></legend><label"#
         )
     );
     expect_that!(
         html,
-        contains_substring(r#"<legend>Inner<span class="required"> *</span></legend>"#)
+        contains_substring(
+            r#"<legend>Inner<span class="required" aria-hidden="true"> *</span></legend>"#
+        )
     );
     // The star annotates the label, and the label is on the legend — so it must
     // not also appear loose in front of the select.

@@ -33,9 +33,16 @@ pub fn VariantSelect(
             // legend carries both, and a lone `*` floating in front of the
             // select reads as belonging to nothing.
             if let Some(text) = label_text {
-                span { class: "field-label", "{text}" }
-                if required {
-                    span { class: "required", " *" }
+                // Inside the label span, not beside it: a consumer who makes
+                // `.field-label` a block would otherwise push a lone asterisk
+                // onto its own line. `aria-hidden` because the asterisk is a
+                // VISUAL convention — `required` on the control is what a screen
+                // reader reads, so this would only add noise to the name.
+                span { class: "field-label",
+                    "{text}"
+                    if required {
+                        span { class: "required", aria_hidden: "true", " *" }
+                    }
                 }
             }
             select {

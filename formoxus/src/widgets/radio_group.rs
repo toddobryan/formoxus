@@ -80,11 +80,15 @@ pub fn RadioGroup(
             // The group's label is the `legend`, not a `label` — a `<label>`
             // can only name a single control, and there are several here.
             legend {
+                // No label, no marker — an asterisk with nothing to qualify
+                // means nothing. `aria-hidden` because it is visual only: on a
+                // radio group `required` applies to the whole group and that is
+                // what a screen reader announces.
                 if let Some(text) = label_text {
                     "{text}"
-                }
-                if required {
-                    span { class: "required", " *" }
+                    if required {
+                        span { class: "required", aria_hidden: "true", " *" }
+                    }
                 }
             }
             { radios.into_iter() }

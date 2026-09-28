@@ -174,7 +174,7 @@ impl FormMember for VariantSet {
                     legend {
                         "{text}"
                         if ctx.required {
-                            span { class: "required", " *" }
+                            span { class: "required", aria_hidden: "true", " *" }
                         }
                     }
                 }

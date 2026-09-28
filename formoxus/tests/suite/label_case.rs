@@ -317,3 +317,77 @@ fn a_variant_name_uses_the_forms_case() {
     expect_that!(html, contains_substring(">credit-card<"));
     expect_that!(html, not(contains_substring(">Credit Card<")));
 }
+
+// ── The required marker ──────────────────────────────────────────────────
+
+/// **The marker sits INSIDE the label span, not beside it.** A consumer who
+/// makes `.field-label` a block — the natural choice for a label above an input,
+/// and what `examples/assets/main.css` does — would otherwise get a lone
+/// asterisk pushed onto its own line. Nesting makes the markup correct whatever
+/// the consumer's CSS does, which matters because formoxus ships none.
+#[gtest]
+fn the_required_marker_is_nested_in_the_label() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Signup {
+        email: String,
+    }
+
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Signup {} }));
+        form.render_fragment()
+    }
+    expect_that!(
+        super::render_to_html(App),
+        contains_substring(
+            r#"<span class="field-label">Email<span class="required" aria-hidden="true"> *</span></span>"#
+        )
+    );
+}
+
+/// `aria-hidden`, because the asterisk is a VISUAL convention: `required` on the
+/// control is what a screen reader announces, so the marker would only add noise
+/// to the accessible name — "Email star, required".
+///
+/// This pins the attribute, not the behaviour — computing an accessible name
+/// needs a browser. That half is
+/// `e2e/tests/required_text.rs::the_required_marker_is_absent_from_the_accessible_name`,
+/// which also found that an exact `get_by_label` does NOT work here: it matches
+/// the label's TEXT, which still contains the asterisk.
+#[gtest]
+fn the_required_marker_is_hidden_from_assistive_technology() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Signup {
+        email: String,
+    }
+
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Signup {} }));
+        form.render_fragment()
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring(r#"aria-hidden="true""#));
+    // And the semantic marker is still there — the asterisk replaces nothing.
+    expect_that!(html, contains_substring("required=true"));
+}
+
+/// No label, no marker — an asterisk with nothing to qualify means nothing.
+/// All six sites that render one now agree on this; `RadioGroup` did not before.
+#[gtest]
+fn an_unlabelled_required_field_gets_no_marker() {
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Hidden {
+        token: String,
+    }
+
+    #[component]
+    fn App() -> Element {
+        // `hidden` renders bare, with no label at all.
+        let form = use_form(|| empty_form(form! { Hidden { token => { widget: hidden } } }));
+        form.render_fragment()
+    }
+    let html = super::render_to_html(App);
+    expect_that!(html, contains_substring(r#"type="hidden""#));
+    expect_that!(html, not(contains_substring("required")));
+}
