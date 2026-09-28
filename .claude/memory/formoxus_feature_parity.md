@@ -1,6 +1,6 @@
 ---
 name: formoxus-feature-parity
-description: "Formoxus vs. Django forms and leptos_form, RE-SURVEYED 2026-09-25 against the reflection-path code (after constraints landed). leptos_form is effectively unmaintained (last release 0.2.0-rc1, Feb 2024). Ahead: compile-time checks, enums, one validation on both sides. Biggest gaps: 4 widgets form! accepts but cannot render, per-field validators, typed dates/decimals/uuids, help text and AUTHOR-SUPPLIED widget attrs, change tracking, formset bounds (formoxus's OWN constraint attributes landed 2026-09-27)"
+description: "Formoxus vs. Django forms and leptos_form, RE-SURVEYED 2026-09-25 against the reflection-path code (after constraints landed). leptos_form is effectively unmaintained (last release 0.2.0-rc1, Feb 2024). Ahead: compile-time checks, enums, one validation on both sides. Biggest gaps: a checkbox cannot be required to be TICKED (issue #6, a real Django divergence), 3 widgets form! accepts but cannot render, per-field validators, typed dates/decimals/uuids, help text and AUTHOR-SUPPLIED widget attrs, change tracking, formset bounds (formoxus's OWN constraint attributes landed 2026-09-27)"
 metadata:
   type: project
 ---
@@ -45,6 +45,18 @@ Useful for ideas, but Django is the real bar.
    arbitrary attributes through**; fixed error markup (leptos_form has 5 error
    modes); no
    label placement options; no disabled/readonly fields; no field exclusion.
+6b. **A checkbox cannot be required to be TICKED** (issue #6, found 2026-09-27).
+   Django's `BooleanField(required=True)` means the box must be checked;
+   formoxus's `required` means presence, and for a `bool` unticked is a complete
+   answer — so `Checkbox` drops `required` on purpose and nothing enforces
+   must-agree on either side. A "I agree to the terms" box can be submitted
+   unticked and formoxus accepts it. The fix is a value constraint
+   (`ValueKind::Bool` gaining a payload, `check` + `attrs` + a compile-time gate),
+   NOT forwarding `required` — the presence sense is load-bearing elsewhere
+   (`RenderCtx.required` drives `Select`'s placeholder and `radio_group`'s refusal
+   of an `Option`), so redefining it for bools would make one word mean two
+   things depending on the field's type.
+
 7. **State:** no change tracking (Django `has_changed`/`changed_data`,
    leptos_form `field_changed_class`); no draft persistence (leptos_form
    localStorage cache); no live/blur validation.
