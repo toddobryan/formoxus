@@ -303,7 +303,7 @@ impl FormMember for VariantSet {
         // which puts `VariantSelect` above `members`.
         let my_path = qualify(prefix, &self.name);
         if !self.errors.is_empty() {
-            out.push((my_path, self.errors.clone()));
+            out.insert(my_path, self.errors.clone());
         }
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: no children, and my own errors are already out

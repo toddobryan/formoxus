@@ -22,6 +22,7 @@ use crate::wire::WireForm;
 use crate::{RenderCtx, ValuesByPath};
 use dioxus::prelude::*;
 use facet::Facet;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, future::Future, pin::Pin, rc::Rc};
 
@@ -31,12 +32,36 @@ mod state;
 pub use spec::{FieldSpec, FormSpec};
 pub use state::{FormState, empty_form, form_for};
 
-pub type FieldErrors = Vec<(String, Vec<FieldError>)>;
+/// One path, at most, per entry — every writer (`collect_errors`'s tree walk,
+/// `apply_errors`) visits a given path once. `IndexMap` over a plain
+/// `HashMap` for the same reason `FormSpec`'s own fields use it: insertion
+/// order is preserved, and `collect_errors` deliberately builds this in the
+/// same order `render` walks the tree.
+pub type FieldErrors = IndexMap<String, Vec<FieldError>>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FormErrors {
     pub form: Vec<FormError>,
     pub fields: FieldErrors,
+}
+
+impl FormErrors {
+    pub fn paths(&self) -> Vec<String> {
+        self.fields.keys().cloned().collect()
+    }
+
+    pub fn messages_at<T>(&self, path: Option<Path<T>>) -> Vec<String> {
+        match path {
+            None => self.form.iter().map(|e| e.0.clone()).collect(),
+            Some(p) => self
+                .fields
+                .get(p.as_str())
+                .into_iter()
+                .flatten()
+                .map(|e| e.0.clone())
+                .collect(),
+        }
+    }
 }
 
 // ── Button/provider slots ────────────────────────────────────────────────

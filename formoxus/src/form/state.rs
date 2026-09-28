@@ -12,7 +12,7 @@ use crate::RenderCtx;
 use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
 use crate::error::{FieldError, FormAccessError, FormError};
-use crate::form::FormErrors;
+use crate::form::{FieldErrors, FormErrors};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, FormMember, no_such_path, owns};
 
@@ -243,7 +243,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn collect_errors(&self) -> FormErrors {
-        let mut field_errors = Vec::new();
+        let mut field_errors = FieldErrors::default();
         for m in &self.members {
             m.collect_errors("", &mut field_errors);
         }

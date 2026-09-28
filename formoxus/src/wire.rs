@@ -49,7 +49,7 @@ use std::marker::PhantomData;
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::form::{FormErrors, FormSpec, form_for};
+use crate::{FieldError, FormError, Path, form::{FormErrors, FormSpec, form_for}};
 
 /// A form's mutable state, as plain data: raw values by leaf path, plus
 /// whatever anyone has objected to.
@@ -104,6 +104,17 @@ impl<T> WireForm<T> {
 
     pub fn errors(&self) -> &FormErrors {
         &self.errors
+    }
+
+    pub fn form_errors(&self) -> &[FormError] {
+        &self.errors.form
+    }
+
+    pub fn errors_at(&self, path: Path<T>) -> &[FieldError] {
+        self.errors
+            .fields
+            .get(path.as_str())
+            .map_or(&[], Vec::as_slice)
     }
 
     /// True when nothing objected. Note an empty `fields` is not the test: a

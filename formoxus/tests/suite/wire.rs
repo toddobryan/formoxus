@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{
-    FieldError, FormError, FormErrors, FormSpec, Submission, WireForm, empty_form, form, form_for,
-    path, use_form, using_fns,
+    FieldError, FieldErrors, FormError, FormErrors, FormSpec, Submission, WireForm, empty_form,
+    form, form_for, path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -46,7 +46,9 @@ fn render(app: fn() -> Element) -> String {
 fn errors_at(path: &str, message: &str) -> FormErrors {
     FormErrors {
         form: Vec::new(),
-        fields: vec![(path.to_string(), vec![FieldError(message.to_string())])],
+        fields: [(path.to_string(), vec![FieldError(message.to_string())])]
+            .into_iter()
+            .collect(),
     }
 }
 
@@ -103,7 +105,7 @@ fn applied_form_errors_reach_the_form_level_list() {
         let form = use_form(|| empty_form(form! { Contact {} }));
         form.apply_errors(&FormErrors {
             form: vec![FormError("Those credentials do not match.".into())],
-            fields: Vec::new(),
+            fields: FieldErrors::default(),
         })
         .expect("a form-level error names no path");
         form.render(using_fns! {})

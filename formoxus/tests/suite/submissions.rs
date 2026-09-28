@@ -56,9 +56,9 @@ fn form_messages(errors: &FormErrors) -> Vec<String> {
 fn messages_at(errors: &FormErrors, path: &str) -> Vec<String> {
     errors
         .fields
-        .iter()
-        .filter(|(p, _)| p == path)
-        .flat_map(|(_, errs)| errs.iter().map(|e| e.0.clone()))
+        .get(path)
+        .into_iter()
+        .flat_map(|errs| errs.iter().map(|e| e.0.clone()))
         .collect()
 }
 

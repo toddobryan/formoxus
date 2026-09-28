@@ -601,13 +601,13 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut crate::form::FieldErrors) {
-        // Clean fields contribute nothing — see the trait's contract. Pushing
+        // Clean fields contribute nothing — see the trait's contract. Inserting
         // `(path, [])` here would make `FormErrors.fields` non-empty for a form
         // that passed, so a caller could not read "did it pass?" off the shape.
         if self.errors.is_empty() {
             return;
         }
-        out.push((qualify(prefix, &self.name), self.errors.clone()));
+        out.insert(qualify(prefix, &self.name), self.errors.clone());
     }
 }
 

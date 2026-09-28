@@ -205,3 +205,40 @@ this list, and the `Prefix`-vs-`Path`-vs-bare-`Name` taxonomy needs its own
 deliberate design pass rather than being decided as a side effect of
 whatever's being worked on when it's picked up. Do it as its own pass, not
 folded into another change.
+
+**UPDATE 2026-09-28: this got built.** `Path<T>`/`path!` now exist
+(`formoxus/src/path.rs`, `formoxus-macros/src/path.rs`) — `raw: &'static str`
++ `PhantomData<fn() -> T>`, proven only by `path!`'s witness-borrow trick, and
+`WireForm`/`Submission::reject_field`/`Form::push_field_error` all take one
+instead of a bare `&str` now. `FormErrors.fields` also moved from `Vec<(String,
+Vec<FieldError>)>` to `IndexMap<String, Vec<FieldError>>` the same day, for the
+same order-preservation reason `FormSpec`'s fields use `IndexMap` — see
+[[facet_form_design_decisions]].
+
+## 4. Indexed row paths through `path!` — deferred design idea (2026-09-28)
+
+`path!(Model.venues[].city)` already compiles — `[]` names the SPEC-level row
+shape, every row. What it can't do is name ONE row: `venues[3]` (or any
+runtime index) is explicitly rejected by `spec_path.rs`'s parser, on purpose —
+"`[]` must be empty — a spec applies to every row, not one index" — because
+`path!` reuses `form!`'s spec-path grammar (`SpecPath`), and that restriction
+was correct for `form!` (a spec never means one row) but is just inherited,
+not chosen, for `path!` (a live row's path is a different kind of thing).
+
+**Why this is genuinely hard, not just unimplemented.** A row's index is
+runtime data — `Submission::reject_field`'s own doc already says as much
+("those go through `FormState::push_field_error` with a string"). No macro
+can prove `venues[3]` refers to an existing row at compile time, so a
+`path!(Model.venues[i].city)` extension could only ever compile-check the
+FIELD half (`city` exists on a row); the index half is unchecked regardless
+of syntax. And whatever it returns can't be `Path<T>` as it stands today —
+`Path<T>`'s `raw: &'static str` is *why* it's `Copy`/`Hash`/`'static`, and a
+runtime index can't live in a `&'static str` without leaking memory. A real
+version needs a second, smaller type (something like `RowPath<T>`, holding an
+owned `String` built at the call site) rather than a `Path<T>` variant.
+
+**Deliberately not started — Todd's call, 2026-09-28: "we'll come back to
+that."** No caller needs it yet (`errors.rs`'s test-local `messages_at`/`paths`
+calls, the ones that surfaced this, use plain field names like `"shape"`, not
+row paths). Pick this up once something actually needs to reject or read
+back a *specific row's* field, not before.

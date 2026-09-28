@@ -84,8 +84,9 @@ heck = { version = "0.5.0" }
 # Ordered map: preserves declaration order (so a `FormSpec`'s Debug output and
 # any future field-ordering customization are stable) while still overwriting on
 # duplicate insert, which a Vec of pairs would not. Already in the lock
-# transitively, so declaring it costs nothing to build.
-indexmap = { version = "2" }
+# transitively, so declaring it costs nothing to build. `serde`: `FormErrors`
+# (inside `WireForm`) uses it for `fields` too, and that crosses the wire.
+indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 # dev-only: `WireForm` is what crosses a server-fn boundary, so a test has to
 # prove it survives a real serializer rather than just deriving the impls.

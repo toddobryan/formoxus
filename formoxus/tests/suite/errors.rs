@@ -21,22 +21,6 @@ struct Drawing {
     shape: Shape,
 }
 
-/// Just the paths, in collected order — most assertions here don't care about
-/// the message, only about where it landed.
-fn paths(errors: &FormErrors) -> Vec<String> {
-    errors.fields.iter().map(|(p, _)| p.clone()).collect()
-}
-
-/// The messages recorded at exactly `path`, or an empty vec if it's absent.
-fn messages_at(errors: &FormErrors, path: &str) -> Vec<String> {
-    errors
-        .fields
-        .iter()
-        .filter(|(p, _)| p == path)
-        .flat_map(|(_, errs)| errs.iter().map(|e| e.0.clone()))
-        .collect()
-}
-
 fn filled_event() -> EventForCreate {
     EventForCreate {
         title: "Recital".to_string(),
@@ -77,9 +61,9 @@ fn only_the_failing_fields_appear() {
     expect_that!(form.validate(), none());
 
     let errors = form.collect_errors();
-    expect_that!(paths(&errors), elements_are![eq("location.city")]);
+    expect_that!(errors.paths(), elements_are![eq("location.city")]);
     expect_that!(
-        messages_at(&errors, "location.city"),
+        errors.messages_at(Some(path!(EventForCreate.location.city))),
         elements_are![eq("This field is required.")]
     );
 }
@@ -92,7 +76,7 @@ fn leaf_paths_are_qualified_through_nested_field_sets() {
     expect_that!(form.validate(), none());
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![
             eq("title"),
             eq("location.street"),
@@ -115,9 +99,9 @@ fn an_unchosen_enum_reports_at_its_own_path() {
     expect_that!(form.validate(), none());
 
     let errors = form.collect_errors();
-    expect_that!(paths(&errors), elements_are![eq("shape")]);
+    expect_that!(errors.paths(), elements_are![eq("shape")]);
     expect_that!(
-        messages_at(&errors, "shape"),
+        errors.messages_at(Some(path!(Drawing.shape))),
         elements_are![eq("You must choose a variant for this field.")],
         "the enum's own error belongs at `shape`, NOT under a `$Variant` segment"
     );
@@ -134,7 +118,7 @@ fn a_chosen_variants_fields_report_under_the_variant_segment() {
     expect_that!(form.validate(), none());
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![eq("shape.$Circle.radius")]
     );
 }
@@ -148,7 +132,7 @@ fn choosing_a_variant_clears_the_enums_own_error() {
     let mut form = empty_form::<Drawing>(FormSpec::default());
     form.apply_form_values(&[("name".to_string(), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
-    expect_that!(paths(&form.collect_errors()), contains(eq("shape")));
+    expect_that!(form.collect_errors().paths(), contains(eq("shape")));
 
     form.edit(&Edit::new_choose_variant("shape", Some("Circle")))
         .expect("Circle is a variant of Shape");
@@ -172,7 +156,7 @@ fn a_server_verdict_about_the_choice_itself_comes_back_out() {
         .expect("the enum's own path is a legal target");
 
     expect_that!(
-        messages_at(&form.collect_errors(), "shape"),
+        &form.collect_errors().messages_at(Some(path!(Drawing.shape))),
         elements_are![eq("That shape is not available on this plan.")]
     );
 }
@@ -186,9 +170,9 @@ fn a_server_verdict_survives_the_enum_being_unchosen() {
         .expect("the enum's own path is a legal target while unchosen");
 
     let errors = form.collect_errors();
-    expect_that!(paths(&errors), elements_are![eq("shape")]);
+    expect_that!(errors.paths(), elements_are![eq("shape")]);
     expect_that!(
-        messages_at(&errors, "shape"),
+        errors.messages_at(Some(path!(Drawing.shape))),
         elements_are![eq("Pick a shape first.")]
     );
 }
@@ -200,7 +184,7 @@ fn a_server_verdict_on_a_leaf_round_trips_at_its_own_path() {
         .expect("a qualified leaf path is a legal target");
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![eq("location.zip")],
         "a pushed error must not drag its clean siblings along"
     );
@@ -227,7 +211,7 @@ fn list_rows_report_their_own_row_keys() {
     expect_that!(form.validate(), none());
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![eq("counts.#1")]
     );
 }
@@ -278,7 +262,7 @@ fn an_enum_inside_a_variant_reports_at_its_own_nested_path() {
     expect_that!(form.validate(), none());
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![eq("outer.$First.inner")]
     );
 }
@@ -293,7 +277,7 @@ fn a_nested_enums_leaf_error_carries_both_variant_segments() {
     expect_that!(form.validate(), none());
 
     expect_that!(
-        paths(&form.collect_errors()),
+        form.collect_errors().paths(),
         elements_are![eq("outer.$First.inner.$A.x")]
     );
 }
