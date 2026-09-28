@@ -4,10 +4,13 @@ members = [
     "formoxus",
     "formoxus-macros",
     "examples",
+    "e2e",
 ]
-# `examples` is a member so it is always COMPILED and cannot rot, but it is not
-# a DEFAULT member, so a bare `cargo test` in the edit loop skips it. Reach it
-# with `--workspace` (what CI should run) or `-p formoxus-examples`.
+# `examples` and `e2e` are members so they are always COMPILED and cannot rot,
+# but neither is a DEFAULT member, so a bare `cargo test` in the edit loop skips
+# them. Reach them with `--workspace` (what CI should run) or `-p <name>`.
+# `e2e` additionally needs a browser and a running server, so its tests are
+# `#[ignore]`d: `--workspace` compiles them and runs none. `just e2e` runs them.
 default-members = [
     "formoxus",
     "formoxus-macros",

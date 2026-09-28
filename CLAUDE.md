@@ -59,7 +59,7 @@ memory files for the reasoning that shaped specific tests; there isn't yet a
 CLAUDE.md-level testing-tiers section the way `apcsp-dioxus` has one, because
 this repo has no DB/server boundary of its own to tier against.
 
-Three homes:
+Four homes:
 - `formoxus/tests/suite.rs` + `formoxus/tests/suite/` — nearly all of them, as
   modules of ONE integration target. They run against the public surface a
   dependent crate gets, so an item that is unreachable or un-nameable from
@@ -73,3 +73,24 @@ Three homes:
 - `formoxus/tests/ui/` — trybuild goldens pinning `form!`'s compile-time
   diagnostics, including spans. Regenerate with `TRYBUILD=overwrite`, then
   *read the diff*. A toolchain bump is what invalidates these.
+- `e2e/` — browser tests through `playwright-rs`, run with **`just e2e`** (which
+  builds, serves, waits and tears down) or **`just e2e-watch [filter]`** to watch
+  one happen in a real window. NOT part of `just ci`, because CI has no browser;
+  every test is `#[ignore]`d, so `cargo test --workspace` compiles them — keeping
+  selectors from rotting silently — and runs none.
+
+  They exist for what the other three structurally cannot reach. The suite
+  renders to an HTML string, which proves *markup*; only a browser proves that a
+  click lands, that a value survives `onsubmit`, or that a `pattern` actually
+  blocks a submit — and that last one is the assumption behind formoxus emitting
+  constraint attributes at all.
+
+  They drive the small single-purpose forms at `/t/<slug>` in
+  `examples/src/test_forms.rs`, **not** the gallery: the gallery is for someone
+  evaluating formoxus, these are for testing, and one feature per form is what
+  keeps selectors unambiguous. Nothing human keeps them from rotting, so a test
+  form without a test is dead weight — add them in pairs. Before writing a
+  selector, read the `get_by_label` vs `get_by_role` section of
+  `.claude/memory/e2e_harness.md`; the two differ exactly where formoxus's
+  `aria-hidden` required marker lives, and reaching for the wrong one makes
+  working code look broken.

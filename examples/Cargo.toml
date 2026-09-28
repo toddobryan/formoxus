@@ -16,7 +16,7 @@ workspace = true
 
 [dependencies]
 formoxus = { path = "../formoxus" }
-dioxus = { workspace = true, features = ["fullstack"] }
+dioxus = { workspace = true, features = ["fullstack", "router"] }
 facet = { workspace = true }
 
 # `widget_matrix` renders to a string with no browser. Kept off the wasm build
@@ -31,3 +31,6 @@ dioxus-ssr = { workspace = true }
 default = []
 web = ["dioxus/web"]
 server = ["dioxus/server"]
+# The hidden `#app-ready` marker the e2e tests wait on. Off by default so it
+# never reaches a real build; `just e2e` turns it on.
+e2e-testing = []

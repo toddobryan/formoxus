@@ -88,7 +88,6 @@ const GENDERS: &[(&str, &str)] = &[("male", "Male"), ("female", "Female"), ("oth
 fn address() -> FormSpec<Address> {
     form! {
         Address {
-            browser_validation: off,
             label_case: "label-case",
             state => {
                 widget: select {

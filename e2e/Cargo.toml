@@ -1,0 +1,17 @@
+[package]
+name = "e2e"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Browser-driving end-to-end tests for the example gallery and the test forms.
+# Kept out of the DEFAULT build graph so a plain `cargo build`/`cargo test` does
+# not pull Playwright or need a browser; `--workspace` still compiles it, which
+# is what keeps the selectors from rotting silently.
+#
+# Run with `just e2e`, which builds and serves the app first. See E2E_PLAN.md.
+
+[dependencies]
+anyhow = "1"
+playwright-rs = "0.15.1"
+tokio = { version = "1", features = ["full"] }

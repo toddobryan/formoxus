@@ -12,12 +12,14 @@ metadata:
 16 tests: 7 unit beside `attrs` in `fields.rs`, 9 end-to-end from `form!` in
 `tests/suite/constraint_attrs.rs`.
 
-**One thing is NOT rigorously verified: that a browser actually blocks submit.**
-The plan's step 5 was a manual `just serve` click-through, and it was done only
-cursorily — SSR tests prove the attribute is in the markup, not that the browser
-acts on it. That is exactly the gap `E2E_PLAN.md` exists to close, and the
-novalidate-both-ways section there is the test that would settle it. Until then,
-treat browser enforcement as assumed rather than proven.
+**Browser enforcement is now PROVEN, 2026-09-28**, by the browser tests in
+`e2e/tests/constraints.rs` — a bad `pattern`, a short `min_length` and an
+out-of-range `min` are each blocked before `onsubmit` runs, and the same values
+reach formoxus's own error rendering once `browser_validation: off` sets
+`novalidate`. That pair is also the proof that `novalidate` neutralizes these,
+which is the assumption behind emitting them ungated. `pattern` anchoring is
+checked end to end too: a value with five digits embedded in it is refused by the
+browser, matching what `check` does in Rust. See [[e2e-harness]].
 
 Originally: Todd's call, 2026-09-25, to build it as soon as `radio_group` was done.
 
