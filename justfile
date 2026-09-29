@@ -95,3 +95,16 @@ e2e-watch *args:
     # `{{{{args}}}}` BEFORE its own `--`, so a runner flag there would be read by
     # cargo instead of by the test binary.
     E2E_HEADED=1 E2E_SLOW_MO="${E2E_SLOW_MO:-150}" RUST_TEST_THREADS=1 just e2e {{args}}
+
+# Point git at the repo's committed hooks. Run once per clone.
+#
+# `.git/hooks/` is not part of the repository, so a hook left there exists on one
+# machine only — which is how an unformatted commit reached main. `core.hooksPath`
+# makes git read `.githooks/` instead, and that IS committed.
+hooks:
+    git config core.hooksPath .githooks
+    @echo "core.hooksPath -> .githooks (pre-commit: cargo fmt --all --check)"
+
+# Format in place — what the pre-commit hook tells you to run.
+fmt-fix:
+    cargo fmt --all

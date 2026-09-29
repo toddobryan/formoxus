@@ -156,7 +156,9 @@ fn a_server_verdict_about_the_choice_itself_comes_back_out() {
         .expect("the enum's own path is a legal target");
 
     expect_that!(
-        &form.collect_errors().messages_at(Some(path!(Drawing.shape))),
+        &form
+            .collect_errors()
+            .messages_at(Some(path!(Drawing.shape))),
         elements_are![eq("That shape is not available on this plan.")]
     );
 }

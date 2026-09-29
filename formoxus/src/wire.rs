@@ -49,7 +49,10 @@ use std::marker::PhantomData;
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-use crate::{FieldError, FormError, Path, form::{FormErrors, FormSpec, form_for}};
+use crate::{
+    FieldError, FormError, Path,
+    form::{FormErrors, FormSpec, form_for},
+};
 
 /// A form's mutable state, as plain data: raw values by leaf path, plus
 /// whatever anyone has objected to.

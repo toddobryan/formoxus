@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit that `cargo fmt` would change.
+#
+# Why this lives in `.githooks/` and not `.git/hooks/`: the latter is not part of
+# the repository, so it would have to be recreated by hand on every machine — and
+# this exists precisely because an unformatted commit reached `main` from one.
+# Install it once per clone with `just hooks`.
+#
+# Only `fmt` is checked, deliberately. It needs no compilation, so it costs
+# well under a second; adding clippy or the test suite would make every commit
+# slow enough to be worth bypassing, and bypassing is the failure mode a hook is
+# supposed to prevent. `just ci` stays the real gate.
+#
+# This checks the whole TREE, not just the staged files. That is the simpler and
+# stricter reading, and it matches what `just ci` does — the cost is that
+# unformatted work in progress elsewhere blocks an unrelated commit.
+#
+# `git commit --no-verify` skips this when you genuinely mean to.
+
+set -euo pipefail
+
+if ! cargo fmt --all --check >/dev/null 2>&1; then
+    echo "pre-commit: cargo fmt would change these files:" >&2
+    echo >&2
+    cargo fmt --all --check 2>&1 | grep '^Diff in' | sed 's/^/  /' >&2
+    echo >&2
+    echo "  Run 'cargo fmt --all' (or 'just fmt-fix'), re-stage, and commit again." >&2
+    echo "  To commit anyway: git commit --no-verify" >&2
+    exit 1
+fi

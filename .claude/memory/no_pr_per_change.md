@@ -29,3 +29,22 @@ So they DO still get committed and pushed, which is what keeps `.claude/memory/`
 authoritative and able to cross machines — the radio-group handover worked
 because the plan and the resume entry had been pushed. The rule is about commit
 granularity, not about keeping them out of git.
+
+
+## The pre-commit hook needs `just hooks` on each machine (2026-09-29)
+
+`cargo fmt --all --check` runs as a pre-commit hook, added after an unformatted
+commit reached `main` and turned `just ci` red. Two things to know:
+
+- **It lives in `.githooks/`, not `.git/hooks/`**, because the latter is not part
+  of the repository and so exists on one machine only — which is the problem it
+  was added to solve. Git finds it via `core.hooksPath`, which is per-clone
+  config, so **run `just hooks` once on each machine**. A fresh clone has no hook
+  until you do.
+- **`git commit --no-verify` bypasses it**, which Todd asked for explicitly:
+  work-in-progress commits should not be blocked on formatting. The hook says so
+  in its own failure message.
+
+Only `fmt` is checked, deliberately — it needs no compilation, so it costs under
+a second. Adding clippy or the tests would make every commit slow enough that
+bypassing became habit, which defeats the point. `just ci` is still the real gate.
