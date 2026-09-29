@@ -45,23 +45,6 @@ fn filled() -> HashMap<String, String> {
     ])
 }
 
-fn paths(errors: &FormErrors) -> Vec<String> {
-    errors.fields.iter().map(|(p, _)| p.clone()).collect()
-}
-
-fn form_messages(errors: &FormErrors) -> Vec<String> {
-    errors.form.iter().map(|e| e.0.clone()).collect()
-}
-
-fn messages_at(errors: &FormErrors, path: &str) -> Vec<String> {
-    errors
-        .fields
-        .get(path)
-        .into_iter()
-        .flat_map(|errs| errs.iter().map(|e| e.0.clone()))
-        .collect()
-}
-
 // ── accept ───────────────────────────────────────────────────────────────
 
 #[gtest]
@@ -87,9 +70,9 @@ fn a_missing_field_is_rejected_before_the_handler_sees_anything() {
     let errors = Submission::accept(credentials_spec(), &values)
         .expect_err("confirm_password was never sent");
 
-    expect_that!(paths(&errors), elements_are![eq("confirm_password")]);
+    expect_that!(errors.paths(), elements_are![eq("confirm_password")]);
     expect_that!(
-        messages_at(&errors, "confirm_password"),
+        errors.messages_at(Some(path!(Credentials.confirm_password))),
         elements_are![eq("This field is required.")]
     );
 }
@@ -120,7 +103,7 @@ fn the_specs_validator_runs_on_the_server_too() {
         Submission::accept(credentials_spec(), &values).expect_err("the passwords disagree");
 
     expect_that!(
-        form_messages(&errors),
+        errors.form_messages(),
         elements_are![eq("Passwords don't match.")]
     );
 }
@@ -151,9 +134,9 @@ fn a_server_verdict_lands_on_the_named_field() {
     let wire = submission.reject_field(path!(Credentials.username), "That username is taken.");
     let errors = wire.errors();
 
-    expect_that!(paths(errors), elements_are![eq("username")]);
+    expect_that!(errors.paths(), elements_are![eq("username")]);
     expect_that!(
-        messages_at(errors, "username"),
+        errors.messages_at(Some(path!(Credentials.username))),
         elements_are![eq("That username is taken.")]
     );
     expect_that!(errors.form, is_empty());
@@ -167,7 +150,7 @@ fn a_form_level_verdict_lands_in_form_with_no_field_named() {
 
     expect_that!(errors.fields, is_empty());
     expect_that!(
-        form_messages(errors),
+        errors.form_messages(),
         elements_are![eq("Those credentials don't match.")]
     );
 }
@@ -183,7 +166,7 @@ fn rejecting_reports_only_the_rejected_field() {
         "That password was found in a breach.",
     );
 
-    expect_that!(paths(wire.errors()), elements_are![eq("password")]);
+    expect_that!(wire.errors().paths(), elements_are![eq("password")]);
 }
 
 /// The values ride back with the verdict, so the client can absorb both in one

@@ -50,6 +50,15 @@ impl FormErrors {
         self.fields.keys().cloned().collect()
     }
 
+    /// The form-level messages alone — `messages_at(None)`'s `T` has nothing
+    /// to infer it from at a `None` call site, so this is the ergonomic way
+    /// to reach the same branch. Mirrors [`WireForm::form_error_messages`].
+    ///
+    /// [`WireForm::form_error_messages`]: crate::WireForm::form_error_messages
+    pub fn form_messages(&self) -> Vec<String> {
+        self.form.iter().map(|e| e.0.clone()).collect()
+    }
+
     pub fn messages_at<T>(&self, path: Option<Path<T>>) -> Vec<String> {
         match path {
             None => self.form.iter().map(|e| e.0.clone()).collect(),
