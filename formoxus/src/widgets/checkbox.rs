@@ -17,24 +17,24 @@ pub fn Checkbox(
         path,
         label,
         errors,
-        ..
+        required: _,
+        aria_invalid,
     } = props;
 
     // `required` is deliberately dropped rather than forwarded. HTML `required`
     // on a checkbox means "must be ticked", which is not what a required `bool`
     // field asks for — unticked is a complete answer. For the same reason there
     // is no ` *` marker: it would promise a rule nothing enforces.
-    // See `Input`. A checkbox has nowhere to put an invalid icon, but the
-    // attribute still drives any border or adjacent-message styling a consumer
-    // writes, and it is what a screen reader announces either way.
-    let invalid = (!errors.is_empty()).then_some("true");
 
     let input_element = rsx! {
         input {
             name: "{path}",
             r#type: "checkbox",
             checked: get_current(&path, values) == "true",
-            aria_invalid: invalid,
+            // A checkbox has nowhere to put an invalid icon, but the
+            // attribute still drives any border or adjacent-message styling a consumer
+            // writes, and it is what a screen reader announces either way.
+            aria_invalid,
             onchange: move |e: FormEvent| write_value(&path, values, e.value()),
             // Last: rsx! reads anything after a spread as children.
             ..attrs,

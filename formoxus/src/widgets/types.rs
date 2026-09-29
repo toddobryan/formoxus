@@ -153,4 +153,12 @@ pub struct FieldProps {
     // modulo weird things like not being able to mark checkboxes required
     pub required: bool,
     pub errors: Vec<FieldError>,
+    /// Present and equal to "true" only when there is an error.
+    /// `aria-invalid="false"` is NOT the neutral value — per ARIA it
+    /// asserts "checked, and passed", so an untouched form would claim to
+    /// have validated every field, and a screen reader would say so.
+    /// Stylesheets that paint a validated-and-clean state key off it too.
+    /// Absent is the only neutral state. Dioxus omits an attribute whose
+    /// value is `None`, which is what makes absence expressible at all.
+    pub aria_invalid: Option<&'static str>,
 }

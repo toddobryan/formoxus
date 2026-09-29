@@ -35,12 +35,10 @@ pub fn RadioGroup(
         label: label_text,
         required,
         errors,
+        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
-
-    // See `Input` for why this is `Option` rather than a plain bool.
-    let invalid = (!errors.is_empty()).then_some("true");
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
     // radio needs its OWN `path` to move into its own `onchange` and an rsx
@@ -64,7 +62,7 @@ pub fn RadioGroup(
                         // repeating it per input asks for one pick, not one per
                         // button.
                         required,
-                        aria_invalid: invalid,
+                        aria_invalid,
                         onchange: move |e: FormEvent| write_value(&path, values, e.value()),
                     }
                     "{choice.display}"

@@ -108,12 +108,10 @@ pub fn Select(
         label: label_text,
         required,
         errors,
+        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
-
-    // See `Input` for why this is `Option` rather than a plain bool.
-    let invalid = (!errors.is_empty()).then_some("true");
 
     rsx! {
         label { class: "form-field",
@@ -133,7 +131,7 @@ pub fn Select(
                 }
             }
             select {
-                aria_invalid: invalid,
+                aria_invalid,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `apply_form_values` would never see it.
                 name: "{path}",

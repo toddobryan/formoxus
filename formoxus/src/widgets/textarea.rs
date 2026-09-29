@@ -25,11 +25,10 @@ pub fn Textarea(
         label: label_text,
         required,
         errors,
+        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
-
-    let invalid = (!errors.is_empty()).then_some("true");
 
     rsx! {
         label { class: "form-field",
@@ -52,7 +51,7 @@ pub fn Textarea(
                 name: "{path}",
                 value: "{current}",
                 required,
-                aria_invalid: invalid,
+                aria_invalid,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);

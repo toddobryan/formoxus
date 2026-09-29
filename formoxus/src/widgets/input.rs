@@ -20,6 +20,7 @@ pub fn Input(
         label: label_text,
         required,
         errors,
+        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
@@ -42,20 +43,6 @@ pub fn Input(
     // Withholding it cost more than it bought: a field nothing could CLEAR
     // programmatically (so "reset after a successful change" became impossible),
     // and the only asymmetric input in the set.
-
-    // Present ONLY when there is an error. `aria-invalid="false"` is NOT the
-    // neutral value — per ARIA it asserts "checked, and passed", so an
-    // untouched form would claim to have validated every field, and a screen
-    // reader would say so. Stylesheets that paint a validated-and-clean state
-    // key off it too. Absent is the only neutral state. Dioxus omits an
-    // attribute whose value is `None`, which is what makes absence
-    // expressible at all.
-    //
-    // Unlike the `small` in `FieldErrors`, this is not a styling choice with a
-    // framework behind it: `aria-invalid` is the W3C ARIA attribute assistive
-    // technology reads to announce a field as errored, so it belongs here
-    // whatever CSS the consumer brings.
-    let invalid = (!errors.is_empty()).then_some("true");
 
     // A hidden widget renders BARE. The wrapper below is a `label` with a caption
     // and a required marker, which for `type="hidden"` would put visible text
@@ -97,7 +84,7 @@ pub fn Input(
                 name: "{path}",
                 value: "{current}",
                 required,
-                aria_invalid: invalid,
+                aria_invalid,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);

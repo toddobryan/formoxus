@@ -456,6 +456,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                     label: self.label(ctx.label_case),
                     required: ctx.required,
                     errors: self.errors.clone(),
+                    aria_invalid: (!self.errors.is_empty()).then_some("true"),
                 },
             }
         }

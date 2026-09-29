@@ -1,6 +1,6 @@
 ---
 name: shrink-fieldprops-idea
-description: "Todd's TODO 2026-09-26: now that widgets take an attributes map, consider moving path/required/choices into it and shrinking FieldProps to label+errors. Recorded with the obstacle each move hits — the dividing line is 'emitted without reasoning' vs 'reasoned about'"
+description: "Todd's TODO 2026-09-26: now that widgets take an attributes map, consider moving path/required/choices into it and shrinking FieldProps to label+errors. Recorded with the obstacle each move hits — the dividing line is 'emitted without reasoning' vs 'reasoned about'. The aria_invalid step DID ship 2026-09-29, as a resolved PROP not a map entry, which corrects the test this file proposed"
 metadata:
   type: project
 ---
@@ -53,7 +53,42 @@ idea. `path`, `required`, `choices` and `errors` are all reasoned about.
 `Option`, and it becomes element *content* rather than an attribute, so it is not
 a candidate either.
 
-`aria_invalid` is currently derived inside each widget from `errors.is_empty()`.
-That one IS purely emitted and is duplicated across `Input`, `Select`, `Textarea`
-and `RadioGroup` — the most defensible thing to move into the map, and a smaller
-first step than any of the three above.
+## `aria_invalid` — DONE 2026-09-29, but NOT into the map
+
+It was duplicated as `let invalid = (!errors.is_empty()).then_some("true")` in
+all five of `Input`, `Textarea`, `Checkbox`, `Select` and `RadioGroup`, and it is
+purely emitted, so it looked like the smallest first step *into the attrs map*.
+**That was wrong, and the reason matters for the rest of this idea.**
+
+It landed instead as a resolved PROP: `FieldProps::aria_invalid:
+Option<&'static str>`, derived once in `FormField::render` and forwarded by every
+widget. Two things ruled the map out:
+
+- **`RadioGroup` puts it somewhere the spread cannot reach.** `..attrs` spreads
+  onto the `<fieldset>`, while `aria-invalid` belongs on each `<input type=radio>`.
+  Via the map it would land on the group container, and `FieldErrors`'s whole
+  placement rationale — that a plain `input[aria-invalid="true"] + *` sibling
+  selector reaches the message with no framework and no class — would stop
+  working.
+- **The merge rule is caller-wins.** `ScalarWidget` lets a consumer's attribute
+  displace a derived one, which is right for `maxlength` and wrong for an
+  accessibility attribute a consumer should not be able to silently override.
+
+So "purely emitted" is necessary but NOT sufficient. The real test is also
+**whether every widget emits it on the same element the spread lands on**, and
+whether a consumer overriding it is acceptable. That kills the map for anything
+a widget places structurally rather than on its one main element.
+
+The precedent it does set is the useful half: `FieldProps` already carries
+`label` as a pre-cased `Option<String>` rather than a `LabelCase`, so
+**resolving at the boundary and handing the answer down** is the established
+shape for this struct — the same rule as [[config-cascade]]. A third tier of
+member, between "attribute in the map" and "prop the widget reasons about":
+a prop the widget merely forwards, resolved once by the form.
+
+Follow-on: the third ARIA state (`aria-invalid="false"`) is issue **#7** — it
+needs validation state, not `FieldValue`'s parse state, plus a validate-on-load
+policy decision. Also noted there: `aria_invalid` is redundant with `errors`
+today, so a hand-built `FieldProps` can hold contradictory values and nothing
+stops it (Todd flagged this as annoying, deferred) — #7 dissolves it, since
+`Some("false")` stops being derivable from an empty `errors`.

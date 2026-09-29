@@ -190,6 +190,7 @@ fn PopulatedInput() -> Element {
                 label: Some("Title".to_string()),
                 required: true,
                 errors: Vec::new(),
+                aria_invalid: None,
             },
         }
     }
@@ -210,6 +211,7 @@ fn EmptyInput() -> Element {
                 label: None,
                 required: true,
                 errors: Vec::new(),
+                aria_invalid: None,
             },
         }
     }
@@ -537,6 +539,7 @@ fn PasswordWithEcho() -> Element {
                 label: Some("Secret".to_string()),
                 required: true,
                 errors: Vec::new(),
+                aria_invalid: None,
             },
         }
         p { class: "echo", "{stored}" }
