@@ -9,7 +9,7 @@ use crate::members::{
     Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
-use crate::widgets::{VariantSelect, WidgetType};
+use crate::widgets::{FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 
@@ -178,16 +178,19 @@ impl FormMember for VariantSet {
                     }
                 }
                 VariantSelect {
-                    path: ctx.path(&self.name),
-                    // The legend above already names this group; a second copy
-                    // beside the select would just be the same word twice.
-                    label: None,
-                    required: ctx.required,
-                    errors: self.errors.clone(),
                     variants: self.variants(),
                     selected: self.chosen(),
-                    label_case: ctx.label_case,
                     on_edit: ctx.on_edit,
+                    label_case: ctx.label_case,
+                    props: FieldProps {
+                        path: ctx.path(&self.name),
+                        // The legend above already names this group; a second copy
+                        // beside the select would just be the same word twice.
+                        label: None,
+                        required: ctx.required,
+                        errors: self.errors.clone(),
+                        aria_invalid: (!self.errors.is_empty()).then_some("true"),
+                    }
                 }
                 { members.into_iter() }
             }

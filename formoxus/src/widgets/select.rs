@@ -30,6 +30,8 @@ pub fn Select(
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
+    let field_class = props.field_class();
+
     let FieldProps {
         path,
         label: label_text,
@@ -39,12 +41,6 @@ pub fn Select(
     } = props;
 
     let current = get_current(&path, values);
-
-    let field_class = if aria_invalid.is_some() {
-        "fx-form-field fx-invalid"
-    } else {
-        "fx-form-field"
-    };
 
     rsx! {
         label { class: field_class,

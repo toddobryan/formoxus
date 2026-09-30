@@ -15,6 +15,8 @@ pub fn Input(
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let field_class = props.field_class();
+
     let FieldProps {
         path,
         label: label_text,
@@ -61,15 +63,6 @@ pub fn Input(
             }
         };
     }
-
-    // Resolved rather than merged: rsx joins several `class:` entries with a
-    // space unconditionally, so a false branch leaves `class="fx-form-field "`
-    // with a trailing space in every clean field on the page.
-    let field_class = if aria_invalid.is_some() {
-        "fx-form-field fx-invalid"
-    } else {
-        "fx-form-field"
-    };
 
     rsx! {
         label { class: field_class,

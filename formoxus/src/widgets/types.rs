@@ -165,6 +165,38 @@ pub struct FieldProps {
     pub aria_invalid: Option<&'static str>,
 }
 
+impl FieldProps {
+    /// The field wrapper's classes: `fx-form-field`, plus `fx-invalid` when
+    /// there are errors to show.
+    ///
+    /// **Why this picks a whole string instead of letting `rsx!` add a class.**
+    /// The tempting version is two `class:` attributes on the element:
+    ///
+    /// ```text
+    /// label { class: "fx-form-field", class: if invalid { "fx-invalid" }, … }
+    /// ```
+    ///
+    /// `rsx!` does merge those — it joins every `class:` value with a space. But
+    /// it joins them *unconditionally*: when `invalid` is false the second value
+    /// is the empty string, and the result is `class="fx-form-field "`, with a
+    /// trailing space, on every field that has no error. Harmless to a browser,
+    /// but it is on nearly every field on every page, and it breaks any test
+    /// that matches the attribute exactly. Choosing between two complete
+    /// strings here never produces the stray space.
+    pub fn field_class(&self) -> &'static str {
+        if self.aria_invalid.is_some() {
+            "fx-form-field fx-invalid"
+        } else {
+            "fx-form-field"
+        }
+    }
+
+    /// The field wrapper's classes plus additional, space-separated classes
+    pub fn field_class_plus(&self, plus: &str) -> String {
+        format!("{} {}", self.field_class(), plus)
+    }
+}
+
 /// One of the options in a selectable list (e.g., [`super::Select`],
 /// [`super::RadioGroup`]).
 /// This is a value choice representable as a String. Contrast with

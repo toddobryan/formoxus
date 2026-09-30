@@ -338,3 +338,24 @@ fn the_group_label_is_a_legend() {
         contains_substring(r#"<legend class="fx-legend fx-field-label">State"#)
     );
 }
+
+/// The group's fieldset carries the field wrapper's class AND its own, since it
+/// is both a field and a radio group. Pinned exactly because a typo here is
+/// invisible to every other test — the legend and the radios render the same
+/// either way, and only the stylesheet notices the class it no longer matches.
+#[gtest]
+fn the_group_is_a_field_and_a_radio_group() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! {
+                Address { state => { widget: radio_group { choices: STATES } } }
+            })
+        });
+        form.render_fragment()
+    }
+    expect_that!(
+        render(App),
+        contains_substring(r#"<fieldset class="fx-form-field fx-radio-group">"#)
+    );
+}

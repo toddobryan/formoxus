@@ -2,9 +2,9 @@
 
 use dioxus::prelude::*;
 
-use crate::error::FieldError;
 use crate::label_case::{LabelCase, ToCase};
 use crate::members::Edit;
+use crate::widgets::FieldProps;
 
 use super::errors::FieldErrors;
 use super::select::ABSENT_DISPLAY;
@@ -18,27 +18,25 @@ use super::select::ABSENT_DISPLAY;
 /// [`Edit`] and rebuilds the form beneath it.
 #[component]
 pub fn VariantSelect(
-    path: String,
-    label: Option<String>,
-    required: bool,
-    errors: Vec<FieldError>,
     variants: Vec<&'static str>,
     selected: Option<String>,
+    on_edit: Callback<Edit>,
     /// The form's resolved casing, for the variant names below. A prop rather
     /// than a `defaults()` call, so the per-form tier is not skipped — see
     /// [`crate::buttons::ButtonSpec::label`].
     label_case: LabelCase,
-    on_edit: Callback<Edit>,
+    props: FieldProps,
+    #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
-    let label_text = label;
+    let field_class = props.field_class();
 
-    // From `errors` directly: this widget predates `FieldProps` and takes its
-    // pieces as separate props, so there is no resolved `aria_invalid` to read.
-    let field_class = if errors.is_empty() {
-        "fx-form-field"
-    } else {
-        "fx-form-field fx-invalid"
-    };
+    let FieldProps {
+        path,
+        label: label_text,
+        required,
+        errors,
+        aria_invalid,
+    } = props;
 
     rsx! {
         label { class: field_class,
@@ -62,11 +60,13 @@ pub fn VariantSelect(
             select {
                 class: "fx-control fx-select",
                 required,
+                aria_invalid,
                 onchange: move |e: FormEvent| {
                     let v = e.value();
                     let variant = (!v.is_empty()).then_some(v);
                     on_edit.call(Edit::new_choose_variant(&path, variant.as_deref()));
                 },
+                ..attrs,
                 // Required + unchosen: an unselectable placeholder that keeps the browser's
                 // own validation on the hook. Not required: a real "--none--" the user can
                 // pick, which routes through the empty arm above to Unchosen.

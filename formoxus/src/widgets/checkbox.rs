@@ -13,6 +13,8 @@ pub fn Checkbox(
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let field_class = props.field_class();
+
     let FieldProps {
         path,
         label,
@@ -26,12 +28,6 @@ pub fn Checkbox(
     // field asks for — unticked is a complete answer. For the same reason there
     // is no ` *` marker: it would promise a rule nothing enforces. Requiring a
     // box to be TICKED is issue #6.
-
-    let field_class = if aria_invalid.is_some() {
-        "fx-form-field fx-invalid"
-    } else {
-        "fx-form-field"
-    };
 
     // The wrapper is unconditional and the caption is not, exactly as in
     // `Input`. Until 2026-09-29 this widget wrapped an unclassed `<label>` only

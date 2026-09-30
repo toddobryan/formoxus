@@ -30,6 +30,8 @@ pub fn RadioGroup(
     // TODO: figure out where to put the attributes. Currently in the fieldset,
     //       but we might want people to be able to set attrs on each input
 
+    let field_class = props.field_class_plus("fx-radio-group");
+
     let FieldProps {
         path,
         label: label_text,
@@ -71,12 +73,6 @@ pub fn RadioGroup(
             }
         })
         .collect();
-
-    let field_class = if aria_invalid.is_some() {
-        "fx-form-field fx-radio-group fx-invalid"
-    } else {
-        "fx-form-field fx-radio-group"
-    };
 
     rsx! {
         fieldset {
