@@ -62,10 +62,10 @@ mod wire;
 
 /// Render a component to HTML, with a real Dioxus runtime behind it.
 ///
-/// Every render assertion has to come through here now. `FormState::render` takes a
-/// `ValuesByPath`, which is a `Store`, which only `use_store` can mint — and
-/// that's a hook, so it needs a live runtime. Rendering stopped being a pure
-/// function of the form when the values moved into a store.
+/// Every render assertion has to come through here now. `FormState::render` takes
+/// a `ValuesStore`, which only `use_store` can mint — and that's a hook, so it
+/// needs a live runtime. Rendering stopped being a pure function of the form when
+/// the values moved into a store.
 pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();

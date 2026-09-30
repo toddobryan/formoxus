@@ -6,13 +6,12 @@ use crate::error::{FieldError, FormAccessError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
-    variant_segment,
+    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    qualify, variant_segment,
 };
 use crate::widgets::{VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
-use std::collections::HashMap;
 
 /// The enum variant at a particular point
 ///
@@ -169,12 +168,12 @@ impl FormMember for VariantSet {
             }
         };
         rsx! {
-            fieldset {
+            fieldset { class: "fx-group fx-variant-set",
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend {
+                    legend { class: "fx-legend fx-field-label",
                         "{text}"
                         if ctx.required {
-                            span { class: "required", aria_hidden: "true", " *" }
+                            span { class: "fx-required", aria_hidden: "true", " *" }
                         }
                     }
                 }
@@ -317,7 +316,7 @@ impl FormMember for VariantSet {
         !matches!(self.choice, VariantChoice::Unchosen)
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: nothing to apply into
         };

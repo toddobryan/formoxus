@@ -569,7 +569,7 @@ mod tests {
 
     #[gtest]
     fn an_arbitrary_expression_is_accepted_as_a_list() {
-        // Whatever it is, it only has to be `IntoIterator<Item: Into<SelectChoice>>`
+        // Whatever it is, it only has to be `IntoIterator<Item: Into<Choice>>`
         // at the call site — the macro never inspects it.
         let spec = parse(quote! { Address { state => { widget: select { choices: states() } } } })
             .unwrap();

@@ -11,7 +11,7 @@ use crate::buttons::ButtonSpec;
 use crate::error::FormError;
 use crate::fields::Constraints;
 use crate::label_case::LabelCase;
-use crate::widgets::{SelectChoice, WidgetType};
+use crate::widgets::{Choice, WidgetType};
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
@@ -48,7 +48,7 @@ pub struct FieldSpec {
     /// **Not on `ValueKind` either** — choices are presentation, so swapping a
     /// select for a radio group must not change what the value parses as. See
     /// `.claude/memory/choice_fields_design.md`.
-    pub choices: Option<Vec<SelectChoice>>,
+    pub choices: Option<Vec<Choice>>,
 }
 
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
@@ -102,7 +102,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     pub fn with_choices(
         mut self,
         path: &str,
-        choices: impl IntoIterator<Item = impl Into<SelectChoice>>,
+        choices: impl IntoIterator<Item = impl Into<Choice>>,
     ) -> Self {
         self.field(path).choices = Some(choices.into_iter().map(Into::into).collect());
         self

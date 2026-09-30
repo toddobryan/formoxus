@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::ValuesByPath;
+use crate::ValuesStore;
 
 /// This path's current raw value, or `""` if the map has no entry for it.
 ///
@@ -16,7 +16,7 @@ use crate::ValuesByPath;
 /// after mount reveals leaves that were never populated, and an absent key
 /// reads as empty, which is the same "empty IS absence" rule `apply_leaves`
 /// follows.
-pub fn get_current(path: &str, values: ValuesByPath) -> String {
+pub fn get_current(path: &str, values: ValuesStore) -> String {
     let slot = values.get_unchecked(path.to_string());
     slot.try_read().map(|v| v.clone()).unwrap_or_default()
 }
@@ -26,7 +26,7 @@ pub fn get_current(path: &str, values: ValuesByPath) -> String {
 /// `pub` for the same reason as [`get_current`]: a custom widget has to be able
 /// to write, and the insert-vs-set distinction is not something each one should
 /// have to rediscover.
-pub fn write_value(path: &str, mut values: ValuesByPath, raw: String) {
+pub fn write_value(path: &str, mut values: ValuesStore, raw: String) {
     let populated = values.peek().contains_key(path);
     if populated {
         values.get_unchecked(path.to_string()).set(raw);

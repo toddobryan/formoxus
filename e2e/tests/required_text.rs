@@ -51,7 +51,7 @@ async fn browser_validation_blocks_an_empty_required_field() -> Result<()> {
         .to_have_text("")
         .await?;
     // And formoxus never got to report it either — the browser got there first.
-    expect(s.page.locator(".field-error"))
+    expect(s.page.locator(".fx-field-error"))
         .to_have_count(0)
         .await?;
     s.close().await
@@ -86,7 +86,7 @@ async fn novalidate_lets_formoxus_report_the_empty_field() -> Result<()> {
         .locator("button[type=\"submit\"]")
         .click(None)
         .await?;
-    expect(s.page.locator(".field-error"))
+    expect(s.page.locator(".fx-field-error"))
         .to_contain_text("required")
         .await?;
     // The submit was rejected by formoxus, so no model was recorded.

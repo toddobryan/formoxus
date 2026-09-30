@@ -116,12 +116,12 @@ must not live on `WidgetType`.** This is the open decision.
 ### Option A — `fn` pointer, plus `Provider` for the fetched case
 
 ```rust
-fn(&ValuesByPath) -> Vec<Choice>   // + a `name: &'static str` for Debug
+fn(&ValuesStore) -> Vec<Choice>   // + a `name: &'static str` for Debug
 ```
 
 A plain fn pointer, exactly like `Custom`'s `render`: `Copy`, clones trivially,
 compares by address, and `Debug`s via the name the macro fills in. It cannot
-capture — but it *receives* the values store (`ValuesByPath =
+capture — but it *receives* the values store (`ValuesStore =
 Store<HashMap<String, String>>`), so it can read sibling fields and
 re-evaluate. That covers (1) and (3) with the derives intact.
 

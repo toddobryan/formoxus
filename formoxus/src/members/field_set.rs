@@ -5,11 +5,11 @@ use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
+    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    qualify,
 };
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
-use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct FieldSet {
@@ -35,9 +35,9 @@ impl FormMember for FieldSet {
         let nested = ctx.nested(&self.name);
         let members_rendered = self.members.iter().map(|m| m.render(&nested));
         rsx! {
-            fieldset {
+            fieldset { class: "fx-group fx-field-set",
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { "{text}"}
+                    legend { class: "fx-legend fx-field-label", "{text}" }
                 }
                 { members_rendered.into_iter() }
             }
@@ -78,7 +78,7 @@ impl FormMember for FieldSet {
         }
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
         for m in &mut self.members {
             m.apply_leaves(&nested, values);

@@ -5,13 +5,11 @@
 //! borrow, and neither resolves inside the library itself. A test here is the
 //! only place the expansion is exercised as a caller meets it.
 
-use std::collections::HashMap;
-
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{
     FieldError, FieldErrors, FormError, FormErrors, FormSpec, Submission, WireForm, empty_form,
-    form, form_for, path, use_form, using_fns,
+    form, form_for, members::ValuesByPath, path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -167,10 +165,9 @@ fn absorb_replaces_values_the_server_normalized() {
         let form = use_form(|| empty_form(form! { Contact {} }));
         formoxus::widgets::write_value("email", form.values(), "  ADA@Example.COM ".to_string());
 
-        let normalized: HashMap<String, String> =
-            [("email".to_string(), "ada@example.com".to_string())]
-                .into_iter()
-                .collect();
+        let normalized: ValuesByPath = [("email".to_string(), "ada@example.com".to_string())]
+            .into_iter()
+            .collect();
         form.absorb(WireForm::new(normalized, FormErrors::default()))
             .expect("email is a field of this form");
 
@@ -187,7 +184,7 @@ fn absorb_applies_values_and_errors_in_one_pass() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        let values: HashMap<String, String> = [("name".to_string(), "Ada".to_string())]
+        let values: ValuesByPath = [("name".to_string(), "Ada".to_string())]
             .into_iter()
             .collect();
         form.absorb(WireForm::new(

@@ -4,9 +4,10 @@ use super::models::{Location, Shape};
 use super::{Harness, new_since};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::members::ValuesByPath;
 use formoxus::*;
 use googletest::prelude::*;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Quiz {
@@ -162,7 +163,7 @@ fn enum_rows_are_pinned_by_the_value() {
 #[gtest]
 fn editing_one_row_leaves_the_others_alone() {
     let mut form = form_for(&venues(), FormSpec::default());
-    form.apply(&HashMap::from([(
+    form.apply(&IndexMap::from([(
         "places.#1.city".to_string(),
         "Ogdenville".to_string(),
     )]));
@@ -180,7 +181,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     // here would drop every row on the floor. Swap it once step 4 lands —
     // that substitution is a good check that lengths really are plumbed.
     let form = form_for(&venues(), FormSpec::default());
-    let collected: HashMap<String, String> = form.leaves().into_iter().collect();
+    let collected: ValuesByPath = form.leaves().into_iter().collect();
 
     let mut reloaded = form_for(&venues(), FormSpec::default());
     reloaded.apply(&collected);
@@ -194,7 +195,7 @@ fn create_mode_yields_no_rows_yet() {
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>(FormSpec::default());
-    form.apply(&HashMap::from([(
+    form.apply(&IndexMap::from([(
         "title".to_string(),
         "Unit 1".to_string(),
     )]));
@@ -443,7 +444,7 @@ fn each_row_renders_inside_its_own_wrapper() {
     // diffing behaviour, which needs a widget that can dispatch `AddRow`
     // before it can be driven. This guards the structure the key rides on.
     let html = super::render_to_html(QuizForm);
-    expect_that!(html.matches(r#"<div class="form-row">"#).count(), eq(2));
+    expect_that!(html.matches(r#"<div class="fx-form-row">"#).count(), eq(2));
     expect_that!(html, contains_substring(r#"name="answers.#0""#));
     expect_that!(html, contains_substring(r#"name="answers.#1""#));
 }
@@ -543,7 +544,10 @@ fn a_list_renders_its_own_label() {
     // Until the list got a `fieldset`, no container but `FieldSet` rendered its
     // label, so `answers` appeared on the page as an unexplained stack of inputs.
     let html = super::render_to_html(QuizForm);
-    expect_that!(html, contains_substring("<legend>Answers</legend>"));
+    expect_that!(
+        html,
+        contains_substring(r#"<legend class="fx-legend fx-field-label">Answers</legend>"#)
+    );
 }
 
 #[gtest]

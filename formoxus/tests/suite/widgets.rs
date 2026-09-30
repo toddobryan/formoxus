@@ -364,7 +364,10 @@ fn an_errored_field_marks_its_widget_aria_invalid() {
     // `input[aria-invalid="true"] + *` sibling selector can reach it. Nesting
     // it any deeper would force every consumer to invent a class on the input
     // to style the error state.
-    expect_that!(html, contains_substring(r#"/><ul class="field-errors">"#));
+    expect_that!(
+        html,
+        contains_substring(r#"/><ul class="fx-field-errors">"#)
+    );
 }
 
 #[gtest]

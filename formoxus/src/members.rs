@@ -4,7 +4,8 @@
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use indexmap::IndexMap;
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 mod field_set;
 mod list_set;
@@ -39,7 +40,7 @@ pub trait FormMember: Debug {
     /// The reverse of [`collect_leaves`](Self::collect_leaves): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>);
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath);
     fn validate(&mut self);
     fn has_errors(&self) -> bool;
     fn clone_box(&self) -> Box<dyn FormMember>;
@@ -204,9 +205,16 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
     }
 }
 
-/// The live raw values, keyed by qualified path — what `leaves()` produces and
-/// what `apply()` consumes, held in a store so a write touches one input.
-pub type ValuesByPath = Store<HashMap<String, String>>;
+/// The live raw values, keyed by qualified path — what `leaves()` produces
+/// and what `apply()` consumes.
+pub type ValuesByPath = IndexMap<String, String>;
+
+/// A [`std::collections::HashMap`] equivalent to [`ValuesByPath`] held in
+/// a store so a write touches one input. The two maps are different,
+/// because [`ValuesByPath`] maintains insertion order, but
+/// [`struct@dioxus_stores::Store`] doesn't support [`indexmap::IndexMap`], just
+/// [`std::collections::HashMap`] and a few others.
+pub type ValuesStore = Store<HashMap<String, String>>;
 
 /// What a member needs in order to render: where it sits in the path tree,
 /// where the live values are, and whether the browser should treat its leaves
@@ -226,7 +234,7 @@ pub type ValuesByPath = Store<HashMap<String, String>>;
 #[derive(Clone, Debug)]
 pub struct RenderCtx {
     pub prefix: String,
-    pub values: ValuesByPath,
+    pub values: ValuesStore,
     pub required: bool,
     pub on_edit: Callback<Edit>,
     /// Already resolved — the cascade is settled once, where the ctx is built,
@@ -238,7 +246,7 @@ pub struct RenderCtx {
 impl RenderCtx {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionMember` says otherwise.
-    pub fn root(values: ValuesByPath, on_edit: Callback<Edit>, label_case: LabelCase) -> Self {
+    pub fn root(values: ValuesStore, on_edit: Callback<Edit>, label_case: LabelCase) -> Self {
         Self {
             prefix: String::new(),
             values,

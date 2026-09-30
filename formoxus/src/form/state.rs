@@ -3,7 +3,8 @@
 //! reactivity — testable on its own. [`super::Form`] is the live wrapper a
 //! page actually holds.
 
-use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
+use std::collections::HashMap;
+use std::{fmt::Debug, marker::PhantomData};
 
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
@@ -14,7 +15,7 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::{FieldErrors, FormErrors};
 use crate::label_case::LabelCase;
-use crate::members::{Edit, FormMember, no_such_path, owns};
+use crate::members::{Edit, FormMember, ValuesByPath, no_such_path, owns};
 
 use super::FormSpec;
 
@@ -125,10 +126,35 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         out
     }
 
+    /// A [`ValuesStore`](crate::ValuesStore)'s contents as a [`ValuesByPath`],
+    /// ordered by the member tree rather than by the map's hashing.
+    ///
+    /// The bridge every read of the live values crosses, because the store's map
+    /// and [`ValuesByPath`] cannot be the same type — see
+    /// [`ValuesStore`](crate::ValuesStore). Takes its KEYS and their order from
+    /// [`leaves`](Self::leaves) and its VALUES from the store, which is the only
+    /// way to get both: the schema knows the order, the store knows what the
+    /// user typed.
+    ///
+    /// Two things follow from taking the keys from the schema. A path the store
+    /// holds but the schema does not is dropped — those are the stale keys an
+    /// undone variant choice leaves behind, which nothing reads. And a path the
+    /// schema has but the store does not arrives as `""`, which is the same
+    /// "absent IS empty" rule [`apply`](Self::apply) already follows.
+    pub(crate) fn ordered_values(&self, store: &HashMap<String, String>) -> ValuesByPath {
+        self.leaves()
+            .into_iter()
+            .map(|(path, _)| {
+                let raw = store.get(&path).cloned().unwrap_or_default();
+                (path, raw)
+            })
+            .collect()
+    }
+
     /// Take raw input values back in, keyed by the same qualified paths
     /// [`leaves`](Self::leaves) hands out. Call this on submit, before
     /// `validate()`.
-    pub fn apply(&mut self, values: &HashMap<String, String>) {
+    pub fn apply(&mut self, values: &ValuesByPath) {
         for m in &mut self.members {
             m.apply_leaves("", values);
         }
@@ -140,7 +166,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// [`leaves`](Self::leaves) emitted — so no per-field signal is needed to
     /// track edits: the DOM already did it.
     pub fn apply_form_values(&mut self, values: &[(String, String)]) {
-        let map: HashMap<String, String> = values.iter().cloned().collect();
+        let map: ValuesByPath = values.iter().cloned().collect();
         self.apply(&map);
     }
 
@@ -211,7 +237,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             || rsx! {},
             |t| {
                 rsx! {
-                    h2 { class: "form-title", "{t}" }
+                    h2 { class: "fx-form-title", "{t}" }
                 }
             },
         )
@@ -230,10 +256,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         } else {
             rsx! {
                 ul {
-                    class: "form-errors",
+                    class: "fx-form-errors",
                     for e in self.errors.clone() {
                         li {
-                            class: "form-error",
+                            class: "fx-form-error",
                             "{e.0}"
                         }
                     }
@@ -253,7 +279,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    pub fn as_hash_map(&self) -> HashMap<String, String> {
+    pub fn as_values(&self) -> ValuesByPath {
         self.leaves().into_iter().collect()
     }
 }

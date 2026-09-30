@@ -1,9 +1,9 @@
 //! `""` IS absence, at both boundaries.
 
 use facet::Facet;
-use formoxus::*;
+use formoxus::{members::ValuesByPath, *};
 use googletest::prelude::*;
-use std::{collections::HashMap, fmt::Debug};
+use std::fmt::Debug;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Optional {
@@ -21,7 +21,7 @@ fn through_the_dom<T>(form: &FormState<T>, mut reloaded: FormState<T>) -> Option
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
-    let collected: HashMap<String, String> = form.leaves().into_iter().collect();
+    let collected: ValuesByPath = form.leaves().into_iter().collect();
     reloaded.apply(&collected);
     reloaded.validate()
 }

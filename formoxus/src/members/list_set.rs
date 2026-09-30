@@ -10,13 +10,12 @@ use crate::error::{FieldError, FormAccessError, FormError};
 use crate::form::FieldErrors;
 use crate::label_case::LabelCase;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, default_label, ensure_owned, no_such_path, owns, qualify,
-    row_segment,
+    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    qualify, row_segment,
 };
 use crate::widgets::{AddRowButton, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
-use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
@@ -109,9 +108,9 @@ impl FormMember for ListSet {
         // count, so marking a list required would be a promise `validate()`
         // doesn't keep.
         rsx! {
-            fieldset {
+            fieldset { class: "fx-group fx-list-set",
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { "{text}" }
+                    legend { class: "fx-legend fx-field-label", "{text}" }
                 }
                 for (index, row) in self.rows.iter().enumerate() {
                     // Keyed by the row's own name, which is stable across
@@ -120,7 +119,7 @@ impl FormMember for ListSet {
                     // re-render every row below it; with one it moves the nodes
                     // it already has. The wrapper exists because a key has to sit
                     // on an element, and it is what pairs a row with its widget.
-                    div { class: "form-row", key: "{row.name()}",
+                    div { class: "fx-form-row", key: "{row.name()}",
                         { row.render(&nested) }
                         RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit }
                     }
@@ -148,7 +147,7 @@ impl FormMember for ListSet {
         }
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
         for r in &mut self.rows {
             r.apply_leaves(&nested, values);

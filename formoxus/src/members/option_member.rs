@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use dioxus::core::Element;
 
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
-use crate::members::{Edit, FieldSpecs};
+use crate::members::{Edit, FieldSpecs, ValuesByPath};
 use crate::{FormMember, RenderCtx};
 
 #[derive(Clone, Debug)]
@@ -40,7 +38,7 @@ impl FormMember for OptionMember {
         self.inner.collect_errors(prefix, out);
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
         self.inner.apply_leaves(prefix, values);
     }
 

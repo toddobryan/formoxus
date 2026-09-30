@@ -3,82 +3,9 @@
 use dioxus::prelude::*;
 
 use super::errors::FieldErrors;
-use super::types::FieldProps;
+use super::types::{Choice, FieldProps};
 use super::values::{get_current, write_value};
-use crate::ValuesByPath;
-
-/// One option in a [`Select`].
-#[derive(Clone, Debug, PartialEq)]
-pub struct SelectChoice {
-    /// The raw string written into the value map, so it has to be exactly what
-    /// `parse_scalar` expects for this field's type — `"true"`, not `"True"`.
-    /// That the two can differ at all is why this isn't just a `Vec<String>`.
-    pub value: String,
-    /// What the user reads.
-    pub display: String,
-}
-
-impl SelectChoice {
-    pub fn new(value: impl Into<String>, display: impl Into<String>) -> Self {
-        Self {
-            value: value.into(),
-            display: display.into(),
-        }
-    }
-}
-
-// A choice list is usually written as a literal table, and `SelectChoice` holds
-// `String`s, so it cannot be a `const` array. These conversions are what let the
-// list be a plain `&[(&str, &str)]` — which CAN be `const` — and still arrive as
-// choices. The borrowed-tuple impl exists because iterating a slice yields
-// references, so `STATES.iter()` would otherwise miss.
-impl From<(&str, &str)> for SelectChoice {
-    fn from((value, display): (&str, &str)) -> Self {
-        Self::new(value, display)
-    }
-}
-
-impl From<&(&str, &str)> for SelectChoice {
-    fn from(pair: &(&str, &str)) -> Self {
-        Self::from(*pair)
-    }
-}
-
-impl From<(String, String)> for SelectChoice {
-    fn from((value, display): (String, String)) -> Self {
-        Self::new(value, display)
-    }
-}
-
-/// A choice whose display text IS its value — `"Alabama"` rather than
-/// `("AL", "Alabama")`.
-impl From<&str> for SelectChoice {
-    fn from(both: &str) -> Self {
-        Self::new(both, both)
-    }
-}
-
-impl From<&&str> for SelectChoice {
-    fn from(both: &&str) -> Self {
-        Self::new(*both, *both)
-    }
-}
-
-impl From<String> for SelectChoice {
-    fn from(both: String) -> Self {
-        Self::new(both.clone(), both)
-    }
-}
-
-/// The three states of an `Option<bool>`, minus the absent one — that comes
-/// from `Select`'s own "no value" option, so it is spelled in exactly one
-/// place rather than once per caller.
-pub(super) fn bool_choices() -> Vec<SelectChoice> {
-    vec![
-        SelectChoice::new("true", "True"),
-        SelectChoice::new("false", "False"),
-    ]
-}
+use crate::ValuesStore;
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
 ///
@@ -98,8 +25,8 @@ pub(super) fn bool_choices() -> Vec<SelectChoice> {
 /// nothing and loses the value.
 #[component]
 pub fn Select(
-    values: ValuesByPath,
-    choices: Vec<SelectChoice>,
+    values: ValuesStore,
+    choices: Vec<Choice>,
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
@@ -113,24 +40,31 @@ pub fn Select(
 
     let current = get_current(&path, values);
 
+    let field_class = if aria_invalid.is_some() {
+        "fx-form-field fx-invalid"
+    } else {
+        "fx-form-field"
+    };
+
     rsx! {
-        label { class: "form-field",
+        label { class: field_class,
             if let Some(text) = label_text {
                 // The marker is INSIDE the label span, not a sibling: a
-                // consumer who makes `.field-label` a block — the natural
+                // consumer who makes `.fx-field-label` a block — the natural
                 // choice above an input — would otherwise push a lone asterisk
                 // onto its own line. `aria-hidden` because it is a VISUAL
                 // convention only; `required` on the input is what tells a
                 // screen reader, so the asterisk would just be noise in the
                 // accessible name.
-                span { class: "field-label",
+                span { class: "fx-field-label",
                     "{text}"
                     if required {
-                        span { class: "required", aria_hidden: "true", " *" }
+                        span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
             }
             select {
+                class: "fx-control fx-select",
                 aria_invalid,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `apply_form_values` would never see it.

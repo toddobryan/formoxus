@@ -1,9 +1,11 @@
 //! What a widget IS, as opposed to what it renders: the widget
 //! vocabulary `form!` speaks, and the two prop bundles every input takes.
+//! This includes [`Choice`], which represents one of the legal values
+//! a widget can hold.
 
 use dioxus::prelude::*;
 
-use crate::ValuesByPath;
+use crate::ValuesStore;
 use crate::error::FieldError;
 
 #[derive(Clone)]
@@ -88,7 +90,7 @@ impl PartialEq for WidgetType {
 /// strings through `values`, exactly as `Input` does.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WidgetProps {
-    pub values: ValuesByPath,
+    pub values: ValuesStore,
     pub props: FieldProps,
     /// Pass-through attributes for the element this widget puts them on. A
     /// custom widget decides that for itself, the same way each built-in does.
@@ -161,4 +163,77 @@ pub struct FieldProps {
     /// Absent is the only neutral state. Dioxus omits an attribute whose
     /// value is `None`, which is what makes absence expressible at all.
     pub aria_invalid: Option<&'static str>,
+}
+
+/// One of the options in a selectable list (e.g., [`super::Select`],
+/// [`super::RadioGroup`]).
+/// This is a value choice representable as a String. Contrast with
+/// [`crate::VariantChoice`], which specifies the SHAPE of the data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Choice {
+    /// The raw string written into the value map, so it has to be exactly what
+    /// `parse_scalar` expects for this field's type — `"true"`, not `"True"`.
+    /// That the two can differ at all is why this isn't just a `Vec<String>`.
+    pub value: String,
+    /// What the user reads.
+    pub display: String,
+}
+
+impl Choice {
+    pub fn new(value: impl Into<String>, display: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            display: display.into(),
+        }
+    }
+}
+
+// A choice list is usually written as a literal table, and `Choice` holds
+// `String`s, so it cannot be a `const` array. These conversions are what let the
+// list be a plain `&[(&str, &str)]` — which CAN be `const` — and still arrive as
+// choices. The borrowed-tuple impl exists because iterating a slice yields
+// references, so `STATES.iter()` would otherwise miss.
+impl From<(&str, &str)> for Choice {
+    fn from((value, display): (&str, &str)) -> Self {
+        Self::new(value, display)
+    }
+}
+
+impl From<&(&str, &str)> for Choice {
+    fn from(pair: &(&str, &str)) -> Self {
+        Self::from(*pair)
+    }
+}
+
+impl From<(String, String)> for Choice {
+    fn from((value, display): (String, String)) -> Self {
+        Self::new(value, display)
+    }
+}
+
+/// A choice whose display text IS its value — `"Alabama"` rather than
+/// `("AL", "Alabama")`.
+impl From<&str> for Choice {
+    fn from(both: &str) -> Self {
+        Self::new(both, both)
+    }
+}
+
+impl From<&&str> for Choice {
+    fn from(both: &&str) -> Self {
+        Self::new(*both, *both)
+    }
+}
+
+impl From<String> for Choice {
+    fn from(both: String) -> Self {
+        Self::new(both.clone(), both)
+    }
+}
+
+/// The two choices for a `bool` field. If used in a [`super::Select`]
+/// for an `Option<bool>` field, the [`super::Select`] provides the
+/// "no value" choice itself.
+pub(super) fn bool_choices() -> Vec<Choice> {
+    vec![Choice::new("true", "True"), Choice::new("false", "False")]
 }

@@ -19,7 +19,7 @@ use crate::label_case::LabelCase;
 use crate::members::Edit;
 use crate::path::Path;
 use crate::wire::WireForm;
-use crate::{RenderCtx, ValuesByPath};
+use crate::{RenderCtx, ValuesStore};
 use dioxus::prelude::*;
 use facet::Facet;
 use indexmap::IndexMap;
@@ -208,7 +208,7 @@ where
 /// The value store on its own, seeded from a state's leaves.
 ///
 /// The low-level half of [`use_form`], which is what a page normally wants.
-pub fn use_form_values<T>(form: &FormState<T>) -> ValuesByPath
+pub fn use_form_values<T>(form: &FormState<T>) -> ValuesStore
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
@@ -227,10 +227,10 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// nowhere but here. That's why it's `FormState` and not `FormSchema`, and
     /// why it's a `Signal`: a structural edit rebuilds it and the page has to
     /// re-render.
-    state: Signal<FormState<T>>,
+    state_signal: Signal<FormState<T>>,
     /// Live raw values by qualified path. Changes on every keystroke, and
     /// survives a schema rebuild because paths are stable under one.
-    values: ValuesByPath,
+    values_store: ValuesStore,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
     /// widget layer stay ignorant of `T` — [`RenderCtx`] can't be generic
     /// without making every member type generic too.
@@ -242,7 +242,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// STRUCTURAL edits too — rows added to a `Vec`, a variant chosen. Those
     /// live in the state and nowhere else, so restoring only the raw strings
     /// would leave a form with the right values in the wrong shape.
-    initial: Signal<FormState<T>>,
+    initial_signal: Signal<FormState<T>>,
 }
 
 // Hand-written, not derived: `#[derive(Copy)]` would add a spurious `T: Copy`
@@ -270,7 +270,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// browser would otherwise gate submit first and `onsubmit` would never
     /// fire. See [the `defaults` module](mod@crate::defaults).
     pub fn use_browser_validation(&self) -> bool {
-        self.state
+        self.state_signal
             .peek()
             .use_browser_validation()
             .unwrap_or_else(|| crate::defaults::defaults().use_browser_validation)
@@ -280,20 +280,20 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// cascade applied: what the form stated, else the app-wide
     /// [`Formoxus`](crate::Formoxus), else the built-in.
     pub fn label_case(&self) -> LabelCase {
-        self.state
+        self.state_signal
             .peek()
             .label_case()
             .unwrap_or_else(|| crate::defaults::defaults().label_case)
     }
 
-    pub fn values(&self) -> ValuesByPath {
-        self.values
+    pub fn values(&self) -> ValuesStore {
+        self.values_store
     }
 
     /// The state as it currently stands. Reading this subscribes the caller to
     /// *structural* changes.
     pub fn state(&self) -> ReadSignal<FormState<T>> {
-        self.state.into()
+        self.state_signal.into()
     }
 
     /// The whole form — title, fields, errors, button row — with the handlers
@@ -312,8 +312,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         reason = "`using_fns!` builds this at the call site for this one call; taking it by value is the honest signature even though the body only reads it"
     )]
     pub fn render(&self, fns: Fns<T>) -> Element {
-        let ctx = RenderCtx::root(self.values, self.on_edit, self.label_case());
-        let state = self.state.read();
+        let ctx = RenderCtx::root(self.values_store, self.on_edit, self.label_case());
+        let state = self.state_signal.read();
         let buttons = state.buttons().to_vec();
         let problems = fns.reconcile(&buttons);
 
@@ -331,7 +331,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
         rsx! {
             div {
-                class: "form",
+                class: "fx-form",
                 { state.render_title() }
                 form {
                     // Dioxus omits a boolean attribute whose value is false,
@@ -378,7 +378,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                     button {
                         key: "{b.name}",
                         r#type: "{b.ty.html_type()}",
-                        class: "{b.ty.default_class()}",
+                        class: "{b.ty.classes()}",
                         // A button with nothing behind it is inert rather than
                         // absent: omitting it would hide the mistake, and a
                         // live `submit` with no handler would reload the page.
@@ -400,35 +400,35 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .collect::<Vec<_>>();
         rsx! {
             // A grouping element so the button row is addressable as one
-            // thing: `.formoxus-buttons` is the hook for laying it out, and
+            // thing: `.fx-buttons` is the hook for laying it out, and
             // for opting its buttons out of any full-width rule a consumer's
             // stylesheet applies to form widgets.
-            div { class: "formoxus-buttons", { rendered.into_iter() } }
+            div { class: "fx-buttons", { rendered.into_iter() } }
         }
     }
 
     pub fn render_fragment(&self) -> Element {
-        self.state.read().render_fragment(&RenderCtx::root(
-            self.values,
+        self.state_signal.read().render_fragment(&RenderCtx::root(
+            self.values_store,
             self.on_edit,
             self.label_case(),
         ))
     }
 
     pub fn render_title(&self) -> Element {
-        self.state.read().render_title()
+        self.state_signal.read().render_title()
     }
 
     pub fn render_fields(&self) -> Element {
-        self.state.read().render_fields(&RenderCtx::root(
-            self.values,
+        self.state_signal.read().render_fields(&RenderCtx::root(
+            self.values_store,
             self.on_edit,
             self.label_case(),
         ))
     }
 
     pub fn render_errors(&self) -> Element {
-        self.state.read().render_errors()
+        self.state_signal.read().render_errors()
     }
 
     /// Add a form-level error — one that belongs to the form as a whole rather
@@ -447,7 +447,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// does: it keeps `&self` here, which is what lets `Form` stay `Copy` and
     /// drop into an event handler.
     pub fn push_error(&self, error: FormError) {
-        let mut state = self.state;
+        let mut state = self.state_signal;
         state.write().errors.push(error);
     }
 
@@ -472,7 +472,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// only the runtime knows, so those go through
     /// [`FormState::push_field_error`] with a string.
     pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
-        let mut state = self.state;
+        let mut state = self.state_signal;
         state.write().push_field_error(path.as_str(), message)
     }
 
@@ -492,7 +492,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// **Cleared by the next [`validate`](Self::validate)**, like every other
     /// pushed error.
     pub fn apply_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
-        let mut state = self.state;
+        let mut state = self.state_signal;
         {
             let mut state = state.write();
             state.errors.clone_from(&errors.form);
@@ -511,9 +511,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// [`Form`] nor [`FormState`] can cross one — see [`crate::wire`] for why
     /// the spec travels as code instead.
     pub fn to_wire(&self) -> WireForm<T> {
+        // From the STORE, not from `state.as_values()`. The store is what the
+        // user has typed; the state holds whatever the last `apply` put there,
+        // so reading the state would ship a payload missing every edit since.
+        let state = self.state_signal.read();
         WireForm::new(
-            self.values.read().clone(),
-            self.state.read().collect_errors(),
+            state.ordered_values(&self.values_store.read()),
+            state.collect_errors(),
         )
     }
 
@@ -539,7 +543,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            crate::widgets::write_value(path, self.values, raw.clone());
+            crate::widgets::write_value(path, self.values_store, raw.clone());
         }
         self.apply_errors(wire.errors())
     }
@@ -561,9 +565,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// next render — so the old values would reappear immediately. The state
     /// is the thing that has to change.
     pub fn reset(&self) {
-        let fresh = self.initial.peek().clone();
+        let fresh = self.initial_signal.peek().clone();
         let leaves = fresh.leaves();
-        let mut state = self.state;
+        let mut state = self.state_signal;
         *state.write() = fresh;
         // Written per path rather than by replacing the map, so each input's
         // own subscription fires. Paths that only existed because of an edit
@@ -571,7 +575,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `apply_leaves` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            crate::widgets::write_value(&path, self.values, raw);
+            crate::widgets::write_value(&path, self.values_store, raw);
         }
     }
 
@@ -579,9 +583,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // `Signal` is a `Copy` handle to shared reactive state, so copy it for a
         // mutable binding and write through the copy. Keeps `&self` here, which
         // is what lets `Form` stay `Copy` and drop into event handlers.
-        let mut state = self.state;
+        let mut state = self.state_signal;
         let mut state = state.write();
-        state.apply(&self.values.read().clone());
+        // The argument comes from the STORE. `state.as_values()` would be the
+        // state applied to itself — a no-op that discards every keystroke, and
+        // then validates the stale values it kept.
+        // Two statements: the argument borrows `state` immutably and `apply`
+        // takes it mutably.
+        let values = state.ordered_values(&self.values_store.read());
+        state.apply(&values);
         state.validate()
     }
 }
@@ -620,9 +630,9 @@ fn render_problems(problems: &[String]) -> Element {
     let problems = problems.to_vec();
     rsx! {
         ul {
-            class: "form-errors formoxus-button-problems",
+            class: "fx-form-errors fx-problems",
             for p in problems {
-                li { class: "form-error", "{p}" }
+                li { class: "fx-form-error", "{p}" }
             }
         }
     }
@@ -679,9 +689,9 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     });
     Form {
-        state,
-        values,
+        state_signal: state,
+        values_store: values,
         on_edit,
-        initial,
+        initial_signal: initial,
     }
 }

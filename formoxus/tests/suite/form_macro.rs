@@ -5,10 +5,9 @@
 //! Inside the library they would not compile, so this file is the only place
 //! the expansion is exercised end to end rather than as tokens.
 
-use std::collections::HashMap;
-
 use facet::Facet;
 use formoxus::form;
+use formoxus::members::ValuesByPath;
 use formoxus::{FormErrors, Submission, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
@@ -398,7 +397,9 @@ fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
     // The list's own label, on the `fieldset`'s `legend`.
     expect_that!(
         html,
-        contains_substring("<legend>Stops along the way</legend>")
+        contains_substring(
+            r#"<legend class="fx-legend fx-field-label">Stops along the way</legend>"#
+        )
     );
     // And every row got the widget — two rows in `a_trip`, so exactly two.
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
@@ -450,7 +451,10 @@ fn every_entry_kind_coexists_in_one_spec() {
     expect_that!(html, contains_substring("Trip name"));
     expect_that!(html, contains_substring("Passphrase"));
     expect_that!(html, contains_substring("Town"));
-    expect_that!(html, contains_substring("<legend>Stops</legend>"));
+    expect_that!(
+        html,
+        contains_substring(r#"<legend class="fx-legend fx-field-label">Stops</legend>"#)
+    );
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
     expect_that!(html, contains_substring("type=\"password\""));
 }
@@ -508,7 +512,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
     );
     expect_that!(state.validate(), none());
 
-    state.apply(&std::collections::HashMap::from([
+    state.apply(&::indexmap::IndexMap::from([
         ("headline".to_string(), "Trees are good".to_string()),
         ("words".to_string(), "400".to_string()),
     ]));
@@ -538,7 +542,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
         },
         form! { Article { validator: counting_validator } },
     );
-    state.apply(&std::collections::HashMap::from([
+    state.apply(&::indexmap::IndexMap::from([
         ("headline".to_string(), "Trees".to_string()),
         ("words".to_string(), "not a number".to_string()),
     ]));
@@ -567,7 +571,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
 /// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
 /// function call from `render_widget` could not provide.
 #[component]
-fn ShoutyWidget(values: formoxus::ValuesByPath, props: formoxus::widgets::FieldProps) -> Element {
+fn ShoutyWidget(values: formoxus::ValuesStore, props: formoxus::widgets::FieldProps) -> Element {
     let _ = values;
     let marker = use_hook(|| "scope-ok");
     let label = props.label.clone().unwrap_or_default();
@@ -680,7 +684,7 @@ fn a_keyword_named_field_is_addressable_bare() {
 
 // ── Constraints ──────────────────────────────────────────────────────────
 
-fn wire(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+fn wire(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))

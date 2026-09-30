@@ -7,7 +7,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::prelude::*;
-use formoxus::widgets::SelectChoice;
+use formoxus::widgets::Choice;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -90,7 +90,10 @@ fn a_sibling_without_choices_is_still_an_input() {
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"name="zip""#));
-    expect_that!(html, contains_substring(r#"<input type="text" name="zip""#));
+    expect_that!(
+        html,
+        contains_substring(r#"<input class="fx-control fx-input" type="text" name="zip""#)
+    );
 }
 
 /// An optional field offers a real way back to "unanswered"; a required one
@@ -152,12 +155,12 @@ fn an_explicit_list_overrides_a_bools_derived_one() {
 
 // ── The list itself ──────────────────────────────────────────────────────
 
-/// `SelectChoice` holds `String`s, so a list of them can never be `const`. The
+/// `Choice` holds `String`s, so a list of them can never be `const`. The
 /// conversions are what let the table be a `const` of pairs anyway — which is
 /// how anyone actually writes fifty states.
 #[gtest]
 fn a_const_table_of_pairs_becomes_choices() {
-    let built: Vec<SelectChoice> = STATES.iter().map(Into::into).collect();
+    let built: Vec<Choice> = STATES.iter().map(Into::into).collect();
     expect_that!(built.len(), eq(2));
     expect_that!(built[0].value, eq("AL"));
     expect_that!(built[0].display, eq("Alabama"));
@@ -167,7 +170,7 @@ fn a_const_table_of_pairs_becomes_choices() {
 /// no separate code.
 #[gtest]
 fn a_bare_string_is_its_own_display() {
-    let choice: SelectChoice = "Alabama".into();
+    let choice: Choice = "Alabama".into();
     expect_that!(choice.value, eq("Alabama"));
     expect_that!(choice.display, eq("Alabama"));
 }
@@ -330,5 +333,8 @@ fn the_group_label_is_a_legend() {
         });
         form.render_fragment()
     }
-    expect_that!(render(App), contains_substring("<legend>State"));
+    expect_that!(
+        render(App),
+        contains_substring(r#"<legend class="fx-legend fx-field-label">State"#)
+    );
 }

@@ -5,10 +5,8 @@
 //! model or a `FormErrors` comes back. Nothing here needs a Dioxus runtime,
 //! which is the property that makes the whole approach work.
 
-use std::collections::HashMap;
-
 use facet::Facet;
-use formoxus::*;
+use formoxus::{members::ValuesByPath, *};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -30,14 +28,14 @@ fn credentials_spec() -> FormSpec<Credentials> {
     FormSpec::default().with_validator(passwords_must_match)
 }
 
-fn wire(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+fn wire(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
 }
 
-fn filled() -> HashMap<String, String> {
+fn filled() -> ValuesByPath {
     wire(&[
         ("username", "ada"),
         ("password", "hunter2"),

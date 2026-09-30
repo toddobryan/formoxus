@@ -1,6 +1,6 @@
 ---
 name: error-model-design
-description: "2026-09-21 design conversation on formoxus's error model, NOTHING BUILT. The gap: no custom check can attach its message to a field, because FormError carries no path. Decisions: merge the two message types, keep storage POSITIONAL, put the path on the PRODUCER where T is still in scope. ErrorsByPath is agreed-in-principle but deliberately deferred — it is a performance change whose payoff arrives with live validation"
+description: "2026-09-21 design conversation on formoxus's error model, NOTHING BUILT. The gap: no custom check can attach its message to a field, because FormError carries no path. Decisions: merge the two message types, keep storage POSITIONAL, put the path on the PRODUCER where T is still in scope. ErrorsStore (renamed from ErrorsByPath 2026-09-29) is agreed-in-principle but deliberately deferred — it is a performance change whose payoff arrives with live validation"
 metadata:
   type: project
 ---
@@ -84,14 +84,23 @@ rather than a downcast panic.
 Use the keyword `validator` at BOTH levels; context disambiguates (a top-level
 entry vs. one inside a field body) and two words for one concept reads worse.
 
-## ErrorsByPath — AGREED IN PRINCIPLE, DELIBERATELY DEFERRED
+## ErrorsStore — AGREED IN PRINCIPLE, DELIBERATELY DEFERRED
 
-Todd's observation: errors distributed by path parallel `ValuesByPath`.
+**Called `ErrorsByPath` when this was written.** Renamed here on 2026-09-29,
+when Todd split the values pair for the same reason: `ValuesByPath` became the
+plain `HashMap`/`IndexMap` of raw values and `ValuesStore` became the
+`Store<…>` handle, because he had forgotten three separate times that
+`ValuesByPath` was a reactive store rather than data. The errors projection is
+the exact parallel — a `Store`, not a map — so under that convention it is
+`ErrorsStore`, and the name `ErrorsByPath` is free to mean the plain data if it
+is ever wanted. **Do not reintroduce `ErrorsByPath` for the store.**
+
+Todd's observation: errors distributed by path parallel the values store.
 
 **The real asymmetry it fixes.** `FieldProps` carries `errors` as a prop, and
 those props are computed in `Form::render`, which does `self.state.read()` — a
 subscription to the WHOLE `FormState`. So one pushed error re-renders every
-field, which is precisely the failure mode `ValuesByPath` exists to prevent. A
+field, which is precisely the failure mode the values store exists to prevent. A
 widget reads its value reactively from a store but receives its errors as a prop
 from a whole-tree read: two reactive inputs, two mechanisms.
 
@@ -101,7 +110,7 @@ from a whole-tree read: two reactive inputs, two mechanisms.
 server side work. So a store can NOT be the only home for errors.
 
 **The resolution that is not a drift hazard.** `FormState` stays the authority;
-`ErrorsByPath` is a client-side PROJECTION with exactly one writer.
+`ErrorsStore` is a client-side PROJECTION with exactly one writer.
 `Form::validate` already does `state.write().validate()` and would push the
 result into the store in the same operation; `push_field_error` and
 `apply_errors` likewise. A projection with one writer is not a second source of

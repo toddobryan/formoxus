@@ -39,7 +39,10 @@ do it on a `select`, and that claim is UNVERIFIED.** Worth settling before using
 can carry hints too, then hint text is a property of the choice list rather than
 a reason to prefer one widget.
 
-**Rename `SelectChoice` → `Choice`.** The type is already used by `RadioGroup`
+**Rename `SelectChoice` → `Choice` — DONE 2026-09-29.** It also MOVED to
+`widgets/types.rs`, since it was never `select`'s type, and the doc comment now
+states the value-vs-shape contrast explicitly (the general name made that
+ambiguity worse, so the docs have to do what the old name did). Original note: The type is already used by `RadioGroup`
 as well as `Select`, and would be used by a `Chooser`, so the `Select` prefix is
 now wrong. [[choice-fields-design]] called it `Choice` in the original design
 anyway, so this is a return to that name rather than a new one.

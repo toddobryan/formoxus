@@ -26,9 +26,9 @@ use super::models::{Mode, Shape};
 use super::{Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::members::ValuesByPath;
 use formoxus::*;
 use googletest::prelude::*;
-use std::collections::HashMap;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 pub(crate) struct Drawing {
@@ -181,7 +181,10 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
         ))
     );
     // Not `required`: HTML5 validation must not block submitting without a shape.
-    expect_that!(html, not(contains_substring("<select required")));
+    expect_that!(
+        html,
+        contains_substring(r#"<select class="fx-control fx-select">"#)
+    );
 }
 
 #[component]
@@ -198,7 +201,10 @@ fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
     // re-selected afterwards. `required` on the select puts the browser's own
     // validation behind the same rule `validate()` enforces.
     let html = render_to_html(UnchosenDrawingForm);
-    expect_that!(html, contains_substring("<select required=true>"));
+    expect_that!(
+        html,
+        contains_substring(r#"<select class="fx-control fx-select" required=true>"#)
+    );
     expect_that!(html, contains_substring("disabled=true hidden=true"));
     expect_that!(
         html,
@@ -217,13 +223,13 @@ fn the_select_and_the_fields_it_reveals_render_as_one_group() {
     expect_that!(
         html,
         contains_substring(
-            r#"<fieldset><legend>Outer<span class="required" aria-hidden="true"> *</span></legend><label"#
+            r#"<fieldset class="fx-group fx-variant-set"><legend class="fx-legend fx-field-label">Outer<span class="fx-required" aria-hidden="true"> *</span></legend><label"#
         )
     );
     expect_that!(
         html,
         contains_substring(
-            r#"<legend>Inner<span class="required" aria-hidden="true"> *</span></legend>"#
+            r#"<legend class="fx-legend fx-field-label">Inner<span class="fx-required" aria-hidden="true"> *</span></legend>"#
         )
     );
     // The star annotates the label, and the label is on the legend — so it must
@@ -231,7 +237,7 @@ fn the_select_and_the_fields_it_reveals_render_as_one_group() {
     expect_that!(
         html,
         not(contains_substring(
-            r#"</legend><label class="form-field"><span"#
+            r#"</legend><label class="fx-form-field"><span"#
         ))
     );
 }
@@ -594,13 +600,13 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
         .expect("Circle is a variant of Footprint");
 
     // Type into every leaf Circle offers, then snapshot the value map.
-    let typed: HashMap<String, String> = form
+    let typed: ValuesByPath = form
         .leaves()
         .into_iter()
         .map(|(p, _)| (p, "5".to_string()))
         .collect();
     form.apply(&typed);
-    let store: HashMap<String, String> = form.leaves().into_iter().collect();
+    let store: ValuesByPath = form.leaves().into_iter().collect();
 
     // Switch. The store is keyed by path and survives structural edits by
     // design, so the Circle's entry is still sitting in it.
@@ -803,7 +809,7 @@ fn unsetting_then_rechoosing_restores_what_was_typed() {
         ("name".to_string(), "Doodle".to_string()),
         ("shape.$Circle.radius".to_string(), "2.5".to_string()),
     ]);
-    let store: HashMap<String, String> = form.leaves().into_iter().collect();
+    let store: ValuesByPath = form.leaves().into_iter().collect();
 
     form.choose_variant("shape", None)
         .expect("an optional enum can be cleared");

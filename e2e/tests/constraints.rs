@@ -59,7 +59,7 @@ async fn formoxus_reports_a_bad_pattern_when_the_browser_does_not() -> Result<()
     let s = Session::open("/t/pattern-novalidate").await?;
     textbox(&s, "Code").fill("xx90210xx", None).await?;
     submit(&s).click(None).await?;
-    expect(s.page.locator(".field-error"))
+    expect(s.page.locator(".fx-field-error"))
         .to_contain_text("regular expression")
         .await?;
     expect(s.page.locator("#submitted"))

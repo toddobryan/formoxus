@@ -3,14 +3,16 @@
 use crate::RenderCtx;
 use crate::error::{FieldError, FormAccessError};
 use crate::label_case::LabelCase;
-use crate::members::{Edit, FieldSpecs, FormMember, default_label, no_such_path, qualify};
-use crate::widgets::{FieldProps, InputType, ScalarWidget, SelectChoice, WidgetType};
+use crate::members::{
+    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, no_such_path, qualify,
+};
+use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::core::IntoAttributeValue;
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
 use indexmap::IndexMap;
 use regress::Regex;
-use std::{collections::HashMap, fmt::Debug};
+use std::fmt::Debug;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -28,7 +30,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
     /// spec gave choices to — which is every field rendered as an `<input>`.
-    pub choices: Option<Vec<SelectChoice>>,
+    pub choices: Option<Vec<Choice>>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `FormField<String>` standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
@@ -420,7 +422,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         out.push((qualify(prefix, &self.name), self.raw_value()));
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &HashMap<String, String>) {
+    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
         let Some(raw) = values.get(&qualify(prefix, &self.name)) else {
             return; // nothing supplied for this field; leave it as it stands
         };

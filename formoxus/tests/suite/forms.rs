@@ -10,11 +10,12 @@ use dioxus_html::{
 use facet::Facet;
 use formoxus::fields::Constraints;
 use formoxus::label_case::LabelCase;
+use formoxus::members::ValuesByPath;
 use formoxus::*;
 use googletest::prelude::*;
 use std::any::Any;
+use std::marker::PhantomData;
 use std::rc::Rc;
-use std::{collections::HashMap, marker::PhantomData};
 
 fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
     Box::new(FormField {
@@ -140,7 +141,7 @@ fn a_specs_title_reaches_the_rendered_form() {
     // no caller could trigger. This is the first test that gets there.
     let rendered = render_to_html(TitledEventForm);
     expect_that!(rendered, contains_substring("New Event"));
-    expect_that!(rendered, contains_substring(r#"class="form-title""#));
+    expect_that!(rendered, contains_substring(r#"class="fx-form-title""#));
 }
 
 #[gtest]
@@ -216,7 +217,7 @@ fn option_fields_round_trip_both_ways() {
     );
 }
 
-fn values(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+fn values(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -320,7 +321,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     };
 
     let form = form_for(&rsvp, FormSpec::default());
-    let round_tripped: HashMap<String, String> = form.leaves().into_iter().collect();
+    let round_tripped: ValuesByPath = form.leaves().into_iter().collect();
 
     let mut reloaded = empty_form::<Rsvp>(FormSpec::default());
     reloaded.apply(&round_tripped);
@@ -611,7 +612,7 @@ fn TitleOnly() -> Element {
 fn render_title_renders_just_the_heading() {
     let rendered = render_to_html(TitleOnly);
     expect_that!(rendered, contains_substring("New Event"));
-    expect_that!(rendered, contains_substring(r#"class="form-title""#));
+    expect_that!(rendered, contains_substring(r#"class="fx-form-title""#));
     // None of the fields came along for the ride.
     expect_that!(rendered, not(contains_substring("name=")));
 }
@@ -661,7 +662,7 @@ fn render_errors_is_empty_before_any_push() {
     expect_that!(rendered.trim(), eq(""));
 }
 
-// ── `render` owns the `<div class="form">` / `<form>` wrapper ───────────────
+// ── `render` owns the `<div class="fx-form">` / `<form>` wrapper ────────────
 //
 // `render_fragment` never gained a wrapper — that's the escape hatch, and a
 // regression here would silently start wrapping every one of the 46 existing
@@ -678,7 +679,7 @@ fn WrappedTitledEventForm() -> Element {
 #[gtest]
 fn render_wraps_the_form_in_a_div_with_class_form() {
     let rendered = render_to_html(WrappedTitledEventForm);
-    expect_that!(rendered, contains_substring(r#"class="form""#));
+    expect_that!(rendered, contains_substring(r#"class="fx-form""#));
     expect_that!(rendered, contains_substring("<form"));
 }
 
@@ -701,7 +702,7 @@ fn render_fragment_stays_unwrapped() {
     // today's bare fragment. `TitledEventForm` (defined above) renders via
     // `render_fragment`, with the same model and title as `WrappedTitledEventForm`.
     let rendered = render_to_html(TitledEventForm);
-    expect_that!(rendered, not(contains_substring(r#"class="form""#)));
+    expect_that!(rendered, not(contains_substring(r#"class="fx-form""#)));
     expect_that!(rendered, not(contains_substring("<form")));
 }
 
@@ -717,7 +718,7 @@ fn validate_clears_a_pushed_error() {
         .push(FormError("invalid credentials".to_string()));
     expect_that!(state.has_errors(), eq(true));
 
-    state.apply(&HashMap::from([(
+    state.apply(&indexmap::IndexMap::from([(
         "username".to_string(),
         "bob".to_string(),
     )]));

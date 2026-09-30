@@ -18,7 +18,7 @@ struct Address {
 
 /// The choice list, as a plain `const` table.
 ///
-/// `SelectChoice` holds `String`s, so a list of them cannot be `const` — hence
+/// `Choice` holds `String`s, so a list of them cannot be `const` — hence
 /// the pairs, and the `From<&(&str, &str)>` impl that lets them arrive as
 /// choices anyway. The stored value is the postal code; the reader sees the
 /// name.

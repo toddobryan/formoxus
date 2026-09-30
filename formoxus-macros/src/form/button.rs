@@ -147,7 +147,7 @@ pub(crate) enum ButtonType {
     Destructive,
     Reset,
     Cancel,
-    Button,
+    Action,
     Submit,
 }
 
@@ -155,8 +155,14 @@ pub(crate) enum ButtonType {
 /// [`widgets!`]: one table generates both the parse and the list the error
 /// message reads from, so the two cannot drift apart.
 ///
-/// Lowercase for the same reason widget names are — three of these five are
+/// Lowercase for the same reason widget names are — two of these five are
 /// literally the HTML `type` attribute, and the author is writing HTML's word.
+///
+/// `action` is deliberately NOT HTML's `button`. It renders as
+/// `type="button"`, but naming it that would have meant an author writing
+/// `button` and getting a class spelled `fx-button-action` — a mapping you
+/// would have to know rather than read. The keyword, the variant and the class
+/// now all say `action`.
 macro_rules! button_types {
     ( $( $name:ident => $variant:ident ),* $(,)? ) => {
         impl Parse for ButtonType {
@@ -191,7 +197,7 @@ button_types! {
     reset       => Reset,
     cancel      => Cancel,
     destructive => Destructive,
-    button      => Button,
+    action      => Action,
 }
 
 /// The message for a button type that is not in the table — the same three
@@ -316,7 +322,7 @@ mod tests {
                     b: { type: reset },
                     c: { type: cancel },
                     d: { type: destructive },
-                    e: { type: button },
+                    e: { type: action },
                 }
             }
         })
@@ -331,7 +337,7 @@ mod tests {
                 eq("Reset"),
                 eq("Cancel"),
                 eq("Destructive"),
-                eq("Button")
+                eq("Action")
             ]
         );
     }
@@ -340,7 +346,7 @@ mod tests {
     fn an_invocation_overrides_what_the_type_implies() {
         let spec = parse(quote! {
             Source {
-                buttons: { preview: { type: button, invocation: if_model_validates } }
+                buttons: { preview: { type: action, invocation: if_model_validates } }
             }
         })
         .unwrap();

@@ -71,12 +71,18 @@ fn each_type_picks_its_html_type_and_class() {
     let html = render_to_html(FakeForm);
     // `destructive` is a plain `button`: letting it submit would save the form
     // it is meant to discard.
-    expect_that!(html, contains_substring(r#"type="button" class="danger""#));
     expect_that!(
         html,
-        contains_substring(r#"type="reset" class="outline danger""#)
+        contains_substring(r#"type="button" class="fx-button fx-button-destructive""#)
     );
-    expect_that!(html, contains_substring(r#"type="submit" class="primary""#));
+    expect_that!(
+        html,
+        contains_substring(r#"type="reset" class="fx-button fx-button-reset""#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"type="submit" class="fx-button fx-button-submit""#)
+    );
 }
 
 #[gtest]
@@ -85,7 +91,7 @@ fn the_row_is_wrapped_for_the_existing_style_rule() {
     // wrapper in `Form::render_buttons`.
     expect_that!(
         render_to_html(FakeForm),
-        contains_substring(r#"class="formoxus-buttons""#)
+        contains_substring(r#"class="fx-buttons""#)
     );
 }
 
@@ -180,6 +186,6 @@ fn a_form_with_no_buttons_renders_no_row() {
     // The existing views hand-write their own buttons; nothing may appear
     // underneath them.
     let html = render_to_html(NoButtons);
-    expect_that!(html, not(contains_substring("formoxus-buttons")));
+    expect_that!(html, not(contains_substring("fx-buttons")));
     expect_that!(html, not(contains_substring("<button")));
 }

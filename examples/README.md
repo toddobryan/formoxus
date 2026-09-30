@@ -31,10 +31,12 @@ unwind never reaches a caller. What a user actually experiences is the field
 *silently vanishing* while its siblings render normally. So the matrix looks
 for `name="<path>"` in the output instead.
 
-Two earlier markers were false positives worth knowing about, since they say
+Two earlier markers were false positives worth knowing about, since they said
 something real about the widgets: a `hidden` input deliberately renders bare
-with no label at all, and a checkbox puts its text in a plain `<label>` rather
-than the `field-label` span every other widget uses.
+with no label at all, and a checkbox used to put its text in a plain `<label>`
+rather than the `fx-field-label` span every other widget uses. The checkbox half
+was a genuine inconsistency and was fixed on 2026-09-29 — it now carries
+`fx-form-field` and an `fx-field-label` span like everything else.
 
 ## Still to come
 

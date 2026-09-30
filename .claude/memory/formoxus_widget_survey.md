@@ -369,7 +369,7 @@ same category as `placeholder`.
    several DOM nodes sharing one `name`. Everything in `reflect/` assumes a path
    maps to one widget, `get_current`/`write_value` included. Radio is not "a
    select with different CSS".
-4. **`file` does not fit the value model at all.** `ValuesByPath` is
+4. **`file` does not fit the value model at all.** `ValuesStore` is
    `HashMap<String, String>`; a file input's value is a `FileList`. Django
    threads `files` as a separate dict alongside `data`
    (`value_from_datadict(data, files, name)`), which hints at the eventual shape.

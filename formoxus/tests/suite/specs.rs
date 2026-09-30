@@ -6,12 +6,11 @@
 //! builder is the contract between the macro and the tree, so testing the builder
 //! keeps these honest about which half is being exercised.
 
-use std::collections::HashMap;
-
 use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::members::ValuesByPath;
 use formoxus::widgets::WidgetType;
 use formoxus::*;
 use googletest::prelude::*;
@@ -77,7 +76,10 @@ fn a_field_sets_own_label_becomes_its_legend() {
     // A container is addressable in its own right, not just as a prefix — so
     // `apply_specs` has to consult the map about itself before recursing.
     let html = render_to_html(RelabelledFieldSet);
-    expect_that!(html, contains_substring("<legend>Where</legend>"));
+    expect_that!(
+        html,
+        contains_substring(r#"<legend class="fx-legend fx-field-label">Where</legend>"#)
+    );
 }
 
 // ── Widgets ─────────────────────────────────────────────────────────────
@@ -406,7 +408,7 @@ fn a_new_rows_nested_field_gets_the_spec_too() {
 
 // ── Constraints ──────────────────────────────────────────────────────────
 
-fn full_event(title: &str) -> HashMap<String, String> {
+fn full_event(title: &str) -> ValuesByPath {
     [
         ("title", title),
         ("location.street", "1 Main"),

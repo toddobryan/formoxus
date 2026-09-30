@@ -24,9 +24,10 @@ use super::Harness;
 use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::members::ValuesByPath;
 use formoxus::*;
 use googletest::prelude::*;
-use std::{collections::HashMap, fmt::Debug};
+use std::fmt::Debug;
 
 /// `Option<Struct>` — the case that used to panic one way and lie the other.
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -72,7 +73,7 @@ fn contact(address: Option<Location>) -> Contact {
     }
 }
 
-fn applied(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+fn applied(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
         .map(|(p, v)| (p.to_string(), v.to_string()))
@@ -505,10 +506,10 @@ fn choosing_a_value_and_choosing_none_both_round_trip_through_the_dom() {
 
 #[gtest]
 fn a_choices_value_has_to_be_what_parse_scalar_expects() {
-    // Pins the other end of the contract `SelectChoice::value` has to meet: what
+    // Pins the other end of the contract `Choice::value` has to meet: what
     // `parse_scalar` actually accepts for an `Option<bool>`. This does NOT check
     // that `bool_choices()` matches — it feeds raw strings directly, so
-    // `SelectChoice::new("True", ..)` would still pass here and fail in the two
+    // `Choice::new("True", ..)` would still pass here and fail in the two
     // render tests above. The pair is what covers it: this says what the raw
     // strings must be, those say the widget emits them.
     for (raw, expected) in [("true", Some(true)), ("false", Some(false)), ("", None)] {
@@ -559,7 +560,7 @@ fn an_untouched_checkbox_submits_as_false() {
     // The real submit path — `leaves()` out, edits in, `apply()` back — because
     // that is where the `""` came from. Feeding `("subscribed", "false")`
     // straight in would test the parse and skip the bug entirely.
-    let mut values: HashMap<String, String> = form.leaves().into_iter().collect();
+    let mut values: ValuesByPath = form.leaves().into_iter().collect();
     expect_that!(
         values.get("subscribed"),
         some(eq("")),
@@ -595,7 +596,7 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     // select whose blank really is absence, so `Empty` must reach `None`
     // untouched. `is_unticked_checkbox` excludes `optional: true` for this.
     let mut form = empty_form::<Event>(FormSpec::default());
-    let values: HashMap<String, String> = form.leaves().into_iter().collect();
+    let values: ValuesByPath = form.leaves().into_iter().collect();
 
     form.apply(&values);
     expect_that!(

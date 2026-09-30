@@ -5,11 +5,28 @@
  * hooks — which is also the point of it: it is the worked example of how to
  * theme formoxus with whatever you already use, or with nothing at all.
  *
- * The complete vocabulary:
- *   .form  .form-title  .form-field  .field-label  .required  .radio-group
- *   .field-errors  .field-error  .form-errors  .form-error
- *   .form-row  .add-row  .remove-row
- *   .formoxus-buttons  .formoxus-button-problems
+ * The complete vocabulary, all prefixed `fx-`:
+ *   structure   .fx-form  .fx-form-title  .fx-form-row
+ *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
+ *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
+ *   a group     .fx-group + .fx-field-set .fx-variant-set .fx-list-set  .fx-legend
+ *   radios      .fx-radio-group  .fx-choice
+ *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
+ *               .fx-problems
+ *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
+ *               .fx-button-cancel .fx-button-destructive .fx-button-action
+ *               .fx-button-add-row .fx-button-remove-row
+ *
+ * `<option>` carries no class, deliberately — browsers style options barely at
+ * all, and the three kinds are already distinguishable without one:
+ *   placeholder   option[value=""][disabled]
+ *   --none--      option[value=""]:not([disabled])
+ *   a real choice option:not([value=""])
+ *
+ * And one freebie nobody would guess: because the placeholder option carries
+ * `value=""` and a required `<select>` carries `required`, `select:invalid`
+ * already matches a required select still showing its placeholder — the
+ * "grey it out until answered" effect, with no markup needed.
  */
 
 :root {
@@ -44,17 +61,17 @@ body {
 
 /* ── formoxus's own vocabulary ───────────────────────────────────────── */
 
-.form-title { font-size: 1.1rem; font-weight: 600; margin-block: 0 0.75rem; }
+.fx-form-title { font-size: 1.1rem; font-weight: 600; margin-block: 0 0.75rem; }
 
-.form-field { display: block; margin-block: 0.75rem; }
+.fx-form-field { display: block; margin-block: 0.75rem; }
 
-.field-label { display: block; font-weight: 500; }
+.fx-field-label { display: block; font-weight: 500; }
 
-.required { color: var(--fx-error); }
+.fx-required { color: var(--fx-error); }
 
-.form-field input,
-.form-field select,
-.form-field textarea {
+/* One class reaches every control, which is what `.fx-control` is for — this
+   was three descendant selectors before the controls carried classes. */
+.fx-control {
     width: 100%;
     padding: 0.4rem 0.5rem;
     border: 1px solid var(--fx-border);
@@ -64,37 +81,50 @@ body {
     font: inherit;
 }
 
-/* A radio group's fieldset carries `.form-field` too, so the rule above would
-   otherwise stretch every radio button to 100% width and give it a border and
-   padding. Undo that for the radios, then lay the group out. */
-.radio-group {
-    border: 1px solid var(--fx-border);
-    border-radius: var(--fx-radius);
-    padding: 0.25rem 0.75rem 0.5rem;
-}
-
-.radio-group legend { font-weight: 500; padding-inline: 0.25rem; }
-
-.radio-group label {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin-block: 0.25rem;
-}
-
-.radio-group input[type="radio"] {
+/* Radios and checkboxes are `.fx-control` too, so the rule above would
+   otherwise stretch each one to 100% width and give it a border and padding.
+   Undo that for both, then lay the radio group out. */
+.fx-radio,
+.fx-checkbox {
     width: auto;
     padding: 0;
     border: 0;
     accent-color: currentColor;
 }
 
-/* The error state lives on the widget, so a sibling selector reaches the
-   message without either element needing a class of its own. */
+/* A checkbox's caption belongs BESIDE the box, not above it, so the block
+   `display` that stacks a caption over an input has to come back off. The
+   adjacent-sibling selector is available because the caption immediately follows
+   the control — no `:has()` needed, and before the controls carried classes this
+   rule could not be written at all. The margin stands in for the gap that is
+   absent because formoxus emits no whitespace between the two. */
+.fx-checkbox + .fx-field-label {
+    display: inline;
+    margin-inline-start: 0.4rem;
+}
+
+.fx-radio-group {
+    border: 1px solid var(--fx-border);
+    border-radius: var(--fx-radius);
+    padding: 0.25rem 0.75rem 0.5rem;
+}
+
+.fx-radio-group .fx-legend { font-weight: 500; padding-inline: 0.25rem; }
+
+.fx-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-block: 0.25rem;
+}
+
+/* The error state is on the control (`aria-invalid`, which assistive technology
+   reads) and on the field wrapper (`.fx-invalid`, which is what lets a rule
+   reach the whole field rather than just the control). */
 [aria-invalid="true"] { border-color: var(--fx-error); }
 
-.field-errors,
-.form-errors { color: var(--fx-error); }
+.fx-field-errors,
+.fx-form-errors { color: var(--fx-error); }
 
 /* Both error lists are `ul`s: several messages really are a list, and a screen
    reader announces the structure and the count.
@@ -108,8 +138,8 @@ body {
  *
  * All of this is the gallery's choice. formoxus emits the `ul`/`li` and the
  * class names and imposes no styling of its own. */
-.field-errors,
-.form-errors {
+.fx-field-errors,
+.fx-form-errors {
     list-style-type: "\2715";  /* ✕ MULTIPLICATION X */
     margin-block: 0.35rem;
     padding-inline-start: 1.25rem;
@@ -118,26 +148,26 @@ body {
 /* Explicit, though the `li` already inherits red from the list above — the
    marker takes its colour from its own list item, so this only guards against
    someone later recolouring the text and wondering why the X followed. */
-.field-error::marker,
-.form-error::marker {
+.fx-field-error::marker,
+.fx-form-error::marker {
     color: var(--fx-error);
 }
 
-.field-error,
-.form-error {
+.fx-field-error,
+.fx-form-error {
     padding-inline-start: 0.35rem;
 }
 
-.form-errors { margin-block: 0.75rem; }
+.fx-form-errors { margin-block: 0.75rem; }
 
-.formoxus-buttons {
+.fx-buttons {
     display: flex;
     gap: 0.5rem;
     justify-content: flex-end;
     margin-block-start: 1rem;
 }
 
-.formoxus-buttons button {
+.fx-button {
     padding: 0.4rem 0.9rem;
     border: 1px solid var(--fx-border);
     border-radius: var(--fx-radius);
@@ -147,7 +177,7 @@ body {
     cursor: pointer;
 }
 
-.form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+.fx-form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
 
 /* ── the gallery frame, not formoxus ─────────────────────────────────── */
 

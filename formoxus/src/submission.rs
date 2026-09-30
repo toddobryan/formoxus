@@ -1,11 +1,12 @@
 //! A form that arrived from a client, rebuilt and validated on the server.
 
-use std::{collections::HashMap, fmt::Debug};
+use std::fmt::Debug;
 
 use facet::Facet;
 
 use crate::error::FormError;
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
+use crate::members::ValuesByPath;
 use crate::path::Path;
 use crate::wire::WireForm;
 
@@ -53,7 +54,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// an EMPTY `fields`: a cross-field validator's verdict has no path and
     /// lands in [`FormErrors::form`], so "did it pass?" is this `Result`, never
     /// `fields.is_empty()`.
-    pub fn accept(spec: FormSpec<T>, values: &HashMap<String, String>) -> Result<Self, FormErrors> {
+    pub fn accept(spec: FormSpec<T>, values: &ValuesByPath) -> Result<Self, FormErrors> {
         let mut state = empty_form(spec);
         state.apply(values);
         match state.validate() {
@@ -127,12 +128,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// the model instead and use [`WireForm::from_model`] — that regenerates
     /// every leaf from the value, so the two cannot drift.
     pub fn into_wire(self) -> WireForm<T> {
-        WireForm::new(self.state.as_hash_map(), FormErrors::default())
+        WireForm::new(self.state.as_values(), FormErrors::default())
     }
 
     /// Values plus whatever has been objected to — what both `reject_*` return.
     fn into_wire_with_errors(self) -> WireForm<T> {
         let errors = self.state.collect_errors();
-        WireForm::new(self.state.as_hash_map(), errors)
+        WireForm::new(self.state.as_values(), errors)
     }
 }

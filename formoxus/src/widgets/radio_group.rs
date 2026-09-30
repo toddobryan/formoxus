@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 
-use crate::ValuesByPath;
-use crate::widgets::{FieldErrors, FieldProps, SelectChoice, get_current, write_value};
+use crate::ValuesStore;
+use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 
 /// A group of radio buttons over a fixed set of choices, bound to one path.
 ///
@@ -22,8 +22,8 @@ use crate::widgets::{FieldErrors, FieldProps, SelectChoice, get_current, write_v
 /// value comes back as `current` and checks its own radio.
 #[component]
 pub fn RadioGroup(
-    values: ValuesByPath,
-    choices: Vec<SelectChoice>,
+    values: ValuesStore,
+    choices: Vec<Choice>,
     props: FieldProps,
     #[props(extends = fieldset)] attrs: Vec<Attribute>,
 ) -> Element {
@@ -49,8 +49,9 @@ pub fn RadioGroup(
         .map(|choice| {
             let path = path.clone();
             rsx! {
-                label {
+                label { class: "fx-choice",
                     input {
+                        class: "fx-control fx-radio",
                         r#type: "radio",
                         // Every radio in the group carries the SAME name: that
                         // is what makes them one group to the browser, and what
@@ -71,13 +72,19 @@ pub fn RadioGroup(
         })
         .collect();
 
+    let field_class = if aria_invalid.is_some() {
+        "fx-form-field fx-radio-group fx-invalid"
+    } else {
+        "fx-form-field fx-radio-group"
+    };
+
     rsx! {
         fieldset {
-            class: "form-field radio-group",
+            class: field_class,
             ..attrs,
             // The group's label is the `legend`, not a `label` — a `<label>`
             // can only name a single control, and there are several here.
-            legend {
+            legend { class: "fx-legend fx-field-label",
                 // No label, no marker — an asterisk with nothing to qualify
                 // means nothing. `aria-hidden` because it is visual only: on a
                 // radio group `required` applies to the whole group and that is
@@ -85,7 +92,7 @@ pub fn RadioGroup(
                 if let Some(text) = label_text {
                     "{text}"
                     if required {
-                        span { class: "required", aria_hidden: "true", " *" }
+                        span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
             }

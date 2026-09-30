@@ -1,5 +1,4 @@
-//! Widgets that change a form's SHAPE rather than a value: which enum
-//! variant is chosen, and the rows of a list.
+//! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
 
@@ -10,6 +9,13 @@ use crate::members::Edit;
 use super::errors::FieldErrors;
 use super::select::ABSENT_DISPLAY;
 
+/// The `<select>` a [`VariantSet`](crate::VariantSet) renders to ask which
+/// variant a value takes.
+///
+/// A SHAPE choice, not a value choice — contrast [`Select`](super::Select),
+/// which picks one of a field's legal values and is a leaf. This one carries no
+/// `name`, because the answer is not a value to submit: it goes out as an
+/// [`Edit`] and rebuilds the form beneath it.
 #[component]
 pub fn VariantSelect(
     path: String,
@@ -26,26 +32,35 @@ pub fn VariantSelect(
 ) -> Element {
     let label_text = label;
 
+    // From `errors` directly: this widget predates `FieldProps` and takes its
+    // pieces as separate props, so there is no resolved `aria_invalid` to read.
+    let field_class = if errors.is_empty() {
+        "fx-form-field"
+    } else {
+        "fx-form-field fx-invalid"
+    };
+
     rsx! {
-        label { class: "form-field",
+        label { class: field_class,
             // The star annotates the LABEL, so it only appears when there is
             // one. Rendered inside a `VariantSet`'s fieldset there isn't: the
             // legend carries both, and a lone `*` floating in front of the
             // select reads as belonging to nothing.
             if let Some(text) = label_text {
                 // Inside the label span, not beside it: a consumer who makes
-                // `.field-label` a block would otherwise push a lone asterisk
+                // `.fx-field-label` a block would otherwise push a lone asterisk
                 // onto its own line. `aria-hidden` because the asterisk is a
                 // VISUAL convention — `required` on the control is what a screen
                 // reader reads, so this would only add noise to the name.
-                span { class: "field-label",
+                span { class: "fx-field-label",
                     "{text}"
                     if required {
-                        span { class: "required", aria_hidden: "true", " *" }
+                        span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
             }
             select {
+                class: "fx-control fx-select",
                 required,
                 onchange: move |e: FormEvent| {
                     let v = e.value();
@@ -69,54 +84,6 @@ pub fn VariantSelect(
                 }
             }
             FieldErrors { errors }
-        }
-    }
-}
-
-/// The widget that appends a row to a list.
-///
-/// Like [`VariantSelect`], it reads nothing from the value store — adding a row
-/// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
-/// wire. `type="button"` is load-bearing: inside a `<form>` a bare `<button>`
-/// defaults to `type="submit"`, so omitting it would submit the form instead of
-/// adding a row.
-#[component]
-pub fn AddRowButton(path: String, on_edit: Callback<Edit>) -> Element {
-    rsx! {
-        button {
-            r#type: "button",
-            class: "add-row",
-            onclick: move |_| {
-                // Append. `before` exists for mid-list insertion, which needs a
-                // widget between every pair of rows — a UI question that hasn't
-                // been answered yet, not a limitation of the edit.
-                on_edit.call(Edit::AddRow { path: path.clone(), before: None });
-            },
-            "Add"
-        }
-    }
-}
-
-/// The widget that drops one row from a list.
-///
-/// Addressed by POSITION, not by the row's key: the list is what applies the
-/// edit and it works in terms of `rows`, so a position is what it can act on
-/// directly. Keys identify a row across edits; a position locates one at an
-/// instant, which is all a click needs to say.
-#[component]
-pub fn RemoveRowButton(path: String, index: usize, on_edit: Callback<Edit>) -> Element {
-    // 1-based for humans: this is the only place a row's position is spoken
-    // aloud, and it is never used as a path segment.
-    let ordinal = index + 1;
-    rsx! {
-        button {
-            r#type: "button",
-            class: "remove-row",
-            aria_label: "Remove row {ordinal}",
-            onclick: move |_| {
-                on_edit.call(Edit::RemoveRow { path: path.clone(), index });
-            },
-            "Remove"
         }
     }
 }

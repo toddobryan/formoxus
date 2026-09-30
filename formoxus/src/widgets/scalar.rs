@@ -5,10 +5,10 @@ use dioxus::prelude::*;
 use super::checkbox::Checkbox;
 use super::input::Input;
 use super::radio_group::RadioGroup;
-use super::select::{Select, SelectChoice, bool_choices};
+use super::select::Select;
 use super::textarea::Textarea;
-use super::types::{FieldProps, WidgetProps, WidgetType};
-use crate::ValuesByPath;
+use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
+use crate::ValuesStore;
 use crate::fields::ValueKind;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
@@ -27,8 +27,8 @@ use crate::fields::ValueKind;
 pub fn ScalarWidget(
     value_kind: ValueKind,
     widget: WidgetType,
-    choices: Option<Vec<SelectChoice>>,
-    values: ValuesByPath,
+    choices: Option<Vec<Choice>>,
+    values: ValuesStore,
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {

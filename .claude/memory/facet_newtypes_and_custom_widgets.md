@@ -17,7 +17,7 @@ the call site. Now:
 
 ```rust
 Custom { name: &'static str, render: fn(WidgetProps) -> Element }
-pub struct WidgetProps { pub values: ValuesByPath, pub props: FieldProps }
+pub struct WidgetProps { pub values: ValuesStore, pub props: FieldProps }
 ```
 
 - **`fn` pointer, NOT `Box<dyn Fn>`, and the derives force it.** `WidgetType`

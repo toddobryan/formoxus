@@ -321,7 +321,7 @@ fn a_variant_name_uses_the_forms_case() {
 // ── The required marker ──────────────────────────────────────────────────
 
 /// **The marker sits INSIDE the label span, not beside it.** A consumer who
-/// makes `.field-label` a block — the natural choice for a label above an input,
+/// makes `.fx-field-label` a block — the natural choice for a label above an input,
 /// and what `examples/assets/main.css` does — would otherwise get a lone
 /// asterisk pushed onto its own line. Nesting makes the markup correct whatever
 /// the consumer's CSS does, which matters because formoxus ships none.
@@ -340,7 +340,7 @@ fn the_required_marker_is_nested_in_the_label() {
     expect_that!(
         super::render_to_html(App),
         contains_substring(
-            r#"<span class="field-label">Email<span class="required" aria-hidden="true"> *</span></span>"#
+            r#"<span class="fx-field-label">Email<span class="fx-required" aria-hidden="true"> *</span></span>"#
         )
     );
 }

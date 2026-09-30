@@ -77,7 +77,11 @@ pub enum ButtonType {
     Reset,
     Cancel,
     Destructive,
-    Button,
+    /// Acts on the model like `Submit` — a preview, a save-draft — but renders
+    /// as `type="button"` so it does not submit the form out from under its own
+    /// handler. Named `Button` until 2026-09-29, which collided with the element
+    /// name and made its class read `fx-button-button`.
+    Action,
 }
 
 impl ButtonType {
@@ -88,27 +92,36 @@ impl ButtonType {
         match self {
             ButtonType::Submit => "submit",
             ButtonType::Reset => "reset",
-            ButtonType::Cancel | ButtonType::Destructive | ButtonType::Button => "button",
+            ButtonType::Cancel | ButtonType::Destructive | ButtonType::Action => "button",
         }
     }
 
-    pub fn default_class(&self) -> &'static str {
+    /// The classes this button carries: the shared `fx-button`, plus one naming
+    /// its type.
+    ///
+    /// **Nothing overrides these**, which is why they are structural rather than
+    /// presentational. An earlier version emitted bare `primary`, `danger`,
+    /// `secondary` and `outline danger` — Pico CSS's vocabulary, which matched no
+    /// other framework, was styled by nothing formoxus shipped, and collided with
+    /// any consumer rule naming an unqualified adjective. `fx-button-destructive`
+    /// says the same thing without claiming a name it does not own.
+    pub fn classes(&self) -> &'static str {
         match self {
-            ButtonType::Submit => "primary",
-            ButtonType::Reset => "outline danger",
-            ButtonType::Cancel => "outline secondary",
-            ButtonType::Destructive => "danger",
-            ButtonType::Button => "secondary",
+            ButtonType::Submit => "fx-button fx-button-submit",
+            ButtonType::Reset => "fx-button fx-button-reset",
+            ButtonType::Cancel => "fx-button fx-button-cancel",
+            ButtonType::Destructive => "fx-button fx-button-destructive",
+            ButtonType::Action => "fx-button fx-button-action",
         }
     }
 
-    /// `Submit` and `Button` act ON the model (a save, a preview), so they want
+    /// `Submit` and `Action` act ON the model (a save, a preview), so they want
     /// it validated. `Cancel`, `Reset` and `Destructive` are escape hatches
     /// that have to work on an invalid form — validating first would trap the
     /// user in it.
     pub fn default_invocation(&self) -> Invocation {
         match self {
-            ButtonType::Submit | ButtonType::Button => Invocation::IfModelValidates,
+            ButtonType::Submit | ButtonType::Action => Invocation::IfModelValidates,
             ButtonType::Cancel | ButtonType::Reset | ButtonType::Destructive => {
                 Invocation::Unconditional
             }

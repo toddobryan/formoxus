@@ -116,7 +116,7 @@ pub use form::{
     use_form_values,
 };
 pub use members::{
-    Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesByPath, VariantChoice, VariantSet,
+    Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesStore, VariantChoice, VariantSet,
     model_path,
 };
 pub use path::Path;

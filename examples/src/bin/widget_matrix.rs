@@ -106,9 +106,9 @@ fn renders(path: &str, widget: WidgetType) -> bool {
     dom.rebuild_in_place();
     let html = dioxus_ssr::render(&dom);
     // `name="<path>"` and not the label, which was the first attempt: a `hidden`
-    // input deliberately renders bare with no label at all, and a checkbox puts
-    // its text in a plain `<label>` rather than the `field-label` span every
-    // other widget uses. Both looked like failures. Every widget that renders
+    // input deliberately renders bare with no label at all, so it looked like a
+    // failure. (A checkbox used to as well, putting its text in a plain `<label>`
+    // rather than the `fx-field-label` span — fixed 2026-09-29.) Every widget that renders
     // at all emits a `name`, because that is what makes the value submittable.
     html.contains(&format!(r#"name="{path}""#))
 }

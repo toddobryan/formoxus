@@ -42,16 +42,17 @@
 //! [`FormSpec`]: crate::FormSpec
 //! [`Submission::accept`]: crate::Submission::accept
 
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use facet::Facet;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     FieldError, FormError, Path,
     form::{FormErrors, FormSpec, form_for},
+    members::ValuesByPath,
 };
 
 /// A form's mutable state, as plain data: raw values by leaf path, plus
@@ -71,7 +72,7 @@ use crate::{
 // for the `PhantomData`, and there is no `T` in here to serialize.
 #[serde(bound = "")]
 pub struct WireForm<T> {
-    values: HashMap<String, String>,
+    values: ValuesByPath,
     errors: FormErrors,
     #[serde(skip)]
     model: PhantomData<fn() -> T>,
@@ -79,7 +80,7 @@ pub struct WireForm<T> {
 
 impl<T> WireForm<T> {
     /// Values and errors as they stand.
-    pub fn new(values: HashMap<String, String>, errors: FormErrors) -> Self {
+    pub fn new(values: ValuesByPath, errors: FormErrors) -> Self {
         Self {
             values,
             errors,
@@ -91,17 +92,17 @@ impl<T> WireForm<T> {
     /// holds the values it sent. [`Form::absorb`](crate::Form::absorb) leaves
     /// values untouched when this is empty.
     pub fn from_errors(errors: FormErrors) -> Self {
-        Self::new(HashMap::new(), errors)
+        Self::new(IndexMap::new(), errors)
     }
 
     /// Nothing wrong and nothing to change.
     pub fn empty() -> Self {
-        Self::new(HashMap::new(), FormErrors::default())
+        Self::new(IndexMap::new(), FormErrors::default())
     }
 
     /// The raw values, keyed by leaf path — what
     /// [`Submission::accept`](crate::Submission::accept) takes.
-    pub fn values(&self) -> &HashMap<String, String> {
+    pub fn values(&self) -> &ValuesByPath {
         &self.values
     }
 
@@ -143,7 +144,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> WireForm<T> {
     /// alone: which paths exist depends on the chosen variants and row counts
     /// that [`form_for`] derives from the value.
     pub fn from_model(model: &T, spec: FormSpec<T>) -> Self {
-        Self::new(form_for(model, spec).as_hash_map(), FormErrors::default())
+        Self::new(form_for(model, spec).as_values(), FormErrors::default())
     }
 }
 
