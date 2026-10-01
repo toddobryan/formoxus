@@ -23,7 +23,7 @@
 //!   handlers validate first is read from their **arity**.
 //!
 //! Emitted code must reference formoxus items by fully-qualified,
-//! module-canonical path (`::formoxus::form::FormSpec`, `::formoxus::FieldError`,
+//! module-canonical path (`::formoxus::form::FormSpec`, `::formoxus::error::ValidationError`,
 //! …) — NOT via `::formoxus::prelude::…`. The defining module is a stabler
 //! contract for generated code than the human-facing prelude.
 

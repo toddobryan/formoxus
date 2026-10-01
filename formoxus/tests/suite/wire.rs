@@ -8,8 +8,8 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{
-    FieldError, FieldErrors, FormError, FormErrors, FormSpec, Submission, WireForm, empty_form,
-    form, form_for, members::ValuesByPath, path, use_form, using_fns,
+    ErrorsByPath, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form, form,
+    form_for, members::ValuesByPath, path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -44,9 +44,12 @@ fn render(app: fn() -> Element) -> String {
 fn errors_at(path: &str, message: &str) -> FormErrors {
     FormErrors {
         form: Vec::new(),
-        fields: [(path.to_string(), vec![FieldError(message.to_string())])]
-            .into_iter()
-            .collect(),
+        fields: [(
+            path.to_string(),
+            vec![ValidationMessage(message.to_string())],
+        )]
+        .into_iter()
+        .collect(),
     }
 }
 
@@ -76,7 +79,7 @@ fn a_path_copies_without_its_model_being_copy() {
     expect_that!(a, eq(b));
 }
 
-// ── Form::apply_errors ───────────────────────────────────────────────────
+// ── Form::distribute_errors ──────────────────────────────────────────────
 
 /// The loop every caller used to write by hand, and the thing that had no
 /// consumer at all before: `collect_errors` produced a `FormErrors` and nothing
@@ -86,7 +89,7 @@ fn applied_field_errors_render_where_the_widget_shows_them() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        form.apply_errors(&errors_at("email", "That address is already registered."))
+        form.distribute_errors(&errors_at("email", "That address is already registered."))
             .expect("email is a field of this form");
         form.render_fragment()
     }
@@ -101,9 +104,9 @@ fn applied_form_errors_reach_the_form_level_list() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        form.apply_errors(&FormErrors {
-            form: vec![FormError("Those credentials do not match.".into())],
-            fields: FieldErrors::default(),
+        form.distribute_errors(&FormErrors {
+            form: vec![ValidationMessage("Those credentials do not match.".into())],
+            fields: ErrorsByPath::default(),
         })
         .expect("a form-level error names no path");
         form.render(using_fns! {})
@@ -114,13 +117,14 @@ fn applied_form_errors_reach_the_form_level_list() {
     );
 }
 
-/// A nested path is as good as a flat one — `owns()` walks the tree.
+/// A nested path is as good as a flat one — every member checks for its own
+/// qualified path, however deep it sits.
 #[gtest]
 fn an_applied_error_finds_a_nested_leaf() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        form.apply_errors(&errors_at("location.zip", "No such ZIP code."))
+        form.distribute_errors(&errors_at("location.zip", "No such ZIP code."))
             .expect("a qualified leaf is a legal target");
         form.render_fragment()
     }
@@ -134,10 +138,73 @@ fn an_error_at_an_unknown_path_is_reported() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        let outcome = form.apply_errors(&errors_at("nope", "..."));
+        let outcome = form.distribute_errors(&errors_at("nope", "..."));
         rsx! { "{outcome.is_err()}" }
     }
     expect_that!(render(App), contains_substring("true"));
+}
+
+/// One bad path does not stop the good ones, and EVERY bad path is named. The
+/// per-path loop this replaced returned at the first unknown path, leaving the
+/// form half-applied and reporting one problem of several.
+#[gtest]
+fn good_paths_land_and_every_bad_path_is_named() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Contact {} }));
+        let reply = FormErrors {
+            form: Vec::new(),
+            fields: [
+                ("nope", "first stray"),
+                ("email", "That address is already registered."),
+                ("location.nope", "second stray"),
+            ]
+            .into_iter()
+            .map(|(path, message)| (path.to_string(), vec![ValidationMessage::from(message)]))
+            .collect(),
+        };
+        let outcome = form.distribute_errors(&reply);
+        let problem = outcome.err().map(|e| e.to_string()).unwrap_or_default();
+        rsx! {
+            p { "{problem}" }
+            { form.render_fragment() }
+        }
+    }
+    let html = render(App);
+    // Landed despite sitting between two bad paths.
+    expect_that!(
+        html,
+        contains_substring("That address is already registered.")
+    );
+    // Both bad paths, in the order the reply listed them. Matched from after
+    // the apostrophe in "don't", which the render escapes to `&#39;`.
+    expect_that!(html, contains_substring("exist: nope, location.nope"));
+}
+
+/// A reply REPLACES what was showing rather than adding to it, at both levels —
+/// so a reply that arrives twice (a retried request, a double click) does not
+/// show every message twice.
+#[gtest]
+fn a_reply_applied_twice_shows_each_message_once() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Contact {} }));
+        let mut reply = errors_at("email", "That address is already registered.");
+        reply
+            .form
+            .push(ValidationMessage::from("Please try again."));
+        for _ in 0..2 {
+            form.distribute_errors(&reply)
+                .expect("email is a field of this form");
+        }
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(
+        html.matches("That address is already registered.").count(),
+        eq(1)
+    );
+    expect_that!(html.matches("Please try again.").count(), eq(1));
 }
 
 // ── to_wire / absorb ─────────────────────────────────────────────────────

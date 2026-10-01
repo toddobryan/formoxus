@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::ValuesStore;
+use crate::members::ValuesStore;
 use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 
 /// A group of radio buttons over a fixed set of choices, bound to one path.
@@ -57,7 +57,7 @@ pub fn RadioGroup(
                         r#type: "radio",
                         // Every radio in the group carries the SAME name: that
                         // is what makes them one group to the browser, and what
-                        // `apply_form_values` collects the pick under.
+                        // `distribute_form_values` collects the pick under.
                         name: "{path}",
                         value: "{choice.value}",
                         checked: choice.value == current,

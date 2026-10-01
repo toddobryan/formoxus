@@ -5,8 +5,8 @@
 
 use dioxus::prelude::*;
 
-use crate::ValuesStore;
-use crate::error::FieldError;
+use crate::error::ValidationMessage;
+use crate::members::ValuesStore;
 
 #[derive(Clone)]
 pub enum WidgetType {
@@ -154,7 +154,7 @@ pub struct FieldProps {
     // whether the field(s) below are considered required in the form,
     // modulo weird things like not being able to mark checkboxes required
     pub required: bool,
-    pub errors: Vec<FieldError>,
+    pub errors: Vec<ValidationMessage>,
     /// Present and equal to "true" only when there is an error.
     /// `aria-invalid="false"` is NOT the neutral value — per ARIA it
     /// asserts "checked, and passed", so an untouched form would claim to
@@ -200,7 +200,7 @@ impl FieldProps {
 /// One of the options in a selectable list (e.g., [`super::Select`],
 /// [`super::RadioGroup`]).
 /// This is a value choice representable as a String. Contrast with
-/// [`crate::VariantChoice`], which specifies the SHAPE of the data.
+/// [`crate::members::VariantChoice`], which specifies the SHAPE of the data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Choice {
     /// The raw string written into the value map, so it has to be exactly what

@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::ValuesStore;
+use crate::members::ValuesStore;
 
 /// This path's current raw value, or `""` if the map has no entry for it.
 ///
@@ -14,7 +14,7 @@ use crate::ValuesStore;
 /// would reimplement the missing-key rule and get it subtly wrong. A path the
 /// schema has but the map doesn't is normal, not an error: a variant chosen
 /// after mount reveals leaves that were never populated, and an absent key
-/// reads as empty, which is the same "empty IS absence" rule `apply_leaves`
+/// reads as empty, which is the same "empty IS absence" rule `distribute_values`
 /// follows.
 pub fn get_current(path: &str, values: ValuesStore) -> String {
     let slot = values.get_unchecked(path.to_string());

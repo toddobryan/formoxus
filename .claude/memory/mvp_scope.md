@@ -45,7 +45,7 @@ describes the deleted derive path). The survey this was drawn from is
      not. Also recorded there: class renaming does NOT buy framework parity
      (Bootstrap wants `form-control` on the `<input>`; formoxus puts `form-field`
      on the wrapping `<label>`), so the override is a convenience, not a fix.
-   - **`FieldError`/`FormError` → one `Verdict<T>`** ([[error-model-design]] —
+   - **DONE 2026-09-30 — `FieldError`/`FormError` → `ValidationError<T>` (producer) + `ValidationMessage` (stored)**, with the error walk `distribute_errors`, the `collect_*`/`distribute_*` renames and the prelude made the one export list ([[prelude-is-the-one-list]]). Originally: **`FieldError`/`FormError` → one `ValidationError<T>`** ([[error-model-design]] —
      already decided, unbuilt). The one with reach: it is public, it is
      `Serialize`/`Deserialize` so it crosses the wire, and `FormErrors`,
      `WireForm`, `push_field_error` and `Submission::reject_field` all touch it.
@@ -65,7 +65,7 @@ describes the deleted derive path). The survey this was drawn from is
 5. **C4 — per-field validators.** Design fully settled in
    [[error-model-design]] (`fn` pointer not `Box<dyn Fn>`, downcast made
    unreachable by a witness line, keyword `validator` at both levels).
-   **Depends on `Verdict<T>` from step 1.** Its syntax goes in the same `form!`
+   **Depends on `ValidationError<T>` from step 1.** Its syntax goes in the same `form!`
    brace block C6 settles — which is why C6 goes first.
 6. **C5 — `help_text`.** Tiny, and very commonly wanted.
 7. **A3 — the facet version decision.** Publish against 0.46.5, or wait for 0.50

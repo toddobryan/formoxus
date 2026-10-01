@@ -6,7 +6,7 @@
 //! which is the property that makes the whole approach work.
 
 use facet::Facet;
-use formoxus::{members::ValuesByPath, *};
+use formoxus::{members::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -16,11 +16,11 @@ struct Credentials {
     confirm_password: String,
 }
 
-fn passwords_must_match(c: &Credentials) -> Vec<FormError> {
+fn passwords_must_match(c: &Credentials) -> Vec<ValidationError<Credentials>> {
     if c.password == c.confirm_password {
         Vec::new()
     } else {
-        vec![FormError("Passwords don't match.".to_string())]
+        vec![ValidationError::form("Passwords don't match.")]
     }
 }
 

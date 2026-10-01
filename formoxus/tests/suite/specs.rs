@@ -10,9 +10,11 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::fields::Constraints;
+use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
+use formoxus::prelude::*;
 use formoxus::widgets::WidgetType;
-use formoxus::*;
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -148,7 +150,7 @@ fn an_unmatched_path_is_a_no_op() {
     // exists.
     let form =
         empty_form(FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"));
-    expect_that!(form.leaves().len(), gt(0));
+    expect_that!(form.collect_values().len(), gt(0));
 }
 
 #[gtest]

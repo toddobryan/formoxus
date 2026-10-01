@@ -4,7 +4,6 @@ use std::fmt::Debug;
 
 use facet::Facet;
 
-use crate::error::FormError;
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
 use crate::members::ValuesByPath;
 use crate::path::Path;
@@ -56,7 +55,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// `fields.is_empty()`.
     pub fn accept(spec: FormSpec<T>, values: &ValuesByPath) -> Result<Self, FormErrors> {
         let mut state = empty_form(spec);
-        state.apply(values);
+        state.distribute_values(values);
         match state.validate() {
             Some(model) => Ok(Self { state, model }),
             None => Err(state.collect_errors()),
@@ -117,7 +116,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// that names no field — "those credentials don't match" can't say whether
     /// it was the username or the password.
     pub fn reject(mut self, message: &str) -> WireForm<T> {
-        self.state.errors.push(FormError(message.to_string()));
+        self.state.errors.push(message.into());
         self.into_wire_with_errors()
     }
 
@@ -128,12 +127,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// the model instead and use [`WireForm::from_model`] — that regenerates
     /// every leaf from the value, so the two cannot drift.
     pub fn into_wire(self) -> WireForm<T> {
-        WireForm::new(self.state.as_values(), FormErrors::default())
+        WireForm::new(self.state.collect_values(), FormErrors::default())
     }
 
     /// Values plus whatever has been objected to — what both `reject_*` return.
     fn into_wire_with_errors(self) -> WireForm<T> {
         let errors = self.state.collect_errors();
-        WireForm::new(self.state.as_values(), errors)
+        WireForm::new(self.state.collect_values(), errors)
     }
 }

@@ -1,7 +1,7 @@
 //! `T -> String -> T` must be the identity for every scalar a `FormField` can
 //! hold, because that is the trip a value takes through the DOM: `leaves()`
 //! formats it through facet's display vtable, the browser hands the string back,
-//! and `apply_leaves` parses it through the parse vtable.
+//! and `distribute_values` parses it through the parse vtable.
 //!
 //! **Where this does and does not bite today.** `FieldValue::Valid(T)` holds the
 //! *typed* value and `write_value_into` does `partial.set(t.clone())`, so

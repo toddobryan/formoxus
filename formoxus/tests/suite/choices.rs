@@ -113,7 +113,7 @@ fn an_optional_choice_field_offers_the_absent_entry() {
     }
     expect_that!(
         render(App),
-        contains_substring(format!(">{}</option>", formoxus::ABSENT_DISPLAY))
+        contains_substring(format!(">{}</option>", formoxus::widgets::ABSENT_DISPLAY))
     );
 }
 
@@ -317,7 +317,10 @@ fn every_radio_is_required_and_nothing_offers_absence() {
     // too, so its `<input>` carries `required=true` as well.
     expect_that!(html, contains_substring(r#"value="AL" required=true"#));
     expect_that!(html, contains_substring(r#"value="AK" required=true"#));
-    expect_that!(html, not(contains_substring(formoxus::ABSENT_DISPLAY)));
+    expect_that!(
+        html,
+        not(contains_substring(formoxus::widgets::ABSENT_DISPLAY))
+    );
 }
 
 /// The group's label is a `legend`, not a `label`: a `<label>` names one

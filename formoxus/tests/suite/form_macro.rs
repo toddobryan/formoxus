@@ -8,7 +8,7 @@
 use facet::Facet;
 use formoxus::form;
 use formoxus::members::ValuesByPath;
-use formoxus::{FormErrors, Submission, empty_form, form_for, use_form};
+use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
 use super::render_to_html;
@@ -128,11 +128,9 @@ fn a_spec_may_have_no_title() {
 
 // ── `validator:` ─────────────────────────────────────────────────────────
 
-fn headline_is_not_shouted(a: &Article) -> Vec<formoxus::error::FormError> {
+fn headline_is_not_shouted(a: &Article) -> Vec<formoxus::ValidationError<Article>> {
     if a.headline.chars().all(|c| !c.is_lowercase()) {
-        vec![formoxus::error::FormError(
-            "headline is all caps".to_string(),
-        )]
+        vec![formoxus::ValidationError::form("headline is all caps")]
     } else {
         Vec::new()
     }
@@ -140,10 +138,10 @@ fn headline_is_not_shouted(a: &Article) -> Vec<formoxus::error::FormError> {
 
 #[gtest]
 fn a_validator_fn_item_coerces_to_the_fn_pointer() {
-    // Compile-only: `FormSpec::validator` is private and `FormState::validate`
-    // does not yet call it, so there is nothing to assert about behaviour. What
-    // this pins is that a plain fn item still reaches `with_validator(fn(&T) ->
-    // Vec<FormError>)` — the coercion an expanded call depends on.
+    // Compile-only: `FormSpec::validator` is private, so there is nothing to
+    // assert about it directly. What this pins is that a plain fn item still
+    // reaches `with_validator(fn(&T) -> Vec<ValidationError<T>>)` — the coercion
+    // an expanded call depends on.
     expect_that!(
         title_of(form! {
             Article {
@@ -431,11 +429,9 @@ fn EverythingAtOnce() -> Element {
     .render_fragment()
 }
 
-fn trip_has_a_name(t: &Trip) -> Vec<formoxus::error::FormError> {
+fn trip_has_a_name(t: &Trip) -> Vec<formoxus::ValidationError<Trip>> {
     if t.name.is_empty() {
-        vec![formoxus::error::FormError(
-            "a trip needs a name".to_string(),
-        )]
+        vec![formoxus::ValidationError::form("a trip needs a name")]
     } else {
         Vec::new()
     }
@@ -493,8 +489,8 @@ fn a_validators_message_lands_where_form_errors_render() {
     );
     let _ = state.validate();
     expect_that!(
-        state.errors.iter().map(|e| e.0.clone()).collect::<Vec<_>>(),
-        elements_are![eq("headline is all caps")]
+        state.errors,
+        elements_are![eq(&ValidationMessage::from("headline is all caps"))]
     );
 }
 
@@ -512,7 +508,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
     );
     expect_that!(state.validate(), none());
 
-    state.apply(&::indexmap::IndexMap::from([
+    state.distribute_values(&::indexmap::IndexMap::from([
         ("headline".to_string(), "Trees are good".to_string()),
         ("words".to_string(), "400".to_string()),
     ]));
@@ -524,7 +520,7 @@ fn a_second_validate_clears_the_first_ones_verdict() {
 /// rather than sharing one, since tests run in parallel.
 static SHORT_CIRCUIT_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn counting_validator(_: &Article) -> Vec<formoxus::error::FormError> {
+fn counting_validator(_: &Article) -> Vec<formoxus::ValidationError<Article>> {
     SHORT_CIRCUIT_CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     Vec::new()
 }
@@ -542,7 +538,7 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
         },
         form! { Article { validator: counting_validator } },
     );
-    state.apply(&::indexmap::IndexMap::from([
+    state.distribute_values(&::indexmap::IndexMap::from([
         ("headline".to_string(), "Trees".to_string()),
         ("words".to_string(), "not a number".to_string()),
     ]));
@@ -571,7 +567,10 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
 /// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
 /// function call from `render_widget` could not provide.
 #[component]
-fn ShoutyWidget(values: formoxus::ValuesStore, props: formoxus::widgets::FieldProps) -> Element {
+fn ShoutyWidget(
+    values: formoxus::widgets::ValuesStore,
+    props: formoxus::widgets::FieldProps,
+) -> Element {
     let _ = values;
     let marker = use_hook(|| "scope-ok");
     let label = props.label.clone().unwrap_or_default();

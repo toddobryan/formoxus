@@ -14,17 +14,17 @@
 //! lays onto the tree. Lives in `spec`.
 
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
-use crate::error::{FieldError, FormAccessError, FormError};
+use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::members::Edit;
+use crate::members::{Edit, RenderCtx};
 use crate::path::Path;
+use crate::widgets::ValuesStore;
 use crate::wire::WireForm;
-use crate::{RenderCtx, ValuesStore};
 use dioxus::prelude::*;
 use facet::Facet;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, future::Future, pin::Pin, rc::Rc};
+use std::{collections::HashMap, fmt::Debug, future::Future, pin::Pin, rc::Rc};
 
 mod spec;
 mod state;
@@ -33,16 +33,16 @@ pub use spec::{FieldSpec, FormSpec};
 pub use state::{FormState, empty_form, form_for};
 
 /// One path, at most, per entry — every writer (`collect_errors`'s tree walk,
-/// `apply_errors`) visits a given path once. `IndexMap` over a plain
+/// `distribute_errors`) visits a given path once. `IndexMap` over a plain
 /// `HashMap` for the same reason `FormSpec`'s own fields use it: insertion
 /// order is preserved, and `collect_errors` deliberately builds this in the
 /// same order `render` walks the tree.
-pub type FieldErrors = IndexMap<String, Vec<FieldError>>;
+pub type ErrorsByPath = IndexMap<String, Vec<ValidationMessage>>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FormErrors {
-    pub form: Vec<FormError>,
-    pub fields: FieldErrors,
+    pub form: Vec<ValidationMessage>,
+    pub fields: ErrorsByPath,
 }
 
 impl FormErrors {
@@ -212,7 +212,7 @@ pub fn use_form_values<T>(form: &FormState<T>) -> ValuesStore
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
-    let leaves = form.leaves();
+    let leaves = form.collect_values();
     use_store(move || leaves.into_iter().collect())
 }
 
@@ -446,7 +446,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// Writing through a copy of the `Signal` for the same reason `validate`
     /// does: it keeps `&self` here, which is what lets `Form` stay `Copy` and
     /// drop into an event handler.
-    pub fn push_error(&self, error: FormError) {
+    pub fn push_error(&self, error: ValidationMessage) {
         let mut state = self.state_signal;
         state.write().errors.push(error);
     }
@@ -476,33 +476,41 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         state.write().push_field_error(path.as_str(), message)
     }
 
-    /// Put a server's verdict back onto the form — the return leg of a submit.
+    /// Put a server's validation back onto the form — the return leg of a submit.
     ///
-    /// The counterpart to [`FormState::collect_errors`], which had no consumer
-    /// before this existed: every caller wrote the same loop over
-    /// `errors.fields` by hand, with a stringly-typed path, and had nowhere to
-    /// put `errors.form` at all.
+    /// The counterpart to [`FormState::collect_errors`].
     ///
     /// Paths arrive as strings because they came off the wire, so this is the
     /// one error path that a `Path<T>` cannot protect — an `Err` here means the
-    /// server named a field this form does not have, which is a mismatch
-    /// between the two sides' specs rather than anything a user did. Errors
-    /// already applied are left in place; the first bad path stops the rest.
+    /// server (or a malicious user) named a field this form does not have,
+    /// which is a mismatch between the two sides' specs rather than anything
+    /// a normal user did.
     ///
     /// **Cleared by the next [`validate`](Self::validate)**, like every other
     /// pushed error.
-    pub fn apply_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
+    pub fn distribute_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
         let mut state = self.state_signal;
-        {
+        let unclaimed = {
             let mut state = state.write();
             state.errors.clone_from(&errors.form);
-        }
-        for (path, messages) in &errors.fields {
-            for message in messages {
-                state.write().push_field_error(path, &message.0)?;
+            for m in &mut state.members {
+                m.clear_errors();
             }
+            state.distribute_errors(errors.fields.clone())
+        };
+
+        if unclaimed.is_empty() {
+            Ok(())
+        } else {
+            let paths: String = unclaimed
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(FormAccessError(format!(
+                "Errors appeared for form paths that don't exist: {paths}"
+            )))
         }
-        Ok(())
     }
 
     /// This form as plain data, ready to cross a server-fn boundary.
@@ -511,7 +519,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// [`Form`] nor [`FormState`] can cross one — see [`crate::wire`] for why
     /// the spec travels as code instead.
     pub fn to_wire(&self) -> WireForm<T> {
-        // From the STORE, not from `state.as_values()`. The store is what the
+        // From the STORE, not from `state.collect_values()`. The store is what the
         // user has typed; the state holds whatever the last `apply` put there,
         // so reading the state would ship a payload missing every edit since.
         let state = self.state_signal.read();
@@ -545,7 +553,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         for (path, raw) in wire.values() {
             crate::widgets::write_value(path, self.values_store, raw.clone());
         }
-        self.apply_errors(wire.errors())
+        self.distribute_errors(wire.errors())
     }
 
     /// Push the live values into the state, then build the model.
@@ -566,14 +574,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// is the thing that has to change.
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
-        let leaves = fresh.leaves();
+        let leaves = fresh.collect_values();
         let mut state = self.state_signal;
         *state.write() = fresh;
         // Written per path rather than by replacing the map, so each input's
         // own subscription fires. Paths that only existed because of an edit
         // being undone are left behind as stale keys; nothing reads them, since
         // the restored schema is what decides which paths get rendered, and
-        // `apply_leaves` treats an absent path as empty either way.
+        // `distribute_values` treats an absent path as empty either way.
         for (path, raw) in leaves {
             crate::widgets::write_value(&path, self.values_store, raw);
         }
@@ -585,13 +593,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // is what lets `Form` stay `Copy` and drop into event handlers.
         let mut state = self.state_signal;
         let mut state = state.write();
-        // The argument comes from the STORE. `state.as_values()` would be the
+        // The argument comes from the STORE. `state.collect_values()` would be the
         // state applied to itself — a no-op that discards every keystroke, and
         // then validates the stale values it kept.
         // Two statements: the argument borrows `state` immutably and `apply`
         // takes it mutably.
         let values = state.ordered_values(&self.values_store.read());
-        state.apply(&values);
+        state.distribute_values(&values);
         state.validate()
     }
 }
@@ -677,7 +685,15 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
-    let values = use_store(move || state.peek().leaves().into_iter().collect());
+    // Re-collected into a `HashMap`: the store cannot hold the `IndexMap`
+    // `collect_values` returns — see `ValuesStore`.
+    let values = use_store(move || {
+        state
+            .peek()
+            .collect_values()
+            .into_iter()
+            .collect::<HashMap<_, _>>()
+    });
     let on_edit = use_callback(move |edit: Edit| {
         let mut state = state;
         if let Err(e) = state.write().edit(&edit) {

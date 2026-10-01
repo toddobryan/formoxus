@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::error::FieldError;
+use crate::error::ValidationMessage;
 
 /// The per-field error list, rendered under every widget.
 ///
@@ -34,7 +34,7 @@ use crate::error::FieldError;
 /// reads to announce a field as errored. Leaving it off is an accessibility
 /// defect, not a theming preference.
 #[component]
-pub fn FieldErrors(errors: Vec<FieldError>) -> Element {
+pub fn FieldErrors(errors: Vec<ValidationMessage>) -> Element {
     rsx! {
         if !errors.is_empty() {
             ul { class: "fx-field-errors",

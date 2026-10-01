@@ -394,7 +394,7 @@ fn list_member(
                     // is inserted or removed; see `row_segment`. And unlike
                     // `struct_member`, which passes `prefix` straight through,
                     // nothing upstream has qualified this on yet, so do it here.
-                    // Keeping this in step with `collect_leaves` is what keeps
+                    // Keeping this in step with `collect_values` is what keeps
                     // the leaf paths and the store keys the same strings.
                     let row = row_segment(i);
                     member_for_shape(

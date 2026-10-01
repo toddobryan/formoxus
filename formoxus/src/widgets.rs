@@ -72,4 +72,7 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, FieldProps, InputType, WidgetProps, WidgetType};
 pub use values::{get_current, write_value};
+// Defined in `members`, re-exported here because a custom widget cannot be
+// written without it — so `use formoxus::widgets::*` is the whole kit.
+pub use crate::members::ValuesStore;
 pub use variant_select::VariantSelect;

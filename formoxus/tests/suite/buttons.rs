@@ -6,7 +6,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::{Fns, FormSpec, empty_form, use_form};
+use formoxus::{FormSpec, buttons::Fns, empty_form, use_form};
 use formoxus::{form, using_fns};
 use googletest::prelude::*;
 

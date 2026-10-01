@@ -4,13 +4,13 @@
 //! a row be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `row_segment` for why renaming would be a data hazard.
 
-use crate::RenderCtx;
 use crate::build::{FormMode, member_for_shape};
-use crate::error::{FieldError, FormAccessError, FormError};
-use crate::form::FieldErrors;
+use crate::error::{FormAccessError, ValidationMessage};
+use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
+use crate::members::RenderCtx;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, row_segment,
 };
 use crate::widgets::{AddRowButton, RemoveRowButton};
@@ -24,7 +24,7 @@ pub struct ListSet {
     pub shape: &'static Shape,
     pub optional: bool,
     pub rows: Vec<Box<dyn FormMember>>,
-    pub errors: Vec<FormError>,
+    pub errors: Vec<ValidationMessage>,
     pub next_key: usize,
 }
 
@@ -133,24 +133,31 @@ impl FormMember for ListSet {
         String::new()
     }
 
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let nested = qualify(prefix, &self.name);
         for r in &self.rows {
-            r.collect_leaves(&nested, out);
+            r.collect_values(&nested, out);
         }
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+        let nested = qualify(prefix, &self.name);
+        for r in &mut self.rows {
+            r.distribute_values(&nested, values);
+        }
+    }
+
+    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
         for r in &self.rows {
             r.collect_errors(&nested, out);
         }
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
         for r in &mut self.rows {
-            r.apply_leaves(&nested, values);
+            r.distribute_errors(&nested, errors);
         }
     }
 
@@ -213,28 +220,6 @@ impl FormMember for ListSet {
         Err(no_such_path(path))
     }
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError> {
-        // No `path == my_path` case, unlike `edit`: a list has no field of its
-        // own to attach a `FieldError` to (`self.errors` holds `FormError`s, a
-        // different type) — only a row can be the field a server complained
-        // about. `my_path`, not a row's own path, for the same reason `edit`
-        // qualifies against it: a row qualifies its own name onto whatever
-        // prefix it's handed.
-        let my_path = qualify(prefix, &self.name);
-        ensure_owned(&my_path, path)?;
-        for m in &mut self.rows {
-            if owns(&qualify(&my_path, &m.name()), path) {
-                return m.push_field_error(&my_path, path, error);
-            }
-        }
-        Err(no_such_path(path))
-    }
-
     fn clear_errors(&mut self) {
         self.errors.clear();
         for r in &mut self.rows {
@@ -242,7 +227,7 @@ impl FormMember for ListSet {
         }
     }
 
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
         let my_path = qualify(prefix, &self.name);
         if let Some(spec) = fields.get(&my_path) {
             // Checked before anything is written — see `FieldSet::apply_specs`.
@@ -271,11 +256,11 @@ impl FormMember for ListSet {
             // double-qualifies it into `shapes.#1.#1` — the trap `edit`
             // documents above.
             let row_path = qualify(&my_path, &m.name());
-            let row_fields: FieldSpecs = fields
+            let row_fields: SpecsByPath = fields
                 .iter()
                 .map(|(k, v)| (k.replace(&marker, &row_path), v.clone()))
                 .collect();
-            m.apply_specs(&my_path, &row_fields);
+            m.distribute_specs(&my_path, &row_fields);
         }
     }
 }

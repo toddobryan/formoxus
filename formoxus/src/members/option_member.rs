@@ -1,9 +1,10 @@
 use dioxus::core::Element;
 
-use crate::error::{FieldError, FormAccessError};
+use crate::ErrorsByPath;
+use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::members::{Edit, FieldSpecs, ValuesByPath};
-use crate::{FormMember, RenderCtx};
+use crate::members::{Edit, SpecsByPath, ValuesByPath};
+use crate::members::{FormMember, RenderCtx};
 
 #[derive(Clone, Debug)]
 pub struct OptionMember {
@@ -30,16 +31,20 @@ impl FormMember for OptionMember {
         self.inner.raw_value()
     }
 
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
-        self.inner.collect_leaves(prefix, out);
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+        self.inner.collect_values(prefix, out);
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut crate::form::FieldErrors) {
+    fn collect_errors(&self, prefix: &str, out: &mut crate::form::ErrorsByPath) {
         self.inner.collect_errors(prefix, out);
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
-        self.inner.apply_leaves(prefix, values);
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+        self.inner.distribute_values(prefix, values);
+    }
+
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
+        self.inner.distribute_errors(prefix, errors);
     }
 
     fn validate(&mut self) {
@@ -80,22 +85,11 @@ impl FormMember for OptionMember {
         self.inner.edit(prefix, edit)
     }
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError> {
-        // Same pass-through as `edit`, for the same reason: a decorator, not a
-        // path segment.
-        self.inner.push_field_error(prefix, path, error)
-    }
-
     fn clear_errors(&mut self) {
         self.inner.clear_errors();
     }
 
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
-        self.inner.apply_specs(prefix, fields);
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
+        self.inner.distribute_specs(prefix, fields);
     }
 }

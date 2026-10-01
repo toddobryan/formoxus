@@ -104,37 +104,25 @@ pub use formoxus_macros::using_fns;
 /// same way.
 pub use formoxus_macros::path;
 
-// A flat root, so `use formoxus::*` (and the test modules' `use crate::*`)
-// reaches the whole vocabulary without knowing which module each name lives in.
-pub use crate::defaults::{Formoxus, defaults, provide_defaults};
-pub use crate::error::{FieldError, FormError};
-pub use buttons::{ButtonFn, ButtonSpec, ButtonType, Fns, Invocation};
-pub use fields::{Bound, Constraints, FieldValue, FormField};
-pub use form::{
-    FieldErrors, FieldSpec, Form, FormErrors, FormSpec, FormState, Handler, IntoSlot, Provider,
-    UncheckedHandler, empty_form, form_for, handler, provider, unchecked_handler, use_form,
-    use_form_values,
-};
-pub use members::{
-    Edit, FieldSet, FormMember, ListSet, RenderCtx, ValuesStore, VariantChoice, VariantSet,
-    model_path,
-};
-pub use path::Path;
-pub use submission::Submission;
-pub use widgets::ABSENT_DISPLAY;
-pub use wire::WireForm;
-
 /// The common surface: `use formoxus::prelude::*;`.
 ///
-/// The crate root re-exports the same vocabulary flat, so the prelude is a
-/// convenience rather than a separate contract. For precise imports, reach into
-/// the defining module (`formoxus::form::FormSpec`, …).
+/// **The one list.** The crate root re-exports exactly this module and nothing
+/// else, so a name is either here — reachable as `formoxus::X` and through the
+/// glob — or only at its defining module (`formoxus::members::FormMember`,
+/// `formoxus::buttons::ButtonSpec`). Two hand-kept lists drifted the first time
+/// an export changed, which is why there is no second one.
+///
+/// Glob THIS, not the crate root. `use formoxus::*` would also import every
+/// `pub mod` — `form`, `path`, `error`, `widgets` — into the caller's scope.
+///
+/// Writing a custom widget is a different audience with its own glob:
+/// `use formoxus::widgets::*`.
 pub mod prelude {
     pub use crate::defaults::{Formoxus, defaults, provide_defaults};
-    pub use crate::error::{FieldError, FormError};
+    pub use crate::error::{ValidationError, ValidationMessage};
     pub use crate::form::{
-        Form, FormSpec, FormState, Provider, empty_form, form_for, handler, provider,
-        unchecked_handler, use_form, use_form_values,
+        ErrorsByPath, Form, FormErrors, FormSpec, FormState, Provider, empty_form, form_for,
+        handler, provider, unchecked_handler, use_form, use_form_values,
     };
     pub use crate::path::Path;
     pub use crate::submission::Submission;
@@ -145,3 +133,5 @@ pub mod prelude {
     // is only ever the macro.
     pub use formoxus_macros::{form, path, using_fns};
 }
+
+pub use prelude::*;

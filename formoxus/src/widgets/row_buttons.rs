@@ -2,7 +2,7 @@
 //!
 //! Neither reads the value store. Adding or dropping a row changes the form's
 //! SHAPE, so all either one does is put an [`Edit`] on the wire and let
-//! [`ListSet`](crate::ListSet) rebuild itself.
+//! [`ListSet`](crate::members::ListSet) rebuild itself.
 
 use dioxus::prelude::*;
 

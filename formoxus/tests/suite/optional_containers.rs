@@ -25,7 +25,8 @@ use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::members::ValuesByPath;
-use formoxus::*;
+use formoxus::prelude::*;
+use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
 use std::fmt::Debug;
 
@@ -81,7 +82,7 @@ fn applied(pairs: &[(&str, &str)]) -> ValuesByPath {
 }
 
 fn paths<T: Clone + Debug + PartialEq + Facet<'static>>(form: &FormState<T>) -> Vec<String> {
-    form.leaves().into_iter().map(|(p, _)| p).collect()
+    form.collect_values().into_iter().map(|(p, _)| p).collect()
 }
 
 // ── Shape of the form ──
@@ -106,7 +107,9 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
         ]
     );
     expect_that!(
-        form.leaves(),
+        // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order,
+        // and the order is part of what this asserts.
+        form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("name".to_string(), "Ada".to_string()),
             ("address.street".to_string(), String::new()),
@@ -141,7 +144,7 @@ fn create_mode_leaves_an_untouched_optional_struct_absent() {
     // Same rule arriving through the DOM path rather than through populating —
     // the two boundaries have to agree, as they now do for `""`.
     let mut form = empty_form::<Contact>(FormSpec::default());
-    form.apply(&applied(&[("name", "Ada")]));
+    form.distribute_values(&applied(&[("name", "Ada")]));
     expect_that!(form.validate(), some(eq(&contact(None))));
 }
 
@@ -151,7 +154,7 @@ fn filling_in_an_absent_optional_struct_makes_it_present() {
     // inputs is what makes the container `Some`. No third construction
     // question, and no "is there an address?" checkbox.
     let mut form = form_for(&contact(None), FormSpec::default());
-    form.apply(&applied(&[
+    form.distribute_values(&applied(&[
         ("address.street", "123 Main St"),
         ("address.city", "Springfield"),
         ("address.zip", "12345"),
@@ -164,7 +167,7 @@ fn blanking_a_present_optional_struct_makes_it_absent() {
     // The inverse, and the same rule one level up from `""` IS absence:
     // every leaf underneath empty ⟺ the container is absent.
     let mut form = form_for(&contact(Some(springfield())), FormSpec::default());
-    form.apply(&applied(&[
+    form.distribute_values(&applied(&[
         ("address.street", ""),
         ("address.city", ""),
         ("address.zip", ""),
@@ -186,7 +189,7 @@ fn a_partly_filled_optional_struct_is_an_error() {
     // it — a street with no city is a half-answered address, not an absent
     // one.
     let mut form = form_for(&contact(None), FormSpec::default());
-    form.apply(&applied(&[("address.street", "123 Main St")]));
+    form.distribute_values(&applied(&[("address.street", "123 Main St")]));
     expect_that!(form.validate(), none());
     expect_that!(form.has_errors(), eq(true));
 }
@@ -319,8 +322,8 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
     };
     let form = form_for(&value, FormSpec::default());
     expect_that!(
-        form.leaves(),
-        eq(&Vec::new()),
+        form.collect_values(),
+        is_empty(),
         "fieldless variants have no leaves"
     );
 
@@ -514,7 +517,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
     // strings must be, those say the widget emits them.
     for (raw, expected) in [("true", Some(true)), ("false", Some(false)), ("", None)] {
         let mut form = empty_form::<Prefs>(FormSpec::default());
-        form.apply_form_values(&[("subscribed".to_string(), raw.to_string())]);
+        form.distribute_form_values(&[("subscribed".to_string(), raw.to_string())]);
         expect_that!(
             form.validate(),
             some(eq(&Prefs {
@@ -529,7 +532,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
 //
 // `""` means "unfilled" everywhere else, but a checkbox posts nothing when it is
 // unticked and `false` is a complete answer. The obvious fix — read `""` as
-// `"false"` in `apply_leaves` — was TRIED and reverted: it makes the field
+// `"false"` in `distribute_values` — was TRIED and reverted: it makes the field
 // permanently present, and since `FieldSet::is_present` is `any` over its
 // members, an `Option<Struct>` whose only field is a checkbox then builds
 // `Some(..)` for a section the user never opened. The second test below is that
@@ -560,7 +563,7 @@ fn an_untouched_checkbox_submits_as_false() {
     // The real submit path — `leaves()` out, edits in, `apply()` back — because
     // that is where the `""` came from. Feeding `("subscribed", "false")`
     // straight in would test the parse and skip the bug entirely.
-    let mut values: ValuesByPath = form.leaves().into_iter().collect();
+    let mut values: ValuesByPath = form.collect_values();
     expect_that!(
         values.get("subscribed"),
         some(eq("")),
@@ -569,7 +572,7 @@ fn an_untouched_checkbox_submits_as_false() {
     );
     values.insert("email".to_string(), "ada@example.com".to_string());
 
-    form.apply(&values);
+    form.distribute_values(&values);
     expect_that!(
         form.validate(),
         some(eq(&Signup {
@@ -596,9 +599,9 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     // select whose blank really is absence, so `Empty` must reach `None`
     // untouched. `is_unticked_checkbox` excludes `optional: true` for this.
     let mut form = empty_form::<Event>(FormSpec::default());
-    let values: ValuesByPath = form.leaves().into_iter().collect();
+    let values: ValuesByPath = form.collect_values();
 
-    form.apply(&values);
+    form.distribute_values(&values);
     expect_that!(
         form.validate(),
         some(eq(&Event {

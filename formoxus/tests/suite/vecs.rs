@@ -4,8 +4,9 @@ use super::models::{Location, Shape};
 use super::{Harness, new_since};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
-use formoxus::*;
+use formoxus::prelude::*;
 use googletest::prelude::*;
 use indexmap::IndexMap;
 
@@ -86,7 +87,9 @@ fn struct_rows_round_trip() {
 fn rows_are_named_by_key() {
     let form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.leaves(),
+        // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order,
+        // and the order is part of what this asserts.
+        form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
             ("answers.#0".to_string(), "alpha".to_string()),
@@ -98,7 +101,7 @@ fn rows_are_named_by_key() {
 #[gtest]
 fn struct_rows_qualify_through_their_key() {
     let form = form_for(&venues(), FormSpec::default());
-    let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
         elements_are![
@@ -121,7 +124,7 @@ fn nested_lists_nest_their_keys() {
         ],
     };
     let form = form_for(&grid, FormSpec::default());
-    let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
         elements_are![eq("rows.#0.#0"), eq("rows.#0.#1"), eq("rows.#1.#0")]
@@ -146,7 +149,7 @@ fn enum_rows_are_pinned_by_the_value() {
         ],
     };
     let form = form_for(&drawings, FormSpec::default());
-    let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
     expect_that!(
         paths,
         elements_are![
@@ -163,7 +166,7 @@ fn enum_rows_are_pinned_by_the_value() {
 #[gtest]
 fn editing_one_row_leaves_the_others_alone() {
     let mut form = form_for(&venues(), FormSpec::default());
-    form.apply(&IndexMap::from([(
+    form.distribute_values(&IndexMap::from([(
         "places.#1.city".to_string(),
         "Ogdenville".to_string(),
     )]));
@@ -181,10 +184,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     // here would drop every row on the floor. Swap it once step 4 lands —
     // that substitution is a good check that lengths really are plumbed.
     let form = form_for(&venues(), FormSpec::default());
-    let collected: ValuesByPath = form.leaves().into_iter().collect();
+    let collected: ValuesByPath = form.collect_values();
 
     let mut reloaded = form_for(&venues(), FormSpec::default());
-    reloaded.apply(&collected);
+    reloaded.distribute_values(&collected);
     expect_that!(reloaded.validate(), some(eq(&venues())));
 }
 
@@ -195,7 +198,7 @@ fn create_mode_yields_no_rows_yet() {
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>(FormSpec::default());
-    form.apply(&IndexMap::from([(
+    form.distribute_values(&IndexMap::from([(
         "title".to_string(),
         "Unit 1".to_string(),
     )]));
@@ -218,7 +221,7 @@ fn create_mode_yields_no_rows_yet() {
 fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
     form: &FormState<T>,
 ) -> Vec<String> {
-    form.leaves().into_iter().map(|(p, _)| p).collect()
+    form.collect_values().into_iter().map(|(p, _)| p).collect()
 }
 
 #[gtest]
@@ -252,7 +255,7 @@ fn a_new_row_is_blank_and_buildable() {
         before: None,
     })
     .expect("answers is a list");
-    form.apply_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
+    form.distribute_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
 
     expect_that!(
         form.validate(),
@@ -278,7 +281,9 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
     .expect("answers is a list");
 
     expect_that!(
-        form.leaves(),
+        // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order,
+        // and the order is part of what this asserts.
+        form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
             // The new row comes FIRST in order...
@@ -302,7 +307,7 @@ fn the_list_builds_in_row_order_not_key_order() {
         before: Some(0),
     })
     .expect("answers is a list");
-    form.apply_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
+    form.distribute_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
 
     expect_that!(
         form.validate(),

@@ -17,13 +17,13 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::FieldSpec;
-use crate::error::{FieldError, FormAccessError};
-use crate::form::FieldErrors;
+use crate::error::FormAccessError;
+use crate::form::ErrorsByPath;
+use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
 use dioxus::stores::Store;
 
-pub type FieldSpecs = IndexMap<String, FieldSpec>;
+pub type SpecsByPath = IndexMap<String, FieldSpec>;
 
 pub trait FormMember: Debug {
     fn name(&self) -> String;
@@ -36,11 +36,11 @@ pub trait FormMember: Debug {
     /// Flatten this member's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two field sets in one form can each have a `street`.
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>);
-    /// The reverse of [`collect_leaves`](Self::collect_leaves): each leaf looks
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>);
+    /// The reverse of [`collect_values`](Self::collect_values): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath);
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath);
     fn validate(&mut self);
     fn has_errors(&self) -> bool;
     fn clone_box(&self) -> Box<dyn FormMember>;
@@ -56,7 +56,7 @@ pub trait FormMember: Debug {
     fn clear_errors(&mut self);
 
     /// Flatten this member's errors into `(qualified_path, errors)` pairs — the
-    /// read counterpart to [`push_field_error`](Self::push_field_error), and
+    /// read counterpart to [`distribute_errors`](Self::distribute_errors), and
     /// what turns a validated tree into something that crosses a server fn.
     ///
     /// **Only members that actually have errors appear.** A clean member pushes
@@ -66,18 +66,25 @@ pub trait FormMember: Debug {
     /// meaning that.
     ///
     /// **A container reports its OWN path too, when it has errors of its own.**
-    /// The rule is `push_field_error`'s, mirrored: whatever can be pushed at a
-    /// path has to be collectable from it. `VariantSet` is the one member where
+    /// The rule is `distribute_errors`'s, mirrored: whatever can be delivered
+    /// to a path has to be collectable from it. `VariantSet` is the one member where
     /// that bites today — its `errors` render beside the `<select>` at its own
     /// path, not under a child.
     ///
-    /// Container-level [`FormError`](crate::error::FormError)s (`FieldSet` and
-    /// `ListSet` each hold a `Vec<FormError>`) have no home in `FieldErrors`,
-    /// which is `FieldError`-typed, and so are NOT collected. Latent rather
-    /// than live: nothing pushes to either today — `validate` only clears them
-    /// — but a future `ListSet` min/max-rows check would be the first writer
-    /// and would need `FormErrors` to grow somewhere to put it.
-    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors);
+    /// `FieldSet` and `ListSet` also hold a `Vec<ValidationMessage>` of their
+    /// own, and do NOT report it. Not for want of somewhere to put it — since
+    /// the error types merged it is exactly what `ErrorsByPath` holds — but
+    /// because nothing writes one yet: `validate` only clears them, and neither
+    /// container renders them. The first writer (a `ListSet` min/max-rows
+    /// check, say) needs three things at once: report them here at the
+    /// container's own path, as `VariantSet` does; claim them in
+    /// `distribute_errors`; and render them.
+    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath);
+
+    /// Take this member's own errors out of `errors`, by its qualified path, and
+    /// pass the rest down. Whatever no member claims is left in the map and will
+    /// surface as a form error.
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath);
 
     /// Apply a structural edit — choose a variant, add or remove a row.
     ///
@@ -87,14 +94,7 @@ pub trait FormMember: Debug {
     /// only thing a container reads, so containers stay kind-agnostic.
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError>;
-
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs);
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath);
 }
 
 impl Clone for Box<dyn FormMember> {

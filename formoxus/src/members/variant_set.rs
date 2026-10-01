@@ -1,12 +1,12 @@
 //! An enum-typed member, locked to one variant chosen before the form existed.
 
-use crate::RenderCtx;
 use crate::build::{FormMode, variant_members};
-use crate::error::{FieldError, FormAccessError};
-use crate::form::FieldErrors;
+use crate::error::{FormAccessError, ValidationMessage};
+use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
+use crate::members::RenderCtx;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
 use crate::widgets::{FieldProps, VariantSelect, WidgetType};
@@ -42,7 +42,7 @@ pub struct VariantSet {
     pub optional: bool,
     pub choice: VariantChoice,
     pub members: Vec<Box<dyn FormMember>>,
-    pub errors: Vec<FieldError>,
+    pub errors: Vec<ValidationMessage>,
 }
 
 impl VariantSet {
@@ -123,7 +123,7 @@ impl VariantSet {
         let message = format!(
             "{name:?} is not a variant of the enum at {my_path} (expected one of {known:?})"
         );
-        self.errors.push(FieldError(message.clone()));
+        self.errors.push(ValidationMessage(message.clone()));
         Err(FormAccessError(message))
     }
 
@@ -200,7 +200,7 @@ impl FormMember for VariantSet {
     fn validate(&mut self) {
         self.errors.clear();
         if matches!(self.choice, VariantChoice::Unchosen) {
-            self.errors.push(FieldError(
+            self.errors.push(ValidationMessage(
                 "You must choose a variant for this field.".to_string(),
             ));
         }
@@ -226,35 +226,6 @@ impl FormMember for VariantSet {
         }
     }
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError> {
-        // Unlike `edit`, `path == my_path` IS meaningful here: `self.errors` is
-        // already `Vec<FieldError>` — it's what renders beside the `<select>` —
-        // so a server complaint about the CHOICE itself ("pick a grading
-        // scheme") belongs right there, not forwarded to a child.
-        let my_path = qualify(prefix, &self.name);
-        ensure_owned(&my_path, path)?;
-        if path == my_path {
-            self.errors.push(error);
-            return Ok(());
-        }
-        // Otherwise it's about a field inside the chosen variant — same
-        // containment walk as `forward_to_child`.
-        let Some(child_prefix) = self.child_prefix(prefix) else {
-            return Err(no_such_path(path)); // unchosen: no children to be inside
-        };
-        for m in &mut self.members {
-            if owns(&qualify(&child_prefix, &m.name()), path) {
-                return m.push_field_error(&child_prefix, path, error);
-            }
-        }
-        Err(no_such_path(path))
-    }
-
     fn clear_errors(&mut self) {
         self.errors.clear();
         for m in &mut self.members {
@@ -275,17 +246,38 @@ impl FormMember for VariantSet {
         String::new()
     }
 
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: no members, so no leaves
         };
         for m in &self.members {
-            m.collect_leaves(&nested, out);
+            m.collect_values(&nested, out);
         }
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
-        // The inverse of `push_field_error`, NOT of `collect_leaves` above —
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+        let Some(nested) = self.child_prefix(prefix) else {
+            return; // unchosen: nothing to apply into
+        };
+        for m in &mut self.members {
+            m.distribute_values(&nested, values);
+        }
+    }
+
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
+        if let Some(found) = errors.shift_remove(&qualify(prefix, &self.name)) {
+            self.errors.extend(found);
+        }
+        let Some(nested) = self.child_prefix(prefix) else {
+            return; // No variant was picked, so no errors to get
+        };
+        for m in &mut self.members {
+            m.distribute_errors(&nested, errors);
+        }
+    }
+
+    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
+        // The inverse of `push_field_error`, NOT of `collect_values` above —
         // which is why this does NOT early-return when unchosen, and why it
         // reports `my_path` rather than only recursing.
         //
@@ -319,15 +311,6 @@ impl FormMember for VariantSet {
         !matches!(self.choice, VariantChoice::Unchosen)
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
-        let Some(nested) = self.child_prefix(prefix) else {
-            return; // unchosen: nothing to apply into
-        };
-        for m in &mut self.members {
-            m.apply_leaves(&nested, values);
-        }
-    }
-
     fn write_value_into<'p>(&self, mut partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         match &self.choice {
             VariantChoice::Named(variant) => {
@@ -346,7 +329,7 @@ impl FormMember for VariantSet {
         Ok(partial)
     }
 
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
             self.label = spec.label.clone().or(self.label.take());
             // A variant chooser is the one container that DOES have a widget of
@@ -359,7 +342,7 @@ impl FormMember for VariantSet {
         // descriptor. `Unchosen` means there are none to visit.
         if let Some(child_prefix) = self.child_prefix(prefix) {
             for m in &mut self.members {
-                m.apply_specs(&child_prefix, fields);
+                m.distribute_specs(&child_prefix, fields);
             }
         }
     }

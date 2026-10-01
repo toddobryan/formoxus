@@ -8,8 +8,8 @@ use super::radio_group::RadioGroup;
 use super::select::Select;
 use super::textarea::Textarea;
 use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
-use crate::ValuesStore;
 use crate::fields::ValueKind;
+use crate::members::ValuesStore;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
 ///
@@ -21,7 +21,7 @@ use crate::fields::ValueKind;
 /// `values` + `path` rather than a pre-lensed child store, because a path that
 /// the schema has but the map doesn't is a normal state, not an error: a
 /// variant chosen after mount reveals leaves that were never populated. A missing
-/// key reads as `""`, which is the same "empty IS absence" rule `apply_leaves`
+/// key reads as `""`, which is the same "empty IS absence" rule `distribute_values`
 /// already follows when a path is absent from submitted values.
 #[component]
 pub fn ScalarWidget(

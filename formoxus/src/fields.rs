@@ -1,11 +1,10 @@
 //! Leaf members: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
-use crate::RenderCtx;
-use crate::error::{FieldError, FormAccessError};
+use crate::ErrorsByPath;
+use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::members::{
-    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, no_such_path, qualify,
-};
+use crate::members::RenderCtx;
+use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::core::IntoAttributeValue;
 use dioxus::prelude::*;
@@ -18,7 +17,10 @@ use std::fmt::Debug;
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
     Empty,
     Valid(T),
-    Invalid { raw: String, error: FieldError },
+    Invalid {
+        raw: String,
+        error: ValidationMessage,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,7 +48,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     /// Only [`write_value_into`](FormMember::write_value_into) consults it.
     pub wrapper: Option<&'static facet::Shape>,
     pub value: FieldValue<T>,
-    pub errors: Vec<FieldError>,
+    pub errors: Vec<ValidationMessage>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,8 +119,8 @@ pub struct Constraints {
 }
 
 impl ValueKind {
-    fn check(&self, raw_value: &str) -> Vec<FieldError> {
-        let mut errors: Vec<FieldError> = Vec::new();
+    fn check(&self, raw_value: &str) -> Vec<ValidationMessage> {
+        let mut errors: Vec<ValidationMessage> = Vec::new();
         match self {
             ValueKind::Text {
                 min_length,
@@ -128,18 +130,18 @@ impl ValueKind {
                 if let Some(min) = min_length
                     && raw_value.chars().count() < *min
                 {
-                    errors.push(FieldError(format!("length must be at least {min}")));
+                    errors.push(ValidationMessage(format!("length must be at least {min}")));
                 }
                 if let Some(max) = max_length
                     && raw_value.chars().count() > *max
                 {
-                    errors.push(FieldError(format!("length must be at most {max}")));
+                    errors.push(ValidationMessage(format!("length must be at most {max}")));
                 }
                 if let Some(patt) = pattern {
                     let re = Regex::with_flags(&format!("^(?:{patt})$"), "v")
                         .expect("this regex should have parsed at compile time");
                     if re.find(raw_value).is_none() {
-                        errors.push(FieldError(format!(
+                        errors.push(ValidationMessage(format!(
                             "input should match the regular expression {patt}"
                         )));
                     }
@@ -152,19 +154,20 @@ impl ValueKind {
                 match (min, max) {
                     (Some(min), Some(max)) => {
                         if n < *min || n > *max {
-                            errors.push(FieldError(format!(
+                            errors.push(ValidationMessage(format!(
                                 "number must be in the range {min} up to (and including) {max}"
                             )));
                         }
                     }
                     (Some(min), None) => {
                         if n < *min {
-                            errors.push(FieldError(format!("number must be at least {min}")));
+                            errors
+                                .push(ValidationMessage(format!("number must be at least {min}")));
                         }
                     }
                     (None, Some(max)) => {
                         if n > *max {
-                            errors.push(FieldError(format!("number must be at most {max}")));
+                            errors.push(ValidationMessage(format!("number must be at most {max}")));
                         }
                     }
                     (None, None) => (),
@@ -177,19 +180,20 @@ impl ValueKind {
                 match (min, max) {
                     (Some(min), Some(max)) => {
                         if n < *min || n > *max || n.is_nan() {
-                            errors.push(FieldError(format!(
+                            errors.push(ValidationMessage(format!(
                                 "number must be in the range {min} up to (and including) {max}"
                             )));
                         }
                     }
                     (Some(min), None) => {
                         if n < *min || n.is_nan() {
-                            errors.push(FieldError(format!("number must be at least {min}")));
+                            errors
+                                .push(ValidationMessage(format!("number must be at least {min}")));
                         }
                     }
                     (None, Some(max)) => {
                         if n > *max || n.is_nan() {
-                            errors.push(FieldError(format!("number must be at most {max}")));
+                            errors.push(ValidationMessage(format!("number must be at most {max}")));
                         }
                     }
                     (None, None) => (),
@@ -418,11 +422,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         }
     }
 
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         out.push((qualify(prefix, &self.name), self.raw_value()));
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
         let Some(raw) = values.get(&qualify(prefix, &self.name)) else {
             return; // nothing supplied for this field; leave it as it stands
         };
@@ -444,6 +448,22 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                 error,
             },
         };
+    }
+
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
+        if let Some(found) = errors.shift_remove(&qualify(prefix, &self.name)) {
+            self.errors.extend(found);
+        }
+    }
+
+    fn collect_errors(&self, prefix: &str, out: &mut crate::form::ErrorsByPath) {
+        // Clean fields contribute nothing — see the trait's contract. Inserting
+        // `(path, [])` here would make `FormErrors.fields` non-empty for a form
+        // that passed, so a caller could not read "did it pass?" off the shape.
+        if self.errors.is_empty() {
+            return;
+        }
+        out.insert(qualify(prefix, &self.name), self.errors.clone());
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
@@ -476,7 +496,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         // "required" on top of it — exactly one error either way.
         let error = match &self.value {
             FieldValue::Empty if !self.is_unticked_checkbox() => {
-                Some(FieldError("This field is required.".to_string()))
+                Some(ValidationMessage("This field is required.".to_string()))
             }
             FieldValue::Invalid { error, .. } => Some(error.clone()),
             _ => None,
@@ -494,7 +514,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             && !choices.iter().any(|c| c.value == raw)
         {
             self.errors
-                .push(FieldError("not one of the available choices".into()));
+                .push(ValidationMessage("not one of the available choices".into()));
         }
     }
 
@@ -564,21 +584,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         })
     }
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError> {
-        if path == qualify(prefix, &self.name) {
-            self.errors.push(error);
-            Ok(())
-        } else {
-            Err(no_such_path(path))
-        }
-    }
-
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
             self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
             self.label = spec.label.clone().or(self.label.take());
@@ -602,16 +608,6 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn clear_errors(&mut self) {
         self.errors.clear();
     }
-
-    fn collect_errors(&self, prefix: &str, out: &mut crate::form::FieldErrors) {
-        // Clean fields contribute nothing — see the trait's contract. Inserting
-        // `(path, [])` here would make `FormErrors.fields` non-empty for a form
-        // that passed, so a caller could not read "did it pass?" off the shape.
-        if self.errors.is_empty() {
-            return;
-        }
-        out.insert(qualify(prefix, &self.name), self.errors.clone());
-    }
 }
 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —
@@ -623,19 +619,19 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 /// leaf converts, not a service this crate offers; treat its signature as
 /// unstable.
 #[doc(hidden)]
-pub fn parse_scalar<X>(raw: &str) -> Result<X, FieldError>
+pub fn parse_scalar<X>(raw: &str) -> Result<X, ValidationMessage>
 where
     X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
 {
-    let partial = Partial::alloc::<X>().map_err(|e| FieldError(e.to_string()))?;
+    let partial = Partial::alloc::<X>().map_err(|e| ValidationMessage(e.to_string()))?;
     let partial = partial
         .parse_from_str(raw)
-        .map_err(|_| FieldError(format!("{raw:?} isn't a valid {}", X::SHAPE)))?;
+        .map_err(|_| ValidationMessage(format!("{raw:?} isn't a valid {}", X::SHAPE)))?;
     partial
         .build()
-        .map_err(|e| FieldError(e.to_string()))?
+        .map_err(|e| ValidationMessage(e.to_string()))?
         .materialize::<X>()
-        .map_err(|e| FieldError(e.to_string()))
+        .map_err(|e| ValidationMessage(e.to_string()))
 }
 
 pub(crate) fn populate<X>(peek: Option<Peek<'_, 'static>>) -> FieldValue<X>
@@ -644,7 +640,7 @@ where
 {
     match peek {
         None => FieldValue::Empty,
-        // `""` IS absence, and that has to hold at BOTH boundaries. `apply_leaves`
+        // `""` IS absence, and that has to hold at BOTH boundaries. `distribute_values`
         // already collapses an empty input to `Empty`; without the same collapse
         // here, populating kept `Some("")` alive and `leaves() -> apply()` silently
         // stopped being an identity — the very invariant the uncontrolled design

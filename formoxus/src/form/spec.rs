@@ -8,16 +8,18 @@ use facet::Facet;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
-use crate::error::FormError;
+use crate::error::ValidationError;
 use crate::fields::Constraints;
 use crate::label_case::LabelCase;
 use crate::widgets::{Choice, WidgetType};
+
+type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     pub(super) title: Option<String>,
     pub(super) fields: IndexMap<String, FieldSpec>,
-    pub(super) validator: Option<fn(&T) -> Vec<FormError>>,
+    pub(super) validator: ValidationFn<T>,
     /// Declaration order, which is display order — `form!` collects a `Vec`
     /// for exactly this reason.
     pub(super) buttons: Vec<ButtonSpec>,
@@ -113,7 +115,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_validator(mut self, f: fn(&T) -> Vec<FormError>) -> Self {
+    pub fn with_validator(mut self, f: fn(&T) -> Vec<ValidationError<T>>) -> Self {
         self.validator = Some(f);
         self
     }

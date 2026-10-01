@@ -3,13 +3,19 @@
 //!
 //! The counterpart to `roundtrip`/`forms`, which cover values going out and
 //! back. These cover *verdicts* coming out. The contract under test is stated
-//! on [`FormMember::collect_errors`](formoxus::FormMember::collect_errors):
+//! on [`FormMember::collect_errors`](formoxus::members::FormMember::collect_errors):
 //! only members with errors appear, and a container that can be *pushed* an
 //! error at its own path must be able to hand it back from there.
 
 use super::models::{EventForCreate, Location, Shape};
 use facet::Facet;
-use formoxus::*;
+use formoxus::{
+    FormSpec, empty_form,
+    error::{ValidationError, ValidationMessage},
+    form_for,
+    members::Edit,
+    path,
+};
 use googletest::prelude::*;
 
 /// A struct with an enum field. `enums` has its own `Drawing` of the same
@@ -52,7 +58,7 @@ fn only_the_failing_fields_appear() {
     // One blank field among four filled ones. The three that passed stay out,
     // which is the same rule as above seen from the other side.
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
-    form.apply_form_values(&[
+    form.distribute_form_values(&[
         ("title".to_string(), "Recital".to_string()),
         ("location.street".to_string(), "123 Main St".to_string()),
         ("location.city".to_string(), String::new()),
@@ -91,11 +97,11 @@ fn leaf_paths_are_qualified_through_nested_field_sets() {
 #[gtest]
 fn an_unchosen_enum_reports_at_its_own_path() {
     // The regression test for `collect_errors` having been written as a copy of
-    // `collect_leaves`, which early-returns when unchosen. `validate` pushes
+    // `collect_values`, which early-returns when unchosen. `validate` pushes
     // "you must choose a variant" PRECISELY in that state, so the early return
     // dropped the one error this member reliably produces.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.apply_form_values(&[("name".to_string(), "Sketch".to_string())]);
+    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
 
     let errors = form.collect_errors();
@@ -112,7 +118,7 @@ fn a_chosen_variants_fields_report_under_the_variant_segment() {
     // Chosen but unfilled: now the error is a leaf's, one segment deeper, and
     // the enum itself has nothing to say.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.apply_form_values(&[("name".to_string(), "Sketch".to_string())]);
+    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
     form.edit(&Edit::new_choose_variant("shape", Some("Circle")))
         .expect("Circle is a variant of Shape");
     expect_that!(form.validate(), none());
@@ -130,13 +136,13 @@ fn choosing_a_variant_clears_the_enums_own_error() {
     // a form that reported both would be telling the user to choose a variant
     // they had already chosen.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.apply_form_values(&[("name".to_string(), "Sketch".to_string())]);
+    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(form.collect_errors().paths(), contains(eq("shape")));
 
     form.edit(&Edit::new_choose_variant("shape", Some("Circle")))
         .expect("Circle is a variant of Shape");
-    form.apply_form_values(&[
+    form.distribute_form_values(&[
         ("name".to_string(), "Sketch".to_string()),
         ("shape.$Circle.radius".to_string(), "1.5".to_string()),
     ]);
@@ -209,7 +215,7 @@ fn list_rows_report_their_own_row_keys() {
         counts: vec![1, 2, 3],
     };
     let mut form = form_for(&tally, FormSpec::default());
-    form.apply_form_values(&[("counts.#1".to_string(), "not a number".to_string())]);
+    form.distribute_form_values(&[("counts.#1".to_string(), "not a number".to_string())]);
     expect_that!(form.validate(), none());
 
     expect_that!(
@@ -230,7 +236,7 @@ fn an_absent_optional_enum_reports_nothing() {
     // inner member's errors when absent — so the "choose a variant" error the
     // required case produces must NOT appear here.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.apply_form_values(&[("name".to_string(), "Doodle".to_string())]);
+    form.distribute_form_values(&[("name".to_string(), "Doodle".to_string())]);
     expect_that!(form.validate(), some(anything()));
 
     expect_that!(form.collect_errors().fields, is_empty());
@@ -286,9 +292,9 @@ fn a_nested_enums_leaf_error_carries_both_variant_segments() {
 
 // ── Form-level errors ────────────────────────────────────────────────────
 
-fn label_must_not_be_shouted(tally: &Tally) -> Vec<FormError> {
+fn label_must_not_be_shouted(tally: &Tally) -> Vec<ValidationError<Tally>> {
     if tally.label.chars().all(|c| !c.is_lowercase()) {
-        vec![FormError("Don't shout the label.".to_string())]
+        vec![ValidationError::form("Don't shout the label.")]
     } else {
         Vec::new()
     }
@@ -311,7 +317,66 @@ fn the_specs_validator_lands_in_form_not_fields() {
     let errors = form.collect_errors();
     expect_that!(errors.fields, is_empty());
     expect_that!(
-        errors.form.iter().map(|e| e.0.clone()).collect::<Vec<_>>(),
+        errors.form_messages(),
         elements_are![eq("Don't shout the label.")]
     );
+}
+
+/// The other half of the test above: an error WITH a path skips the form-level
+/// list and lands on the field it names, however deeply that field is nested.
+/// This is the gap the merged error type exists to close — before it, a
+/// whole-form check had no way to say WHICH field was wrong.
+fn zip_is_numeric(e: &EventForCreate) -> Vec<ValidationError<EventForCreate>> {
+    if e.location.zip.chars().all(|c| c.is_ascii_digit()) {
+        Vec::new()
+    } else {
+        vec![ValidationError::at(
+            path!(EventForCreate.location.zip),
+            "A ZIP code is digits.",
+        )]
+    }
+}
+
+#[gtest]
+fn a_validator_error_with_a_path_lands_on_that_field() {
+    let event = EventForCreate {
+        title: "Launch".into(),
+        location: Location {
+            street: "1 Main St".into(),
+            city: "Springfield".into(),
+            zip: "NW1".into(),
+        },
+    };
+    let mut form = form_for(&event, FormSpec::default().with_validator(zip_is_numeric));
+    expect_that!(form.validate(), none());
+
+    let errors = form.collect_errors();
+    expect_that!(errors.form, is_empty());
+    expect_that!(
+        errors.fields.get("location.zip"),
+        some(elements_are![eq(&ValidationMessage::from(
+            "A ZIP code is digits."
+        ))])
+    );
+}
+
+/// `ValidationError<T>` asks nothing of `T`. Its `T` lives only inside
+/// `Path<T>`, which holds no `T` either, so cloning, printing or comparing an
+/// error must not depend on whether the MODEL can be cloned, printed or
+/// compared. A `#[derive]` would quietly demand all three, which is why the
+/// impls are hand-written — and this is what stops a derive coming back.
+#[gtest]
+fn a_validation_error_needs_nothing_from_its_model() {
+    // Deliberately implements nothing: not Clone, not Debug, not PartialEq.
+    struct Opaque;
+
+    // Generic, with no bounds on `T`: under a derive this fails to compile at
+    // `to_vec`, which needs `ValidationError<T>: Clone`.
+    fn copied<T>(errors: &[ValidationError<T>]) -> Vec<ValidationError<T>> {
+        errors.to_vec()
+    }
+
+    let errors = vec![ValidationError::<Opaque>::form("Don't shout the label.")];
+    // `eq` needs `Debug` and `PartialEq` on the errors themselves.
+    expect_that!(copied(&errors), eq(&errors));
 }

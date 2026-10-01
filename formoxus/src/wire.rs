@@ -50,7 +50,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    FieldError, FormError, Path,
+    Path,
+    error::ValidationMessage,
     form::{FormErrors, FormSpec, form_for},
     members::ValuesByPath,
 };
@@ -110,7 +111,7 @@ impl<T> WireForm<T> {
         &self.errors
     }
 
-    pub fn form_errors(&self) -> &[FormError] {
+    pub fn form_errors(&self) -> &[ValidationMessage] {
         &self.errors.form
     }
 
@@ -118,7 +119,7 @@ impl<T> WireForm<T> {
         self.form_errors().iter().map(|fe| fe.0.clone()).collect()
     }
 
-    pub fn errors_at(&self, path: Path<T>) -> &[FieldError] {
+    pub fn errors_at(&self, path: Path<T>) -> &[ValidationMessage] {
         self.errors
             .fields
             .get(path.as_str())
@@ -144,7 +145,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> WireForm<T> {
     /// alone: which paths exist depends on the chosen variants and row counts
     /// that [`form_for`] derives from the value.
     pub fn from_model(model: &T, spec: FormSpec<T>) -> Self {
-        Self::new(form_for(model, spec).as_values(), FormErrors::default())
+        Self::new(
+            form_for(model, spec).collect_values(),
+            FormErrors::default(),
+        )
     }
 }
 

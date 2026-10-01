@@ -1,11 +1,11 @@
 //! A struct-typed member: its fields, nested under its own name.
 
-use crate::RenderCtx;
-use crate::error::{FieldError, FormAccessError, FormError};
-use crate::form::FieldErrors;
+use crate::error::{FormAccessError, ValidationMessage};
+use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
+use crate::members::RenderCtx;
 use crate::members::{
-    Edit, FieldSpecs, FormMember, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify,
 };
 use dioxus::prelude::*;
@@ -17,7 +17,7 @@ pub struct FieldSet {
     pub optional: bool,
     pub label: Option<String>,
     pub members: Vec<Box<dyn FormMember>>,
-    pub errors: Vec<FormError>,
+    pub errors: Vec<ValidationMessage>,
 }
 
 impl FormMember for FieldSet {
@@ -64,24 +64,31 @@ impl FormMember for FieldSet {
         String::new()
     }
 
-    fn collect_leaves(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let nested = qualify(prefix, &self.name);
         for m in &self.members {
-            m.collect_leaves(&nested, out);
+            m.collect_values(&nested, out);
         }
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut FieldErrors) {
+    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
         for m in &self.members {
             m.collect_errors(&nested, out);
         }
     }
 
-    fn apply_leaves(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
         for m in &mut self.members {
-            m.apply_leaves(&nested, values);
+            m.distribute_values(&nested, values);
+        }
+    }
+
+    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
+        let nested = qualify(prefix, &self.name);
+        for m in &mut self.members {
+            m.distribute_errors(&nested, errors);
         }
     }
 
@@ -112,22 +119,6 @@ impl FormMember for FieldSet {
         Err(no_such_path(path))
     }
 
-    fn push_field_error(
-        &mut self,
-        prefix: &str,
-        path: &str,
-        error: FieldError,
-    ) -> Result<(), FormAccessError> {
-        let nested = qualify(prefix, &self.name);
-        ensure_owned(&nested, path)?;
-        for m in &mut self.members {
-            if owns(&qualify(&nested, &m.name()), path) {
-                return m.push_field_error(&nested, path, error);
-            }
-        }
-        Err(no_such_path(path))
-    }
-
     fn clear_errors(&mut self) {
         self.errors.clear();
         for m in &mut self.members {
@@ -135,7 +126,7 @@ impl FormMember for FieldSet {
         }
     }
 
-    fn apply_specs(&mut self, prefix: &str, fields: &FieldSpecs) {
+    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
         let my_path = qualify(prefix, &self.name);
         if let Some(spec) = fields.get(&my_path) {
             // Checked before anything is written, so a rejected spec leaves the
@@ -152,7 +143,7 @@ impl FormMember for FieldSet {
         // spec may speak about any number of descendants — so every child is
         // visited, with this member's path as their prefix.
         for m in &mut self.members {
-            m.apply_specs(&my_path, fields);
+            m.distribute_specs(&my_path, fields);
         }
     }
 }

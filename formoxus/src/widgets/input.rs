@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use super::errors::FieldErrors;
 use super::types::{FieldProps, InputType};
 use super::values::{get_current, write_value};
-use crate::ValuesStore;
+use crate::members::ValuesStore;
 
 #[component]
 pub fn Input(

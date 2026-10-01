@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use super::errors::FieldErrors;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
-use crate::ValuesStore;
+use crate::members::ValuesStore;
 
 /// A multi-line text input bound to one path in the value map.
 ///

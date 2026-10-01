@@ -9,12 +9,13 @@ use std::{fmt::Debug, marker::PhantomData};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
 
-use crate::RenderCtx;
+use crate::ValidationError;
 use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
-use crate::error::{FieldError, FormAccessError, FormError};
-use crate::form::{FieldErrors, FormErrors};
+use crate::error::{FormAccessError, ValidationMessage};
+use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
+use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, ValuesByPath, no_such_path, owns};
 
 use super::FormSpec;
@@ -23,7 +24,7 @@ use super::FormSpec;
 pub struct FormState<T: Clone + Debug + Facet<'static>> {
     pub spec: FormSpec<T>,
     pub members: Vec<Box<dyn FormMember>>,
-    pub errors: Vec<FormError>,
+    pub errors: Vec<ValidationMessage>,
 
     pub _type: PhantomData<T>,
 }
@@ -44,7 +45,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub(crate) fn apply_specs(&mut self) {
         let fields = &self.spec.fields;
         for m in &mut self.members {
-            m.apply_specs("", fields);
+            m.distribute_specs("", fields);
         }
     }
 
@@ -108,7 +109,29 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         // Copied out rather than borrowed: `Option<fn(..)>` is `Copy`, so this
         // holds no borrow of `self.spec` while `self.errors` is extended.
         if let Some(check) = self.spec.validator {
-            self.errors.extend(check(&model));
+            let mut errors_by_path = ErrorsByPath::default();
+            for ValidationError { path, message } in check(&model) {
+                match path {
+                    None => self.errors.push(message),
+                    Some(p) => errors_by_path
+                        .entry(p.to_string())
+                        .or_default()
+                        .push(message),
+                }
+            }
+            let unclaimed = self.distribute_errors(errors_by_path);
+            let messages_for_unclaimed: Vec<ValidationMessage> = unclaimed
+                .into_iter()
+                .map(|(path, messages)| {
+                    let combined_messages = messages
+                        .into_iter()
+                        .map(|vm| vm.0)
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    ValidationMessage(format!("At path: {path}, {combined_messages}"))
+                })
+                .collect();
+            self.errors.extend(messages_for_unclaimed);
         }
 
         // One exit for both kinds of failure, so a form-wide error cannot be
@@ -116,14 +139,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    /// Every leaf input in the form, as `(qualified_path, raw_value)` — the
-    /// list the widget layer turns into one signal apiece.
-    pub fn leaves(&self) -> Vec<(String, String)> {
+    /// Every leaf input in the form, keyed by qualified path, in the order the
+    /// member tree declares them — the inverse of
+    /// [`distribute_values`](Self::distribute_values), and the list the widget
+    /// layer turns into one store entry apiece.
+    pub fn collect_values(&self) -> ValuesByPath {
         let mut out = Vec::new();
         for m in &self.members {
-            m.collect_leaves("", &mut out);
+            m.collect_values("", &mut out);
         }
-        out
+        out.into_iter().collect()
     }
 
     /// A [`ValuesStore`](crate::ValuesStore)'s contents as a [`ValuesByPath`],
@@ -132,7 +157,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// The bridge every read of the live values crosses, because the store's map
     /// and [`ValuesByPath`] cannot be the same type — see
     /// [`ValuesStore`](crate::ValuesStore). Takes its KEYS and their order from
-    /// [`leaves`](Self::leaves) and its VALUES from the store, which is the only
+    /// [`collect_values`](Self::collect_values) and its VALUES from the store, which is the only
     /// way to get both: the schema knows the order, the store knows what the
     /// user typed.
     ///
@@ -140,11 +165,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// holds but the schema does not is dropped — those are the stale keys an
     /// undone variant choice leaves behind, which nothing reads. And a path the
     /// schema has but the store does not arrives as `""`, which is the same
-    /// "absent IS empty" rule [`apply`](Self::apply) already follows.
+    /// "absent IS empty" rule [`distribute_values`](Self::distribute_values) already follows.
     pub(crate) fn ordered_values(&self, store: &HashMap<String, String>) -> ValuesByPath {
-        self.leaves()
-            .into_iter()
-            .map(|(path, _)| {
+        self.collect_values()
+            .into_keys()
+            .map(|path| {
                 let raw = store.get(&path).cloned().unwrap_or_default();
                 (path, raw)
             })
@@ -152,22 +177,29 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// Take raw input values back in, keyed by the same qualified paths
-    /// [`leaves`](Self::leaves) hands out. Call this on submit, before
+    /// [`collect_values`](Self::collect_values) hands out. Call this on submit, before
     /// `validate()`.
-    pub fn apply(&mut self, values: &ValuesByPath) {
+    pub fn distribute_values(&mut self, values: &ValuesByPath) {
         for m in &mut self.members {
-            m.apply_leaves("", values);
+            m.distribute_values("", values);
         }
+    }
+
+    pub fn distribute_errors(&mut self, mut errors: ErrorsByPath) -> ErrorsByPath {
+        for m in &mut self.members {
+            m.distribute_errors("", &mut errors);
+        }
+        errors
     }
 
     /// Take values straight off a submitted `<form>`. Dioxus's
     /// `FormData::values()` hands back `(name, FormValue)` pairs keyed by each
     /// input's `name` attribute — which is exactly the qualified path
-    /// [`leaves`](Self::leaves) emitted — so no per-field signal is needed to
+    /// [`collect_values`](Self::collect_values) emitted — so no per-field signal is needed to
     /// track edits: the DOM already did it.
-    pub fn apply_form_values(&mut self, values: &[(String, String)]) {
+    pub fn distribute_form_values(&mut self, values: &[(String, String)]) {
         let map: ValuesByPath = values.iter().cloned().collect();
-        self.apply(&map);
+        self.distribute_values(&map);
     }
 
     pub fn edit(&mut self, edit: &Edit) -> Result<(), FormAccessError> {
@@ -194,10 +226,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
-        let Some(idx) = self.members.iter().position(|m| owns(&m.name(), path)) else {
-            return Err(no_such_path(path));
-        };
-        self.members[idx].push_field_error("", path, FieldError(message.to_string()))
+        let mut this_error = ErrorsByPath::default();
+        this_error.insert(path.to_string(), vec![ValidationMessage::from(message)]);
+        let unclaimed = self.distribute_errors(this_error);
+        if unclaimed.is_empty() {
+            Ok(())
+        } else {
+            Err(no_such_path(path))
+        }
     }
 
     /// Answer the enum at `path`, rebuilding that subtree from the chosen
@@ -269,7 +305,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn collect_errors(&self) -> FormErrors {
-        let mut field_errors = FieldErrors::default();
+        let mut field_errors = ErrorsByPath::default();
         for m in &self.members {
             m.collect_errors("", &mut field_errors);
         }
@@ -277,10 +313,6 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             form: self.errors.clone(),
             fields: field_errors,
         }
-    }
-
-    pub fn as_values(&self) -> ValuesByPath {
-        self.leaves().into_iter().collect()
     }
 }
 
@@ -294,7 +326,7 @@ pub fn form_for<T: Clone + Debug + PartialEq + Facet<'static>>(
 }
 
 /// Create mode: no value to seed from, so every field starts empty and any
-/// enum in `T` starts [`VariantChoice::Unchosen`](crate::VariantChoice) until
+/// enum in `T` starts [`VariantChoice::Unchosen`](crate::members::VariantChoice) until
 /// the user picks.
 pub fn empty_form<T: Clone + Debug + PartialEq + Facet<'static>>(
     spec: FormSpec<T>,

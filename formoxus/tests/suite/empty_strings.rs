@@ -1,7 +1,7 @@
 //! `""` IS absence, at both boundaries.
 
 use facet::Facet;
-use formoxus::{members::ValuesByPath, *};
+use formoxus::{members::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 use std::fmt::Debug;
 
@@ -21,8 +21,8 @@ fn through_the_dom<T>(form: &FormState<T>, mut reloaded: FormState<T>) -> Option
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
-    let collected: ValuesByPath = form.leaves().into_iter().collect();
-    reloaded.apply(&collected);
+    let collected: ValuesByPath = form.collect_values();
+    reloaded.distribute_values(&collected);
     reloaded.validate()
 }
 
@@ -80,7 +80,7 @@ fn none_and_some_empty_are_indistinguishable() {
         },
         FormSpec::default(),
     );
-    expect_that!(from_none.leaves(), eq(&from_empty.leaves()));
+    expect_that!(from_none.collect_values(), eq(&from_empty.collect_values()));
 }
 
 #[gtest]

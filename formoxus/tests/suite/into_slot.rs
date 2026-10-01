@@ -21,7 +21,8 @@
 //! stops compiling. (Verified by hand against the type-alias version before
 //! writing the newtype.)
 
-use formoxus::*;
+use formoxus::form::{Handler, IntoSlot, UncheckedHandler};
+use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;

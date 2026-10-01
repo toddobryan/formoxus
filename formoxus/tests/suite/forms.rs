@@ -8,10 +8,13 @@ use dioxus_html::{
     PlatformEventData, SerializedHtmlEventConverter, SerializedMouseData, set_event_converter,
 };
 use facet::Facet;
+use formoxus::buttons::Fns;
 use formoxus::fields::Constraints;
+use formoxus::fields::{FieldValue, FormField};
 use formoxus::label_case::LabelCase;
 use formoxus::members::ValuesByPath;
-use formoxus::*;
+use formoxus::members::{FieldSet, FormMember};
+use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::any::Any;
 use std::marker::PhantomData;
@@ -81,7 +84,7 @@ fn member_names(members: &[Box<dyn FormMember>]) -> Vec<String> {
 #[gtest]
 fn repeated_struct_types_get_distinct_paths() {
     let form = empty_form::<Trip>(FormSpec::default());
-    let paths: Vec<String> = form.leaves().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
 
     expect_that!(
         paths,
@@ -229,7 +232,7 @@ fn applying_widget_values_round_trips_to_a_model() {
     // The full loop: shape-walk an empty form, take raw strings back in
     // the way a submit handler would, then validate into a model.
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
-    form.apply(&values(&[
+    form.distribute_values(&values(&[
         ("title", "Board Game Night"),
         ("location.street", "123 Main St"),
         ("location.city", "Springfield"),
@@ -253,7 +256,7 @@ fn applying_widget_values_round_trips_to_a_model() {
 fn non_string_scalars_parse_through_the_shape_vtable() {
     // `u32` here never touches `FromStr` — facet parses it from the shape.
     let mut form = empty_form::<Rsvp>(FormSpec::default());
-    form.apply(&values(&[
+    form.distribute_values(&values(&[
         ("name", "Ada"),
         ("guests", "2"),
         ("note", "bringing dessert"),
@@ -272,14 +275,14 @@ fn non_string_scalars_parse_through_the_shape_vtable() {
 #[gtest]
 fn unparseable_input_becomes_invalid_not_a_panic() {
     let mut form = empty_form::<Rsvp>(FormSpec::default());
-    form.apply(&values(&[("name", "Ada"), ("guests", "not a number")]));
+    form.distribute_values(&values(&[("name", "Ada"), ("guests", "not a number")]));
 
     expect_that!(form.validate(), none());
     expect_that!(form.has_errors(), eq(true));
 
     // The bad input is preserved so the widget can show it back.
     let guests = form
-        .leaves()
+        .collect_values()
         .into_iter()
         .find(|(p, _)| p == "guests")
         .map(|(_, raw)| raw);
@@ -297,7 +300,7 @@ fn blanking_a_field_makes_it_empty_again() {
         FormSpec::default(),
     );
     // Clearing an optional field is legal; clearing a required one isn't.
-    form.apply(&values(&[("note", ""), ("name", "")]));
+    form.distribute_values(&values(&[("note", ""), ("name", "")]));
 
     expect_that!(form.validate(), none());
     let complaining: Vec<String> = form
@@ -321,10 +324,10 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     };
 
     let form = form_for(&rsvp, FormSpec::default());
-    let round_tripped: ValuesByPath = form.leaves().into_iter().collect();
+    let round_tripped: ValuesByPath = form.collect_values();
 
     let mut reloaded = empty_form::<Rsvp>(FormSpec::default());
-    reloaded.apply(&round_tripped);
+    reloaded.distribute_values(&round_tripped);
 
     expect_that!(reloaded.validate(), some(eq(&rsvp)));
 }
@@ -525,7 +528,7 @@ fn PushesAnErrorOnClick() -> Element {
     rsx! {
         { form.render_fragment() }
         button {
-            onclick: move |_| form.push_error(FormError("invalid credentials".to_string())),
+            onclick: move |_| form.push_error("invalid credentials".into()),
             "Sign in"
         }
     }
@@ -587,7 +590,7 @@ fn FieldsOnlyWithPushedError() -> Element {
     rsx! {
         { form.render_fields() }
         button {
-            onclick: move |_| form.push_error(FormError("invalid credentials".to_string())),
+            onclick: move |_| form.push_error("invalid credentials".into()),
             "Sign in"
         }
     }
@@ -637,7 +640,7 @@ fn ErrorsOnlyWithPushedError() -> Element {
     rsx! {
         { form.render_errors() }
         button {
-            onclick: move |_| form.push_error(FormError("invalid credentials".to_string())),
+            onclick: move |_| form.push_error("invalid credentials".into()),
             "Sign in"
         }
     }
@@ -715,10 +718,10 @@ fn validate_clears_a_pushed_error() {
     let mut state = empty_form(FormSpec::<Credentials>::default());
     state
         .errors
-        .push(FormError("invalid credentials".to_string()));
+        .push(ValidationMessage::from("invalid credentials"));
     expect_that!(state.has_errors(), eq(true));
 
-    state.apply(&indexmap::IndexMap::from([(
+    state.distribute_values(&indexmap::IndexMap::from([(
         "username".to_string(),
         "bob".to_string(),
     )]));

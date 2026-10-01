@@ -10,7 +10,7 @@ use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
 use facet::Facet;
-use formoxus::*;
+use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
@@ -26,7 +26,7 @@ use std::{collections::HashMap, fmt::Debug};
 fn use_field_signals<T: Clone + Debug + PartialEq + Facet<'static>>(
     form: &FormState<T>,
 ) -> HashMap<String, Signal<String>> {
-    let leaves = form.leaves();
+    let leaves = form.collect_values();
     use_hook(|| {
         leaves
             .into_iter()
@@ -75,7 +75,7 @@ fn EventFormView() -> Element {
 #[component]
 fn UncontrolledEventForm() -> Element {
     let form = use_hook(|| empty_form::<EventForCreate>(FormSpec::default()));
-    let leaves = form.leaves();
+    let leaves = form.collect_values();
 
     rsx! {
         form {
@@ -91,7 +91,7 @@ fn UncontrolledEventForm() -> Element {
                     })
                     .collect();
                 let mut form = empty_form::<EventForCreate>(FormSpec::default());
-                form.apply_form_values(&values);
+                form.distribute_form_values(&values);
                 let _model = form.validate();
             },
             for (path, raw) in leaves {
@@ -105,7 +105,7 @@ fn UncontrolledEventForm() -> Element {
 #[gtest]
 fn uncontrolled_inputs_are_named_by_qualified_path() {
     // `FormData::values()` keys off the `name` attribute, so these names
-    // are the entire contract between the DOM and `apply_form_values`.
+    // are the entire contract between the DOM and `distribute_form_values`.
     let html = render_to_html(UncontrolledEventForm);
     for path in ["title", "location.street", "location.city", "location.zip"] {
         expect_that!(html, contains_substring(format!(r#"name="{path}""#)));
@@ -123,7 +123,7 @@ fn submitted_values_shuffle_into_a_model() {
     ];
 
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
-    form.apply_form_values(&submitted);
+    form.distribute_form_values(&submitted);
 
     expect_that!(
         form.validate(),
@@ -229,7 +229,7 @@ fn a_scalar_input_binds_to_its_path_in_the_value_map() {
 fn a_path_the_value_map_never_saw_renders_empty_rather_than_panicking() {
     // `get_unchecked` + `try_read` is what buys this: reading a missing key
     // yields `""` instead of the panic a plain `read()` would raise. It's the
-    // same "absent IS empty" rule `apply_leaves` follows for submitted values.
+    // same "absent IS empty" rule `distribute_values` follows for submitted values.
     let html = render_to_html(EmptyInput);
     expect_that!(html, contains_substring(r#"name="shape.radius""#));
     expect_that!(html, contains_substring(r#"value="""#));
@@ -307,7 +307,7 @@ struct Score {
 #[component]
 fn ScoreFormWithBadInput() -> Element {
     let mut state = empty_form::<Score>(FormSpec::default());
-    state.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
+    state.distribute_form_values(&[("credit".to_string(), "abc".to_string())]);
     // Validating BEFORE mounting is what makes this a pure render assertion —
     // errors are populated by `validate`, and blur-time validation doesn't
     // exist yet, so there is no interaction to drive here.
@@ -343,7 +343,7 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
     // value is unparseable — which satisfies "not also required" by making the
     // field report nothing at all, so the real error never renders either.
     let mut form = empty_form::<Score>(FormSpec::default());
-    form.apply_form_values(&[("credit".to_string(), "abc".to_string())]);
+    form.distribute_form_values(&[("credit".to_string(), "abc".to_string())]);
     expect_that!(form.validate(), none());
 
     let html = render_to_html(ScoreFormWithBadInput);
