@@ -39,6 +39,24 @@ from, calls the whole range `Widget`. A brief widget→control rename on
 which also records the Control-vs-Widget split that was considered and why it
 does not work.
 
+**One deliberate exception: the CSS class `fx-control`.** It names the bare
+`<input>`/`<select>`/`<textarea>` — the one thing the rule's reason does not
+cover — and "form control" is the HTML spec's own term. The CSS vocabulary is
+web-facing, not Rust-API-facing; do not let the word back into the Rust API on
+its strength. All emitted classes are `fx-`-prefixed; the full list and its
+reasoning are in `.claude/memory/css_class_vocabulary.md`.
+
+## Exports: the prelude is the one list
+
+`formoxus::prelude` holds what a consumer writing forms uses, and the crate
+root is only `pub use prelude::*;`. Everything else is reached through its
+defining module (`formoxus::members::FormMember`, `formoxus::buttons::ButtonSpec`);
+`formoxus::widgets::*` is the separate glob for writing a custom widget.
+**Inside the crate, the macros and intra-doc links, always use the full module
+path** — never a name through the prelude — so trimming the prelude cannot
+break anything. There used to be a flat root list as well, and the two drifted
+on the first export change. See `.claude/memory/prelude_is_the_one_list.md`.
+
 ## `.claude/memory/`
 
 Start at its `MEMORY.md` index. Holds the accumulated design reasoning for

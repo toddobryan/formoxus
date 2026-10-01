@@ -19,7 +19,27 @@ describes the deleted derive path). The survey this was drawn from is
    documenting the `form!` grammar comes *after* the three items that add
    grammar to it (C6, C4, C5), not before.
 
-## The list, in order
+## CURRENT ORDER — revised by Todd 2026-09-30, supersedes the numbering below
+
+Step 1 is **DONE** (all its breaking changes landed, last commit `3f04386`).
+Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
+
+1. ~~Breaking API changes~~ — done
+2. **Issue #6** — require a checkbox to be ticked. ← **NEXT**
+3. **C6 — author-supplied widget attributes** (was item 4)
+4. **Issue #9 — `aria-describedby`** (was item 3)
+5. **C5 — `help_text`** (was item 6) — moved AHEAD of per-field validators, so
+   help text arrives right after the describedby mechanism it will join
+6. **C4 — per-field validators** (was item 5)
+7. **A3 — the facet version decision**
+8. **A1 — document the `form!` grammar**
+9. **A2 — the doc pass**
+
+**A4 (`wasm-opt`) was not in Todd's reordered list.** Assumed still last; confirm
+before treating it as dropped. The item descriptions below are unchanged and
+still accurate — only their order moved.
+
+## The list, in order (original numbering, kept for the item descriptions)
 
 1. **Breaking API changes.** Three of them.
    - **`SelectChoice` → `Choice` — DONE 2026-09-29.** Renamed, MOVED from
