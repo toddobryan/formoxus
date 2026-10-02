@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `required` applies only to a bool field, where it means the value must be true; every other field is already required unless its type is an `Option`
+  --> tests/ui/form_required_on_a_string.rs:14:33
+   |
+14 |             name => { required: true },
+   |                                 ^^^^ evaluation of `main::_` failed here

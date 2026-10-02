@@ -45,7 +45,7 @@ Useful for ideas, but Django is the real bar.
    arbitrary attributes through**; fixed error markup (leptos_form has 5 error
    modes); no
    label placement options; no disabled/readonly fields; no field exclusion.
-6b. **A checkbox cannot be required to be TICKED** (issue #6, found 2026-09-27).
+6b. **DONE 2026-10-01 — `required: true` on a bool.** Originally: **A checkbox cannot be required to be TICKED** (issue #6, found 2026-09-27).
    Django's `BooleanField(required=True)` means the box must be checked;
    formoxus's `required` means presence, and for a `bool` unticked is a complete
    answer — so `Checkbox` drops `required` on purpose and nothing enforces
@@ -56,6 +56,39 @@ Useful for ideas, but Django is the real bar.
    (`RenderCtx.required` drives `Select`'s placeholder and `radio_group`'s refusal
    of an `Option`), so redefining it for bools would make one word mean two
    things depending on the field's type.
+
+   **DECIDED by Todd 2026-10-01, overriding the lean above:** the `form!` key IS
+   `required: true`, Django's spelling, legal ONLY on a non-optional `bool`
+   field (compile-time gate; his draft message: "required is only allowed on
+   bool fields and indicates that its value must be true; required is implied
+   for all other fields unless the value is an Option<_>"). Any bool widget may
+   carry it; RadioGroup/Select browser-side enforcement still to think about.
+   BUILT 2026-10-01 differently from first planned: NOT a `FieldProps` field.
+   The HTML attribute already arrives via `ValueKind::attrs` (a constraint like
+   any other), so only the ` *` marker needed a signal, and `ScalarWidget`'s
+   checkbox arm binds `required_true` from `ValueKind::Bool` and passes it as a
+   `Checkbox`-only prop. `FieldProps` stays the same for every widget and
+   `required` keeps one (presence) meaning in the Rust API. A bool `select`
+   already gets the marker from presence. Compile gates `takes_required` +
+   `required_is_not_optional` (field_kind) and a `checkbox`-on-`Option` refusal
+   (widget.rs) also BUILT, with goldens. Semantics: on a Checkbox, `Empty` and `Valid(false)`
+   are one answer and both fail; on Select/RadioGroup `Empty` already fails
+   presence and `Valid(false)` fails the new rule. TRAP found scoping it: an
+   unticked box is `FieldValue::Empty`, and `FormField::validate` returns on
+   `Empty` before `ValueKind::check`, so a rule only in `check` never sees the
+   unticked case. ALSO FOUND: `widget: checkbox` on an `Option<bool>` COMPILES
+   today (`field_kind::kind` peels the `Option`; only `radio_group` has a
+   `not_optional` assert, in `formoxus-macros/src/form/widget.rs`), though a
+   two-state widget cannot express three states. Todd wants it refused. And
+   `validate` can see `self.widget()` (pure data, fine server-side), so the
+   message can vary by widget. The key is a `syn::LitBool` in `field_body!`
+   (so only a literal parses), and **`required: false` is a compile error too**
+   (Todd, 2026-10-01): on any non-bool field an explicit `required` would let a
+   form disagree with its model — `false` on a non-`Option` field or `true` on
+   an `Option` describes forms the model cannot hold — so presence comes from
+   the type alone, and on a bool `false` is just the default. Division of labour: Todd writes the code, I
+   review it, then write suite tests, trybuild goldens and a `/t/` form + e2e
+   pair.
 
 7. **State:** no change tracking (Django `has_changed`/`changed_data`,
    leptos_form `field_changed_class`); no draft persistence (leptos_form

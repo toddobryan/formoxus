@@ -35,6 +35,8 @@ pub fn TestForm(slug: String) -> Element {
         "lengths" => rsx! { Lengths {} },
         "bounds" => rsx! { Bounds {} },
         "checkbox" => rsx! { CheckboxForm {} },
+        "must-agree" => rsx! { MustAgree {} },
+        "must-agree-novalidate" => rsx! { MustAgreeNoValidate {} },
         "select" => rsx! { SelectForm {} },
         "radio-group" => rsx! { RadioGroupForm {} },
         "textarea" => rsx! { TextareaForm {} },
@@ -235,17 +237,54 @@ struct Agree {
     agreed: bool,
 }
 
-/// A bool as a checkbox. **Unticked is a complete answer** — formoxus has no way
-/// to demand a tick, which is issue #6. So submitting it untouched succeeds with
-/// `agreed: false`, and that is the behaviour under test rather than a gap in it.
+/// A bool as a checkbox. **Unticked is a complete answer**, so submitting it
+/// untouched succeeds with `agreed: false`, and that is the behaviour under test.
+/// Demanding a tick takes `required: true`; see `must-agree` below.
 #[component]
 fn CheckboxForm() -> Element {
     harness(
         "checkbox",
-        "A bool as a checkbox. Unticked is a complete answer — see issue #6.",
+        "A bool as a checkbox. Unticked is a complete answer.",
         form! {
             Agree {
                 agreed => { widget: checkbox },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── must-agree ───────────────────────────────────────────────────────────
+
+/// `required: true` on a bool, validation ON: the box must be ticked, and the
+/// browser blocks an unticked submit itself, from the `required` attribute.
+#[component]
+fn MustAgree() -> Element {
+    harness(
+        "must-agree",
+        "A checkbox that must be ticked, browser validation ON. Submitting it unticked should be blocked by the browser.",
+        form! {
+            Agree {
+                browser_validation: on,
+                agreed => { required: true },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+/// The same rule with validation OFF, so formoxus does the rejecting. This is
+/// the half that a forged request also meets, since the browser's `required` is
+/// only a convenience.
+#[component]
+fn MustAgreeNoValidate() -> Element {
+    harness(
+        "must-agree-novalidate",
+        "The same checkbox with browser validation OFF. Submitting it unticked should reach formoxus, which reports it.",
+        form! {
+            Agree {
+                browser_validation: off,
+                agreed => { required: true },
                 buttons: { save: { type: submit } }
             }
         },

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`
+  --> tests/ui/form_checkbox_on_an_optional_bool.rs:17:42
+   |
+17 |             would_recommend => { widget: checkbox },
+   |                                          ^^^^^^^^ evaluation of `main::_` failed here

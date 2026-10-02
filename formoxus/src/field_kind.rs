@@ -51,6 +51,25 @@ pub const fn takes_bound(shape: &Shape) -> bool {
     )
 }
 
+/// Whether `required: true` can apply: only to a bool, where it means the value
+/// must be `true`. Every other field is already required by its type unless it
+/// is an `Option`, so on anything else the key would mean nothing.
+///
+/// An `Option<bool>` passes HERE, because `kind` peels the `Option`.
+/// [`required_is_not_optional`] refuses it, with its own message.
+pub const fn takes_required(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Bool | Kind::Unknown)
+}
+
+/// Whether `required: true` avoids an `Option`. An optional field may be left
+/// unanswered, so it cannot also be required to be true.
+///
+/// `true` for anything [`takes_required`] rejects, so `required` on an
+/// `Option<String>` reports once, from there, not twice.
+pub const fn required_is_not_optional(shape: &Shape) -> bool {
+    !is_optional(shape) || !takes_required(shape)
+}
+
 // ── Does a bound fit the field's type? ──────────────────────────────────
 //
 // `form!` passes each `min`/`max` twice, as `(e) as f64` and `(e) as i128`,
@@ -289,7 +308,7 @@ const fn str_eq(a: &str, b: &str) -> bool {
 mod tests {
     use super::{
         WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_optional, is_single_value,
-        renders, takes_bound, takes_length,
+        renders, required_is_not_optional, takes_bound, takes_length, takes_required,
     };
     use facet::Facet;
     use googletest::prelude::*;
@@ -511,6 +530,37 @@ mod tests {
     fn a_bool_takes_nothing() {
         expect_that!(takes_length(bool::SHAPE), eq(false));
         expect_that!(takes_bound(bool::SHAPE), eq(false));
+    }
+
+    /// `required: true` means "must be true", so a bool is the only kind that
+    /// takes it.
+    #[gtest]
+    fn only_a_bool_takes_required() {
+        expect_that!(takes_required(bool::SHAPE), eq(true));
+        for shape in [std::string::String::SHAPE, i32::SHAPE, f64::SHAPE] {
+            expect_that!(takes_required(shape), eq(false), "{shape}");
+        }
+        expect_that!(takes_required(<Vec<bool>>::SHAPE), eq(false));
+        expect_that!(takes_required(Flag::SHAPE), eq(true));
+    }
+
+    /// `kind` peels the `Option`, so `takes_required` alone would let an
+    /// `Option<bool>` through. The second check is what refuses it.
+    #[gtest]
+    fn an_optional_bool_takes_the_type_check_but_fails_the_optional_one() {
+        let maybe = <Option<bool>>::SHAPE;
+        expect_that!(takes_required(maybe), eq(true));
+        expect_that!(required_is_not_optional(maybe), eq(false));
+        expect_that!(required_is_not_optional(bool::SHAPE), eq(true));
+    }
+
+    /// `required` on an `Option<String>` is wrong for two reasons, and should
+    /// report once, from `takes_required`, rather than twice.
+    #[gtest]
+    fn an_optional_non_bool_is_left_to_the_type_check() {
+        let maybe = <Option<std::string::String>>::SHAPE;
+        expect_that!(takes_required(maybe), eq(false));
+        expect_that!(required_is_not_optional(maybe), eq(true));
     }
 
     /// Unsupported by `scalar_member`, so a constraint on one could only ever be

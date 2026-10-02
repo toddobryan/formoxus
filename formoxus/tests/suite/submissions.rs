@@ -219,3 +219,56 @@ fn into_model_hands_the_value_onward() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
     expect_that!(submission.into_model().username, eq("ada"));
 }
+
+// ── `required: true` on a bool (issue #6) ────────────────────────────────
+//
+// The browser's `required` on a checkbox is trivially bypassed, so this is
+// where "I agree to the terms" is actually enforced. An unticked checkbox is
+// LEFT OUT of the form data entirely, which is why the missing-pair case is
+// the one that matters most.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Terms {
+    agreed: bool,
+}
+
+fn must_agree() -> FormSpec<Terms> {
+    form! { Terms { agreed => { required: true } } }
+}
+
+#[gtest]
+fn an_unticked_required_true_box_is_rejected_on_the_server() {
+    let errors = Submission::accept(must_agree(), &wire(&[]))
+        .expect_err("an unticked box sends nothing, and the box must be ticked");
+    expect_that!(
+        errors.messages_at(Some(path!(Terms.agreed))),
+        elements_are![eq("this value must be true")]
+    );
+}
+
+/// A request that sends `false` outright, which no browser does for a
+/// checkbox but anything else can.
+#[gtest]
+fn an_explicit_false_is_rejected_the_same_way() {
+    let errors = Submission::accept(must_agree(), &wire(&[("agreed", "false")]))
+        .expect_err("false is not agreeing");
+    expect_that!(
+        errors.messages_at(Some(path!(Terms.agreed))),
+        elements_are![eq("this value must be true")]
+    );
+}
+
+#[gtest]
+fn a_ticked_required_true_box_is_accepted() {
+    let submission =
+        Submission::accept(must_agree(), &wire(&[("agreed", "true")])).expect("the box is ticked");
+    expect_that!(submission.model(), eq(&Terms { agreed: true }));
+}
+
+/// Without the rule, the same empty request is a complete answer: "no".
+#[gtest]
+fn an_unticked_plain_box_is_accepted_as_false() {
+    let submission = Submission::accept(form! { Terms {} }, &wire(&[]))
+        .expect("an unticked plain checkbox is an answer");
+    expect_that!(submission.model(), eq(&Terms { agreed: false }));
+}

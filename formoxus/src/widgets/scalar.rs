@@ -58,8 +58,9 @@ pub fn ScalarWidget(
         (ValueKind::Text { .. }, WidgetType::Textarea) => {
             rsx! { Textarea { values, props, attrs } }
         }
-        (ValueKind::Bool, WidgetType::Checkbox) => {
-            rsx! { Checkbox { values, props, attrs } }
+        (ValueKind::Bool { required_true }, WidgetType::Checkbox) => {
+            let required_true = *required_true;
+            rsx! { Checkbox { values, props, required_true, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. The list is the only
@@ -100,10 +101,10 @@ pub fn ScalarWidget(
         // A bool's choices are derivable, so it is the one kind that renders
         // without a list — but an explicit one still wins, for a form that would
         // rather say "Yes"/"No".
-        (ValueKind::Bool, WidgetType::Select) => {
+        (ValueKind::Bool { .. }, WidgetType::Select) => {
             rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props, attrs } }
         }
-        (ValueKind::Bool, WidgetType::RadioGroup) => {
+        (ValueKind::Bool { .. }, WidgetType::RadioGroup) => {
             reject_if_not_required(&props);
             rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props, attrs }}
         }

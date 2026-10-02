@@ -66,11 +66,12 @@ pub enum ValueKind {
         min: Option<f64>,
         max: Option<f64>,
     },
-    Bool,
-    /*Temporal,
-    Choice,
-    MultiChoice,
-    File,*/
+    Bool {
+        required_true: bool,
+    }, /*Temporal,
+       Choice,
+       MultiChoice,
+       File,*/
 }
 
 #[derive(Clone, Debug, Copy, PartialEq)]
@@ -116,6 +117,7 @@ pub struct Constraints {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<&'static str>,
+    pub required_true: bool,
 }
 
 impl ValueKind {
@@ -199,7 +201,14 @@ impl ValueKind {
                     (None, None) => (),
                 }
             }
-            ValueKind::Bool => (),
+            ValueKind::Bool { required_true } => {
+                let is_true: bool = raw_value
+                    .parse()
+                    .expect("this bool should have already successfully parsed");
+                if *required_true && !is_true {
+                    errors.push(ValidationMessage("this value must be true".to_string()));
+                }
+            }
         }
         errors
     }
@@ -266,7 +275,11 @@ impl ValueKind {
                     Self::add_attr(&mut map, "max", m);
                 }
             }
-            ValueKind::Bool => (),
+            ValueKind::Bool { required_true } => {
+                if *required_true {
+                    Self::add_attr(&mut map, "required", true);
+                }
+            }
         }
         map
     }
@@ -304,7 +317,9 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                 max_length: self.constraints.max_length,
                 pattern: self.constraints.pattern,
             },
-            ScalarType::Bool => ValueKind::Bool,
+            ScalarType::Bool => ValueKind::Bool {
+                required_true: self.constraints.required_true,
+            },
             ScalarType::I8
             | ScalarType::I16
             | ScalarType::I32
@@ -382,8 +397,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             // optional case gets a `Select` — reusing the one implementation of
             // the "no value" option rather than growing a third checkbox state
             // the DOM would have to be talked into.
-            ValueKind::Bool if self.optional => WidgetType::Select,
-            ValueKind::Bool => WidgetType::Checkbox,
+            ValueKind::Bool { .. } if self.optional => WidgetType::Select,
+            ValueKind::Bool { .. } => WidgetType::Checkbox,
         }
     }
 
@@ -396,6 +411,22 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
 
     fn is_unticked_checkbox(&self) -> bool {
         matches!(self.value, FieldValue::Empty) && matches!(self.widget(), WidgetType::Checkbox)
+    }
+
+    /// The raw value `validate` checks: `"false"` for an unticked checkbox,
+    /// and [`FormMember::raw_value`] for everything else.
+    ///
+    /// An unticked checkbox stays `Empty`, so that `is_present` keeps one
+    /// meaning. The places that CONSUME the value know it means `false` instead.
+    /// `write_value_into` writes `false` for one, and this is the same rule for
+    /// `validate`. That way a rule about a bool sees an untouched box and an
+    /// unticked one alike.
+    fn raw_value_to_validate(&self) -> String {
+        if self.is_unticked_checkbox() {
+            "false".to_string()
+        } else {
+            self.raw_value()
+        }
     }
 }
 
@@ -501,14 +532,16 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             FieldValue::Invalid { error, .. } => Some(error.clone()),
             _ => None,
         };
-        // return an invalid or empty required field error (ignoring checkboxes) immediately,
-        // and an empty field can't fail any constraints, so also return
-        if error.is_some() || matches!(self.value, FieldValue::Empty) {
-            self.errors.extend(error);
+        // An invalid value or a missing one stops here: it gets exactly one
+        // error, and an empty field cannot fail a constraint.
+        if let Some(error) = error {
+            self.errors.push(error);
             return;
         }
-        // now check constraints on particular types, all values should be FieldValue::Valid(t)
-        let raw = self.raw_value();
+        // What is left is a `Valid` value or an unticked checkbox. An unticked
+        // checkbox is the only `Empty` the match above lets through, and its
+        // constraints are checked against `"false"`.
+        let raw = self.raw_value_to_validate();
         self.errors.extend(self.value_kind().check(&raw));
         if let Some(choices) = &self.choices
             && !choices.iter().any(|c| c.value == raw)
@@ -696,8 +729,24 @@ mod tests {
     #[gtest]
     fn a_field_with_no_constraints_gets_no_attributes() {
         expect_that!(text(None, None, None).attrs().len(), eq(0));
-        // A bool never has one: none of the five applies to a checkbox.
-        expect_that!(ValueKind::Bool.attrs().len(), eq(0));
+        let plain = ValueKind::Bool {
+            required_true: false,
+        };
+        expect_that!(plain.attrs().len(), eq(0));
+    }
+
+    /// HTML `required` on a checkbox means "must be ticked", which is exactly
+    /// `required: true` on a bool and nothing else. A plain bool must NOT get
+    /// it (above), because unticked is a complete answer there.
+    #[gtest]
+    fn a_required_true_bool_becomes_the_required_attribute() {
+        let must_agree = ValueKind::Bool {
+            required_true: true,
+        };
+        expect_that!(
+            must_agree.attrs().keys().copied().collect::<Vec<_>>(),
+            elements_are![eq(&"required")]
+        );
     }
 
     #[gtest]
@@ -739,6 +788,9 @@ mod tests {
             ValueKind::Float {
                 min: Some(1.0),
                 max: Some(2.0),
+            },
+            ValueKind::Bool {
+                required_true: true,
             },
         ];
         for kind in all {
@@ -1047,10 +1099,28 @@ mod tests {
 
     // ── Bool ─────────────────────────────────────────────────────────────
 
+    /// Without `required: true`, `false` is a complete answer, so a bool has
+    /// nothing to check.
     #[gtest]
-    fn a_bool_has_nothing_to_constrain() {
-        expect_that!(messages(&ValueKind::Bool, "true"), is_empty());
-        expect_that!(messages(&ValueKind::Bool, "false"), is_empty());
+    fn a_plain_bool_accepts_either_value() {
+        let plain = ValueKind::Bool {
+            required_true: false,
+        };
+        expect_that!(messages(&plain, "true"), is_empty());
+        expect_that!(messages(&plain, "false"), is_empty());
+    }
+
+    /// "I agree to the terms" (issue #6).
+    #[gtest]
+    fn a_required_true_bool_rejects_false() {
+        let must_agree = ValueKind::Bool {
+            required_true: true,
+        };
+        expect_that!(messages(&must_agree, "true"), is_empty());
+        expect_that!(
+            messages(&must_agree, "false"),
+            elements_are![eq("this value must be true")]
+        );
     }
 
     // ── The caller's contract ────────────────────────────────────────────
@@ -1189,5 +1259,98 @@ mod tests {
             ..Default::default()
         };
         let _ = validated(3_i32, fractional);
+    }
+
+    // ── `required: true` on a bool, through `validate` ───────────────────
+    //
+    // `check` is covered above. These go through `validate`, because that is
+    // where an unticked checkbox could slip past: it is `Empty`, and `Empty`
+    // returns early for every other field.
+
+    /// A non-optional bool field, holding `value`, rendered by `widget` (`None`
+    /// means the default, a checkbox).
+    fn a_bool_field(
+        value: FieldValue<bool>,
+        widget: Option<WidgetType>,
+        required_true: bool,
+    ) -> FormField<bool> {
+        FormField {
+            name: "agreed".to_string(),
+            label: None,
+            optional: false,
+            constraints: Constraints {
+                required_true,
+                ..Default::default()
+            },
+            custom_widget: widget,
+            choices: None,
+            wrapper: None,
+            value,
+            errors: Vec::new(),
+        }
+    }
+
+    fn validation_messages(mut field: FormField<bool>) -> Vec<String> {
+        field.validate();
+        field.errors.into_iter().map(|e| e.0).collect()
+    }
+
+    /// The case issue #6 is about. A box nobody touched is `Empty`, and so is
+    /// every unticked box that reaches the server, since an unticked checkbox
+    /// is left out of the form data. A rule that only `check` knew about would
+    /// never see it.
+    #[gtest]
+    fn an_untouched_required_true_checkbox_is_rejected() {
+        let field = a_bool_field(FieldValue::Empty, None, true);
+        expect_that!(
+            validation_messages(field),
+            elements_are![eq("this value must be true")]
+        );
+    }
+
+    /// Ticked and then unticked arrives as `Valid(false)`, not `Empty`. Both
+    /// must get the same answer, or whether the rule holds would depend on how
+    /// the user got there.
+    #[gtest]
+    fn a_ticked_then_unticked_required_true_checkbox_is_rejected_the_same_way() {
+        let field = a_bool_field(FieldValue::Valid(false), None, true);
+        expect_that!(
+            validation_messages(field),
+            elements_are![eq("this value must be true")]
+        );
+    }
+
+    #[gtest]
+    fn a_ticked_required_true_checkbox_passes() {
+        let field = a_bool_field(FieldValue::Valid(true), None, true);
+        expect_that!(validation_messages(field), is_empty());
+    }
+
+    /// Without the rule, an unticked box is a complete answer: no "required"
+    /// error and no constraint error either.
+    #[gtest]
+    fn an_untouched_plain_checkbox_passes() {
+        let field = a_bool_field(FieldValue::Empty, None, false);
+        expect_that!(validation_messages(field), is_empty());
+    }
+
+    /// On a `select` an empty bool really is missing, so it gets the presence
+    /// error and nothing else. It gets one error, not that plus "must be true".
+    #[gtest]
+    fn an_empty_required_true_select_gets_only_the_required_error() {
+        let field = a_bool_field(FieldValue::Empty, Some(WidgetType::Select), true);
+        expect_that!(
+            validation_messages(field),
+            elements_are![eq("This field is required.")]
+        );
+    }
+
+    #[gtest]
+    fn a_required_true_select_rejects_false() {
+        let field = a_bool_field(FieldValue::Valid(false), Some(WidgetType::Select), true);
+        expect_that!(
+            validation_messages(field),
+            elements_are![eq("this value must be true")]
+        );
     }
 }

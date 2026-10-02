@@ -1,0 +1,5 @@
+error: `required: true` is only allowed on bool fields, `required: false` is never allowed
+  --> tests/ui/form_required_false.rs:18:35
+   |
+18 |             agreed => { required: false },
+   |                                   ^^^^^

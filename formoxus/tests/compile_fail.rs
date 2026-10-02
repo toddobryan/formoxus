@@ -22,3 +22,20 @@
 fn ui() {
     trybuild::TestCases::new().compile_fail("tests/ui/*.rs");
 }
+
+/// Diagnostics `form!` SHOULD give but does not yet, written ahead of the check
+/// that will produce them. Each one compiles today, so this fails, which is
+/// the point of running it:
+///
+/// ```text
+/// cargo test -p formoxus --test compile_fail -- --ignored
+/// ```
+///
+/// When a check lands, move its case to `tests/ui/` and generate the `.stderr`
+/// with `TRYBUILD=overwrite`. They have no `.stderr` here on purpose: the
+/// message and span are not decided until the check exists.
+#[test]
+#[ignore = "pending: the checks these need are not built yet"]
+fn ui_pending() {
+    trybuild::TestCases::new().compile_fail("tests/ui-pending/*.rs");
+}

@@ -5,6 +5,8 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-01: issue #6 is BUILT** (see [[formoxus-feature-parity]] 6b): `required: true` on a non-optional bool, rule in `ValueKind::check` reached via `raw_value_to_validate`, compile gates, `Checkbox`-only `required_true` prop for the marker, suite + trybuild + 5 e2e tests; 509 tests + 29 e2e green. Next in [[mvp-scope]] is C6. The rest of this note is the 2026-09-30 handoff.
+
 **Written 2026-09-30, end of day, for the next session.** Todd asked: "write
 whatever the next version of you will need to know where we're going."
 

@@ -6,7 +6,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
 use regress::Regex;
 use syn::{
-    Expr, Ident, LitStr, Result, Token, braced,
+    Expr, Ident, LitBool, LitStr, Result, Token, braced,
     parse::{Parse, ParseStream},
     spanned::Spanned,
 };
@@ -69,6 +69,7 @@ field_body! {
     min_length: Expr,
     max_length: Expr,
     pattern: LitStr,
+    required: LitBool,
 }
 
 impl FieldBody {
@@ -100,18 +101,23 @@ impl FieldBody {
             .as_ref()
             .map(|e| quote! { max_length: Some(#e), });
         let pattern = self.pattern.as_ref().map(|s| quote! { pattern: Some(#s), });
+        let required = self
+            .required
+            .as_ref()
+            .map(|b| quote! { required_true: #b, });
 
         if min.is_none()
             && max.is_none()
             && min_length.is_none()
             && max_length.is_none()
             && pattern.is_none()
+            && required.is_none()
         {
             return None;
         }
         Some(quote! {
             ::formoxus::fields::Constraints {
-                #min #max #min_length #max_length #pattern
+                #min #max #min_length #max_length #pattern #required
                 ..::core::default::Default::default()
             }
         })
@@ -181,6 +187,26 @@ impl FieldBody {
         if let Some(e) = &self.max {
             let msg = "`max` applies only to a number field";
             checks.push(takes(e.span(), bound.clone(), msg));
+        }
+        // Two asserts, because a const panic takes one fixed message and the
+        // two mistakes want different ones. `required_is_not_optional` is
+        // `true` for a non-bool, so each mistake reports once. A
+        // `required: false` never gets here: `Parse` rejects it first.
+        if let Some(b) = &self.required {
+            let msg = "`required` applies only to a bool field, where it means the value must \
+                be true; every other field is already required unless its type is an `Option`";
+            checks.push(takes(
+                b.span(),
+                quote!(::formoxus::field_kind::takes_required),
+                msg,
+            ));
+            let msg = "`required` cannot apply to an `Option<bool>`: an optional field may be \
+                left unanswered, so it cannot also be required to be true";
+            checks.push(takes(
+                b.span(),
+                quote!(::formoxus::field_kind::required_is_not_optional),
+                msg,
+            ));
         }
         // Does each bound fit the field's type? The bound goes in cast both
         // ways, since a const fn cannot be generic over "some number";
@@ -296,6 +322,16 @@ impl Parse for FieldBody {
             }
         }
 
+        // required: false is always wrong
+        if let Some(required) = &fb.required
+            && !required.value()
+        {
+            return Err(syn::Error::new_spanned(
+                required,
+                "`required: true` is only allowed on bool fields, `required: false` is never allowed",
+            ));
+        }
+
         Ok(fb)
     }
 }
@@ -371,6 +407,7 @@ mod tests {
                 "label" => quote!("A label"),
                 "min" | "max" | "min_length" | "max_length" => quote!(1),
                 "pattern" => quote!("x"),
+                "required" => quote!(true),
                 other => panic!("no sample value for the new key `{other}` — add one here"),
             };
             let ident = syn::Ident::new(key, proc_macro2::Span::call_site());
@@ -430,6 +467,38 @@ mod tests {
         let tokens = spec.expand().to_string();
         expect_that!(tokens, contains_substring("MIN_AGE"));
         expect_that!(tokens, contains_substring("2 * LIMIT"));
+    }
+
+    /// `required: true` lands in the same `Constraints` literal as the other
+    /// keys, so it reaches `ValueKind::Bool` by the same route.
+    #[gtest]
+    fn required_true_becomes_a_constraint() {
+        let spec = parse(quote! { Source { agreed => { required: true } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens.matches("with_constraints").count(), eq(1));
+        expect_that!(tokens, contains_substring("required_true : true"));
+    }
+
+    /// Presence comes from the model's type alone, so `required: false` is
+    /// never meaningful: on a bool it is the default, and on anything else it
+    /// would let the form disagree with the model.
+    #[gtest]
+    fn required_false_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { agreed => { required: false } } }),
+            contains_substring("`required: false` is never allowed")
+        );
+    }
+
+    /// `required` is a `LitBool`, so only `true` or `false` parses there. That
+    /// is what lets the macro read it, the same way `pattern` must be a
+    /// `LitStr`.
+    #[gtest]
+    fn required_must_be_a_literal() {
+        expect_that!(
+            err_of(quote! { Source { agreed => { required: MUST_AGREE } } }),
+            contains_substring("expected boolean literal")
+        );
     }
 
     /// A form that declares no constraint expands exactly as it did before

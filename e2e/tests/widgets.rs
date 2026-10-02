@@ -23,9 +23,8 @@ async fn ticking_a_checkbox_reaches_the_model() -> Result<()> {
 }
 
 /// **Unticked is a complete answer.** A required `bool` means "we need an
-/// answer", and `false` is one — so this submits rather than being blocked. That
-/// is deliberate today; issue #6 is about being able to demand a tick, and if it
-/// lands this test is the one that should change.
+/// answer", and `false` is one, so this submits rather than being blocked.
+/// Demanding a tick takes `required: true`, which `must_agree.rs` covers.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
 async fn an_unticked_checkbox_still_submits() -> Result<()> {

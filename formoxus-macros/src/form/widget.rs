@@ -225,15 +225,25 @@ impl WidgetRef {
         let WidgetKind::Named(name) = &self.kind else {
             return single;
         };
-        let not_optional = if &name.to_string() == "radio_group" {
-            quote_spanned! { span =>
+        // The widgets that cannot say "no answer". A `select` can, with its
+        // blank option, which is why it is the default for an `Option<bool>`.
+        let refusal = match name.to_string().as_str() {
+            "radio_group" => Some(
+                "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`",
+            ),
+            "checkbox" => Some(
+                "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`",
+            ),
+            _ => None,
+        };
+        let not_optional = match refusal {
+            Some(message) => quote_spanned! { span =>
                 const _: () = ::core::assert!(
                     !::formoxus::field_kind::is_optional(#shape),
-                    "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`"
+                    #message
                 );
-            }
-        } else {
-            TokenStream2::new()
+            },
+            None => TokenStream2::new(),
         };
         let Rule::Checked { class, message } = rule(&name.to_string()) else {
             unreachable!("parse rejects widgets that render nothing");

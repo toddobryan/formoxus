@@ -25,8 +25,8 @@ Step 1 is **DONE** (all its breaking changes landed, last commit `3f04386`).
 Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
 
 1. ~~Breaking API changes~~ — done
-2. **Issue #6** — require a checkbox to be ticked. ← **NEXT**
-3. **C6 — author-supplied widget attributes** (was item 4)
+2. ~~Issue #6~~ — done 2026-10-01 (`required: true` on a bool)
+3. **C6 — author-supplied widget attributes** (was item 4) ← **NEXT**
 4. **Issue #9 — `aria-describedby`** (was item 3)
 5. **C5 — `help_text`** (was item 6) — moved AHEAD of per-field validators, so
    help text arrives right after the describedby mechanism it will join

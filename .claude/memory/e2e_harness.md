@@ -59,11 +59,14 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
-## 24 tests, 5 files
+## 29 tests, 6 files (was 24/5 until 2026-10-01)
 
 `required_text` (5), `constraints` (9: pattern incl. anchoring end-to-end,
 lengths, bounds), `widgets` (8: checkbox, select, radio-group, textarea),
-`buttons` (2: reset restores the SEEDED value, submit records the edit).
+`buttons` (2: reset restores the SEEDED value, submit records the edit),
+`must_agree` (5, added 2026-10-01 for issue #6: browser blocks an unticked
+`required: true` box, formoxus rejects it under novalidate both untouched and
+ticked-then-unticked, marker out of the accessible name).
 
 Two things worth knowing about writing more:
 

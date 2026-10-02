@@ -11,6 +11,11 @@ use crate::members::ValuesStore;
 pub fn Checkbox(
     mut values: ValuesStore,
     props: FieldProps,
+    /// `required: true` in `form!`: the box must be ticked. Shows the ` *`
+    /// marker. The HTML `required` attribute does not come from here; it
+    /// arrives in `attrs`, from `ValueKind::attrs`, like every other
+    /// constraint.
+    required_true: bool,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
     let field_class = props.field_class();
@@ -23,11 +28,11 @@ pub fn Checkbox(
         aria_invalid,
     } = props;
 
-    // `required` is deliberately dropped rather than forwarded. HTML `required`
-    // on a checkbox means "must be ticked", which is not what a required `bool`
-    // field asks for — unticked is a complete answer. For the same reason there
-    // is no ` *` marker: it would promise a rule nothing enforces. Requiring a
-    // box to be TICKED is issue #6.
+    // `props.required` is deliberately dropped rather than forwarded. It means
+    // PRESENCE, and for a `bool` unticked is a complete answer, while HTML
+    // `required` on a checkbox means "must be ticked". That second meaning is
+    // `required_true`, which is a separate prop so that `required` keeps one
+    // meaning in the Rust API.
 
     // The wrapper is unconditional and the caption is not, exactly as in
     // `Input`. Until 2026-09-29 this widget wrapped an unclassed `<label>` only
@@ -54,7 +59,15 @@ pub fn Checkbox(
                 ..attrs,
             }
             if let Some(label_text) = label {
-                span { class: "fx-field-label", "{label_text}" }
+                // Inside the label span and `aria-hidden`, exactly as in
+                // `Input`: the `required` attribute is what a screen reader
+                // announces, and the asterisk is only for the eye.
+                span { class: "fx-field-label",
+                    "{label_text}"
+                    if required_true {
+                        span { class: "fx-required", aria_hidden: "true", " *" }
+                    }
+                }
             }
             FieldErrors { errors }
         }

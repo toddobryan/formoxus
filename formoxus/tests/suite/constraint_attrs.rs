@@ -246,3 +246,70 @@ fn the_attributes_are_rendered_whether_browser_validation_is_on_or_off() {
     expect_that!(on, not(contains_substring("novalidate")));
     expect_that!(on, contains_substring("maxlength=10"));
 }
+
+// ── `required: true` on a bool (issue #6) ────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Terms {
+    agreed: bool,
+}
+
+/// HTML `required` on a checkbox means "must be ticked", which is exactly
+/// what `required: true` asks, so the browser can block the submit itself.
+#[gtest]
+fn a_required_true_checkbox_carries_required() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Terms { agreed => { required: true } } }));
+        form.render_fragment()
+    }
+    expect_that!(render(App), contains_substring("required=true"));
+}
+
+/// The other half, and the reason the rule needed its own key: a plain bool's
+/// unticked box is a complete answer, so it must NOT get `required`, or the
+/// browser would refuse to submit an honest "no".
+#[gtest]
+fn a_plain_checkbox_does_not_carry_required() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Terms {} }));
+        form.render_fragment()
+    }
+    expect_that!(render(App), not(contains_substring("required")));
+}
+
+/// With a rule behind it, the ` *` marker is finally honest on a checkbox. It
+/// sits inside the label span and is `aria-hidden`, as on every other widget.
+#[gtest]
+fn a_required_true_checkbox_shows_the_marker() {
+    #[component]
+    fn Must() -> Element {
+        let form = use_form(|| empty_form(form! { Terms { agreed => { required: true } } }));
+        form.render_fragment()
+    }
+    #[component]
+    fn Plain() -> Element {
+        let form = use_form(|| empty_form(form! { Terms {} }));
+        form.render_fragment()
+    }
+    expect_that!(
+        render(Must),
+        contains_substring(
+            r#"<span class="fx-field-label">Agreed<span class="fx-required" aria-hidden="true"> *</span></span>"#
+        )
+    );
+    expect_that!(render(Plain), not(contains_substring("fx-required")));
+}
+
+/// A `select` over a non-optional bool needs nothing new: an empty select is a
+/// missing answer, so the PRESENCE `required` already gives it the marker.
+#[gtest]
+fn a_bool_select_gets_the_marker_from_presence() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Terms { agreed => { widget: select } } }));
+        form.render_fragment()
+    }
+    expect_that!(render(App), contains_substring("fx-required"));
+}
