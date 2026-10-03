@@ -26,6 +26,9 @@ serde = { workspace = true }
 # trading convenience for compile time. The old `derive` feature existed to make
 # `#[derive(Form)]` skippable; that path no longer exists.
 formoxus-macros = { workspace = true }
+# The attribute table `form!` checks against at expansion time, read here at run
+# time to validate and emit the same attributes.
+formoxus-attrs = { workspace = true }
 
 [dev-dependencies]
 dioxus-html = { workspace = true }

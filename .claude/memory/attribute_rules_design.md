@@ -153,6 +153,20 @@ sequence of commits, each independently green:
 
 1. **Create `formoxus-attrs`** with the element facts (from
    [[html-attributes-reference]]) and the attribute table. Nothing uses it yet.
+   **Crate CREATED 2026-10-03, empty** (crate doc only): workspace member and
+   default member, `workspace.dependencies` entry with path + version (same
+   publish rule as `formoxus-macros`), depended on by both `formoxus` and
+   `formoxus-macros`, README and licenses symlinked to the root, added to
+   `just msrv` and CLAUDE.md's layout. Verified: workspace tests/clippy/rustdoc,
+   `cargo +1.90 check`, the wasm example build, and `cargo package --list`.
+   The table itself is Todd's to write.
+   **`InputType` MOVED into it 2026-10-03** (`formoxus-attrs/src/input_types.rs`),
+   now `Copy, Eq, Hash` with a `const fn html_type(self)`, re-exported from
+   `formoxus::widgets::types` so `formoxus::widgets::InputType` is unchanged
+   for consumers and for the macro's generated paths. `WidgetType` cannot move
+   (`Custom` holds a fn returning a Dioxus `Element`); a new element enum
+   (`Input(InputType)`, `Textarea`, `Select`, `Fieldset`) is what should join
+   `InputType` there, with `WidgetType` mapping onto it.
 2. **Move the existing constraints onto it, with NO behaviour change**
    (`min_length`, `max_length`, `pattern`, `min`, `max`, `required`). The
    current tests are the regression guard: they should pass unchanged, except
@@ -168,6 +182,33 @@ sequence of commits, each independently green:
 The `FieldAttrs` + `with_attrs` + `to_attributes` already built (2026-10-02)
 is the runtime half of step 3 in its first shape, and its tests in
 `tests/suite/author_attrs.rs` carry over as behaviour guards.
+
+## TODO: cross-check the table against dioxus-html (Todd, 2026-10-03)
+
+**Write a test in `formoxus` (NOT in `formoxus-attrs`)** asserting that every
+attribute the table allows on an element has a matching constant in Dioxus's
+own list, e.g. `dioxus::html::elements::input::placeholder`. Dioxus's lists are
+in `packages/html/src/elements.rs` (`builder_constructors!`) and
+`attribute_groups.rs` (globals) at tag `v0.7.10`; each attribute is a
+`pub const name: AttributeDescription = (name, namespace, volatile)`, and
+`rsx!` checks an unquoted name by referring to that const. Dioxus checks names
+only (the type column is discarded), with one flat list per element and no
+per-`<input type>` rules.
+
+Purpose: each gap is either an **exception encoded in the test** or **an
+upstream issue/PR asking Dioxus to add it**. Known gaps already (see
+[[html-attributes-reference]]): `alpha`, `colorspace`, `dirname` on `<input>`;
+`dirname` on `<textarea>`; `command`, `commandfor` on `<button>`; globals
+`headingoffset`, `headingreset`, `writingsuggestions`.
+
+**Why `dioxus-html` cannot be the source or a dependency of `formoxus-attrs`:**
+checked 2026-10-03, it is not a definitions-only crate. Its direct deps include
+`dioxus-core`, `dioxus-core-macro`, `dioxus-hooks`, `futures-util`, `euclid`,
+`keyboard-types`, `tracing` and more, 87 crates in its normal tree. That would
+break `formoxus-attrs`'s no-dependency rule and drag Dioxus into the macro's
+build. `formoxus` already reaches it free, through `dioxus::html` (the `html`
+feature is on by default via `default` → `lib` → `html`), so the test costs
+nothing there.
 
 ## Findings this has to respect (from 2026-10-02 probes)
 

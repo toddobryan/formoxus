@@ -26,6 +26,10 @@ quote = "1"
 proc-macro2 = "1"
 heck = { workspace = true }
 regress = { workspace = true }
+# Read at EXPANSION time: each attribute's value type (how to parse it) and
+# which widgets it is valid on. A proc-macro crate can depend on an ordinary
+# one, which is the whole reason this is a third crate.
+formoxus-attrs = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }

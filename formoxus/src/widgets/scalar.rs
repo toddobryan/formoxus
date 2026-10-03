@@ -53,7 +53,7 @@ pub fn ScalarWidget(
             ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. },
             WidgetType::Input(input_type),
         ) => {
-            rsx! { Input { input_type: input_type.clone(), values, props, attrs } }
+            rsx! { Input { input_type: *input_type, values, props, attrs } }
         }
         (ValueKind::Text { .. }, WidgetType::Textarea) => {
             rsx! { Textarea { values, props, attrs } }

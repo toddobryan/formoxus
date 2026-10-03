@@ -12,6 +12,7 @@ stale mirror; this repo is the source of truth.
 ```
 formoxus/           — the library
 formoxus-macros/    — proc macros: form! and using_fns!, nothing else
+formoxus-attrs/     — the HTML attribute table both depend on; no dependencies (2026-10-03)
 ```
 
 **One way to build a form, as of 2026-09-19.** A model derives `Facet` and

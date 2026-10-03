@@ -97,55 +97,10 @@ pub struct WidgetProps {
     pub attrs: Vec<Attribute>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum InputType {
-    Text,
-    Password,
-    Hidden,
-    Number,
-    Email,
-    Telephone,
-    Url,
-    Search,
-    Color,
-    Date,
-    Time,
-    DatetimeLocal,
-    Month,
-    Week,
-}
-
-impl InputType {
-    /// The `type=` attribute this renders as.
-    ///
-    /// HTML's spelling, which is not always the variant's: `tel`, and
-    /// `datetime-local` with the hyphen an ident could not carry. `form!`'s
-    /// vocabulary spells these `tel` and `datetime_local`, so `InputType` is the
-    /// pivot with HTML's names on both sides of it.
-    pub fn html_type(&self) -> &'static str {
-        match self {
-            Self::Text => "text",
-            Self::Password => "password",
-            Self::Hidden => "hidden",
-            // Selectable, but NOT the default for a numeric field — see
-            // `FormField::default_widget`. `type="number"` hands back `""` for
-            // anything the browser dislikes, so a half-typed value vanishes
-            // mid-keystroke. A numeric renders as text and `ValueKind` parses it.
-            // Anyone who wants the spinner and the mobile keypad can ask.
-            Self::Number => "number",
-            Self::Email => "email",
-            Self::Telephone => "tel",
-            Self::Url => "url",
-            Self::Search => "search",
-            Self::Color => "color",
-            Self::Date => "date",
-            Self::Time => "time",
-            Self::DatetimeLocal => "datetime-local",
-            Self::Month => "month",
-            Self::Week => "week",
-        }
-    }
-}
+/// Defined in `formoxus-attrs`, because the attribute table and `form!` both
+/// key on it and `formoxus-macros` cannot reach this crate. Re-exported here so
+/// that `formoxus::widgets::InputType` is still its address.
+pub use formoxus_attrs::InputType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldProps {

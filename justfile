@@ -31,7 +31,7 @@ docs:
 # The floor we claim in Cargo.toml and the README. Published crates only, and
 # `check` not `test`: dev-dependencies are ours, not a consumer's.
 msrv:
-    cargo +1.90 check -p formoxus -p formoxus-macros
+    cargo +1.90 check -p formoxus -p formoxus-attrs -p formoxus-macros
 
 # Both builds the gallery has to satisfy — the browser one and the host one.
 check-web:

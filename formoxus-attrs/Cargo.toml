@@ -1,0 +1,24 @@
+[package]
+name = "formoxus-attrs"
+readme = "README.md"
+description = "The HTML attribute facts formoxus and its macros share. Not useful on its own — depend on `formoxus` instead"
+keywords = ["dioxus", "forms", "html", "attributes"]
+categories = ["web-programming"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# No dependencies, and keep it that way. This crate is compiled twice: for
+# `formoxus-macros` on the build machine, and for `formoxus` on the app's
+# target, which includes wasm. Anything added here is paid for in both, and a
+# Dioxus or syn dependency would drag one side's world into the other.
+[dependencies]
+
+[dev-dependencies]
+googletest = { workspace = true }

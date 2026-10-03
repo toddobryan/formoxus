@@ -440,7 +440,7 @@ fn every_input_type_reaches_the_type_attribute() {
         (InputType::Week, "week"),
     ];
     for (input_type, expected) in cases {
-        let html = rendered_with(WidgetType::Input(input_type.clone()));
+        let html = rendered_with(WidgetType::Input(input_type));
         let wanted = format!("type=\"{expected}\"");
         expect_that!(
             html,

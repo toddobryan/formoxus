@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "formoxus",
+    "formoxus-attrs",
     "formoxus-macros",
     "examples",
     "e2e",
@@ -13,10 +14,11 @@ members = [
 # `#[ignore]`d: `--workspace` compiles them and runs none. `just e2e` runs them.
 default-members = [
     "formoxus",
+    "formoxus-attrs",
     "formoxus-macros",
 ]
 
-# Shared by both published crates, so a version bump or a license change is one
+# Shared by all three published crates, so a version bump or a license change is one
 # edit rather than two that can drift.
 [workspace.package]
 version = "0.1.0"
@@ -99,3 +101,4 @@ trybuild = { version = "1.0.116" }
 # a bare path dependency is rejected by `cargo package`. Bump it with
 # `workspace.package.version` — nothing enforces that they agree.
 formoxus-macros = { path = "formoxus-macros", version = "0.1.0" }
+formoxus-attrs = { path = "formoxus-attrs", version = "0.1.0" }
