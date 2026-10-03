@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
 use crate::error::ValidationError;
-use crate::fields::Constraints;
+use crate::fields::{Constraints, FieldAttrs};
 use crate::label_case::LabelCase;
 use crate::widgets::{Choice, WidgetType};
 
@@ -51,6 +51,7 @@ pub struct FieldSpec {
     /// select for a radio group must not change what the value parses as. See
     /// `.claude/memory/choice_fields_design.md`.
     pub choices: Option<Vec<Choice>>,
+    pub attrs: FieldAttrs,
 }
 
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
@@ -142,6 +143,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_constraints(mut self, path: &str, constraints: Constraints) -> Self {
         self.field(path).constraints = constraints;
+        self
+    }
+
+    pub fn with_attrs(mut self, path: &str, attrs: FieldAttrs) -> Self {
+        self.field(path).attrs = attrs;
         self
     }
 }

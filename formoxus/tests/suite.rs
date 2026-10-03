@@ -21,6 +21,8 @@ use dioxus::prelude::*;
 #[path = "suite/models.rs"]
 pub mod models;
 
+#[path = "suite/author_attrs.rs"]
+mod author_attrs;
 #[path = "suite/browser_validation.rs"]
 mod browser_validation;
 #[path = "suite/buttons.rs"]

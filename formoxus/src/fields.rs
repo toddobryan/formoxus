@@ -29,6 +29,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub label: Option<String>,
     pub optional: bool,
     pub constraints: Constraints,
+    pub attrs: FieldAttrs,
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
     /// spec gave choices to — which is every field rendered as an `<input>`.
@@ -118,6 +119,28 @@ pub struct Constraints {
     pub max_length: Option<usize>,
     pub pattern: Option<&'static str>,
     pub required_true: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FieldAttrs(IndexMap<&'static str, String>);
+
+impl FieldAttrs {
+    pub fn to_attributes(&self) -> Vec<Attribute> {
+        self.0
+            .iter()
+            .map(|(name, value)| Attribute::new(name, value.clone(), None, false))
+            .collect()
+    }
+
+    pub fn insert(&mut self, key: &'static str, value: String) {
+        self.0.insert(key, value);
+    }
+}
+
+impl<const N: usize> From<[(&'static str, String); N]> for FieldAttrs {
+    fn from(arr: [(&'static str, String); N]) -> Self {
+        Self(IndexMap::from(arr))
+    }
 }
 
 impl ValueKind {
@@ -498,6 +521,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
+        let attrs: Vec<Attribute> = self.attrs.to_attributes();
         rsx! {
             ScalarWidget {
                 value_kind: self.value_kind(),
@@ -511,6 +535,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                     errors: self.errors.clone(),
                     aria_invalid: (!self.errors.is_empty()).then_some("true"),
                 },
+                attrs,
             }
         }
     }
@@ -635,6 +660,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // range, say), this line starts silently discarding it and wants
             // the per-field `.or()` treatment instead.
             self.constraints = spec.constraints.clone();
+            self.attrs.clone_from(&spec.attrs);
         }
     }
 
@@ -1146,7 +1172,7 @@ mod tests {
     // through `FormField`, which is the only way to exercise `value_kind()` —
     // the one place that pairs a constraint with the field's actual type.
 
-    fn a_field<X>(value: X, constraints: Constraints) -> FormField<X>
+    fn a_field<X>(value: X, constraints: Constraints, attrs: FieldAttrs) -> FormField<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -1155,6 +1181,7 @@ mod tests {
             label: None,
             optional: false,
             constraints,
+            attrs,
             custom_widget: None,
             choices: None,
             wrapper: None,
@@ -1166,11 +1193,18 @@ mod tests {
         }
     }
 
-    fn validated<X>(value: X, constraints: Constraints) -> Vec<String>
+    fn validated_no_attrs<X>(value: X, constraints: Constraints) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        let mut field = a_field(value, constraints);
+        validated(value, constraints, FieldAttrs::default())
+    }
+
+    fn validated<X>(value: X, constraints: Constraints, attrs: FieldAttrs) -> Vec<String>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        let mut field = a_field(value, constraints, attrs);
 
         // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
         // reaches `value_kind()` at all. A test that tripped that early return
@@ -1200,8 +1234,11 @@ mod tests {
             max_length: Some(3),
             ..Default::default()
         };
-        expect_that!(validated("abc".to_string(), short.clone()), is_empty());
-        expect_that!(validated("hello".to_string(), short), len(eq(1)));
+        expect_that!(
+            validated_no_attrs("abc".to_string(), short.clone()),
+            is_empty()
+        );
+        expect_that!(validated_no_attrs("hello".to_string(), short), len(eq(1)));
     }
 
     #[gtest]
@@ -1211,9 +1248,9 @@ mod tests {
             max: Some(Bound::Int(10)),
             ..Default::default()
         };
-        expect_that!(validated(0_i32, between.clone()), len(eq(1)));
-        expect_that!(validated(5_i32, between.clone()), is_empty());
-        expect_that!(validated(11_i32, between), len(eq(1)));
+        expect_that!(validated_no_attrs(0_i32, between.clone()), len(eq(1)));
+        expect_that!(validated_no_attrs(5_i32, between.clone()), is_empty());
+        expect_that!(validated_no_attrs(11_i32, between), len(eq(1)));
     }
 
     /// The cross-flavour case, and the one that matters most in practice:
@@ -1226,8 +1263,11 @@ mod tests {
             min: Some(Bound::Int(0)),
             ..Default::default()
         };
-        expect_that!(validated(-1.5_f64, non_negative.clone()), len(eq(1)));
-        expect_that!(validated(0.5_f64, non_negative), is_empty());
+        expect_that!(
+            validated_no_attrs(-1.5_f64, non_negative.clone()),
+            len(eq(1))
+        );
+        expect_that!(validated_no_attrs(0.5_f64, non_negative), is_empty());
     }
 
     /// The other direction, when the float is whole: `min: 2.0` means 2, so
@@ -1239,8 +1279,8 @@ mod tests {
             min: Some(Bound::Float(2.0)),
             ..Default::default()
         };
-        expect_that!(validated(1_i32, at_least_two.clone()), len(eq(1)));
-        expect_that!(validated(2_i32, at_least_two), is_empty());
+        expect_that!(validated_no_attrs(1_i32, at_least_two.clone()), len(eq(1)));
+        expect_that!(validated_no_attrs(2_i32, at_least_two), is_empty());
     }
 
     /// A FRACTIONAL float bound on an integer field has no sensible answer, so
@@ -1258,7 +1298,7 @@ mod tests {
             min: Some(Bound::Float(1.5)),
             ..Default::default()
         };
-        let _ = validated(3_i32, fractional);
+        let _ = validated_no_attrs(3_i32, fractional);
     }
 
     // ── `required: true` on a bool, through `validate` ───────────────────
@@ -1284,6 +1324,7 @@ mod tests {
             },
             custom_widget: widget,
             choices: None,
+            attrs: FieldAttrs::default(),
             wrapper: None,
             value,
             errors: Vec::new(),
@@ -1352,5 +1393,61 @@ mod tests {
             validation_messages(field),
             elements_are![eq("this value must be true")]
         );
+    }
+
+    // ── Author attributes ────────────────────────────────────────────────
+    //
+    // `FieldAttrs` is presentation only: it never reaches `ValueKind`, so it
+    // cannot change what a value parses as or what `check` allows. These pin
+    // the conversion `render` relies on. That the attributes then land on the
+    // right element, after the constraint attributes, is a widget question,
+    // tested from outside in `tests/suite/`.
+
+    fn author(pairs: &[(&'static str, &str)]) -> FieldAttrs {
+        FieldAttrs(
+            pairs
+                .iter()
+                .map(|(name, value)| (*name, (*value).to_string()))
+                .collect(),
+        )
+    }
+
+    #[gtest]
+    fn no_author_attributes_means_no_attributes() {
+        expect_that!(FieldAttrs::default().to_attributes(), is_empty());
+    }
+
+    /// Order is kept because the map is an `IndexMap`, so the rendered markup
+    /// follows the order the author wrote them in.
+    #[gtest]
+    fn author_attributes_keep_their_names_and_order() {
+        let attrs = author(&[("placeholder", "Ada"), ("autocomplete", "name")]);
+        expect_that!(
+            attrs
+                .to_attributes()
+                .iter()
+                .map(|a| a.name)
+                .collect::<Vec<_>>(),
+            elements_are![eq(&"placeholder"), eq(&"autocomplete")]
+        );
+    }
+
+    /// An author attribute is always TEXT, even when it looks like a number:
+    /// `rows: "4"` renders `rows="4"`. That is unlike a constraint, whose
+    /// `maxlength` is an `AttributeValue::Int` and renders unquoted. Both are
+    /// valid HTML, but a test matching the markup has to know which it is.
+    #[gtest]
+    fn an_author_attribute_is_text_even_when_numeric() {
+        let attrs = author(&[("rows", "4")]).to_attributes();
+        expect_that!(attrs[0].value, eq(&AttributeValue::Text("4".to_string())));
+    }
+
+    /// Plain attributes, the same as `ValueKind::add_attr` builds: no namespace
+    /// (that is only for `style`) and not volatile.
+    #[gtest]
+    fn an_author_attribute_has_no_namespace_and_is_not_volatile() {
+        let attrs = author(&[("placeholder", "Ada")]).to_attributes();
+        expect_that!(attrs[0].namespace, none());
+        expect_that!(attrs[0].volatile, eq(false));
     }
 }

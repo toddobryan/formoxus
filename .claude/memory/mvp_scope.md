@@ -27,6 +27,16 @@ Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
 1. ~~Breaking API changes~~ — done
 2. ~~Issue #6~~ — done 2026-10-01 (`required: true` on a bool)
 3. **C6 — author-supplied widget attributes** (was item 4) ← **NEXT**
+   - **RESHAPED 2026-10-02 by Todd: one attribute table with per-attribute
+     handling rules**, which absorbs issue #4 and collapses `Constraints` +
+     `FieldAttrs` + `ValueKind`'s constraint fields. Server checks stay. See
+     [[attribute-rules-design]].
+   - **QUEUED right after C6 lands (Todd, 2026-10-02): split `fields.rs`.** It
+     was 1,387 lines (712 code + 675 inline tests). Move `ValueKind`, `Bound`,
+     `Constraints`, `FieldAttrs`, `check` and `attrs` (lines ~56–308) and THEIR
+     tests into `fields/value_kind.rs` (the `form.rs` + `form/` layout); the
+     `FormField` side and its `validate` tests stay. Mechanical, so I do it,
+     between commits so it doesn't tangle with a feature diff.
 4. **Issue #9 — `aria-describedby`** (was item 3)
 5. **C5 — `help_text`** (was item 6) — moved AHEAD of per-field validators, so
    help text arrives right after the describedby mechanism it will join
