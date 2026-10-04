@@ -40,12 +40,24 @@ from, calls the whole range `Widget`. A brief widget→control rename on
 which also records the Control-vs-Widget split that was considered and why it
 does not work.
 
-**One deliberate exception: the CSS class `fx-control`.** It names the bare
-`<input>`/`<select>`/`<textarea>` — the one thing the rule's reason does not
-cover — and "form control" is the HTML spec's own term. The CSS vocabulary is
-web-facing, not Rust-API-facing; do not let the word back into the Rust API on
-its strength. All emitted classes are `fx-`-prefixed; the full list and its
-reasoning are in `.claude/memory/css_class_vocabulary.md`.
+**The exception: "control" may name the BARE HTML element, and nothing
+else.** The rule's reason is that no widget renders a bare element, so it says
+nothing about a name for the bare element itself, and "form control" is the
+HTML spec's own term. Two things use it, both deliberately:
+
+- **the CSS class `fx-control`**, on the bare `<input>`/`<select>`/`<textarea>`.
+  All emitted classes are `fx-`-prefixed; the full list and its reasoning are
+  in `.claude/memory/css_class_vocabulary.md`.
+- **`FieldControl` (2026-10-03, Todd)**, the enum in `formoxus-attrs` naming the
+  element a widget puts its attributes on (`Input(InputType)`, `Textarea`,
+  `Select`, `Fieldset`), which is what attribute validity is keyed on.
+  `Fieldset` is a stretch (nobody types into one); it is there because
+  `RadioGroup` spreads onto its `<fieldset>`, which has to be dealt with
+  anyway.
+
+Anything that RENDERS a field is still a widget. A new Rust name containing
+"control" needs to pass the same test: does it name the bare element, not the
+thing around it? If not, it is the reversed rename creeping back.
 
 ## Exports: the prelude is the one list
 

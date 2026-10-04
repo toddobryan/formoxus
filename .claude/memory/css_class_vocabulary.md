@@ -38,8 +38,14 @@ reason does not apply, and **"form control" is the HTML spec's own term** for
 `<input>`/`<select>`/`<textarea>`. The CSS vocabulary is web-facing, not
 Rust-API-facing, so there is no `widget` for it to compete with.
 **Do not read `fx-control` as the reversed widget→control rename creeping back**
-([[widget-is-the-umbrella-word]]), and do not let the word back into the Rust
-API on its strength.
+([[widget-is-the-umbrella-word]]).
+
+**REVISED 2026-10-03:** the original note said "do not let the word back into
+the Rust API on its strength". That was stricter than the reasoning supports,
+and Todd extended the carve-out by one type: **`FieldControl`** in
+`formoxus-attrs`, which names the bare element too (see CLAUDE.md's vocabulary
+section). The rule now reads: "control" names the bare HTML element and nothing
+else; anything that renders a field is a widget.
 
 ## The five gaps the old set had
 

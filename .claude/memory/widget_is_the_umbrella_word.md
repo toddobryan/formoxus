@@ -70,3 +70,18 @@ holding the value), **and a composite does not** — a combobox's visible
 `<input>` is not where the value lives. This matters to
 [[config-cascade]]'s `use_browser_validation` and will need saying in the docs
 for whoever writes the first composite widget.
+
+## "Control" for the bare element: allowed (2026-10-03)
+
+This note's argument is that no WIDGET renders a bare element, so "control"
+is the wrong word for a widget. It never covered a name for the bare element
+itself. Two names use the word for exactly that, deliberately: the CSS class
+`fx-control` ([[css-class-vocabulary]]) and, from 2026-10-03, **`FieldControl`**
+in `formoxus-attrs`: the element a widget puts its attributes on
+(`Input(InputType)`, `Textarea`, `Select`, `Fieldset`), which attribute
+validity is keyed on ([[attribute-rules-design]]). Chosen by Todd over
+`WidgetTag`, `FieldTag` and `ListedTag`; `Tag` alone was too broad (`<p>` and
+`<br>` are tags), and anything built on "input" reads as `<input>`. The test
+for any future name: does it name the bare element? If it names the thing
+around it, it is the reversed rename creeping back.
+

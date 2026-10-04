@@ -19,6 +19,10 @@
 //! The design is in `.claude/memory/attribute_rules_design.md`, and the WHATWG
 //! facts it encodes are in `.claude/memory/html_attributes_reference.md`.
 
+mod attrs;
+mod field_control;
 mod input_types;
 
+pub use attrs::{Attr, AttrType, FieldType, Owner};
+pub use field_control::FieldControl;
 pub use input_types::InputType;

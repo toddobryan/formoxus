@@ -60,3 +60,18 @@ render-side only. Do not assume one mechanism covers all of it.
 
 Also note `"input should match the regular expression {patt}"` leaks a raw regex
 to a user, which is a message-quality problem independent of localization.
+
+## Idea, 2026-10-03: `placeholder:` sets a select's "Choose..." text
+
+Raised while deciding `placeholder`'s `for:` column in the attribute table
+([[attribute-rules-design]]). A `<select>` has no `placeholder` attribute, but
+formoxus renders something placeholder-shaped on a required select: the
+disabled, hidden "Choose..." first option (`select.rs`, and the same string in
+`variant_select.rs`, formerly `structure.rs`). So `placeholder: "Pick a state"`
+on a select-rendered field could set that option's text: a formoxus meaning for
+the key, not an HTML attribute, needing its own table rule ("on a `Select`,
+becomes the first option's text, not an attribute"). It would apply to
+`Text`/`Int`/`Float` selects (a select over `choices`), still NOT to `Bool`
+(Todd kept `placeholder`'s `for:` as `Text | Int | Float`). It is a per-FIELD
+override, which would sit on top of the app-wide configurable string this
+file already proposes. Not scheduled; recorded so it is not lost.

@@ -1,6 +1,14 @@
-//! The `<input type=…>` values formoxus can render.
+//! Every `<input type=…>` value HTML defines.
 
-/// The `type` of an `<input>` that formoxus can render.
+/// Every `type` an `<input>` can have, per the WHATWG spec: all 22, whether
+/// or not formoxus renders it.
+///
+/// This is a set of FACTS, not a list of what formoxus can draw. The attribute
+/// table needs every type, so that a row can say where `checked` is valid
+/// (`Checkbox | Radio`) or that `accept` belongs to `File`. Which of these a
+/// field can actually be rendered as is a separate, smaller enum on the
+/// `formoxus` side, so that a field rendered as `Radio` or `Submit` cannot even
+/// be written (see `.claude/memory/attribute_rules_design.md`, decision 6).
 ///
 /// Here rather than in `formoxus`, because which attributes are valid on an
 /// `<input>` depends on its type (`placeholder` on `text` but not `date`, `min`
@@ -26,6 +34,17 @@ pub enum InputType {
     DatetimeLocal,
     Month,
     Week,
+    // Not rendered by the `Input` widget. A checkbox has its own state
+    // (`checked`, not `value`), a lone radio is meaningless outside a group,
+    // and the last five are buttons or files, not field values.
+    Checkbox,
+    Radio,
+    File,
+    Range,
+    Submit,
+    Image,
+    Reset,
+    Button,
 }
 
 impl InputType {
@@ -56,6 +75,14 @@ impl InputType {
             Self::DatetimeLocal => "datetime-local",
             Self::Month => "month",
             Self::Week => "week",
+            Self::Checkbox => "checkbox",
+            Self::Radio => "radio",
+            Self::File => "file",
+            Self::Range => "range",
+            Self::Submit => "submit",
+            Self::Image => "image",
+            Self::Reset => "reset",
+            Self::Button => "button",
         }
     }
 }
@@ -65,7 +92,7 @@ mod tests {
     use super::InputType;
     use googletest::prelude::*;
 
-    const ALL: [InputType; 14] = [
+    const ALL: [InputType; 22] = [
         InputType::Text,
         InputType::Password,
         InputType::Hidden,
@@ -80,6 +107,14 @@ mod tests {
         InputType::DatetimeLocal,
         InputType::Month,
         InputType::Week,
+        InputType::Checkbox,
+        InputType::Radio,
+        InputType::File,
+        InputType::Range,
+        InputType::Submit,
+        InputType::Image,
+        InputType::Reset,
+        InputType::Button,
     ];
 
     /// The `type` keywords the WHATWG spec defines for `<input>`, checked
@@ -118,7 +153,45 @@ mod tests {
     }
 
     /// Two variants sharing a keyword would make them indistinguishable in the
-    /// markup, and in the attribute table keyed on them.
+    /// markup, and in the attribute table keyed on them. Together with the test
+    /// above and `ALL` having 22 entries, this means every spec keyword has
+    /// exactly one variant.
+    /// `ALL` has to name every variant, or the two tests above check a subset.
+    /// The `match` has no wildcard, so adding a variant to `InputType` stops
+    /// this test from COMPILING until it is listed here, which is the prompt
+    /// to add it to `ALL` too. The length check then ties `ALL` to the spec's
+    /// 22 keywords, and `no_two_types_render_the_same` rules out duplicates.
+    #[gtest]
+    fn all_lists_every_variant() {
+        for t in ALL {
+            match t {
+                InputType::Text
+                | InputType::Password
+                | InputType::Hidden
+                | InputType::Number
+                | InputType::Email
+                | InputType::Telephone
+                | InputType::Url
+                | InputType::Search
+                | InputType::Color
+                | InputType::Date
+                | InputType::Time
+                | InputType::DatetimeLocal
+                | InputType::Month
+                | InputType::Week
+                | InputType::Checkbox
+                | InputType::Radio
+                | InputType::File
+                | InputType::Range
+                | InputType::Submit
+                | InputType::Image
+                | InputType::Reset
+                | InputType::Button => {}
+            }
+        }
+        expect_that!(ALL.len(), eq(SPEC_KEYWORDS.len()));
+    }
+
     #[gtest]
     fn no_two_types_render_the_same() {
         let mut seen: Vec<&str> = ALL.iter().map(|t| t.html_type()).collect();
