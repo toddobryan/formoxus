@@ -46,6 +46,10 @@
 //! tried and abandoned — lives in `.claude/memory/`, starting from its
 //! `MEMORY.md` index.
 
+pub mod attrs {
+    pub use formoxus_attrs::*;
+}
+
 pub mod build;
 pub mod buttons;
 pub mod defaults;

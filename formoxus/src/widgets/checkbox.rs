@@ -13,7 +13,7 @@ pub fn Checkbox(
     props: FieldProps,
     /// `required: true` in `form!`: the box must be ticked. Shows the ` *`
     /// marker. The HTML `required` attribute does not come from here; it
-    /// arrives in `attrs`, from `ValueKind::attrs`, like every other
+    /// arrives in `attrs`, from `FormField::constraint_attributes`, like every other
     /// constraint.
     required_true: bool,
     #[props(extends = input)] attrs: Vec<Attribute>,

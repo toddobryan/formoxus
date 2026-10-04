@@ -60,7 +60,7 @@ macro_rules! field_body {
 // an `Expr` is also what lets the literal's own type pick the `Bound` variant
 // once it reaches `.into()`. A pattern cannot: the macro has to hand the string
 // to `regress` to check it compiles, and only a literal is readable at macro
-// time. It also lands in `Constraints::pattern`, which is a `&'static str`.
+// time. It also lands in `AttrValue::Regex`, which holds a `&'static str`.
 field_body! {
     widget: WidgetRef,
     label: Expr,
@@ -73,54 +73,47 @@ field_body! {
 }
 
 impl FieldBody {
-    /// The `Constraints` literal this body declares, or `None` when it declares
+    /// The `AllAttrs` this body declares, or `None` when it declares
     /// none — in which case no `.with_constraints` call is emitted at all and a
     /// form without constraints expands exactly as it did before they existed.
     ///
-    /// One call taking the whole struct, not five setters: the brace block in
-    /// the source and the struct literal in the expansion are the same shape,
-    /// so a key fills the field of the same name and the macro never has to
-    /// decide which setter a key maps to.
+    /// One call taking the whole map, not one setter per key: each key the
+    /// body has becomes one `(Attr, AttrValue)` entry, and a key it lacks
+    /// contributes nothing, so the expansion holds exactly what was written.
     pub(crate) fn constraints_tokens(&self) -> Option<TokenStream2> {
         // `(#e).into()` — parenthesized because `#e` may be any expression, and
         // the literal's own type is what picks `Bound::Int` over `Bound::Float`.
         let min = self
             .min
             .as_ref()
-            .map(|e| quote! { min: Some((#e).into()), });
+            .map(|e| quote! { (::formoxus::attrs::Attr::Min, ::formoxus::attrs::AttrValue::Bound((#e).into())) });
         let max = self
             .max
             .as_ref()
-            .map(|e| quote! { max: Some((#e).into()), });
+            .map(|e| quote! { (::formoxus::attrs::Attr::Max, ::formoxus::attrs::AttrValue::Bound((#e).into())) });
         let min_length = self
             .min_length
             .as_ref()
-            .map(|e| quote! { min_length: Some(#e), });
+            .map(|e| quote! { (::formoxus::attrs::Attr::MinLength, ::formoxus::attrs::AttrValue::Int(#e)) });
         let max_length = self
             .max_length
             .as_ref()
-            .map(|e| quote! { max_length: Some(#e), });
-        let pattern = self.pattern.as_ref().map(|s| quote! { pattern: Some(#s), });
+            .map(|e| quote! { (::formoxus::attrs::Attr::MaxLength, ::formoxus::attrs::AttrValue::Int(#e)) });
+        let pattern = self.pattern.as_ref().map(|s| quote! { (::formoxus::attrs::Attr::Pattern, ::formoxus::attrs::AttrValue::Regex(#s)) });
         let required = self
             .required
             .as_ref()
-            .map(|b| quote! { required_true: #b, });
+            .map(|_| quote! { (::formoxus::attrs::Attr::RequiredTrue, ::formoxus::attrs::AttrValue::Flag) });
 
-        if min.is_none()
-            && max.is_none()
-            && min_length.is_none()
-            && max_length.is_none()
-            && pattern.is_none()
-            && required.is_none()
-        {
+        let entries: Vec<_> = [min, max, min_length, max_length, pattern, required]
+            .into_iter()
+            .flatten()
+            .collect();
+
+        if entries.is_empty() {
             return None;
         }
-        Some(quote! {
-            ::formoxus::fields::Constraints {
-                #min #max #min_length #max_length #pattern #required
-                ..::core::default::Default::default()
-            }
-        })
+        Some(quote! { ::formoxus::fields::AllAttrs::from([ #(#entries), * ]) })
     }
 }
 
@@ -165,6 +158,7 @@ impl FieldBody {
         };
         let cast_lints = cast_lints();
         let length = quote!(::formoxus::field_kind::takes_length);
+        let pattern = quote!(::formoxus::field_kind::takes_pattern);
         let bound = quote!(::formoxus::field_kind::takes_bound);
 
         let mut checks = Vec::new();
@@ -178,7 +172,7 @@ impl FieldBody {
         }
         if let Some(s) = &self.pattern {
             let msg = "`pattern` applies only to a String field";
-            checks.push(takes(s.span(), length.clone(), msg));
+            checks.push(takes(s.span(), pattern, msg));
         }
         if let Some(e) = &self.min {
             let msg = "`min` applies only to a number field";
@@ -444,9 +438,23 @@ mod tests {
 
         // ONE call, holding a struct literal — not one call per key.
         expect_that!(tokens.matches("with_constraints").count(), eq(1));
-        expect_that!(tokens, contains_substring("min_length : Some (3)"));
-        expect_that!(tokens, contains_substring("max_length : Some (500)"));
-        expect_that!(tokens, contains_substring("pattern : Some"));
+        expect_that!(
+            tokens,
+            contains_substring(":: formoxus :: fields :: AllAttrs :: from ([")
+        );
+        expect_that!(
+            tokens,
+            contains_substring(
+                "(:: formoxus :: attrs :: Attr :: MinLength , :: formoxus :: attrs :: AttrValue :: Int (3))"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring(
+                "(:: formoxus :: attrs :: Attr :: MaxLength , :: formoxus :: attrs :: AttrValue :: Int (500))"
+            )
+        );
+        expect_that!(tokens, contains_substring("AttrValue :: Regex"));
     }
 
     /// A bound goes through `.into()`, which is what lets the literal's own
@@ -456,8 +464,18 @@ mod tests {
     fn a_bound_is_converted_rather_than_classified() {
         let spec = parse(quote! { Source { age => { min: 13, max: 120.5 } } }).unwrap();
         let tokens = spec.expand().to_string();
-        expect_that!(tokens, contains_substring("min : Some ((13) . into ())"));
-        expect_that!(tokens, contains_substring("max : Some ((120.5) . into ())"));
+        expect_that!(
+            tokens,
+            contains_substring(
+                "Attr :: Min , :: formoxus :: attrs :: AttrValue :: Bound ((13) . into ())"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring(
+                "Attr :: Max , :: formoxus :: attrs :: AttrValue :: Bound ((120.5) . into ())"
+            )
+        );
     }
 
     /// An expression, not just a literal — the reason these are held as `Expr`.
@@ -469,14 +487,19 @@ mod tests {
         expect_that!(tokens, contains_substring("2 * LIMIT"));
     }
 
-    /// `required: true` lands in the same `Constraints` literal as the other
-    /// keys, so it reaches `ValueKind::Bool` by the same route.
+    /// `required: true` lands in the same `AllAttrs` as the other keys, as
+    /// `Attr::RequiredTrue`, so it reaches `check` by the same route.
     #[gtest]
     fn required_true_becomes_a_constraint() {
         let spec = parse(quote! { Source { agreed => { required: true } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(tokens.matches("with_constraints").count(), eq(1));
-        expect_that!(tokens, contains_substring("required_true : true"));
+        expect_that!(
+            tokens,
+            contains_substring(
+                "(:: formoxus :: attrs :: Attr :: RequiredTrue , :: formoxus :: attrs :: AttrValue :: Flag)"
+            )
+        );
     }
 
     /// Presence comes from the model's type alone, so `required: false` is
@@ -545,7 +568,7 @@ mod tests {
     }
 
     /// `a)|(b` compiles once wrapped as `^(?:a)|(b)$`, and so would pass
-    /// `ValueKind::check`, but not alone. HTML compiles the bare pattern first
+    /// `FormField::check`, but not alone. HTML compiles the bare pattern first
     /// and drops the constraint if that fails, so accepting it would leave the
     /// browser checking nothing while the server checks something.
     #[gtest]

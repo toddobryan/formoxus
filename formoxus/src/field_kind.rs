@@ -22,6 +22,7 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
+use formoxus_attrs::{Attr, FieldType};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -38,17 +39,31 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
     unreachable!("a form! projection is type-checked, never called")
 }
 
-/// Whether `min_length`, `max_length` or `pattern` can apply to this field.
+const fn applies(attr: Attr, shape: &Shape) -> bool {
+    match kind(shape) {
+        Kind::Unknown => true,
+        Kind::Other => false,
+        _ => match field_type(shape) {
+            Some(t) => attr.applies_to(t),
+            None => false,
+        },
+    }
+}
+
+/// Whether `min_length` or `max_length` can apply to this field.
 pub const fn takes_length(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Text | Kind::Unknown)
+    applies(Attr::MinLength, shape)
+}
+
+/// Whether `pattern` can apply to this field. Its own check rather than
+/// `takes_length`'s, so the question asked of the table names the attribute.
+pub const fn takes_pattern(shape: &Shape) -> bool {
+    applies(Attr::Pattern, shape)
 }
 
 /// Whether `min` or `max` can apply to this field.
 pub const fn takes_bound(shape: &Shape) -> bool {
-    matches!(
-        kind(shape),
-        Kind::Int { .. } | Kind::Float { .. } | Kind::Unknown
-    )
+    applies(Attr::Min, shape)
 }
 
 /// Whether `required: true` can apply: only to a bool, where it means the value
@@ -58,7 +73,7 @@ pub const fn takes_bound(shape: &Shape) -> bool {
 /// An `Option<bool>` passes HERE, because `kind` peels the `Option`.
 /// [`required_is_not_optional`] refuses it, with its own message.
 pub const fn takes_required(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Bool | Kind::Unknown)
+    applies(Attr::RequiredTrue, shape)
 }
 
 /// Whether `required: true` avoids an `Option`. An optional field may be left
@@ -288,6 +303,16 @@ const fn is_newtype(shape: &Shape) -> bool {
     }
 }
 
+const fn field_type(shape: &Shape) -> Option<FieldType> {
+    match kind(shape) {
+        Kind::Text => Some(FieldType::Text),
+        Kind::Int { .. } => Some(FieldType::Int),
+        Kind::Float { .. } => Some(FieldType::Float),
+        Kind::Bool => Some(FieldType::Bool),
+        Kind::Other | Kind::Unknown => None,
+    }
+}
+
 /// `==` on `str` is a trait method, which const code cannot call.
 const fn str_eq(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
@@ -308,7 +333,8 @@ const fn str_eq(a: &str, b: &str) -> bool {
 mod tests {
     use super::{
         WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_optional, is_single_value,
-        renders, required_is_not_optional, takes_bound, takes_length, takes_required,
+        renders, required_is_not_optional, takes_bound, takes_length, takes_pattern,
+        takes_required,
     };
     use facet::Facet;
     use googletest::prelude::*;
@@ -584,6 +610,27 @@ mod tests {
     fn a_list_takes_nothing() {
         expect_that!(takes_length(<Vec<std::string::String>>::SHAPE), eq(false));
         expect_that!(takes_bound(<Vec<u32>>::SHAPE), eq(false));
+    }
+
+    /// `pattern` asks the table about itself rather than borrowing the length
+    /// check, so these mirror the length cases exactly: text yes (optional or
+    /// not), numbers, bools and lists no, an opaque newtype let through.
+    #[gtest]
+    fn pattern_applies_to_text_and_nothing_else() {
+        expect_that!(takes_pattern(std::string::String::SHAPE), eq(true));
+        expect_that!(
+            takes_pattern(<Option<std::string::String>>::SHAPE),
+            eq(true)
+        );
+        expect_that!(takes_pattern(Markdown::SHAPE), eq(true));
+        for shape in [
+            u32::SHAPE,
+            f64::SHAPE,
+            bool::SHAPE,
+            <Vec<std::string::String>>::SHAPE,
+        ] {
+            expect_that!(takes_pattern(shape), eq(false), "{shape}");
+        }
     }
 
     /// Out of reach, so let through: the runtime sees the `String` inside.

@@ -315,6 +315,34 @@ Entering the spec facts literally hit two snags: `min`/`max` are not valid on
     `true_and_on` controls (and that none is also in `on:`), and the rule,
     including `min` on text allowed vs `pattern` on textarea refused.
 
+11. **Step 2d's `check` iterates attributes, not field types** (Todd,
+    2026-10-04): for each attribute in `Attr::ALL` order that the field has and
+    that `validated()`, run that attribute's check; the field type is an INPUT
+    (it picks `i128` vs `f64` for `Min`/`Max` and drives the bound widening),
+    not the dispatch. **`Min`/`Max` keep the COMBINED "in the range X up to
+    (and including) Y" message**: the pair is handled once, on `Min`, with
+    `Max` skipping itself when `Min` is present. A guard skips any attribute
+    where `!applies_to(field_type)`, keeping today's silent-ignore for a
+    hand-built spec until decision 7 makes it unreachable. `Required`
+    (presence) is not checked in this loop; it stays in `validate`'s `Empty`
+    handling.
+
+12. **STEP 2 DONE (2026-10-04), no behaviour change.** `formoxus::attrs`
+    re-exports the crate; `field_kind`'s `takes_length`/`takes_pattern`/
+    `takes_bound`/`takes_required` ask the table through `applies(attr, shape)`
+    (`Unknown` → let through, `Other` → refuse); `Constraints` is replaced by
+    `AllAttrs(IndexMap<Attr, AttrValue>)` (in `formoxus`; `AttrValue` and
+    `Bound` moved to `formoxus-attrs`); `ValueKind` is gone, replaced by
+    `FieldType`. `check` and `constraint_attributes` are methods on `FormField`
+    (NOT `FieldType`: a crate cannot add methods to another crate's type, and
+    both need `int_bound` with the field's name). Both walk `Attr::ALL`, so the
+    TABLE'S ROW ORDER is the message and attribute order (`MinLength` was moved
+    before `MaxLength` for that). `ScalarWidget` takes `field_type`,
+    `constraint_attrs` and `required_true`. Verified: 544 tests, all goldens
+    unchanged (one added: `form_pattern_on_a_number`), 29 e2e, clippy, rustdoc,
+    1.90, wasm. `AllAttrs` (constraints) and `FieldAttrs` (author attributes)
+    are still separate; merging them, and picking the surviving name, is step 3.
+
 ### Agreed to come AFTER the table holds today's attributes
 
 **Reshaping `FieldProps`** (Todd's earlier shrink idea, [[shrink-fieldprops-idea]]):

@@ -62,7 +62,7 @@ impl InputType {
             // Selectable, but NOT the default for a numeric field — see
             // `FormField::default_widget`. `type="number"` hands back `""` for
             // anything the browser dislikes, so a half-typed value vanishes
-            // mid-keystroke. A numeric renders as text and `ValueKind` parses it.
+            // mid-keystroke. A numeric renders as text and formoxus parses it.
             // Anyone who wants the spinner and the mobile keypad can ask.
             Self::Number => "number",
             Self::Email => "email",

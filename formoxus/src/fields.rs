@@ -6,9 +6,9 @@ use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
-use dioxus::core::IntoAttributeValue;
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
+use formoxus_attrs::{Attr, AttrValue, Bound, FieldType};
 use indexmap::IndexMap;
 use regress::Regex;
 use std::fmt::Debug;
@@ -28,7 +28,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
-    pub constraints: Constraints,
+    pub constraints: AllAttrs,
     pub attrs: FieldAttrs,
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
@@ -43,7 +43,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     /// shape walk only ever has a shape in hand, and `FormField<T>` needs a
     /// type at compile time. So a `Markdown` field becomes a
     /// `FormField<String>` that remembers what to re-wrap it in, and every
-    /// string-facing operation — parsing, display, `ValueKind`, the widget —
+    /// string-facing operation — parsing, display, `check`, the widget —
     /// goes on working unchanged against the inner scalar.
     ///
     /// Only [`write_value_into`](FormMember::write_value_into) consults it.
@@ -52,73 +52,23 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub errors: Vec<ValidationMessage>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ValueKind {
-    Text {
-        min_length: Option<usize>,
-        max_length: Option<usize>,
-        pattern: Option<&'static str>,
-    },
-    Int {
-        min: Option<i128>,
-        max: Option<i128>,
-    }, // from the type; author bounds join later as separate Options
-    Float {
-        min: Option<f64>,
-        max: Option<f64>,
-    },
-    Bool {
-        required_true: bool,
-    }, /*Temporal,
-       Choice,
-       MultiChoice,
-       File,*/
-}
-
-#[derive(Clone, Debug, Copy, PartialEq)]
-pub enum Bound {
-    Int(i128),
-    Float(f64),
-}
-
-macro_rules! bound_from_int {
-    // Infallible and lossless — `i128::from` says so in the type system.
-    (from: $($t:ty),* $(,)?) => { $(
-        impl From<$t> for Bound {
-            fn from(v: $t) -> Self { Bound::Int(i128::from(v)) }
-        }
-    )* };
-    // `usize`/`isize` have no `From<_> for i128` — their width is
-    // target-dependent — so these need the cast. Lossless on every target
-    // Rust supports: `i128` is wider than any pointer.
-    (cast: $($t:ty),* $(,)?) => { $(
-        impl From<$t> for Bound {
-            fn from(v: $t) -> Self { Bound::Int(v as i128) }
-        }
-    )* };
-}
-bound_from_int!(from: i8, i16, i32, i64, i128, u8, u16, u32, u64);
-bound_from_int!(cast: isize, usize);
-
-impl From<f32> for Bound {
-    fn from(v: f32) -> Self {
-        Bound::Float(f64::from(v))
-    }
-}
-impl From<f64> for Bound {
-    fn from(v: f64) -> Self {
-        Bound::Float(v)
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Constraints {
-    pub min: Option<Bound>,
-    pub max: Option<Bound>,
-    pub min_length: Option<usize>,
-    pub max_length: Option<usize>,
-    pub pattern: Option<&'static str>,
-    pub required_true: bool,
+pub struct AllAttrs(IndexMap<Attr, AttrValue>);
+
+impl AllAttrs {
+    pub fn get(&self, attr: Attr) -> Option<&AttrValue> {
+        self.0.get(&attr)
+    }
+
+    pub fn contains(&self, attr: Attr) -> bool {
+        self.0.contains_key(&attr)
+    }
+}
+
+impl<const N: usize> From<[(Attr, AttrValue); N]> for AllAttrs {
+    fn from(arr: [(Attr, AttrValue); N]) -> Self {
+        Self(IndexMap::from(arr))
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -143,177 +93,38 @@ impl<const N: usize> From<[(&'static str, String); N]> for FieldAttrs {
     }
 }
 
-impl ValueKind {
-    fn check(&self, raw_value: &str) -> Vec<ValidationMessage> {
-        let mut errors: Vec<ValidationMessage> = Vec::new();
-        match self {
-            ValueKind::Text {
-                min_length,
-                max_length,
-                pattern,
-            } => {
-                if let Some(min) = min_length
-                    && raw_value.chars().count() < *min
-                {
-                    errors.push(ValidationMessage(format!("length must be at least {min}")));
-                }
-                if let Some(max) = max_length
-                    && raw_value.chars().count() > *max
-                {
-                    errors.push(ValidationMessage(format!("length must be at most {max}")));
-                }
-                if let Some(patt) = pattern {
-                    let re = Regex::with_flags(&format!("^(?:{patt})$"), "v")
-                        .expect("this regex should have parsed at compile time");
-                    if re.find(raw_value).is_none() {
-                        errors.push(ValidationMessage(format!(
-                            "input should match the regular expression {patt}"
-                        )));
-                    }
-                }
-            }
-            ValueKind::Int { min, max } => {
-                let n: i128 = raw_value
-                    .parse()
-                    .expect("this int should have already successfully parsed");
-                match (min, max) {
-                    (Some(min), Some(max)) => {
-                        if n < *min || n > *max {
-                            errors.push(ValidationMessage(format!(
-                                "number must be in the range {min} up to (and including) {max}"
-                            )));
-                        }
-                    }
-                    (Some(min), None) => {
-                        if n < *min {
-                            errors
-                                .push(ValidationMessage(format!("number must be at least {min}")));
-                        }
-                    }
-                    (None, Some(max)) => {
-                        if n > *max {
-                            errors.push(ValidationMessage(format!("number must be at most {max}")));
-                        }
-                    }
-                    (None, None) => (),
-                }
-            }
-            ValueKind::Float { min, max } => {
-                let n: f64 = raw_value
-                    .parse()
-                    .expect("this float should have already successfully parsed");
-                match (min, max) {
-                    (Some(min), Some(max)) => {
-                        if n < *min || n > *max || n.is_nan() {
-                            errors.push(ValidationMessage(format!(
-                                "number must be in the range {min} up to (and including) {max}"
-                            )));
-                        }
-                    }
-                    (Some(min), None) => {
-                        if n < *min || n.is_nan() {
-                            errors
-                                .push(ValidationMessage(format!("number must be at least {min}")));
-                        }
-                    }
-                    (None, Some(max)) => {
-                        if n > *max || n.is_nan() {
-                            errors.push(ValidationMessage(format!("number must be at most {max}")));
-                        }
-                    }
-                    (None, None) => (),
-                }
-            }
-            ValueKind::Bool { required_true } => {
-                let is_true: bool = raw_value
-                    .parse()
-                    .expect("this bool should have already successfully parsed");
-                if *required_true && !is_true {
-                    errors.push(ValidationMessage("this value must be true".to_string()));
-                }
-            }
-        }
-        errors
+/// A bound on a float field, as an `f64`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a bound above 2^53 does not survive this widening; form! rejects \
+    one at compile time (`field_kind::bound_is_exact`), so only a hand-built \
+    spec can still reach here with one"
+)]
+fn float_bound(bound: Bound) -> f64 {
+    match bound {
+        Bound::Int(n) => n as f64,
+        Bound::Float(x) => x,
     }
+}
 
-    /// This kind's constraints as HTML attributes, for the element a widget
-    /// renders.
-    ///
-    /// The render-side half of a constraint: `check` enforces it in Rust, and
-    /// these hand the same rule to the browser so it can give instant feedback
-    /// and block submit. `browser_validation: off` does NOT gate them, and must
-    /// not — `novalidate` on the `<form>` disables constraint validation
-    /// form-wide, so it already neutralizes every one of these, and threading the
-    /// flag down here would duplicate what one attribute does.
-    ///
-    /// A `pattern` arrives UNANCHORED. HTML wraps one as `^(?:…)$` implicitly and
-    /// `check` wraps it Rust-side to match, so anchoring it here too
-    /// would make the two disagree — which is the thing `regress` is a dependency
-    /// to prevent.
-    ///
-    /// **Every attribute is emitted regardless of whether it is valid on the
-    /// element that ends up carrying it**, and the browser ignores what does not
-    /// apply. That is deliberate but not ideal: the W3C validator rejects most of
-    /// the combinations, so this produces invalid HTML. See
-    /// <https://github.com/toddobryan/formoxus/issues/4>.
-    ///
-    /// **No `step` is emitted for a float.** `<input type="number">` has an
-    /// implicit `step=1`, so a browser rejects `2.5` in one. formoxus never
-    /// defaults a number to `type="number"` — [`ValueKind::Int`] and
-    /// [`ValueKind::Float`] default to a text input, because `type="number"` eats
-    /// a half-typed value — so this is only reachable by asking for
-    /// `widget: number` explicitly, and an author who does needs to supply `step`
-    /// themselves. Issue #4 covers making that unnecessary.
-    pub fn attrs(&self) -> IndexMap<&'static str, Attribute> {
-        let mut map = IndexMap::<&'static str, Attribute>::new();
-        match self {
-            ValueKind::Text {
-                min_length,
-                max_length,
-                pattern,
-            } => {
-                if let Some(ml) = min_length {
-                    Self::add_attr(&mut map, "minlength", ml);
-                }
-                if let Some(ml) = max_length {
-                    Self::add_attr(&mut map, "maxlength", ml);
-                }
-                if let Some(patt) = pattern {
-                    Self::add_attr(&mut map, "pattern", patt);
-                }
-            }
-            ValueKind::Int { min, max } => {
-                if let Some(m) = min {
-                    Self::add_attr(&mut map, "min", m);
-                }
-                if let Some(m) = max {
-                    Self::add_attr(&mut map, "max", m);
-                }
-            }
-            ValueKind::Float { min, max } => {
-                if let Some(m) = min {
-                    Self::add_attr(&mut map, "min", m);
-                }
-                if let Some(m) = max {
-                    Self::add_attr(&mut map, "max", m);
-                }
-            }
-            ValueKind::Bool { required_true } => {
-                if *required_true {
-                    Self::add_attr(&mut map, "required", true);
-                }
-            }
+/// The message for a value outside its bounds, or `None` when it is inside.
+/// One message covers both ends when the field has both, which is why `min`
+/// and `max` are checked together.
+fn range_message<N: std::fmt::Display>(
+    min: Option<N>,
+    max: Option<N>,
+    below: bool,
+    above: bool,
+) -> Option<ValidationMessage> {
+    let message = match (min, max) {
+        (Some(min), Some(max)) if below || above => {
+            format!("number must be in the range {min} up to (and including) {max}")
         }
-        map
-    }
-
-    fn add_attr(
-        map: &mut IndexMap<&'static str, Attribute>,
-        name: &'static str,
-        v: impl IntoAttributeValue,
-    ) {
-        map.insert(name, Attribute::new(name, v, None, false));
-    }
+        (Some(min), None) if below => format!("number must be at least {min}"),
+        (None, Some(max)) if above => format!("number must be at most {max}"),
+        _ => return None,
+    };
+    Some(ValidationMessage(message))
 }
 
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
@@ -327,7 +138,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// the max and min values on all other int types. Similarly, bounds on floats are
     /// f64s. In the form! macro (where we have access to the actual type of the field),
     /// we check to make sure the constraints fit.
-    fn value_kind(&self) -> ValueKind {
+    fn field_type(&self) -> FieldType {
         // `None` is unreachable: `scalar_member` only builds a `FormField` for
         // the scalars it recognises, and `member_for_shape` panics on the rest.
         let scalar = T::SHAPE
@@ -335,14 +146,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             .expect("FormField is only constructed for scalar shapes");
 
         match scalar {
-            ScalarType::String => ValueKind::Text {
-                min_length: self.constraints.min_length,
-                max_length: self.constraints.max_length,
-                pattern: self.constraints.pattern,
-            },
-            ScalarType::Bool => ValueKind::Bool {
-                required_true: self.constraints.required_true,
-            },
+            ScalarType::String => FieldType::Text,
+            ScalarType::Bool => FieldType::Bool,
             ScalarType::I8
             | ScalarType::I16
             | ScalarType::I32
@@ -350,30 +155,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             | ScalarType::U8
             | ScalarType::U16
             | ScalarType::U32
-            | ScalarType::U64 => {
-                let min = self.constraints.min.map(|b| self.int_bound(b, "min"));
-                let max = self.constraints.max.map(|b| self.int_bound(b, "max"));
-                ValueKind::Int { min, max }
-            }
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a bound above 2^53 does not survive this widening; form! rejects \
-                one at compile time (`field_kind::bound_is_exact`), so only a hand-built \
-                spec can still reach here with one"
-            )]
-            ScalarType::F32 | ScalarType::F64 => {
-                let min = match self.constraints.min {
-                    None => None,
-                    Some(Bound::Int(min)) => Some(min as f64),
-                    Some(Bound::Float(min)) => Some(min),
-                };
-                let max = match self.constraints.max {
-                    None => None,
-                    Some(Bound::Int(max)) => Some(max as f64),
-                    Some(Bound::Float(max)) => Some(max),
-                };
-                ValueKind::Float { min, max }
-            }
+            | ScalarType::U64 => FieldType::Int,
+            ScalarType::F32 | ScalarType::F64 => FieldType::Float,
             other => panic!(
                 "scalar type {other:?} is not supported in FormField (field {})",
                 self.name
@@ -381,7 +164,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
         }
     }
 
-    /// A bound on an integer field, as the `i128` `ValueKind::Int` holds.
+    /// A bound on an integer field, as the `i128` it is compared as.
     ///
     /// A whole float bound is accepted, because `min: 2.0` means what it says
     /// and `form!` cannot reject it: it cannot tell `2.0` from `2` when the
@@ -403,6 +186,147 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
         }
     }
 
+    /// Formoxus's own check of a value against this field's validated
+    /// attributes. `raw_value` has already parsed as `T`; `validate` returns
+    /// before reaching here on an empty or unparseable value.
+    ///
+    /// Walks [`Attr::ALL`], not the map, so the messages come out in the
+    /// table's order (lengths, then pattern, then bounds) whatever order
+    /// `form!` inserted the attributes in. The field type is an INPUT here, not
+    /// the dispatch: it only matters to `min`/`max`, which read the value as an
+    /// `i128` or an `f64`.
+    fn check(&self, raw_value: &str) -> Vec<ValidationMessage> {
+        let field_type = self.field_type();
+        let mut errors = Vec::new();
+        // TODO: the Max and Min handling assumes an ordering for Attr::ALL.
+        //       We should avoid that.
+        for &attr in Attr::ALL {
+            let Some(value) = self.constraints.get(attr) else {
+                continue;
+            };
+            // `form!` refuses an attribute that does not apply to the field's
+            // type at compile time, so only a hand-built spec reaches this.
+            // Skipping keeps what such a spec always got: silently ignored.
+            if !attr.validated() || !attr.applies_to(field_type) {
+                continue;
+            }
+            match (attr, value) {
+                (Attr::MinLength, AttrValue::Int(min)) => {
+                    if raw_value.chars().count() < *min {
+                        errors.push(ValidationMessage(format!("length must be at least {min}")));
+                    }
+                }
+                (Attr::MaxLength, AttrValue::Int(max)) => {
+                    if raw_value.chars().count() > *max {
+                        errors.push(ValidationMessage(format!("length must be at most {max}")));
+                    }
+                }
+                (Attr::Pattern, AttrValue::Regex(patt)) => {
+                    let re = Regex::with_flags(&format!("^(?:{patt})$"), "v")
+                        .expect("this regex should have parsed at compile time");
+                    if re.find(raw_value).is_none() {
+                        errors.push(ValidationMessage(format!(
+                            "input should match the regular expression {patt}"
+                        )));
+                    }
+                }
+                // One message for the pair ("in the range X up to Y"), so it
+                // is produced once, on `Min`, and `Max` stands aside when
+                // `Min` is there to cover both.
+                (Attr::Min | Attr::Max, AttrValue::Bound(_)) => {
+                    if attr == Attr::Max && self.constraints.contains(Attr::Min) {
+                        continue;
+                    }
+                    errors.extend(self.check_bounds(field_type, raw_value));
+                }
+                (Attr::RequiredTrue, AttrValue::Flag) => {
+                    let is_true: bool = raw_value
+                        .parse()
+                        .expect("this bool should have already successfully parsed");
+                    if !is_true {
+                        errors.push(ValidationMessage("this value must be true".to_string()));
+                    }
+                }
+                // Presence: decided in `validate`, before a value reaches here.
+                (Attr::Required, _) => {}
+                (attr, value) => panic!(
+                    "field {}: {attr:?} cannot hold the value {value:?}",
+                    self.name
+                ),
+            }
+        }
+        errors
+    }
+
+    /// This field's constraints as HTML attributes, in `Attr::ALL` order,
+    /// unfiltered (step 4 adds `is_valid_on`).
+    fn constraint_attributes(&self) -> Vec<Attribute> {
+        let field_type = self.field_type();
+        let mut out = Vec::new();
+        for &attr in Attr::ALL {
+            let Some(value) = self.constraints.get(attr) else {
+                continue;
+            };
+            let name = attr.name();
+            let attribute = match value {
+                AttrValue::Int(n) => Attribute::new(name, *n, None, false),
+                AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
+                AttrValue::Flag => Attribute::new(name, true, None, false),
+                AttrValue::Bound(b) => match field_type {
+                    FieldType::Int => Attribute::new(name, self.int_bound(*b, name), None, false),
+                    _ => Attribute::new(name, float_bound(*b), None, false),
+                },
+            };
+            out.push(attribute);
+        }
+        out
+    }
+
+    /// The `min`/`max` check, for whichever of the two the field has.
+    ///
+    /// An integer field compares as `i128` (every supported integer fits), a
+    /// float field as `f64`. A bound written as the other kind is widened to
+    /// match: `int_bound` for an integer field, a cast for a float field.
+    fn check_bounds(&self, field_type: FieldType, raw_value: &str) -> Option<ValidationMessage> {
+        let bound = |attr: Attr| match self.constraints.get(attr) {
+            Some(AttrValue::Bound(b)) => Some(*b),
+            _ => None,
+        };
+        let (min, max) = (bound(Attr::Min), bound(Attr::Max));
+        match field_type {
+            FieldType::Int => {
+                let n: i128 = raw_value
+                    .parse()
+                    .expect("this int should have already successfully parsed");
+                let min = min.map(|b| self.int_bound(b, "min"));
+                let max = max.map(|b| self.int_bound(b, "max"));
+                range_message(
+                    min,
+                    max,
+                    min.is_some_and(|m| n < m),
+                    max.is_some_and(|m| n > m),
+                )
+            }
+            FieldType::Float => {
+                let n: f64 = raw_value
+                    .parse()
+                    .expect("this float should have already successfully parsed");
+                let min = min.map(float_bound);
+                let max = max.map(float_bound);
+                // NaN compares false to everything, so it would slip past both
+                // bounds; a bounded float field rejects it outright.
+                range_message(
+                    min,
+                    max,
+                    min.is_some_and(|m| n < m || n.is_nan()),
+                    max.is_some_and(|m| n > m || n.is_nan()),
+                )
+            }
+            // `applies_to` lets only number fields through to here.
+            FieldType::Text | FieldType::Bool => None,
+        }
+    }
+
     /// What this field renders as absent any override.
     ///
     /// `optional` is the one input here that `T` cannot supply: `Option` peeling
@@ -410,18 +334,19 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// as `FormField<bool>`. A checkbox has two states and an `Option<bool>` has
     /// three, which is the whole reason that flag has to travel from the walk.
     fn default_widget(&self) -> WidgetType {
-        match self.value_kind() {
+        match self.field_type() {
             // Int and Float are deliberately `text`, not `number`: `type="number"` hands back `""`
             // for anything the browser dislikes, so a half-typed value vanishes.
-            ValueKind::Text { .. } | ValueKind::Int { .. } | ValueKind::Float { .. } => {
+            FieldType::Text | FieldType::Int | FieldType::Float => {
                 WidgetType::Input(InputType::Text)
             }
+
             // An `Option<bool>` has three states and a checkbox has two, so the
             // optional case gets a `Select` — reusing the one implementation of
             // the "no value" option rather than growing a third checkbox state
             // the DOM would have to be talked into.
-            ValueKind::Bool { .. } if self.optional => WidgetType::Select,
-            ValueKind::Bool { .. } => WidgetType::Checkbox,
+            FieldType::Bool if self.optional => WidgetType::Select,
+            FieldType::Bool => WidgetType::Checkbox,
         }
     }
 
@@ -524,7 +449,9 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         let attrs: Vec<Attribute> = self.attrs.to_attributes();
         rsx! {
             ScalarWidget {
-                value_kind: self.value_kind(),
+                field_type: self.field_type(),
+                constraint_attrs: self.constraint_attributes(),
+                required_true: self.constraints.contains(Attr::RequiredTrue),
                 widget: self.widget(),
                 choices: self.choices.clone(),
                 values: ctx.values,
@@ -567,7 +494,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         // checkbox is the only `Empty` the match above lets through, and its
         // constraints are checked against `"false"`.
         let raw = self.raw_value_to_validate();
-        self.errors.extend(self.value_kind().check(&raw));
+        self.errors.extend(self.check(&raw));
         if let Some(choices) = &self.choices
             && !choices.iter().any(|c| c.value == raw)
         {
@@ -652,7 +579,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // from the field name and a widget from the shape, so the spec has
             // to mean "mine if I said anything, yours otherwise". Nothing
             // derives a CONSTRAINT: `scalar_member` always writes
-            // `Constraints::default()`, so there has never been anything here
+            // `AllAttrs::default()`, so there has never been anything here
             // to keep, and one rule is easier to hold than two — `with_constraints`
             // already replaces wholesale on the spec side.
             //
@@ -726,39 +653,117 @@ mod tests {
     use dioxus::core::AttributeValue;
     use googletest::prelude::*;
 
+    // ── Helpers ──────────────────────────────────────────────────────────
+    //
+    // A constraint test needs a field TYPE (which decides how `min`/`max`
+    // read the value) and the field's attributes. These build a `FormField`
+    // of the right type, holding nothing: `check` takes the raw value as an
+    // argument, so the field's own value never matters here.
+
+    fn all(entries: &[(Attr, AttrValue)]) -> AllAttrs {
+        AllAttrs(entries.iter().copied().collect())
+    }
+
+    fn holding<X>(constraints: AllAttrs) -> FormField<X>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        FormField {
+            name: "f".to_string(),
+            label: None,
+            optional: false,
+            constraints,
+            attrs: FieldAttrs::default(),
+            custom_widget: None,
+            choices: None,
+            wrapper: None,
+            value: FieldValue::Empty,
+            errors: Vec::new(),
+        }
+    }
+
     fn text(
         min_length: Option<usize>,
         max_length: Option<usize>,
         pattern: Option<&'static str>,
-    ) -> ValueKind {
-        ValueKind::Text {
-            min_length,
-            max_length,
-            pattern,
+    ) -> FormField<String> {
+        let mut entries = Vec::new();
+        entries.extend(min_length.map(|n| (Attr::MinLength, AttrValue::Int(n))));
+        entries.extend(max_length.map(|n| (Attr::MaxLength, AttrValue::Int(n))));
+        entries.extend(pattern.map(|p| (Attr::Pattern, AttrValue::Regex(p))));
+        holding(all(&entries))
+    }
+
+    fn bounds(min: Option<Bound>, max: Option<Bound>) -> AllAttrs {
+        let mut entries = Vec::new();
+        entries.extend(min.map(|b| (Attr::Min, AttrValue::Bound(b))));
+        entries.extend(max.map(|b| (Attr::Max, AttrValue::Bound(b))));
+        all(&entries)
+    }
+
+    fn int(min: Option<i128>, max: Option<i128>) -> FormField<i64> {
+        holding(bounds(min.map(Bound::Int), max.map(Bound::Int)))
+    }
+
+    fn float(min: Option<f64>, max: Option<f64>) -> FormField<f64> {
+        holding(bounds(min.map(Bound::Float), max.map(Bound::Float)))
+    }
+
+    fn boolean(required_true: bool) -> FormField<bool> {
+        if required_true {
+            holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
+        } else {
+            holding(AllAttrs::default())
         }
     }
 
-    fn messages(kind: &ValueKind, raw: &str) -> Vec<String> {
-        kind.check(raw).into_iter().map(|e| e.0).collect()
+    fn messages<X>(field: &FormField<X>, raw: &str) -> Vec<String>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        field.check(raw).into_iter().map(|e| e.0).collect()
+    }
+
+    fn names<X>(field: &FormField<X>) -> Vec<&'static str>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        field
+            .constraint_attributes()
+            .iter()
+            .map(|a| a.name)
+            .collect()
+    }
+
+    /// The value of the one emitted attribute called `name`.
+    fn emitted<X>(field: &FormField<X>, name: &str) -> AttributeValue
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        let attrs = field.constraint_attributes();
+        let found: Vec<&Attribute> = attrs.iter().filter(|a| a.name == name).collect();
+        assert!(
+            found.len() == 1,
+            "expected one `{name}`, got {}",
+            found.len()
+        );
+        found[0].value.clone()
     }
 
     // ── Constraint attributes ────────────────────────────────────────────
     //
-    // `attrs` is the render-side half of a constraint: the same `min_length`
-    // that `check` enforces in Rust also has to reach the browser, or the two
-    // disagree about what the field allows. These pin the mapping. That an
-    // attribute then lands on the right element is a widget question, tested
-    // from outside in `tests/suite/`.
+    // `constraint_attributes` is the render-side half of a constraint: the
+    // same `min_length` that `check` enforces in Rust also has to reach the
+    // browser, or the two disagree about what the field allows. These pin the
+    // mapping. That an attribute then lands on the right element is a widget
+    // question, tested from outside in `tests/suite/`.
 
     /// Constructing an `Attribute` needs no Dioxus runtime, which is why this
     /// mapping is a plain function and lives here rather than in a widget.
     #[gtest]
     fn a_field_with_no_constraints_gets_no_attributes() {
-        expect_that!(text(None, None, None).attrs().len(), eq(0));
-        let plain = ValueKind::Bool {
-            required_true: false,
-        };
-        expect_that!(plain.attrs().len(), eq(0));
+        expect_that!(names(&text(None, None, None)), is_empty());
+        expect_that!(names(&boolean(false)), is_empty());
     }
 
     /// HTML `required` on a checkbox means "must be ticked", which is exactly
@@ -766,63 +771,58 @@ mod tests {
     /// it (above), because unticked is a complete answer there.
     #[gtest]
     fn a_required_true_bool_becomes_the_required_attribute() {
-        let must_agree = ValueKind::Bool {
-            required_true: true,
-        };
+        expect_that!(names(&boolean(true)), elements_are![eq(&"required")]);
         expect_that!(
-            must_agree.attrs().keys().copied().collect::<Vec<_>>(),
-            elements_are![eq(&"required")]
+            emitted(&boolean(true), "required"),
+            eq(&AttributeValue::Bool(true))
         );
     }
 
+    /// In `Attr::ALL` order, whatever order the attributes were given in:
+    /// the table's row order IS the emitted order.
     #[gtest]
     fn each_text_constraint_becomes_its_html_attribute() {
-        let attrs = text(Some(3), Some(10), Some(r"\d{5}")).attrs();
+        let given_backwards = holding::<String>(all(&[
+            (Attr::Pattern, AttrValue::Regex(r"\d{5}")),
+            (Attr::MaxLength, AttrValue::Int(10)),
+            (Attr::MinLength, AttrValue::Int(3)),
+        ]));
         expect_that!(
-            attrs.keys().copied().collect::<Vec<_>>(),
+            names(&given_backwards),
             elements_are![eq(&"minlength"), eq(&"maxlength"), eq(&"pattern")]
         );
     }
 
-    /// One `max_length` means ONE `maxlength`, which is the whole point of
-    /// keying the map: HTML takes the first of a duplicated attribute, so a
+    /// One `max_length` means ONE `maxlength`, because the attributes are
+    /// keyed by `Attr`: HTML takes the first of a duplicated attribute, so a
     /// second entry would be silently dropped rather than loudly wrong.
     #[gtest]
-    fn a_repeated_name_replaces_rather_than_duplicating() {
+    fn a_repeated_attribute_replaces_rather_than_duplicating() {
         let mut map = IndexMap::new();
-        ValueKind::add_attr(&mut map, "maxlength", 5usize);
-        ValueKind::add_attr(&mut map, "maxlength", 99usize);
-        expect_that!(map.len(), eq(1));
+        map.insert(Attr::MaxLength, AttrValue::Int(5));
+        map.insert(Attr::MaxLength, AttrValue::Int(99));
+        let field = holding::<String>(AllAttrs(map));
+        expect_that!(names(&field), elements_are![eq(&"maxlength")]);
         expect_that!(
-            map["maxlength"].value,
+            emitted(&field, "maxlength"),
             eq(&AttributeValue::Int(99)),
             "the later insert should win"
         );
     }
 
-    /// The key IS the attribute's own name, so the two cannot drift apart —
-    /// the failure a `String` key invited was inserting under one name while
-    /// the attribute called itself another.
+    /// Every emitted name is a name the table knows, so the HTML name can
+    /// never drift from the attribute it came from.
     #[gtest]
-    fn every_key_is_its_attributes_name() {
-        let all = [
-            text(Some(1), Some(2), Some("x")),
-            ValueKind::Int {
-                min: Some(1),
-                max: Some(2),
-            },
-            ValueKind::Float {
-                min: Some(1.0),
-                max: Some(2.0),
-            },
-            ValueKind::Bool {
-                required_true: true,
-            },
-        ];
-        for kind in all {
-            for (key, attr) in kind.attrs() {
-                expect_that!(attr.name, eq(key));
-            }
+    fn every_emitted_name_is_the_tables_name() {
+        let emitted_names = [
+            names(&text(Some(1), Some(2), Some("x"))),
+            names(&int(Some(1), Some(2))),
+            names(&float(Some(1.0), Some(2.0))),
+            names(&boolean(true)),
+        ]
+        .concat();
+        for name in emitted_names {
+            expect_that!(Attr::from_name(name), some(anything()), "{name}");
         }
     }
 
@@ -831,8 +831,10 @@ mod tests {
     /// asserting `maxlength="10"` against the markup would not match.
     #[gtest]
     fn a_length_is_a_number_not_a_string() {
-        let attrs = text(None, Some(10), None).attrs();
-        expect_that!(attrs["maxlength"].value, eq(&AttributeValue::Int(10)));
+        expect_that!(
+            emitted(&text(None, Some(10), None), "maxlength"),
+            eq(&AttributeValue::Int(10))
+        );
     }
 
     /// **The pattern reaches the DOM UNANCHORED.** `check` wraps it as
@@ -842,33 +844,37 @@ mod tests {
     /// `regex` in the first place.
     #[gtest]
     fn a_pattern_reaches_the_attribute_unanchored() {
-        let attrs = text(None, None, Some(r"\d{5}")).attrs();
         expect_that!(
-            attrs["pattern"].value,
+            emitted(&text(None, None, Some(r"\d{5}")), "pattern"),
             eq(&AttributeValue::Text(r"\d{5}".to_string()))
         );
     }
 
-    /// An int bound stays an int and a float bound stays a float, rather than
-    /// both widening to text. `Float` is also why no `step` is emitted — see the
-    /// note in `attrs`.
+    /// A bound is emitted as the FIELD's kind, not the bound's: an int field
+    /// emits ints and a float field floats, after the same widening `check`
+    /// uses, rather than both widening to text. `Float` is also why no `step`
+    /// is emitted — see the note on `constraint_attributes`.
     #[gtest]
-    fn a_numeric_bound_keeps_its_kind() {
-        let ints = ValueKind::Int {
-            min: Some(1),
-            max: Some(9),
-        }
-        .attrs();
-        expect_that!(ints["min"].value, eq(&AttributeValue::Int(1)));
-        expect_that!(ints["max"].value, eq(&AttributeValue::Int(9)));
+    fn a_numeric_bound_keeps_its_fields_kind() {
+        let ints = int(Some(1), Some(9));
+        expect_that!(emitted(&ints, "min"), eq(&AttributeValue::Int(1)));
+        expect_that!(emitted(&ints, "max"), eq(&AttributeValue::Int(9)));
 
-        let floats = ValueKind::Float {
-            min: Some(1.5),
-            max: None,
-        }
-        .attrs();
-        expect_that!(floats["min"].value, eq(&AttributeValue::Float(1.5)));
-        expect_that!(floats.len(), eq(1), "an absent bound emits nothing");
+        let floats = float(Some(1.5), None);
+        expect_that!(emitted(&floats, "min"), eq(&AttributeValue::Float(1.5)));
+        expect_that!(names(&floats).len(), eq(1), "an absent bound emits nothing");
+
+        // Written as the other kind, widened to the field's.
+        let int_bound_on_float = holding::<f64>(bounds(Some(Bound::Int(0)), None));
+        expect_that!(
+            emitted(&int_bound_on_float, "min"),
+            eq(&AttributeValue::Float(0.0))
+        );
+        let whole_float_on_int = holding::<i64>(bounds(Some(Bound::Float(2.0)), None));
+        expect_that!(
+            emitted(&whole_float_on_int, "min"),
+            eq(&AttributeValue::Int(2))
+        );
     }
 
     // ── Text: lengths ────────────────────────────────────────────────────
@@ -1000,10 +1006,7 @@ mod tests {
 
     #[gtest]
     fn an_int_with_no_bounds_never_complains() {
-        let kind = ValueKind::Int {
-            min: None,
-            max: None,
-        };
+        let kind = int(None, None);
         expect_that!(messages(&kind, "0"), is_empty());
         expect_that!(
             messages(&kind, "-170141183460469231731687303715884105728"),
@@ -1013,10 +1016,7 @@ mod tests {
 
     #[gtest]
     fn int_bounds_are_inclusive() {
-        let kind = ValueKind::Int {
-            min: Some(1),
-            max: Some(10),
-        };
+        let kind = int(Some(1), Some(10));
         expect_that!(messages(&kind, "0"), len(eq(1)));
         expect_that!(messages(&kind, "1"), is_empty());
         expect_that!(messages(&kind, "10"), is_empty());
@@ -1025,19 +1025,13 @@ mod tests {
 
     #[gtest]
     fn a_one_sided_int_bound_says_which_side() {
-        let low = ValueKind::Int {
-            min: Some(0),
-            max: None,
-        };
+        let low = int(Some(0), None);
         expect_that!(
             messages(&low, "-1"),
             elements_are![contains_substring("at least 0")]
         );
 
-        let high = ValueKind::Int {
-            min: None,
-            max: Some(100),
-        };
+        let high = int(None, Some(100));
         expect_that!(
             messages(&high, "101"),
             elements_are![contains_substring("at most 100")]
@@ -1048,10 +1042,7 @@ mod tests {
 
     #[gtest]
     fn float_bounds_are_inclusive() {
-        let kind = ValueKind::Float {
-            min: Some(0.0),
-            max: Some(1.0),
-        };
+        let kind = float(Some(0.0), Some(1.0));
         expect_that!(messages(&kind, "-0.1"), len(eq(1)));
         expect_that!(messages(&kind, "0"), is_empty());
         expect_that!(messages(&kind, "1"), is_empty());
@@ -1064,43 +1055,13 @@ mod tests {
     /// nothing for it to be outside of, and a float field is entitled to hold it.
     #[gtest]
     fn nan_passes_an_unbounded_float_and_fails_a_bounded_one() {
-        let free = ValueKind::Float {
-            min: None,
-            max: None,
-        };
+        let free = float(None, None);
         expect_that!(messages(&free, "nan"), is_empty());
         expect_that!(messages(&free, "NaN"), is_empty());
 
-        expect_that!(
-            messages(
-                &ValueKind::Float {
-                    min: Some(0.0),
-                    max: Some(1.0)
-                },
-                "nan"
-            ),
-            len(eq(1))
-        );
-        expect_that!(
-            messages(
-                &ValueKind::Float {
-                    min: Some(0.0),
-                    max: None
-                },
-                "nan"
-            ),
-            len(eq(1))
-        );
-        expect_that!(
-            messages(
-                &ValueKind::Float {
-                    min: None,
-                    max: Some(1.0)
-                },
-                "nan"
-            ),
-            len(eq(1))
-        );
+        expect_that!(messages(&float(Some(0.0), Some(1.0)), "nan"), len(eq(1)));
+        expect_that!(messages(&float(Some(0.0), None), "nan"), len(eq(1)));
+        expect_that!(messages(&float(None, Some(1.0)), "nan"), len(eq(1)));
     }
 
     /// Infinity is an ordinary float: allowed when unbounded, and compared
@@ -1108,17 +1069,11 @@ mod tests {
     /// arrives here as `inf` and a stated maximum is what catches it.
     #[gtest]
     fn infinity_is_allowed_unbounded_and_compared_when_bounded() {
-        let free = ValueKind::Float {
-            min: None,
-            max: None,
-        };
+        let free = float(None, None);
         expect_that!(messages(&free, "inf"), is_empty());
         expect_that!(messages(&free, "1e400"), is_empty());
 
-        let capped = ValueKind::Float {
-            min: None,
-            max: Some(100.0),
-        };
+        let capped = float(None, Some(100.0));
         expect_that!(messages(&capped, "1e400"), len(eq(1)));
         expect_that!(messages(&capped, "-inf"), is_empty());
     }
@@ -1129,9 +1084,7 @@ mod tests {
     /// nothing to check.
     #[gtest]
     fn a_plain_bool_accepts_either_value() {
-        let plain = ValueKind::Bool {
-            required_true: false,
-        };
+        let plain = boolean(false);
         expect_that!(messages(&plain, "true"), is_empty());
         expect_that!(messages(&plain, "false"), is_empty());
     }
@@ -1139,9 +1092,7 @@ mod tests {
     /// "I agree to the terms" (issue #6).
     #[gtest]
     fn a_required_true_bool_rejects_false() {
-        let must_agree = ValueKind::Bool {
-            required_true: true,
-        };
+        let must_agree = boolean(true);
         expect_that!(messages(&must_agree, "true"), is_empty());
         expect_that!(
             messages(&must_agree, "false"),
@@ -1159,20 +1110,16 @@ mod tests {
     #[gtest]
     #[should_panic(expected = "should have already successfully parsed")]
     fn checking_an_unparsed_int_is_a_caller_bug() {
-        let _ = ValueKind::Int {
-            min: Some(0),
-            max: None,
-        }
-        .check("not a number");
+        let _ = int(Some(0), None).check("not a number");
     }
 
     // ── Constraints reach the field ──────────────────────────────────────
     //
-    // Everything above tests `ValueKind::check` directly. These four go in
-    // through `FormField`, which is the only way to exercise `value_kind()` —
-    // the one place that pairs a constraint with the field's actual type.
+    // Everything above calls `check` with a raw string. These go in through
+    // `validate` with a real value, so the field's own type and value are what
+    // get checked, the way a submitted form is.
 
-    fn a_field<X>(value: X, constraints: Constraints, attrs: FieldAttrs) -> FormField<X>
+    fn a_field<X>(value: X, constraints: AllAttrs, attrs: FieldAttrs) -> FormField<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -1193,21 +1140,21 @@ mod tests {
         }
     }
 
-    fn validated_no_attrs<X>(value: X, constraints: Constraints) -> Vec<String>
+    fn validated_no_attrs<X>(value: X, constraints: AllAttrs) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
         validated(value, constraints, FieldAttrs::default())
     }
 
-    fn validated<X>(value: X, constraints: Constraints, attrs: FieldAttrs) -> Vec<String>
+    fn validated<X>(value: X, constraints: AllAttrs, attrs: FieldAttrs) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
         let mut field = a_field(value, constraints, attrs);
 
         // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
-        // reaches `value_kind()` at all. A test that tripped that early return
+        // reaches `check` at all. A test that tripped that early return
         // would come back with no errors and read exactly like a constraint
         // that was checked and satisfied — so the precondition is asserted
         // here instead of trusted.
@@ -1230,10 +1177,7 @@ mod tests {
 
     #[gtest]
     fn a_length_constraint_on_the_field_reaches_the_check() {
-        let short = Constraints {
-            max_length: Some(3),
-            ..Default::default()
-        };
+        let short = all(&[(Attr::MaxLength, AttrValue::Int(3))]);
         expect_that!(
             validated_no_attrs("abc".to_string(), short.clone()),
             is_empty()
@@ -1243,11 +1187,7 @@ mod tests {
 
     #[gtest]
     fn integer_bounds_on_the_field_reach_the_check() {
-        let between = Constraints {
-            min: Some(Bound::Int(1)),
-            max: Some(Bound::Int(10)),
-            ..Default::default()
-        };
+        let between = bounds(Some(Bound::Int(1)), Some(Bound::Int(10)));
         expect_that!(validated_no_attrs(0_i32, between.clone()), len(eq(1)));
         expect_that!(validated_no_attrs(5_i32, between.clone()), is_empty());
         expect_that!(validated_no_attrs(11_i32, between), len(eq(1)));
@@ -1259,10 +1199,7 @@ mod tests {
     /// is what keeps that from silently meaning "no minimum".
     #[gtest]
     fn an_integer_bound_on_a_float_field_is_widened_not_dropped() {
-        let non_negative = Constraints {
-            min: Some(Bound::Int(0)),
-            ..Default::default()
-        };
+        let non_negative = bounds(Some(Bound::Int(0)), None);
         expect_that!(
             validated_no_attrs(-1.5_f64, non_negative.clone()),
             len(eq(1))
@@ -1275,10 +1212,7 @@ mod tests {
     /// from `2` when the bound is a named const.
     #[gtest]
     fn a_whole_float_bound_on_an_integer_field_is_used_as_an_integer() {
-        let at_least_two = Constraints {
-            min: Some(Bound::Float(2.0)),
-            ..Default::default()
-        };
+        let at_least_two = bounds(Some(Bound::Float(2.0)), None);
         expect_that!(validated_no_attrs(1_i32, at_least_two.clone()), len(eq(1)));
         expect_that!(validated_no_attrs(2_i32, at_least_two), is_empty());
     }
@@ -1294,10 +1228,7 @@ mod tests {
     #[gtest]
     #[should_panic(expected = "does not support the fractional min")]
     fn a_fractional_bound_on_an_integer_field_is_a_caller_bug() {
-        let fractional = Constraints {
-            min: Some(Bound::Float(1.5)),
-            ..Default::default()
-        };
+        let fractional = bounds(Some(Bound::Float(1.5)), None);
         let _ = validated_no_attrs(3_i32, fractional);
     }
 
@@ -1318,9 +1249,10 @@ mod tests {
             name: "agreed".to_string(),
             label: None,
             optional: false,
-            constraints: Constraints {
-                required_true,
-                ..Default::default()
+            constraints: if required_true {
+                all(&[(Attr::RequiredTrue, AttrValue::Flag)])
+            } else {
+                AllAttrs::default()
             },
             custom_widget: widget,
             choices: None,
@@ -1397,7 +1329,7 @@ mod tests {
 
     // ── Author attributes ────────────────────────────────────────────────
     //
-    // `FieldAttrs` is presentation only: it never reaches `ValueKind`, so it
+    // `FieldAttrs` is presentation only: it never reaches `check`, so it
     // cannot change what a value parses as or what `check` allows. These pin
     // the conversion `render` relies on. That the attributes then land on the
     // right element, after the constraint attributes, is a widget question,
@@ -1442,7 +1374,7 @@ mod tests {
         expect_that!(attrs[0].value, eq(&AttributeValue::Text("4".to_string())));
     }
 
-    /// Plain attributes, the same as `ValueKind::add_attr` builds: no namespace
+    /// Plain attributes, the same as `constraint_attributes` builds: no namespace
     /// (that is only for `style`) and not volatile.
     #[gtest]
     fn an_author_attribute_has_no_namespace_and_is_not_volatile() {

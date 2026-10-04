@@ -20,9 +20,11 @@
 //! facts it encodes are in `.claude/memory/html_attributes_reference.md`.
 
 mod attrs;
+mod bound;
 mod field_control;
 mod input_types;
 
-pub use attrs::{Attr, AttrType, FieldType, Owner};
+pub use attrs::{Attr, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
+pub use bound::Bound;
 pub use field_control::FieldControl;
 pub use input_types::InputType;

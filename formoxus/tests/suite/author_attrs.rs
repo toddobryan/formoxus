@@ -11,7 +11,8 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::fields::{Constraints, FieldAttrs};
+use formoxus::attrs::{Attr, AttrValue};
+use formoxus::fields::{AllAttrs, FieldAttrs};
 use formoxus::members::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::{InputType, WidgetType};
@@ -165,10 +166,7 @@ fn an_author_attribute_overrides_a_constraint_attribute() {
         FormSpec::<Person>::new()
             .with_constraints(
                 "name",
-                Constraints {
-                    max_length: Some(10),
-                    ..Default::default()
-                }
+                AllAttrs::from([(Attr::MaxLength, AttrValue::Int(10))])
             )
             .with_attrs("name", attrs(&[("maxlength", "99")]))
     );

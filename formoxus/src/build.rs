@@ -7,7 +7,7 @@ use facet::{
     UserType, Variant,
 };
 
-use crate::fields::{Constraints, FieldAttrs, FormField, populate};
+use crate::fields::{AllAttrs, FieldAttrs, FormField, populate};
 use crate::members::{
     FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify, row_segment,
 };
@@ -333,7 +333,7 @@ fn scalar_member(
                         name: name.to_string(),
                         label: None,
                         optional,
-                        constraints: Constraints::default(),
+                        constraints: AllAttrs::default(),
                         attrs: FieldAttrs::default(),
                         custom_widget: None,
                         choices: None,

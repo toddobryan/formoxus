@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `pattern` applies only to a String field
+  --> tests/ui/form_pattern_on_a_number.rs:15:36
+   |
+15 |             quantity => { pattern: r"\d+" },
+   |                                    ^^^^^^ evaluation of `main::_` failed here

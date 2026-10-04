@@ -161,20 +161,8 @@ fn signals_are_populated_from_the_model() {
 // These drive `ScalarWidget` directly rather than through `FormMember::render`,
 // so they stay meaningful regardless of how the members wire it up.
 
-use formoxus::fields::ValueKind;
+use formoxus::attrs::FieldType;
 use formoxus::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
-
-/// What a `String` field derives. Spelled out because these tests drive
-/// `ScalarWidget` directly rather than through `FormField::render`, so nothing
-/// upstream is computing it for them — which is the point: they pin the widget
-/// boundary independently of how the members happen to wire it up.
-fn text_kind() -> ValueKind {
-    ValueKind::Text {
-        min_length: None,
-        max_length: None,
-        pattern: None,
-    }
-}
 
 #[component]
 fn PopulatedInput() -> Element {
@@ -182,7 +170,13 @@ fn PopulatedInput() -> Element {
         use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
     rsx! {
         ScalarWidget {
-            value_kind: text_kind(),
+            // What a `String` field with no constraints hands down. Spelled
+            // out because these drive `ScalarWidget` directly, so nothing
+            // upstream computes it, which is the point: they pin the widget
+            // boundary independently of how the members wire it up.
+            field_type: FieldType::Text,
+            constraint_attrs: Vec::new(),
+            required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
@@ -203,7 +197,13 @@ fn EmptyInput() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
         ScalarWidget {
-            value_kind: text_kind(),
+            // What a `String` field with no constraints hands down. Spelled
+            // out because these drive `ScalarWidget` directly, so nothing
+            // upstream computes it, which is the point: they pin the widget
+            // boundary independently of how the members wire it up.
+            field_type: FieldType::Text,
+            constraint_attrs: Vec::new(),
+            required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
@@ -454,7 +454,7 @@ fn every_input_type_reaches_the_type_attribute() {
 fn a_numeric_field_still_renders_as_text() {
     // Deliberate, and easy to "fix" by accident: `type="number"` hands back `""`
     // for anything the browser dislikes, so a half-typed value vanishes
-    // mid-keystroke. `ValueKind::Int` is what parses the string back.
+    // mid-keystroke. The field's type is what parses the string back.
     #[component]
     fn NumberForm() -> Element {
         let form = use_form(|| empty_form(FormSpec::<OneNumber>::default()));
@@ -534,7 +534,13 @@ fn PasswordWithEcho() -> Element {
     let stored = values.read().get("secret").cloned().unwrap_or_default();
     rsx! {
         ScalarWidget {
-            value_kind: text_kind(),
+            // What a `String` field with no constraints hands down. Spelled
+            // out because these drive `ScalarWidget` directly, so nothing
+            // upstream computes it, which is the point: they pin the widget
+            // boundary independently of how the members wire it up.
+            field_type: FieldType::Text,
+            constraint_attrs: Vec::new(),
+            required_true: false,
             widget: WidgetType::Input(InputType::Password),
             values,
             props: FieldProps {

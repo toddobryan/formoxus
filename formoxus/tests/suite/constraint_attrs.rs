@@ -1,6 +1,6 @@
 //! Constraints reaching the BROWSER, not just Rust.
 //!
-//! `ValueKind::check` enforces every constraint server-side; these pin the
+//! `FormField::check` enforces every constraint server-side; these pin the
 //! other half, that the same constraint is handed to the browser so it can
 //! give instant feedback and block submit. The mapping itself is unit-tested
 //! beside `attrs` in `fields.rs`; this is the end-to-end view from `form!`.
@@ -53,7 +53,7 @@ fn each_text_constraint_reaches_the_input() {
 }
 
 /// **The pattern reaches the DOM unanchored.** HTML wraps a `pattern` as
-/// `^(?:…)$` implicitly, and `ValueKind::check` wraps it Rust-side to match —
+/// `^(?:…)$` implicitly, and `FormField::check` wraps it Rust-side to match —
 /// so handing the browser an already-wrapped pattern would anchor it twice and
 /// the two would stop agreeing. Agreement is the whole reason `regress` is a
 /// dependency.
@@ -93,7 +93,7 @@ fn a_numeric_bound_reaches_the_input() {
 /// `step=1` and would reject `0.5` — but formoxus never defaults a float to
 /// `type="number"` (`Int`/`Float` default to `Text`), so the only way to meet
 /// that is an explicit `widget: number`, and then supplying `step` is the
-/// author's job. See the note in `ValueKind::attrs`.
+/// author's job. See the note on `FormField::constraint_attributes`.
 #[gtest]
 fn no_step_is_emitted_for_a_float() {
     #[component]

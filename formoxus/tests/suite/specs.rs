@@ -10,7 +10,8 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::fields::Constraints;
+use formoxus::attrs::{Attr, AttrValue};
+use formoxus::fields::AllAttrs;
 use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
 use formoxus::prelude::*;
@@ -430,7 +431,7 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 /// DOM: a constraint has no markup of its own yet, so validation is the only
 /// place its arrival shows.
 ///
-/// Every other constraint test sets `Constraints` straight onto a `FormField`,
+/// Every other constraint test sets constraints straight onto a `FormField`,
 /// which means this is the only one that would notice `apply_specs` dropping
 /// them on the floor.
 #[gtest]
@@ -438,10 +439,7 @@ fn a_constraint_from_the_spec_reaches_validation() {
     let spec = || {
         FormSpec::<EventForCreate>::default().with_constraints(
             "title",
-            Constraints {
-                max_length: Some(5),
-                ..Default::default()
-            },
+            AllAttrs::from([(Attr::MaxLength, AttrValue::Int(5))]),
         )
     };
 
@@ -463,10 +461,7 @@ fn a_constraint_from_the_spec_reaches_validation() {
 fn a_constraint_reaches_a_nested_leaf() {
     let spec = FormSpec::<EventForCreate>::default().with_constraints(
         "location.zip",
-        Constraints {
-            pattern: Some(r"\d{5}"),
-            ..Default::default()
-        },
+        AllAttrs::from([(Attr::Pattern, AttrValue::Regex(r"\d{5}"))]),
     );
 
     let mut values = full_event("Fine");

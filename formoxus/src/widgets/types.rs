@@ -23,7 +23,7 @@ pub enum WidgetType {
     /// The escape hatch for a value kind the built-in widgets cannot serve —
     /// `Markdown` needs a live preview, a `Ref<Source>` needs an async-fed
     /// combobox. Neither is expressible as an `<input type=…>`, and neither
-    /// belongs in `ValueKind`: they are presentation, not value family.
+    /// belongs in the field's constraints: they are presentation, not value type.
     ///
     /// **`fn` pointer, NOT `Box<dyn Fn>` — the derives force it.** `WidgetType`
     /// is `Clone + Debug + PartialEq`, and a boxed closure supplies none of the

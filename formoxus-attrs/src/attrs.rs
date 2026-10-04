@@ -1,4 +1,4 @@
-use crate::FieldControl;
+use crate::{Bound, FieldControl};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Owner {
@@ -18,12 +18,26 @@ pub enum AttrType {
     Declarations,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AttrValue {
+    Int(usize),
+    Bound(Bound),
+    Regex(&'static str),
+    Flag,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FieldType {
     Text,
     Int,
     Float,
     Bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FieldTypeWithOptional {
+    field_type: FieldType,
+    is_optional: bool,
 }
 
 /// Turns a row's `validated:` into a `bool`, accepting exactly the three
@@ -187,16 +201,19 @@ attributes! {
         on: Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea,
         validated: false,
     },
-    MaxLength {
-        name: "maxlength",
+    // `MinLength` before `MaxLength`, and both before `Pattern`: `check` and
+    // the HTML emission both walk `Attr::ALL`, so this order IS the order of
+    // their messages and attributes, which tests pin.
+    MinLength {
+        name: "minlength",
         owner: Author,
         type: Int,
         for: Text,
         on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
         validated: true,
     },
-    MinLength {
-        name: "minlength",
+    MaxLength {
+        name: "maxlength",
         owner: Author,
         type: Int,
         for: Text,

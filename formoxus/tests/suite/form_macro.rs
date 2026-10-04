@@ -696,7 +696,7 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 
 /// The whole chain the macro was the last missing link in: `form!` -> the
 /// `.with_constraints` call -> `FieldSpec` -> `apply_specs` -> `FormField` ->
-/// `ValueKind::check`. `specs.rs` covers the same ground through a hand-built
+/// `FormField::check`. `specs.rs` covers the same ground through a hand-built
 /// `FormSpec`; this is the only test that proves the macro reaches it.
 #[gtest]
 fn constraints_from_the_macro_reach_validation() {

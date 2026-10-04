@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
 use crate::error::ValidationError;
-use crate::fields::{Constraints, FieldAttrs};
+use crate::fields::{AllAttrs, FieldAttrs};
 use crate::label_case::LabelCase;
 use crate::widgets::{Choice, WidgetType};
 
@@ -37,7 +37,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldSpec {
     pub label: Option<String>,
-    pub constraints: Constraints,
+    pub constraints: AllAttrs,
     pub custom_widget: Option<WidgetType>,
     /// What a `<select>` (or another chooser) offers.
     ///
@@ -47,7 +47,7 @@ pub struct FieldSpec {
     /// list here also means `ScalarWidget`'s match arms do not have to bind or
     /// ignore a payload that dispatch never reads.
     ///
-    /// **Not on `ValueKind` either** — choices are presentation, so swapping a
+    /// **Not in the field's constraints either** — choices are presentation, so swapping a
     /// select for a radio group must not change what the value parses as. See
     /// `.claude/memory/choice_fields_design.md`.
     pub choices: Option<Vec<Choice>>,
@@ -141,7 +141,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self.fields.entry(path.to_string()).or_default()
     }
 
-    pub fn with_constraints(mut self, path: &str, constraints: Constraints) -> Self {
+    pub fn with_constraints(mut self, path: &str, constraints: AllAttrs) -> Self {
         self.field(path).constraints = constraints;
         self
     }

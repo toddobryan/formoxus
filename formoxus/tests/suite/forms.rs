@@ -9,7 +9,7 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::buttons::Fns;
-use formoxus::fields::{Constraints, FieldAttrs};
+use formoxus::fields::{AllAttrs, FieldAttrs};
 use formoxus::fields::{FieldValue, FormField};
 use formoxus::label_case::LabelCase;
 use formoxus::members::ValuesByPath;
@@ -25,7 +25,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
         name: name.to_string(),
         label: None,
         optional: false,
-        constraints: Constraints::default(),
+        constraints: AllAttrs::default(),
         attrs: FieldAttrs::default(),
         custom_widget: None,
         choices: None,
