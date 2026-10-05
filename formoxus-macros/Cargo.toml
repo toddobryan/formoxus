@@ -25,6 +25,10 @@ syn = { version = "3", features = ["full", "extra-traits"] }
 quote = "1"
 proc-macro2 = "1"
 heck = { workspace = true }
+# `ParsedAttrs`: one field's attributes, in the order written, where `insert`
+# returning the previous value is the "given twice" check. No `serde` here;
+# that feature is `formoxus`'s.
+indexmap = { workspace = true }
 regress = { workspace = true }
 # Read at EXPANSION time: each attribute's value type (how to parse it) and
 # which widgets it is valid on. A proc-macro crate can depend on an ordinary

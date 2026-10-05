@@ -5,6 +5,26 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-05, END OF SESSION — WIP COMMITTED, THE BUILD IS BROKEN ON
+PURPOSE.** Todd is mid-way through **step 3b of `formoxus/ATTRIBUTES_PLAN.md`**
+(the living checklist, with files and line numbers; read it first). He is
+replacing `field_body!` in `formoxus-macros/src/form/field.rs` with a
+hand-written `FieldBody { widget, label, attrs: ParsedAttrs }`, so
+`LEGAL_KEYS` and the per-key fields (`min`, `max`, …) are gone and their users
+(`constraints_tokens`, `type_checks`, `Parse`, the unknown-key message) do not
+compile yet: about 23 errors, all in `field.rs`. `cargo fmt` also flags that
+file. The WIP commit used `--no-verify` for that reason.
+Done before this: steps 1–2 (`69a9225`), the 95-row table (decision 15 in
+`attribute_rules_design.md`), `indexmap` added to `formoxus-macros` (workspace
+entry now featureless; `formoxus` adds `serde`), `variant_name` /
+`from_variant_name` in the table (Todd). Decisions for 3b, all recorded in the
+design note (13–15): `ParsedAttrs(IndexMap<AttrId, ParsedAttr>)`,
+`AttrId { Std(Attr), NonStd(String) }`, quoted keys pass through, keys are the
+snake_case variant name, `class_plus:`/`style_plus:`, `AttrSource::List`
+holding `Vec<LitStr>` from a bracketed list (Claude's suggestion, 2026-10-05).
+Pending reminders: `AttrValue` list variants (plan 3a/3d); the two
+`LEGAL_KEYS` tests are Claude's to move to the table once parsing compiles.
+
 **UPDATE 2026-10-01: issue #6 is BUILT** (see [[formoxus-feature-parity]] 6b): `required: true` on a non-optional bool, rule in `ValueKind::check` reached via `raw_value_to_validate`, compile gates, `Checkbox`-only `required_true` prop for the marker, suite + trybuild + 5 e2e tests; 509 tests + 29 e2e green. Next in [[mvp-scope]] is C6. The rest of this note is the 2026-09-30 handoff.
 
 **Written 2026-09-30, end of day, for the next session.** Todd asked: "write

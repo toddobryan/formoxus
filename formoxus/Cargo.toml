@@ -18,7 +18,9 @@ workspace = true
 dioxus = { workspace = true }
 facet = { workspace = true }
 heck = { workspace = true }
-indexmap = { workspace = true }
+# `serde`: `FormErrors` (inside `WireForm`) uses it for `fields`, and that
+# crosses the wire.
+indexmap = { workspace = true, features = ["serde"] }
 regress = { workspace = true }
 serde = { workspace = true }
 # Not optional: `form!` is the way a form is declared, so a build without the

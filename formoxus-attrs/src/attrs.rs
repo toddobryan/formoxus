@@ -167,6 +167,24 @@ macro_rules! attributes {
                 }
                 None
             }
+
+            pub const fn variant_name(&self) -> &'static str {
+                match self {
+                    $( Self::$variant => stringify!($variant), )+
+                }
+            }
+
+            pub const fn from_variant_name(variant_name: &str) -> Option<Self> {
+                let mut i = 0;
+                while i < Self::ALL.len() {
+                    let attr = Self::ALL[i];
+                    if str_eq(variant_name, attr.variant_name()) {
+                        return Some(attr);
+                    }
+                    i += 1;
+                }
+                None
+            }
         }
     }
 }
@@ -193,24 +211,187 @@ impl Attr {
 }
 
 attributes! {
-    Placeholder {
-        name: "placeholder",
+    Accesskey {
+        name: "accesskey",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Alpha {
+        name: "alpha",
+        owner: Author,
+        type: Flag,
+        for: Text,
+        on: Input(Color),
+        validated: false,
+    },
+    Autocapitalize {
+        name: "autocapitalize",
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea,
+        on: Input(_) | Textarea | Select | Fieldset,
         validated: false,
     },
-    // `MinLength` before `MaxLength`, and both before `Pattern`: `check` and
-    // the HTML emission both walk `Attr::ALL`, so this order IS the order of
-    // their messages and attributes, which tests pin.
-    MinLength {
-        name: "minlength",
+    Autocomplete {
+        name: "autocomplete",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color) | Textarea | Select,
+        validated: false,
+    },
+    Autocorrect {
+        name: "autocorrect",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Autofocus {
+        name: "autofocus",
+        owner: Author,
+        type: Flag,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned: comes from the store. Radios can carry any field type (a radio
+    // group over string choices), so `for:` is not just `Bool`.
+    Checked {
+        name: "checked",
+        owner: Formoxus,
+        type: Flag,
+        for: Text | Int | Float | Bool,
+        on: Input(Checkbox | Radio),
+        validated: false,
+    },
+    // REPLACES formoxus's own classes (`fx-control` included); `ClassPlus` appends.
+    // Only one of the two per field, which `form!` checks. Both emit HTML `class`,
+    // resolved into the widget's ONE `class` value, never spread as a second one.
+    Class {
+        name: "class",
+        owner: Merged,
+        type: TokenList,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    ClassPlus {
+        name: "class",
+        owner: Merged,
+        type: TokenList,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Colorspace {
+        name: "colorspace",
+        owner: Author,
+        type: String,
+        for: Text,
+        on: Input(Color),
+        validated: false,
+    },
+    Cols {
+        name: "cols",
         owner: Author,
         type: Int,
         for: Text,
-        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
-        validated: true,
+        on: Textarea,
+        validated: false,
+    },
+    Dir {
+        name: "dir",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Submits an EXTRA `name.dir` pair, which `Submission` ignores as an unknown path.
+    Dirname {
+        name: "dirname",
+        owner: Author,
+        type: String,
+        for: Text,
+        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Submit) | Textarea,
+        validated: false,
+    },
+    // A disabled control is NOT submitted, so the server sees it as empty, and a
+    // non-optional field then fails "This field is required."
+    Disabled {
+        name: "disabled",
+        owner: Author,
+        type: Flag,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Enterkeyhint {
+        name: "enterkeyhint",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned: it would associate the control with a DIFFERENT `<form>`.
+    Form {
+        name: "form",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned, reserved until issue #9 settles formoxus's id scheme (`<label for>`,
+    // `aria-describedby`), so an author's id cannot collide with it.
+    Id {
+        name: "id",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Which keyboard a phone shows: the right fix for a number rendered as
+    // `type="text"`, which formoxus does by default.
+    Inputmode {
+        name: "inputmode",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Lang {
+        name: "lang",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // The id of a `<datalist>` the author renders; formoxus renders none itself.
+    List {
+        name: "list",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(Text | Search | Telephone | Url | Email | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color),
+        validated: false,
+    },
+    Max {
+        name: "max",
+        owner: Author,
+        type: Bound,
+        for: Int | Float,
+        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        validated: true_and_on(Input(Text)),
     },
     MaxLength {
         name: "maxlength",
@@ -218,17 +399,6 @@ attributes! {
         type: Int,
         for: Text,
         on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
-        validated: true,
-    },
-    // No `Textarea`: HTML has no `pattern` on one, and Todd ruled it out
-    // (2026-10-02). With plain `true`, that makes it refused there; a regex
-    // over multi-line text belongs in a per-field validator.
-    Pattern {
-        name: "pattern",
-        owner: Author,
-        type: Regex,
-        for: Text,
-        on: Input(Text | Search | Telephone | Url | Email | Password),
         validated: true,
     },
     // Valid in HTML only on number, range and the date/time types. A number
@@ -242,13 +412,60 @@ attributes! {
         on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
         validated: true_and_on(Input(Text)),
     },
-    Max {
-        name: "max",
+    MinLength {
+        name: "minlength",
         owner: Author,
-        type: Bound,
-        for: Int | Float,
-        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
-        validated: true_and_on(Input(Text)),
+        type: Int,
+        for: Text,
+        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
+        validated: true,
+    },
+    // Owned: a leaf holds ONE string, so a multi-value control has nowhere to go.
+    Multiple {
+        name: "multiple",
+        owner: Formoxus,
+        type: Flag,
+        for: Text | Int | Float | Bool,
+        on: Input(Email | File) | Select,
+        validated: false,
+    },
+    // Owned by formoxus: the store key and the wire path.
+    Name {
+        name: "name",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // No `Textarea`: HTML has no `pattern` on one, and Todd ruled it out
+    // (2026-10-02). With plain `true`, that makes it refused there; a regex
+    // over multi-line text belongs in a per-field validator.
+    Pattern {
+        name: "pattern",
+        owner: Author,
+        type: Regex,
+        for: Text,
+        on: Input(Text | Search | Telephone | Url | Email | Password),
+        validated: true,
+    },
+    Placeholder {
+        name: "placeholder",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea,
+        validated: false,
+    },
+    // The browser skips its own validation on a read-only control; formoxus still
+    // validates the value it submits.
+    Readonly {
+        name: "readonly",
+        owner: Author,
+        type: Flag,
+        for: Text | Int | Float,
+        on: Input(Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number) | Textarea,
+        validated: false,
     },
     // The PRESENCE sense: formoxus emits it on every non-optional field, and
     // `validate` reports "This field is required." The spec allows `required`
@@ -277,10 +494,76 @@ attributes! {
         on: Input(Checkbox),
         validated: true_and_on(Select | Input(Radio)),
     },
-    // Owned by formoxus: the store key and the wire path.
-    Name {
-        name: "name",
-        owner: Formoxus,
+    // Overrides the control's native role; ARIA, though not `aria-*`.
+    Role {
+        name: "role",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Rows {
+        name: "rows",
+        owner: Author,
+        type: Int,
+        for: Text,
+        on: Textarea,
+        validated: false,
+    },
+    Size {
+        name: "size",
+        owner: Author,
+        type: Int,
+        for: Text | Int | Float | Bool,
+        on: Input(Text | Search | Telephone | Url | Email | Password) | Select,
+        validated: false,
+    },
+    Spellcheck {
+        name: "spellcheck",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Like `Class`: `Style` replaces, `StylePlus` appends, only one per field.
+    Style {
+        name: "style",
+        owner: Merged,
+        type: Declarations,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    StylePlus {
+        name: "style",
+        owner: Merged,
+        type: Declarations,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // `String`, not `Int`: `-1` is the common value, and `AttrType::Int` is unsigned.
+    Tabindex {
+        name: "tabindex",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Title {
+        name: "title",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    Translate {
+        name: "translate",
+        owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
         on: Input(_) | Textarea | Select | Fieldset,
@@ -305,14 +588,200 @@ attributes! {
         on: Input(_),
         validated: false,
     },
-    // Owned: comes from the store. Radios can carry any field type (a radio
-    // group over string choices), so `for:` is not just `Bool`.
-    Checked {
-        name: "checked",
-        owner: Formoxus,
-        type: Flag,
+    Wrap {
+        name: "wrap",
+        owner: Author,
+        type: String,
+        for: Text,
+        on: Textarea,
+        validated: false,
+    },
+    Writingsuggestions {
+        name: "writingsuggestions",
+        owner: Author,
+        type: String,
+        for: Text,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaActivedescendant {
+        name: "aria-activedescendant",
+        owner: Author,
+        type: String,
         for: Text | Int | Float | Bool,
-        on: Input(Checkbox | Radio),
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaAtomic {
+        name: "aria-atomic",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaAutocomplete {
+        name: "aria-autocomplete",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaBraillelabel {
+        name: "aria-braillelabel",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaBrailleroledescription {
+        name: "aria-brailleroledescription",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaBusy {
+        name: "aria-busy",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned: formoxus holds the checkbox's value, so an author's `aria-checked`
+    // could only contradict the real `checked`.
+    AriaChecked {
+        name: "aria-checked",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaColcount {
+        name: "aria-colcount",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaColindex {
+        name: "aria-colindex",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaColindextext {
+        name: "aria-colindextext",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaColspan {
+        name: "aria-colspan",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaControls {
+        name: "aria-controls",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaCurrent {
+        name: "aria-current",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned from the start: issue #9 will point it at the field's messages,
+    // so taking it later would be a breaking change.
+    AriaDescribedby {
+        name: "aria-describedby",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaDescription {
+        name: "aria-description",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaDetails {
+        name: "aria-details",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaDisabled {
+        name: "aria-disabled",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaErrormessage {
+        name: "aria-errormessage",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaExpanded {
+        name: "aria-expanded",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaFlowto {
+        name: "aria-flowto",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaHaspopup {
+        name: "aria-haspopup",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaHidden {
+        name: "aria-hidden",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
         validated: false,
     },
     // Owned: resolved at the `Form` boundary from whether there are errors.
@@ -320,6 +789,232 @@ attributes! {
     AriaInvalid {
         name: "aria-invalid",
         owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaKeyshortcuts {
+        name: "aria-keyshortcuts",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaLabel {
+        name: "aria-label",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaLabelledby {
+        name: "aria-labelledby",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaLevel {
+        name: "aria-level",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaLive {
+        name: "aria-live",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaModal {
+        name: "aria-modal",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaMultiline {
+        name: "aria-multiline",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaMultiselectable {
+        name: "aria-multiselectable",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaOrientation {
+        name: "aria-orientation",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaOwns {
+        name: "aria-owns",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaPlaceholder {
+        name: "aria-placeholder",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaPosinset {
+        name: "aria-posinset",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaPressed {
+        name: "aria-pressed",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaReadonly {
+        name: "aria-readonly",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRelevant {
+        name: "aria-relevant",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    // Owned: formoxus decides requiredness and emits HTML `required`; an
+    // author's `aria-required` could only contradict it.
+    AriaRequired {
+        name: "aria-required",
+        owner: Formoxus,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRoledescription {
+        name: "aria-roledescription",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRowcount {
+        name: "aria-rowcount",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRowindex {
+        name: "aria-rowindex",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRowindextext {
+        name: "aria-rowindextext",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaRowspan {
+        name: "aria-rowspan",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaSelected {
+        name: "aria-selected",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaSetsize {
+        name: "aria-setsize",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaSort {
+        name: "aria-sort",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaValuemax {
+        name: "aria-valuemax",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaValuemin {
+        name: "aria-valuemin",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaValuenow {
+        name: "aria-valuenow",
+        owner: Author,
+        type: String,
+        for: Text | Int | Float | Bool,
+        on: Input(_) | Textarea | Select | Fieldset,
+        validated: false,
+    },
+    AriaValuetext {
+        name: "aria-valuetext",
+        owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
         on: Input(_) | Textarea | Select | Fieldset,
@@ -382,128 +1077,141 @@ mod tests {
 
     // ── `on:` against the spec ───────────────────────────────────────────
     //
-    // The `<input>` types each attribute applies to, copied from the WHATWG
-    // spec's non-normative summary table (pulled 2026-10-02, see
-    // `.claude/memory/html_attributes_reference.md`). Written as `type=`
-    // KEYWORDS, not variants, so these lists read exactly like the spec and
-    // share nothing with the table they check.
+    // Where each attribute may be emitted, restated from the WHATWG spec
+    // (pulled 2026-10-02, see `.claude/memory/html_attributes_reference.md`)
+    // independently of the table: the `<input>` types as `type=` KEYWORDS,
+    // exactly as the spec's summary table prints them, and the other controls
+    // from each element's own attribute list.
 
-    const SPEC_PLACEHOLDER: &[&str] = &[
-        "text", "search", "tel", "url", "email", "password", "number",
-    ];
-    const SPEC_LENGTH_AND_PATTERN: &[&str] = &["text", "search", "tel", "url", "email", "password"];
-    const SPEC_MIN_MAX: &[&str] = &[
-        "date",
-        "month",
-        "week",
-        "time",
-        "datetime-local",
-        "number",
-        "range",
-    ];
-    const SPEC_REQUIRED: &[&str] = &[
-        "text",
-        "search",
-        "tel",
-        "url",
-        "email",
-        "password",
-        "date",
-        "month",
-        "week",
-        "time",
-        "datetime-local",
-        "number",
-        "checkbox",
-        "radio",
-        "file",
-    ];
-    const SPEC_CHECKED: &[&str] = &["checkbox", "radio"];
+    const TEXT_LIKE: &[&str] = &["text", "search", "tel", "url", "email", "password"];
+    const DATE_LIKE: &[&str] = &["date", "month", "week", "time", "datetime-local"];
 
-    /// Every input type: valid exactly when the spec's list names it, except
-    /// for the keywords in `excluded`, which the row deliberately leaves out.
-    fn matches_spec_on_inputs(attr: Attr, spec: &[&str], excluded: &[&str]) {
-        for t in INPUT_TYPES {
-            let keyword = t.html_type();
-            let expected = spec.contains(&keyword) && !excluded.contains(&keyword);
-            expect_that!(
-                attr.is_valid_on(FieldControl::Input(t)),
-                eq(expected),
-                "{attr:?} on input type={keyword}"
-            );
-        }
+    /// What the spec says about one attribute: the input types it applies to,
+    /// and which of `<textarea>`, `<select>` and `<fieldset>` it may appear on.
+    struct Expected {
+        inputs: Vec<&'static str>,
+        others: Vec<FieldControl>,
     }
 
-    #[gtest]
-    fn placeholder_follows_the_spec_on_inputs() {
-        matches_spec_on_inputs(Attr::Placeholder, SPEC_PLACEHOLDER, &[]);
+    fn every_input_keyword() -> Vec<&'static str> {
+        INPUT_TYPES.iter().map(|t| t.html_type()).collect()
     }
 
-    #[gtest]
-    fn lengths_and_pattern_follow_the_spec_on_inputs() {
-        for attr in [Attr::MinLength, Attr::MaxLength, Attr::Pattern] {
-            matches_spec_on_inputs(attr, SPEC_LENGTH_AND_PATTERN, &[]);
-        }
+    fn keywords(groups: &[&[&'static str]]) -> Vec<&'static str> {
+        groups.concat()
     }
 
-    #[gtest]
-    fn min_and_max_follow_the_spec_on_inputs() {
-        for attr in [Attr::Min, Attr::Max] {
-            matches_spec_on_inputs(attr, SPEC_MIN_MAX, &[]);
-        }
-    }
-
-    /// The spec allows `required` on a checkbox, where it means "must be
-    /// ticked". That sense is `RequiredTrue`, so the presence row leaves the
-    /// checkbox out, and `RequiredTrue` is valid on the checkbox ONLY.
-    #[gtest]
-    fn the_two_requireds_split_the_specs_list_at_the_checkbox() {
-        matches_spec_on_inputs(Attr::Required, SPEC_REQUIRED, &["checkbox"]);
-        matches_spec_on_inputs(Attr::RequiredTrue, &["checkbox"], &[]);
-    }
-
-    #[gtest]
-    fn checked_follows_the_spec_on_inputs() {
-        matches_spec_on_inputs(Attr::Checked, SPEC_CHECKED, &[]);
-    }
-
-    /// `name`, `type`, `value` and `aria-invalid` apply to every input type.
-    #[gtest]
-    fn the_owned_input_attributes_are_valid_on_every_input_type() {
-        for attr in [Attr::Name, Attr::Type, Attr::Value, Attr::AriaInvalid] {
-            matches_spec_on_inputs(attr, &INPUT_TYPES.map(InputType::html_type), &[]);
-        }
-    }
-
-    // ── `on:` for the other controls ─────────────────────────────────────
-
-    /// The non-`<input>` controls, per the spec's element definitions: which
-    /// of `<textarea>`, `<select>` and `<fieldset>` each attribute may appear
-    /// on.
-    #[gtest]
-    fn each_attribute_is_valid_on_the_right_non_input_controls() {
+    /// The spec's answer for `attr`, or `None` if this test has no statement
+    /// for it, which `every_row_has_a_spec_expectation` turns into a failure.
+    fn expected(attr: Attr) -> Option<Expected> {
         use FieldControl::{Fieldset, Select, Textarea};
-        let cases: &[(Attr, &[FieldControl])] = &[
-            (Attr::Placeholder, &[Textarea]),
-            (Attr::MaxLength, &[Textarea]),
-            (Attr::MinLength, &[Textarea]),
-            (Attr::Pattern, &[]),
-            (Attr::Min, &[]),
-            (Attr::Max, &[]),
-            (Attr::Required, &[Textarea, Select]),
-            (Attr::RequiredTrue, &[]),
-            (Attr::Name, &[Textarea, Select, Fieldset]),
-            (Attr::Type, &[]),
-            (Attr::Value, &[]),
-            (Attr::Checked, &[]),
-            (Attr::AriaInvalid, &[Textarea, Select, Fieldset]),
-        ];
-        expect_that!(cases.len(), eq(Attr::ALL.len()), "every row has a case");
-        for (attr, valid) in cases {
-            for control in [Textarea, Select, Fieldset] {
+        let (inputs, others): (Vec<&'static str>, Vec<FieldControl>) = match attr {
+            // Global attributes, and the form-control attributes every control
+            // (fieldset included) has: everything.
+            _ if attr.name().starts_with("aria-") => {
+                (every_input_keyword(), vec![Textarea, Select, Fieldset])
+            }
+            Attr::Accesskey
+            | Attr::Autocapitalize
+            | Attr::Autocorrect
+            | Attr::Autofocus
+            | Attr::Class
+            | Attr::ClassPlus
+            | Attr::Dir
+            | Attr::Disabled
+            | Attr::Enterkeyhint
+            | Attr::Form
+            | Attr::Id
+            | Attr::Inputmode
+            | Attr::Lang
+            | Attr::Name
+            | Attr::Role
+            | Attr::Spellcheck
+            | Attr::Style
+            | Attr::StylePlus
+            | Attr::Tabindex
+            | Attr::Title
+            | Attr::Translate
+            | Attr::Writingsuggestions => (every_input_keyword(), vec![Textarea, Select, Fieldset]),
+            Attr::Type | Attr::Value => (every_input_keyword(), vec![]),
+            Attr::Placeholder => (keywords(&[TEXT_LIKE, &["number"]]), vec![Textarea]),
+            Attr::MinLength | Attr::MaxLength => (TEXT_LIKE.to_vec(), vec![Textarea]),
+            // No `<textarea>`: HTML has no `pattern` on one.
+            Attr::Pattern => (TEXT_LIKE.to_vec(), vec![]),
+            Attr::Min | Attr::Max => (keywords(&[DATE_LIKE, &["number", "range"]]), vec![]),
+            // The spec also lists `checkbox` for `required`. That sense is
+            // `RequiredTrue`, so the presence row leaves it out on purpose.
+            Attr::Required => (
+                keywords(&[TEXT_LIKE, DATE_LIKE, &["number", "radio", "file"]]),
+                vec![Textarea, Select],
+            ),
+            Attr::RequiredTrue => (vec!["checkbox"], vec![]),
+            Attr::Checked => (vec!["checkbox", "radio"], vec![]),
+            Attr::Autocomplete => (
+                keywords(&[
+                    &["hidden"],
+                    TEXT_LIKE,
+                    DATE_LIKE,
+                    &["number", "range", "color"],
+                ]),
+                vec![Textarea, Select],
+            ),
+            Attr::Dirname => (
+                keywords(&[&["hidden"], TEXT_LIKE, &["submit"]]),
+                vec![Textarea],
+            ),
+            Attr::List => (
+                keywords(&[
+                    &["text", "search", "tel", "url", "email"],
+                    DATE_LIKE,
+                    &["number", "range", "color"],
+                ]),
+                vec![],
+            ),
+            Attr::Readonly => (
+                keywords(&[TEXT_LIKE, DATE_LIKE, &["number"]]),
+                vec![Textarea],
+            ),
+            Attr::Size => (TEXT_LIKE.to_vec(), vec![Select]),
+            Attr::Multiple => (vec!["email", "file"], vec![Select]),
+            Attr::Alpha | Attr::Colorspace => (vec!["color"], vec![]),
+            Attr::Cols | Attr::Rows | Attr::Wrap => (vec![], vec![Textarea]),
+            _ => return None,
+        };
+        Some(Expected { inputs, others })
+    }
+
+    /// A new row cannot skip the spec check: it needs an `expected` arm.
+    #[gtest]
+    fn every_row_has_a_spec_expectation() {
+        for &attr in Attr::ALL {
+            expect_that!(expected(attr).is_some(), eq(true), "{attr:?}");
+        }
+    }
+
+    /// Every row, on all 22 input types and on the three other controls.
+    #[gtest]
+    fn every_row_is_valid_exactly_where_the_spec_says() {
+        for &attr in Attr::ALL {
+            let Some(Expected { inputs, others }) = expected(attr) else {
+                continue;
+            };
+            for t in INPUT_TYPES {
+                let keyword = t.html_type();
+                expect_that!(
+                    attr.is_valid_on(FieldControl::Input(t)),
+                    eq(inputs.contains(&keyword)),
+                    "{attr:?} on input type={keyword}"
+                );
+            }
+            for control in [
+                FieldControl::Textarea,
+                FieldControl::Select,
+                FieldControl::Fieldset,
+            ] {
                 expect_that!(
                     attr.is_valid_on(control),
-                    eq(valid.contains(&control)),
+                    eq(others.contains(&control)),
                     "{attr:?} on {control:?}"
                 );
             }
@@ -512,27 +1220,48 @@ mod tests {
 
     // ── `for:` ───────────────────────────────────────────────────────────
 
+    /// Which field types each attribute applies to, by group. Anything not in
+    /// a narrower group applies to every field type.
     #[gtest]
     fn each_attribute_applies_to_the_right_field_types() {
         use FieldType::{Bool, Float, Int, Text};
-        let any: &[FieldType] = &[Text, Int, Float, Bool];
-        let cases: &[(Attr, &[FieldType])] = &[
-            (Attr::Placeholder, &[Text, Int, Float]),
-            (Attr::MaxLength, &[Text]),
-            (Attr::MinLength, &[Text]),
-            (Attr::Pattern, &[Text]),
-            (Attr::Min, &[Int, Float]),
-            (Attr::Max, &[Int, Float]),
-            (Attr::Required, any),
-            (Attr::RequiredTrue, &[Bool]),
-            (Attr::Name, any),
-            (Attr::Type, any),
-            (Attr::Value, any),
-            (Attr::Checked, any),
-            (Attr::AriaInvalid, any),
+        let text_only = [
+            Attr::MaxLength,
+            Attr::MinLength,
+            Attr::Pattern,
+            Attr::Alpha,
+            Attr::Colorspace,
+            Attr::Cols,
+            Attr::Rows,
+            Attr::Wrap,
+            Attr::Dirname,
+            Attr::Writingsuggestions,
         ];
-        expect_that!(cases.len(), eq(Attr::ALL.len()), "every row has a case");
-        for (attr, applies) in cases {
+        // Attributes about typing text, which a number rendered as text shares.
+        let text_and_numbers = [
+            Attr::Placeholder,
+            Attr::List,
+            Attr::Readonly,
+            Attr::Inputmode,
+            Attr::Enterkeyhint,
+            Attr::Autocapitalize,
+            Attr::Autocorrect,
+            Attr::Spellcheck,
+        ];
+        let numbers = [Attr::Min, Attr::Max];
+        let bools = [Attr::RequiredTrue];
+        for &attr in Attr::ALL {
+            let applies: &[FieldType] = if text_only.contains(&attr) {
+                &[Text]
+            } else if text_and_numbers.contains(&attr) {
+                &[Text, Int, Float]
+            } else if numbers.contains(&attr) {
+                &[Int, Float]
+            } else if bools.contains(&attr) {
+                &[Bool]
+            } else {
+                &[Text, Int, Float, Bool]
+            };
             for field_type in FIELD_TYPES {
                 expect_that!(
                     attr.applies_to(field_type),
@@ -555,12 +1284,38 @@ mod tests {
         expect_that!(
             owned,
             unordered_elements_are![
-                eq(&Attr::Required),
+                eq(&Attr::AriaChecked),
+                eq(&Attr::AriaDescribedby),
+                eq(&Attr::AriaInvalid),
+                eq(&Attr::AriaRequired),
+                eq(&Attr::Checked),
+                eq(&Attr::Form),
+                eq(&Attr::Id),
+                eq(&Attr::Multiple),
                 eq(&Attr::Name),
+                eq(&Attr::Required),
                 eq(&Attr::Type),
                 eq(&Attr::Value),
-                eq(&Attr::Checked),
-                eq(&Attr::AriaInvalid),
+            ]
+        );
+    }
+
+    /// `class` and `style` are the attributes formoxus sets AND an author may
+    /// change: replaced by `Class`/`Style`, appended to by the `Plus` rows.
+    #[gtest]
+    fn only_class_and_style_are_merged() {
+        let merged: Vec<Attr> = Attr::ALL
+            .iter()
+            .copied()
+            .filter(|a| a.owner() == Owner::Merged)
+            .collect();
+        expect_that!(
+            merged,
+            unordered_elements_are![
+                eq(&Attr::Class),
+                eq(&Attr::ClassPlus),
+                eq(&Attr::Style),
+                eq(&Attr::StylePlus),
             ]
         );
     }
@@ -717,6 +1472,14 @@ mod tests {
             (Attr::Required, AttrType::Flag),
             (Attr::RequiredTrue, AttrType::Flag),
             (Attr::Checked, AttrType::Flag),
+            (Attr::Autofocus, AttrType::Flag),
+            (Attr::Cols, AttrType::Int),
+            (Attr::Tabindex, AttrType::String),
+            (Attr::Class, AttrType::TokenList),
+            (Attr::ClassPlus, AttrType::TokenList),
+            (Attr::Style, AttrType::Declarations),
+            (Attr::StylePlus, AttrType::Declarations),
+            (Attr::AriaLabel, AttrType::String),
         ];
         for (attr, attr_type) in cases {
             expect_that!(attr.attr_type(), eq(attr_type), "{attr:?}");
@@ -725,10 +1488,11 @@ mod tests {
 
     // ── Names ────────────────────────────────────────────────────────────
 
-    /// HTML names are unique except `required`, which two rows emit: the
-    /// presence sense and #6's must-be-true.
+    /// HTML names are unique except where two rows emit the same attribute
+    /// with different meanings: `required` (presence and must-be-true), and
+    /// `class`/`style` (replace and append).
     #[gtest]
-    fn only_required_shares_an_html_name() {
+    fn only_required_class_and_style_share_an_html_name() {
         let mut names: Vec<&str> = Attr::ALL.iter().map(|a| a.name()).collect();
         names.sort_unstable();
         let shared: Vec<&str> = names
@@ -736,7 +1500,10 @@ mod tests {
             .filter(|w| w[0] == w[1])
             .map(|w| w[0])
             .collect();
-        expect_that!(shared, elements_are![eq(&"required")]);
+        expect_that!(
+            shared,
+            elements_are![eq(&"class"), eq(&"required"), eq(&"style")]
+        );
     }
 
     #[gtest]
@@ -745,7 +1512,8 @@ mod tests {
             let found = Attr::from_name(attr.name()).map(Attr::name);
             expect_that!(found, some(eq(attr.name())), "{attr:?}");
         }
-        expect_that!(Attr::from_name("rows"), none());
+        // A name only a quoted, pass-through key would carry.
+        expect_that!(Attr::from_name("hx-get"), none());
     }
 
     /// With two rows sharing `required`, name lookup can only return one: the

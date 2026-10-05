@@ -779,7 +779,8 @@ mod tests {
     }
 
     /// In `Attr::ALL` order, whatever order the attributes were given in:
-    /// the table's row order IS the emitted order.
+    /// the table's row order IS the emitted order. The table is alphabetical,
+    /// so `maxlength` comes before `minlength`.
     #[gtest]
     fn each_text_constraint_becomes_its_html_attribute() {
         let given_backwards = holding::<String>(all(&[
@@ -789,7 +790,7 @@ mod tests {
         ]));
         expect_that!(
             names(&given_backwards),
-            elements_are![eq(&"minlength"), eq(&"maxlength"), eq(&"pattern")]
+            elements_are![eq(&"maxlength"), eq(&"minlength"), eq(&"pattern")]
         );
     }
 

@@ -5,6 +5,10 @@ metadata:
   type: project
 ---
 
+**The step-by-step build order, with files and line numbers, is
+`formoxus/ATTRIBUTES_PLAN.md`** (created 2026-10-04; Todd asks for updates
+as things change). This note holds the decisions and reasoning.
+
 **Todd's executive decision, 2026-10-02.** It reshapes C6 ([[mvp-scope]] step 3)
 and takes in issue #4. Nothing is built yet beyond `FieldAttrs` +
 `with_attrs` + `to_attributes` (steps 1–3 of the first C6 plan), which this
@@ -342,6 +346,71 @@ Entering the spec facts literally hit two snags: `min`/`max` are not valid on
     unchanged (one added: `form_pattern_on_a_number`), 29 e2e, clippy, rustdoc,
     1.90, wasm. `AllAttrs` (constraints) and `FieldAttrs` (author attributes)
     are still separate; merging them, and picking the surviving name, is step 3.
+
+13. **Step 3's shape (Todd, 2026-10-04).** The macro holds a field's
+    attributes in **`ParsedAttrs`** (in `formoxus-macros`), and the run-time
+    twin is **`FieldAttrs`** (merging today's `AllAttrs` and `FieldAttrs`).
+    `ParsedAttrs` owns the routing, the duplicate check (`IndexMap::insert`
+    returning the old value) and the ownership refusal. It stores the author's
+    `Ident`/`LitStr` with each entry, so errors can point at the key, and it
+    holds no `&'static str` (nothing parsed is `'static`; the run-time twin's
+    strings ARE, because the macro emits them as literals). Its parts:
+    - the TABLE map, keyed by `Attr`: identifier keys, looked up as the
+      `snake_case` variant name, fully checked. Checked FIRST, so `aria_invalid`
+      hits its owned row instead of slipping through as an extra;
+    - `class_plus`: classes to append. **Only one of `class:` (replace, a
+      token list in the table map) or `class+:` (append); both is a compile
+      error** — "if you're replacing the list, put them all in there";
+    - EXTRAS: **string-literal keys passed through unchecked**
+      (`"hx-get": "/search"`, `"data-terms": "v2"`, `"x-cloak"` bare). This is
+      Dioxus's own split (quoted names bypass its lists; `Attribute::new` takes
+      any name) and covers htmx, Alpine and every `data-*`, including names
+      with underscores. A quoted name the table knows (`"maxlength"`) is
+      refused with "write `max_length:`", so quoting cannot bypass checks.
+      Caveat to document: a name the DOM rejects (Vue's `@click`) fails in the
+      browser, not in `form!`.
+    - **No separate `aria`/`data` maps.** ARIA is a closed set (about 48), so
+      each `aria-*` becomes a table row: `Author`, valid on every control
+      (global), except `aria-invalid` (owned) and probably `aria-describedby`
+      (owned from the start, since #9 will set it). Per-role ARIA validity is
+      out of scope.
+    `AttrSource` needs a list variant for `class` (and later `style`).
+
+14. **Refinements to 13 (Todd, 2026-10-04).** `aria-describedby` is OWNED
+    from the start (avoids a breaking change when #9 sets it). `ParsedAttrs`
+    is ONE map, not separate parts: `ParsedAttrs(IndexMap<AttrId,
+    ParsedAttr>)` with `enum AttrId { Std(Attr), NonStd(String) }` (a quoted
+    key like `"hx-get"` is not an `Ident`, and keying by text avoids `"a"` vs
+    `r"a"` comparing unequal) and `struct ParsedAttr { key_span: Span,
+    source: AttrSource }` (the span lives in the value, since `Std(Attr)` has
+    none). `class+` becomes a table row, `ClassPlus` (emitting HTML `class`,
+    like `Required`/`RequiredTrue` share `required`), and likewise
+    `StylePlus`; the "only one of `Class`/`ClassPlus`" rule is a check in
+    `ParsedAttrs`' insert. **DECIDED: the `form!` keys are `class_plus:` and
+    `style_plus:`** (Todd: "I can't argue with avoiding special-casing"), the
+    ones the snake_case rule gives for free, not `class+:`. Older notes saying
+    `class+` mean this.
+
+15. **The full table (2026-10-04): 95 rows**, alphabetized by variant, with
+    the 51 ARIA rows (ARIA 1.3 minus the deprecated `dropeffect`/`grabbed`)
+    alphabetized at the end, at Todd's request. Because `check` and the
+    emission walk `Attr::ALL`, alphabetical order puts `maxlength` before
+    `minlength`; harmless, since both length errors (or both bound errors) can
+    only fire together if min > max, which `form!` refuses. **Owned:** `name`,
+    `type`, `value`, `checked`, presence `required`, `form` (moves the control
+    to another form), `id` (reserved for #9), `multiple` (one string per leaf),
+    `aria-invalid`, `aria-describedby` (#9), and — Claude's call, flagged to
+    Todd — `aria-required` and `aria-checked` (they restate state formoxus
+    controls). **Merged:** `class`, `class_plus`, `style`, `style_plus`.
+    **Left out:** `step` (browser-validated but not server-checked, which
+    breaks the "validation reaches the server" rule; add it with a `check`
+    arm), `accept` (no file fields), and globals meaningless on a field
+    (`hidden`, `inert`, `contenteditable`, `draggable`, `popover`, `slot`, `is`,
+    `nonce`, `item*`, `heading*`), all still reachable as quoted keys.
+    `tabindex` is `String` because `-1` is common and `AttrType::Int` is
+    unsigned. Tests: one per-row spec expectation (`expected()` in the test
+    module, stated as keywords independently of the table) checked on all 22
+    input types and the 3 other controls, plus a test that every row HAS one.
 
 ### Agreed to come AFTER the table holds today's attributes
 

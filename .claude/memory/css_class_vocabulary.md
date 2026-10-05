@@ -179,3 +179,9 @@ predates `FieldProps` and has no resolved `aria_invalid` to read) but still emit
 **no `aria-invalid` at all** — so the errored state is reachable from CSS and
 invisible to a screen reader. Filed as issue **#11**. Nearly unreachable in
 practice: it needs a tampered submission or a refusal to pick a required variant.
+
+**SPELLING DECIDED 2026-10-04:** `class+` is written **`class_plus:`** in
+`form!` (and `style_plus:` likewise), the key the attribute table's
+snake_case rule gives a `ClassPlus` row, so it needs no special parsing. Only
+one of `class:` (replace) or `class_plus:` (append) per field. Every `class+`
+above means `class_plus:`. See [[attribute-rules-design]], decisions 13–14.

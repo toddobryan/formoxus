@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-09-30 handoff + 2026-10-01 update: #6 DONE, C6 next; parked items, how Todd works
+- [**START HERE: next session**](next_session.md) — 2026-10-05: WIP mid step 3b, BUILD BROKEN ON PURPOSE; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -41,7 +41,7 @@
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`
 - [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade
-- [Attribute rules design](attribute_rules_design.md) — DECIDED 2026-10-02/03: ONE attribute table in a new `formoxus-attrs` crate; legality per widget; custom widgets declare ATTRS; C6 + #4
+- [Attribute rules design](attribute_rules_design.md) — build order in `formoxus/ATTRIBUTES_PLAN.md`; DECIDED 2026-10-02/03: ONE attribute table in a new `formoxus-attrs` crate; legality per widget; custom widgets declare ATTRS; C6 + #4
 - [HTML attributes reference](html_attributes_reference.md) — 2026-10-02, from the WHATWG spec: valid attributes per form element and `<input>` type, where each widget spreads, vs dioxus-html; for C6 and #4
 - [Formoxus widget survey](formoxus_widget_survey.md) — Django's Field/Widget split (constraints follow the value type); why a proc macro beat facet attrs
 

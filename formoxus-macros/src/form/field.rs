@@ -2,11 +2,14 @@
 
 use std::collections::HashSet;
 
+use indexmap::IndexMap;
+
+use formoxus_attrs::Attr;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
 use regress::Regex;
 use syn::{
-    Expr, Ident, LitBool, LitStr, Result, Token, braced,
+    Expr, Ident, LitStr, Result, Token, braced,
     parse::{Parse, ParseStream},
     spanned::Spanned,
 };
@@ -19,58 +22,36 @@ pub(crate) struct FieldSpec {
     pub(crate) body: FieldBody,
 }
 
-/// One table generating the struct, the legal-key list and the parse dispatch,
-/// so the three cannot disagree — the same shape as [`widgets!`] and
-/// [`button_types!`], and for the same reason.
-///
-/// `$ty` is what makes it work here rather than reflection: a key's value is
-/// parsed into a DIFFERENT type depending on which key it is, and that choice
-/// has to exist at compile time. Nothing about the field names alone could
-/// supply it.
-///
-/// The keys are user-facing grammar; they are documented on `form!` itself,
-/// which is where someone writing a form will look.
-macro_rules! field_body {
-    ($( $key:ident : $ty:ty ),* $(,)?) => {
-        /// One field's brace block, as parsed.
-        #[derive(Debug, Default)]
-        pub(crate) struct FieldBody {
-            $( pub(crate) $key: Option<$ty>, )*
-        }
-
-        /// Every key a field body accepts, in declaration order.
-        pub(crate) const LEGAL_KEYS: &[&str] = &[ $( stringify!($key) ),* ];
-
-        impl FieldBody {
-            /// Parse one key's value into its own field. `false` means the key
-            /// is not one of ours, which is the caller's cue to report it.
-            fn set(&mut self, name: &str, body: ParseStream<'_>) -> Result<bool> {
-                match name {
-                    $( stringify!($key) => self.$key = Some(body.parse()?), )*
-                    _ => return Ok(false),
-                }
-                Ok(true)
-            }
-        }
-    };
+#[derive(Debug, Default)]
+pub(crate) struct FieldBody {
+    pub(crate) widget: Option<WidgetRef>,
+    pub(crate) label: Option<String>,
+    pub(crate) attrs: ParsedAttrs, 
 }
 
-// **Why `Expr` for the bounds and `LitStr` for the pattern.** A bound may be
-// any expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), and holding it as
-// an `Expr` is also what lets the literal's own type pick the `Bound` variant
-// once it reaches `.into()`. A pattern cannot: the macro has to hand the string
-// to `regress` to check it compiles, and only a literal is readable at macro
-// time. It also lands in `AttrValue::Regex`, which holds a `&'static str`.
-field_body! {
-    widget: WidgetRef,
-    label: Expr,
-    min: Expr,
-    max: Expr,
-    min_length: Expr,
-    max_length: Expr,
-    pattern: LitStr,
-    required: LitBool,
+#[derive(Debug, Default)]
+pub(crate) struct ParsedAttrs(IndexMap<AttrId, ParsedAttr>);
+
+#[derive(Debug)]
+pub(crate) enum AttrId {
+    Std(Attr),
+    NonStd(String),
 }
+
+#[derive(Debug)]
+pub(crate) struct ParsedAttr {
+    key_span: Span,
+    source: AttrSource,
+}
+
+#[derive(Debug)]
+pub(crate) enum AttrSource {
+    Expr(Expr),
+    Regex(LitStr),
+    Flag,
+    List(Vec<&'static str>)
+}
+
 
 impl FieldBody {
     /// The `AllAttrs` this body declares, or `None` when it declares
