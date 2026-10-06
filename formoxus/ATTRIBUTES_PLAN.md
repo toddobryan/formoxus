@@ -5,9 +5,11 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-04.** Steps 1–2 are done and pushed (`69a9225`): the table
+> **Status, 2026-10-06.** Steps 1–2 are done and pushed (`69a9225`): the table
 > lives in `formoxus-attrs`, and the constraints formoxus already had are driven
-> from it, with no behaviour change. **Next is step 3.**
+> from it, with no behaviour change. 3a is done except the list `AttrValue`s;
+> 3b, 3c and 3e are done (uncommitted); the workspace builds and every test
+> passes. **Next is 3d**, then the rest of 3f.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -55,7 +57,15 @@ pass through, and the grammar change below has landed.
 
 ### 3b. The macro parses attributes generically (`formoxus-macros/src/form/field.rs`)
 
-- [ ] **Replace the per-key fields** of `field_body!`
+> **DONE 2026-10-06** (Claude, delegated). The macro crate builds and its 110
+> unit tests pass; the workspace does not, until 3c gives the runtime
+> `AttrKey` keys and an `AttrValue::String` arm (`fields.rs:271`). Beyond the
+> plan: an identifier key spelled the HTML way (`maxlength:`) gets "write
+> `max_length`"; `required:` (owned) points at `required_true`; `label` is a
+> `LitStr` now (Todd's `Option<String>`), no longer any expression; the
+> `takes_*` wrappers in `field_kind` stay until their unit tests move (3f).
+
+- [x] **Replace the per-key fields** of `field_body!`
   ([field.rs:33](../formoxus-macros/src/form/field.rs#L33), invoked at
   [:64](../formoxus-macros/src/form/field.rs#L64)) with:
   - `widget` and `label` kept as named fields (they are not attributes);
@@ -66,7 +76,7 @@ pass through, and the grammar change below has landed.
     struct ParsedAttr { key_span: Span, source: AttrSource }
     enum AttrSource { Expr(Expr), Regex(LitStr), Flag, List(…) }
     ```
-- [ ] **Routing in `ParsedAttrs`' insert**, in this order:
+- [x] **Routing in `ParsedAttrs`' insert**, in this order:
   1. An identifier key → `from_variant_name` of its PascalCase form. Unknown
      → "unknown key", with a did-you-mean (`suggest.rs`) and the legal list.
   2. Owned (`owner: Formoxus`) → compile error naming it.
@@ -76,13 +86,16 @@ pass through, and the grammar change below has landed.
   5. A **string-literal** key (`"hx-get"`) → `NonStd`, passed through. If the
      table knows that HTML name (`"maxlength"`), refuse it: "write
      `max_length:`".
-- [ ] **Parse each value by the row's `attr_type()`**: `Int`/`Bound`/`String`
+- [x] **Parse each value by the row's `attr_type()`**: `Int`/`Bound`/`String`
   → `Expr`; `Regex` → `LitStr` (and keep today's `regress` compile check);
   `Flag` → **no value at all** (a bare key); lists → the list form.
-- [ ] **`constraints_tokens`** ([:83](../formoxus-macros/src/form/field.rs#L83))
-  becomes one loop over the map, emitting `(Attr::X, AttrValue::…(…))` per
-  entry. `NonStd` entries need a home in the runtime type (3c).
-- [ ] **`type_checks`** ([:152](../formoxus-macros/src/form/field.rs#L152))
+- [x] **`constraints_tokens`** ([:83](../formoxus-macros/src/form/field.rs#L83))
+  becomes one loop over the map, emitting `(AttrKey, AttrValue)` per entry
+  (decision 16): `Std(Attr::X)` with the value its row's type gives, or
+  `NonStd("hx-get")` (the macro's `String` written out as a literal) with
+  `AttrValue::String`. The loop collects `TokenStream`s, not runtime values:
+  the values are the author's expressions, which only exist in the expansion.
+- [x] **`type_checks`** ([:152](../formoxus-macros/src/form/field.rs#L152))
   becomes one loop emitting `assert!(applies(Attr::X, shape), msg)` per entry.
   Make `field_kind::applies` public for it
   ([field_kind.rs:42](../formoxus/src/field_kind.rs#L42)); the `takes_*`
@@ -90,25 +103,32 @@ pass through, and the grammar change below has landed.
   can then go. **Generate each message from the key and the row's `for:`**
   (`Text` → "a String field", `Int | Float` → "a number field") so the goldens
   stay byte-identical. The bound checks and min ≤ max stay, keyed on `Min`/`Max`.
-- [ ] **The `required: false` check** in `Parse`
+- [x] **The `required: false` check** in `Parse`
   ([:319](../formoxus-macros/src/form/field.rs#L319)) goes: `required_true` is
   a bare flag, so there is no `false` to write.
 
 ### 3c. One runtime map (`formoxus/src/fields.rs`, `formoxus/src/form/spec.rs`)
 
-- [ ] **Merge `AllAttrs` ([fields.rs:56](../formoxus/src/fields.rs#L56)) and
-  `FieldAttrs` ([:75](../formoxus/src/fields.rs#L75)) into one `FieldAttrs`**,
-  keyed by `Attr` for table attributes, plus the pass-through extras keyed by
-  their `&'static str` name.
-- [ ] **`FieldSpec`**: `constraints` and `attrs`
+> **DONE 2026-10-06** (Todd; Claude did the two builders → `with_attrs`, the
+> macro's emitted names, and the tests). One `FieldAttrs(IndexMap<AttrKey,
+> AttrValue>)`; `html_attributes` emits in the author's order.
+
+- [x] **Merge `AllAttrs` ([fields.rs:56](../formoxus/src/fields.rs#L56)) and
+  `FieldAttrs` ([:75](../formoxus/src/fields.rs#L75)) into one `FieldAttrs`**:
+  ONE `IndexMap<AttrKey, AttrValue>` (decision 16), so the author's order holds
+  across table and quoted keys. `get(Attr)`/`contains(Attr)` keep their
+  signatures and wrap in `AttrKey::Std` inside; `check` still walks
+  `Attr::ALL`, so it never sees a `NonStd` entry. `to_attributes` emits both
+  kinds. (`AttrKey` and `AttrValue::String` already exist, Todd 2026-10-06.)
+- [x] **`FieldSpec`**: `constraints` and `attrs`
   ([spec.rs:40](../formoxus/src/form/spec.rs#L40),
   [:54](../formoxus/src/form/spec.rs#L54)) become one field;
   `with_constraints` and `with_attrs`
   ([:144](../formoxus/src/form/spec.rs#L144), [:149](../formoxus/src/form/spec.rs#L149))
   become one builder.
-- [ ] **`distribute_specs`** copies the one map
+- [x] **`distribute_specs`** copies the one map
   ([fields.rs:589](../formoxus/src/fields.rs#L589)–[:590](../formoxus/src/fields.rs#L590)).
-- [ ] **`render`** ([:449](../formoxus/src/fields.rs#L449),
+- [x] **`render`** ([:449](../formoxus/src/fields.rs#L449),
   [:453](../formoxus/src/fields.rs#L453)) hands down table attributes plus
   extras; `ScalarWidget`'s merge
   ([scalar.rs:39](../formoxus/src/widgets/scalar.rs#L39)–[:46](../formoxus/src/widgets/scalar.rs#L46))
@@ -134,16 +154,20 @@ pass through, and the grammar change below has landed.
 
 ### 3e. The grammar change: `required: true` → `required_true`
 
+> **DONE 2026-10-06** (Claude). `form_required_false` deleted; the other two
+> goldens differ only by the key name and the caret moving onto the bare flag.
+> Every other golden is byte-identical. Suite 327, lib 86, macros 110, e2e 29.
+
 Breaking, so it all moves together. Claude updates the tests side.
 
-- [ ] Library: the `RequiredTrue` row is a `Flag`, so 3b already parses it bare.
-- [ ] Goldens: `form_required_false` (delete: nothing to write),
+- [x] Library: the `RequiredTrue` row is a `Flag`, so 3b already parses it bare.
+- [x] Goldens: `form_required_false` (delete: nothing to write),
   `form_required_on_a_string`, `form_required_on_an_optional_bool` (in
   `formoxus/tests/ui/`).
-- [ ] e2e forms: `examples/src/test_forms.rs` (`MustAgree` and
+- [x] e2e forms: `examples/src/test_forms.rs` (`MustAgree` and
   `MustAgreeNoValidate`, around lines 242–287).
-- [ ] Suite: `submissions.rs` (223, 236), `constraint_attrs.rs` (250–288).
-- [ ] Macro unit tests in `field.rs` (around 490–512).
+- [x] Suite: `submissions.rs` (223, 236), `constraint_attrs.rs` (250–288).
+- [x] Macro unit tests in `field.rs` (around 490–512).
 
 ### 3f. Tests (Claude)
 

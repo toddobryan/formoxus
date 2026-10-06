@@ -1,4 +1,4 @@
-//! `/t/must-agree` and `/t/must-agree-novalidate`: `required: true` on a bool
+//! `/t/must-agree` and `/t/must-agree-novalidate`: `required_true` on a bool
 //! (issue #6), the "I agree to the terms" checkbox.
 //!
 //! The SSR suite pins that the `required` attribute and the ` *` marker render,

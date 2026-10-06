@@ -16,14 +16,23 @@ pub enum AttrType {
     Flag,
     TokenList,
     Declarations,
+    List,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AttrKey {
+    Std(Attr),
+    NonStd(&'static str),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum AttrValue {
+    String(String),
     Int(usize),
     Bound(Bound),
     Regex(&'static str),
     Flag,
+    List(&'static [&'static str]),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

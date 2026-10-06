@@ -220,7 +220,7 @@ fn into_model_hands_the_value_onward() {
     expect_that!(submission.into_model().username, eq("ada"));
 }
 
-// ── `required: true` on a bool (issue #6) ────────────────────────────────
+// ── `required_true` on a bool (issue #6) ────────────────────────────────
 //
 // The browser's `required` on a checkbox is trivially bypassed, so this is
 // where "I agree to the terms" is actually enforced. An unticked checkbox is
@@ -233,7 +233,7 @@ struct Terms {
 }
 
 fn must_agree() -> FormSpec<Terms> {
-    form! { Terms { agreed => { required: true } } }
+    form! { Terms { agreed => { required_true } } }
 }
 
 #[gtest]

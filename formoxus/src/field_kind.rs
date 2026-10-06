@@ -39,7 +39,13 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
     unreachable!("a form! projection is type-checked, never called")
 }
 
-const fn applies(attr: Attr, shape: &Shape) -> bool {
+/// Whether `attr` can apply to this field: the table's `for:` column, asked
+/// of the field's type. `form!` emits one of these per table attribute a field
+/// body declares.
+///
+/// An opaque newtype is let through, since nothing here can see what it
+/// wraps; a struct, list or enum is refused, since no attribute applies to one.
+pub const fn applies(attr: Attr, shape: &Shape) -> bool {
     match kind(shape) {
         Kind::Unknown => true,
         Kind::Other => false,
@@ -66,7 +72,7 @@ pub const fn takes_bound(shape: &Shape) -> bool {
     applies(Attr::Min, shape)
 }
 
-/// Whether `required: true` can apply: only to a bool, where it means the value
+/// Whether `required_true` can apply: only to a bool, where it means the value
 /// must be `true`. Every other field is already required by its type unless it
 /// is an `Option`, so on anything else the key would mean nothing.
 ///
@@ -76,7 +82,7 @@ pub const fn takes_required(shape: &Shape) -> bool {
     applies(Attr::RequiredTrue, shape)
 }
 
-/// Whether `required: true` avoids an `Option`. An optional field may be left
+/// Whether `required_true` avoids an `Option`. An optional field may be left
 /// unanswered, so it cannot also be required to be true.
 ///
 /// `true` for anything [`takes_required`] rejects, so `required` on an
@@ -558,7 +564,7 @@ mod tests {
         expect_that!(takes_bound(bool::SHAPE), eq(false));
     }
 
-    /// `required: true` means "must be true", so a bool is the only kind that
+    /// `required_true` means "must be true", so a bool is the only kind that
     /// takes it.
     #[gtest]
     fn only_a_bool_takes_required() {

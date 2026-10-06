@@ -11,7 +11,7 @@ use crate::members::ValuesStore;
 pub fn Checkbox(
     mut values: ValuesStore,
     props: FieldProps,
-    /// `required: true` in `form!`: the box must be ticked. Shows the ` *`
+    /// `required_true` in `form!`: the box must be ticked. Shows the ` *`
     /// marker. The HTML `required` attribute does not come from here; it
     /// arrives in `attrs`, from `FormField::constraint_attributes`, like every other
     /// constraint.

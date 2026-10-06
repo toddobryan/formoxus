@@ -5,6 +5,18 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-06, END OF SCHOOL DAY — BUILD GREEN, 3d IN PROGRESS.**
+3b, 3c and 3e of `formoxus/ATTRIBUTES_PLAN.md` are done and committed (see the
+plan's DONE notes); every test passes (macros 111, lib 86, suite 327, goldens,
+e2e 29). Todd has started 3d: `AttrValue::List(&'static [&'static str])` and
+`AttrType::List` exist, and `html_attributes` has a `List` arm. **Todd's call
+(2026-10-06): do NOT pull `class`/`class_plus` out of the generic attribute
+list; handle them inside the `html_attributes` loop** (this replaces plan
+step 12's `FieldProps` field). The one clippy failure left is the `todo!` in
+`ParsedAttr::entry_tokens` for list values, which 3d replaces with
+`AttrValue::List(&[#(#items),*])`. Then Claude does the rest of 3f (new
+goldens; `author_attrs.rs` onto `form!` keys). `label` is an `Expr` again.
+
 **UPDATE 2026-10-05, END OF SESSION — WIP COMMITTED, THE BUILD IS BROKEN ON
 PURPOSE.** Todd is mid-way through **step 3b of `formoxus/ATTRIBUTES_PLAN.md`**
 (the living checklist, with files and line numbers; read it first). He is

@@ -239,7 +239,7 @@ struct Agree {
 
 /// A bool as a checkbox. **Unticked is a complete answer**, so submitting it
 /// untouched succeeds with `agreed: false`, and that is the behaviour under test.
-/// Demanding a tick takes `required: true`; see `must-agree` below.
+/// Demanding a tick takes `required_true`; see `must-agree` below.
 #[component]
 fn CheckboxForm() -> Element {
     harness(
@@ -256,7 +256,7 @@ fn CheckboxForm() -> Element {
 
 // ── must-agree ───────────────────────────────────────────────────────────
 
-/// `required: true` on a bool, validation ON: the box must be ticked, and the
+/// `required_true` on a bool, validation ON: the box must be ticked, and the
 /// browser blocks an unticked submit itself, from the `required` attribute.
 #[component]
 fn MustAgree() -> Element {
@@ -266,7 +266,7 @@ fn MustAgree() -> Element {
         form! {
             Agree {
                 browser_validation: on,
-                agreed => { required: true },
+                agreed => { required_true },
                 buttons: { save: { type: submit } }
             }
         },
@@ -284,7 +284,7 @@ fn MustAgreeNoValidate() -> Element {
         form! {
             Agree {
                 browser_validation: off,
-                agreed => { required: true },
+                agreed => { required_true },
                 buttons: { save: { type: submit } }
             }
         },

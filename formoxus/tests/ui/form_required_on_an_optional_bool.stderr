@@ -1,5 +1,5 @@
-error[E0080]: evaluation panicked: `required` cannot apply to an `Option<bool>`: an optional field may be left unanswered, so it cannot also be required to be true
-  --> tests/ui/form_required_on_an_optional_bool.rs:14:44
+error[E0080]: evaluation panicked: `required_true` cannot apply to an `Option<bool>`: an optional field may be left unanswered, so it cannot also be required to be true
+  --> tests/ui/form_required_on_an_optional_bool.rs:14:34
    |
-14 |             would_recommend => { required: true },
-   |                                            ^^^^ evaluation of `main::_` failed here
+14 |             would_recommend => { required_true },
+   |                                  ^^^^^^^^^^^^^ evaluation of `main::_` failed here

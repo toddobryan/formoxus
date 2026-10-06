@@ -8,7 +8,7 @@ use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label,
 use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
-use formoxus_attrs::{Attr, AttrValue, Bound, FieldType};
+use formoxus_attrs::{Attr, AttrKey, AttrValue, Bound, FieldType};
 use indexmap::IndexMap;
 use regress::Regex;
 use std::fmt::Debug;
@@ -28,7 +28,6 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
-    pub constraints: AllAttrs,
     pub attrs: FieldAttrs,
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
@@ -53,42 +52,20 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AllAttrs(IndexMap<Attr, AttrValue>);
+pub struct FieldAttrs(IndexMap<AttrKey, AttrValue>);
 
-impl AllAttrs {
+impl FieldAttrs {
     pub fn get(&self, attr: Attr) -> Option<&AttrValue> {
-        self.0.get(&attr)
+        self.0.get(&AttrKey::Std(attr))
     }
 
     pub fn contains(&self, attr: Attr) -> bool {
-        self.0.contains_key(&attr)
+        self.0.contains_key(&AttrKey::Std(attr))
     }
 }
 
-impl<const N: usize> From<[(Attr, AttrValue); N]> for AllAttrs {
-    fn from(arr: [(Attr, AttrValue); N]) -> Self {
-        Self(IndexMap::from(arr))
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FieldAttrs(IndexMap<&'static str, String>);
-
-impl FieldAttrs {
-    pub fn to_attributes(&self) -> Vec<Attribute> {
-        self.0
-            .iter()
-            .map(|(name, value)| Attribute::new(name, value.clone(), None, false))
-            .collect()
-    }
-
-    pub fn insert(&mut self, key: &'static str, value: String) {
-        self.0.insert(key, value);
-    }
-}
-
-impl<const N: usize> From<[(&'static str, String); N]> for FieldAttrs {
-    fn from(arr: [(&'static str, String); N]) -> Self {
+impl<const N: usize> From<[(AttrKey, AttrValue); N]> for FieldAttrs {
+    fn from(arr: [(AttrKey, AttrValue); N]) -> Self {
         Self(IndexMap::from(arr))
     }
 }
@@ -201,7 +178,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
         // TODO: the Max and Min handling assumes an ordering for Attr::ALL.
         //       We should avoid that.
         for &attr in Attr::ALL {
-            let Some(value) = self.constraints.get(attr) else {
+            let Some(value) = self.attrs.get(attr) else {
                 continue;
             };
             // `form!` refuses an attribute that does not apply to the field's
@@ -234,7 +211,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                 // is produced once, on `Min`, and `Max` stands aside when
                 // `Min` is there to cover both.
                 (Attr::Min | Attr::Max, AttrValue::Bound(_)) => {
-                    if attr == Attr::Max && self.constraints.contains(Attr::Min) {
+                    if attr == Attr::Max && self.attrs.contains(Attr::Min) {
                         continue;
                     }
                     errors.extend(self.check_bounds(field_type, raw_value));
@@ -258,17 +235,16 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
         errors
     }
 
-    /// This field's constraints as HTML attributes, in `Attr::ALL` order,
-    /// unfiltered (step 4 adds `is_valid_on`).
-    fn constraint_attributes(&self) -> Vec<Attribute> {
+    /// This field's attributes in the order provided by the user.
+    fn html_attributes(&self) -> Vec<Attribute> {
         let field_type = self.field_type();
         let mut out = Vec::new();
-        for &attr in Attr::ALL {
-            let Some(value) = self.constraints.get(attr) else {
-                continue;
+        for (attr_key, attr_value) in &self.attrs.0 {
+            let name = match attr_key {
+                AttrKey::Std(attr) => attr.name(),
+                AttrKey::NonStd(name) => name,
             };
-            let name = attr.name();
-            let attribute = match value {
+            let attribute = match attr_value {
                 AttrValue::Int(n) => Attribute::new(name, *n, None, false),
                 AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
                 AttrValue::Flag => Attribute::new(name, true, None, false),
@@ -276,6 +252,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                     FieldType::Int => Attribute::new(name, self.int_bound(*b, name), None, false),
                     _ => Attribute::new(name, float_bound(*b), None, false),
                 },
+                AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
+                AttrValue::List(vs) => {
+                    // TODO: check style vs class, for now just join with space
+                    Attribute::new(name, vs.join(" "), None, false)
+                }
             };
             out.push(attribute);
         }
@@ -288,7 +269,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// float field as `f64`. A bound written as the other kind is widened to
     /// match: `int_bound` for an integer field, a cast for a float field.
     fn check_bounds(&self, field_type: FieldType, raw_value: &str) -> Option<ValidationMessage> {
-        let bound = |attr: Attr| match self.constraints.get(attr) {
+        let bound = |attr: Attr| match self.attrs.get(attr) {
             Some(AttrValue::Bound(b)) => Some(*b),
             _ => None,
         };
@@ -446,12 +427,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
-        let attrs: Vec<Attribute> = self.attrs.to_attributes();
         rsx! {
             ScalarWidget {
                 field_type: self.field_type(),
-                constraint_attrs: self.constraint_attributes(),
-                required_true: self.constraints.contains(Attr::RequiredTrue),
+                field_attrs: self.html_attributes(),
+                required_true: self.attrs.contains(Attr::RequiredTrue),
                 widget: self.widget(),
                 choices: self.choices.clone(),
                 values: ctx.values,
@@ -462,7 +442,6 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                     errors: self.errors.clone(),
                     aria_invalid: (!self.errors.is_empty()).then_some("true"),
                 },
-                attrs,
             }
         }
     }
@@ -578,16 +557,15 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // Those three have something to preserve — `build` derives a label
             // from the field name and a widget from the shape, so the spec has
             // to mean "mine if I said anything, yours otherwise". Nothing
-            // derives a CONSTRAINT: `scalar_member` always writes
-            // `AllAttrs::default()`, so there has never been anything here
-            // to keep, and one rule is easier to hold than two — `with_constraints`
+            // derives an attribute: `scalar_member` always writes
+            // `FieldAttrs::default()`, so there has never been anything here
+            // to keep, and one rule is easier to hold than two — `with_attrs`
             // already replaces wholesale on the spec side.
             //
             // The day something does derive one (a newtype declaring its own
             // range, say), this line starts silently discarding it and wants
             // the per-field `.or()` treatment instead.
-            self.constraints = spec.constraints.clone();
-            self.attrs.clone_from(&spec.attrs);
+            self.attrs = spec.attrs.clone();
         }
     }
 
@@ -660,11 +638,18 @@ mod tests {
     // of the right type, holding nothing: `check` takes the raw value as an
     // argument, so the field's own value never matters here.
 
-    fn all(entries: &[(Attr, AttrValue)]) -> AllAttrs {
-        AllAttrs(entries.iter().copied().collect())
+    /// Table attributes only, which is all a constraint test needs; the
+    /// author-attribute tests at the bottom build `NonStd` keys themselves.
+    fn all(entries: &[(Attr, AttrValue)]) -> FieldAttrs {
+        FieldAttrs(
+            entries
+                .iter()
+                .map(|(attr, value)| (AttrKey::Std(*attr), value.clone()))
+                .collect(),
+        )
     }
 
-    fn holding<X>(constraints: AllAttrs) -> FormField<X>
+    fn holding<X>(attrs: FieldAttrs) -> FormField<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -672,8 +657,7 @@ mod tests {
             name: "f".to_string(),
             label: None,
             optional: false,
-            constraints,
-            attrs: FieldAttrs::default(),
+            attrs,
             custom_widget: None,
             choices: None,
             wrapper: None,
@@ -694,7 +678,7 @@ mod tests {
         holding(all(&entries))
     }
 
-    fn bounds(min: Option<Bound>, max: Option<Bound>) -> AllAttrs {
+    fn bounds(min: Option<Bound>, max: Option<Bound>) -> FieldAttrs {
         let mut entries = Vec::new();
         entries.extend(min.map(|b| (Attr::Min, AttrValue::Bound(b))));
         entries.extend(max.map(|b| (Attr::Max, AttrValue::Bound(b))));
@@ -713,7 +697,7 @@ mod tests {
         if required_true {
             holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
         } else {
-            holding(AllAttrs::default())
+            holding(FieldAttrs::default())
         }
     }
 
@@ -728,11 +712,7 @@ mod tests {
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        field
-            .constraint_attributes()
-            .iter()
-            .map(|a| a.name)
-            .collect()
+        field.html_attributes().iter().map(|a| a.name).collect()
     }
 
     /// The value of the one emitted attribute called `name`.
@@ -740,7 +720,7 @@ mod tests {
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        let attrs = field.constraint_attributes();
+        let attrs = field.html_attributes();
         let found: Vec<&Attribute> = attrs.iter().filter(|a| a.name == name).collect();
         assert!(
             found.len() == 1,
@@ -752,7 +732,7 @@ mod tests {
 
     // ── Constraint attributes ────────────────────────────────────────────
     //
-    // `constraint_attributes` is the render-side half of a constraint: the
+    // `html_attributes` is the render-side half of a constraint: the
     // same `min_length` that `check` enforces in Rust also has to reach the
     // browser, or the two disagree about what the field allows. These pin the
     // mapping. That an attribute then lands on the right element is a widget
@@ -767,7 +747,7 @@ mod tests {
     }
 
     /// HTML `required` on a checkbox means "must be ticked", which is exactly
-    /// `required: true` on a bool and nothing else. A plain bool must NOT get
+    /// `required_true` on a bool and nothing else. A plain bool must NOT get
     /// it (above), because unticked is a complete answer there.
     #[gtest]
     fn a_required_true_bool_becomes_the_required_attribute() {
@@ -778,31 +758,32 @@ mod tests {
         );
     }
 
-    /// In `Attr::ALL` order, whatever order the attributes were given in:
-    /// the table's row order IS the emitted order. The table is alphabetical,
-    /// so `maxlength` comes before `minlength`.
+    /// In the order the attributes were given, NOT `Attr::ALL` order: the
+    /// map is an `IndexMap`, so the markup follows what the author wrote.
+    /// Given here in neither table order nor its reverse, so a walk of
+    /// `Attr::ALL` either way would fail it.
     #[gtest]
-    fn each_text_constraint_becomes_its_html_attribute() {
-        let given_backwards = holding::<String>(all(&[
+    fn each_text_constraint_becomes_its_html_attribute_in_the_order_given() {
+        let field = holding::<String>(all(&[
+            (Attr::MinLength, AttrValue::Int(3)),
             (Attr::Pattern, AttrValue::Regex(r"\d{5}")),
             (Attr::MaxLength, AttrValue::Int(10)),
-            (Attr::MinLength, AttrValue::Int(3)),
         ]));
         expect_that!(
-            names(&given_backwards),
-            elements_are![eq(&"maxlength"), eq(&"minlength"), eq(&"pattern")]
+            names(&field),
+            elements_are![eq(&"minlength"), eq(&"pattern"), eq(&"maxlength")]
         );
     }
 
     /// One `max_length` means ONE `maxlength`, because the attributes are
-    /// keyed by `Attr`: HTML takes the first of a duplicated attribute, so a
+    /// keyed by `AttrKey`: HTML takes the first of a duplicated attribute, so a
     /// second entry would be silently dropped rather than loudly wrong.
     #[gtest]
     fn a_repeated_attribute_replaces_rather_than_duplicating() {
         let mut map = IndexMap::new();
-        map.insert(Attr::MaxLength, AttrValue::Int(5));
-        map.insert(Attr::MaxLength, AttrValue::Int(99));
-        let field = holding::<String>(AllAttrs(map));
+        map.insert(AttrKey::Std(Attr::MaxLength), AttrValue::Int(5));
+        map.insert(AttrKey::Std(Attr::MaxLength), AttrValue::Int(99));
+        let field = holding::<String>(FieldAttrs(map));
         expect_that!(names(&field), elements_are![eq(&"maxlength")]);
         expect_that!(
             emitted(&field, "maxlength"),
@@ -1081,7 +1062,7 @@ mod tests {
 
     // ── Bool ─────────────────────────────────────────────────────────────
 
-    /// Without `required: true`, `false` is a complete answer, so a bool has
+    /// Without `required_true`, `false` is a complete answer, so a bool has
     /// nothing to check.
     #[gtest]
     fn a_plain_bool_accepts_either_value() {
@@ -1120,7 +1101,7 @@ mod tests {
     // `validate` with a real value, so the field's own type and value are what
     // get checked, the way a submitted form is.
 
-    fn a_field<X>(value: X, constraints: AllAttrs, attrs: FieldAttrs) -> FormField<X>
+    fn a_field<X>(value: X, attrs: FieldAttrs) -> FormField<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -1128,7 +1109,6 @@ mod tests {
             name: "f".to_string(),
             label: None,
             optional: false,
-            constraints,
             attrs,
             custom_widget: None,
             choices: None,
@@ -1141,18 +1121,11 @@ mod tests {
         }
     }
 
-    fn validated_no_attrs<X>(value: X, constraints: AllAttrs) -> Vec<String>
+    fn validated<X>(value: X, attrs: FieldAttrs) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        validated(value, constraints, FieldAttrs::default())
-    }
-
-    fn validated<X>(value: X, constraints: AllAttrs, attrs: FieldAttrs) -> Vec<String>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        let mut field = a_field(value, constraints, attrs);
+        let mut field = a_field(value, attrs);
 
         // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
         // reaches `check` at all. A test that tripped that early return
@@ -1179,19 +1152,16 @@ mod tests {
     #[gtest]
     fn a_length_constraint_on_the_field_reaches_the_check() {
         let short = all(&[(Attr::MaxLength, AttrValue::Int(3))]);
-        expect_that!(
-            validated_no_attrs("abc".to_string(), short.clone()),
-            is_empty()
-        );
-        expect_that!(validated_no_attrs("hello".to_string(), short), len(eq(1)));
+        expect_that!(validated("abc".to_string(), short.clone()), is_empty());
+        expect_that!(validated("hello".to_string(), short), len(eq(1)));
     }
 
     #[gtest]
     fn integer_bounds_on_the_field_reach_the_check() {
         let between = bounds(Some(Bound::Int(1)), Some(Bound::Int(10)));
-        expect_that!(validated_no_attrs(0_i32, between.clone()), len(eq(1)));
-        expect_that!(validated_no_attrs(5_i32, between.clone()), is_empty());
-        expect_that!(validated_no_attrs(11_i32, between), len(eq(1)));
+        expect_that!(validated(0_i32, between.clone()), len(eq(1)));
+        expect_that!(validated(5_i32, between.clone()), is_empty());
+        expect_that!(validated(11_i32, between), len(eq(1)));
     }
 
     /// The cross-flavour case, and the one that matters most in practice:
@@ -1201,11 +1171,8 @@ mod tests {
     #[gtest]
     fn an_integer_bound_on_a_float_field_is_widened_not_dropped() {
         let non_negative = bounds(Some(Bound::Int(0)), None);
-        expect_that!(
-            validated_no_attrs(-1.5_f64, non_negative.clone()),
-            len(eq(1))
-        );
-        expect_that!(validated_no_attrs(0.5_f64, non_negative), is_empty());
+        expect_that!(validated(-1.5_f64, non_negative.clone()), len(eq(1)));
+        expect_that!(validated(0.5_f64, non_negative), is_empty());
     }
 
     /// The other direction, when the float is whole: `min: 2.0` means 2, so
@@ -1214,8 +1181,8 @@ mod tests {
     #[gtest]
     fn a_whole_float_bound_on_an_integer_field_is_used_as_an_integer() {
         let at_least_two = bounds(Some(Bound::Float(2.0)), None);
-        expect_that!(validated_no_attrs(1_i32, at_least_two.clone()), len(eq(1)));
-        expect_that!(validated_no_attrs(2_i32, at_least_two), is_empty());
+        expect_that!(validated(1_i32, at_least_two.clone()), len(eq(1)));
+        expect_that!(validated(2_i32, at_least_two), is_empty());
     }
 
     /// A FRACTIONAL float bound on an integer field has no sensible answer, so
@@ -1230,10 +1197,10 @@ mod tests {
     #[should_panic(expected = "does not support the fractional min")]
     fn a_fractional_bound_on_an_integer_field_is_a_caller_bug() {
         let fractional = bounds(Some(Bound::Float(1.5)), None);
-        let _ = validated_no_attrs(3_i32, fractional);
+        let _ = validated(3_i32, fractional);
     }
 
-    // ── `required: true` on a bool, through `validate` ───────────────────
+    // ── `required_true` on a bool, through `validate` ───────────────────
     //
     // `check` is covered above. These go through `validate`, because that is
     // where an unticked checkbox could slip past: it is `Empty`, and `Empty`
@@ -1250,14 +1217,13 @@ mod tests {
             name: "agreed".to_string(),
             label: None,
             optional: false,
-            constraints: if required_true {
+            attrs: if required_true {
                 all(&[(Attr::RequiredTrue, AttrValue::Flag)])
             } else {
-                AllAttrs::default()
+                FieldAttrs::default()
             },
             custom_widget: widget,
             choices: None,
-            attrs: FieldAttrs::default(),
             wrapper: None,
             value,
             errors: Vec::new(),
@@ -1330,56 +1296,79 @@ mod tests {
 
     // ── Author attributes ────────────────────────────────────────────────
     //
-    // `FieldAttrs` is presentation only: it never reaches `check`, so it
-    // cannot change what a value parses as or what `check` allows. These pin
-    // the conversion `render` relies on. That the attributes then land on the
-    // right element, after the constraint attributes, is a widget question,
-    // tested from outside in `tests/suite/`.
+    // A quoted `form!` key is a `NonStd` entry holding an `AttrValue::String`.
+    // It never reaches `check`, which walks `Attr::ALL`, so it cannot change
+    // what a value parses as or what `check` allows. These pin the conversion
+    // `render` relies on. That the attributes then land on the right element
+    // is a widget question, tested from outside in `tests/suite/`.
 
-    fn author(pairs: &[(&'static str, &str)]) -> FieldAttrs {
-        FieldAttrs(
+    fn author(pairs: &[(&'static str, &str)]) -> Vec<Attribute> {
+        holding::<String>(FieldAttrs(
             pairs
                 .iter()
-                .map(|(name, value)| (*name, (*value).to_string()))
+                .map(|(name, value)| {
+                    (
+                        AttrKey::NonStd(name),
+                        AttrValue::String((*value).to_string()),
+                    )
+                })
                 .collect(),
-        )
+        ))
+        .html_attributes()
     }
 
     #[gtest]
     fn no_author_attributes_means_no_attributes() {
-        expect_that!(FieldAttrs::default().to_attributes(), is_empty());
+        expect_that!(author(&[]), is_empty());
     }
 
     /// Order is kept because the map is an `IndexMap`, so the rendered markup
     /// follows the order the author wrote them in.
     #[gtest]
     fn author_attributes_keep_their_names_and_order() {
-        let attrs = author(&[("placeholder", "Ada"), ("autocomplete", "name")]);
+        let attrs = author(&[("hx-get", "/x"), ("data-id", "7")]);
         expect_that!(
-            attrs
-                .to_attributes()
-                .iter()
-                .map(|a| a.name)
-                .collect::<Vec<_>>(),
-            elements_are![eq(&"placeholder"), eq(&"autocomplete")]
+            attrs.iter().map(|a| a.name).collect::<Vec<_>>(),
+            elements_are![eq(&"hx-get"), eq(&"data-id")]
         );
     }
 
-    /// An author attribute is always TEXT, even when it looks like a number:
-    /// `rows: "4"` renders `rows="4"`. That is unlike a constraint, whose
-    /// `maxlength` is an `AttributeValue::Int` and renders unquoted. Both are
-    /// valid HTML, but a test matching the markup has to know which it is.
+    /// A table attribute and a quoted one share the map, so their relative
+    /// order is the author's too: the reason for one map rather than two.
+    #[gtest]
+    fn table_and_quoted_attributes_interleave_in_the_order_given() {
+        let field = holding::<String>(FieldAttrs(IndexMap::from([
+            (
+                AttrKey::NonStd("hx-get"),
+                AttrValue::String("/x".to_string()),
+            ),
+            (AttrKey::Std(Attr::MaxLength), AttrValue::Int(5)),
+            (
+                AttrKey::NonStd("data-id"),
+                AttrValue::String("7".to_string()),
+            ),
+        ])));
+        expect_that!(
+            names(&field),
+            elements_are![eq(&"hx-get"), eq(&"maxlength"), eq(&"data-id")]
+        );
+    }
+
+    /// A string attribute is always TEXT, even when it looks like a number:
+    /// `"data-rows": "4"` renders `data-rows="4"`. That is unlike `max_length`,
+    /// whose `maxlength` is an `AttributeValue::Int` and renders unquoted. Both
+    /// are valid HTML, but a test matching the markup has to know which it is.
     #[gtest]
     fn an_author_attribute_is_text_even_when_numeric() {
-        let attrs = author(&[("rows", "4")]).to_attributes();
+        let attrs = author(&[("data-rows", "4")]);
         expect_that!(attrs[0].value, eq(&AttributeValue::Text("4".to_string())));
     }
 
-    /// Plain attributes, the same as `constraint_attributes` builds: no namespace
+    /// Plain attributes, the same as a table attribute gets: no namespace
     /// (that is only for `style`) and not volatile.
     #[gtest]
     fn an_author_attribute_has_no_namespace_and_is_not_volatile() {
-        let attrs = author(&[("placeholder", "Ada")]).to_attributes();
+        let attrs = author(&[("hx-get", "/x")]);
         expect_that!(attrs[0].namespace, none());
         expect_that!(attrs[0].volatile, eq(false));
     }

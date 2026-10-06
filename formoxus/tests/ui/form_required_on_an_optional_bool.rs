@@ -11,7 +11,7 @@ struct Survey {
 fn main() {
     let _ = empty_form::<Survey>(form! {
         Survey {
-            would_recommend => { required: true },
+            would_recommend => { required_true },
         }
     });
 }

@@ -10,8 +10,8 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrValue};
-use formoxus::fields::AllAttrs;
+use formoxus::attrs::{Attr, AttrKey, AttrValue};
+use formoxus::fields::FieldAttrs;
 use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
 use formoxus::prelude::*;
@@ -437,9 +437,9 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 #[gtest]
 fn a_constraint_from_the_spec_reaches_validation() {
     let spec = || {
-        FormSpec::<EventForCreate>::default().with_constraints(
+        FormSpec::<EventForCreate>::default().with_attrs(
             "title",
-            AllAttrs::from([(Attr::MaxLength, AttrValue::Int(5))]),
+            FieldAttrs::from([(AttrKey::Std(Attr::MaxLength), AttrValue::Int(5))]),
         )
     };
 
@@ -459,9 +459,9 @@ fn a_constraint_from_the_spec_reaches_validation() {
 /// even if the prefix were being dropped.
 #[gtest]
 fn a_constraint_reaches_a_nested_leaf() {
-    let spec = FormSpec::<EventForCreate>::default().with_constraints(
+    let spec = FormSpec::<EventForCreate>::default().with_attrs(
         "location.zip",
-        AllAttrs::from([(Attr::Pattern, AttrValue::Regex(r"\d{5}"))]),
+        FieldAttrs::from([(AttrKey::Std(Attr::Pattern), AttrValue::Regex(r"\d{5}"))]),
     );
 
     let mut values = full_event("Fine");

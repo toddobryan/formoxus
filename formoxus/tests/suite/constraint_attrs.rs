@@ -247,7 +247,7 @@ fn the_attributes_are_rendered_whether_browser_validation_is_on_or_off() {
     expect_that!(on, contains_substring("maxlength=10"));
 }
 
-// ── `required: true` on a bool (issue #6) ────────────────────────────────
+// ── `required_true` on a bool (issue #6) ────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Terms {
@@ -255,12 +255,12 @@ struct Terms {
 }
 
 /// HTML `required` on a checkbox means "must be ticked", which is exactly
-/// what `required: true` asks, so the browser can block the submit itself.
+/// what `required_true` asks, so the browser can block the submit itself.
 #[gtest]
 fn a_required_true_checkbox_carries_required() {
     #[component]
     fn App() -> Element {
-        let form = use_form(|| empty_form(form! { Terms { agreed => { required: true } } }));
+        let form = use_form(|| empty_form(form! { Terms { agreed => { required_true } } }));
         form.render_fragment()
     }
     expect_that!(render(App), contains_substring("required=true"));
@@ -285,7 +285,7 @@ fn a_plain_checkbox_does_not_carry_required() {
 fn a_required_true_checkbox_shows_the_marker() {
     #[component]
     fn Must() -> Element {
-        let form = use_form(|| empty_form(form! { Terms { agreed => { required: true } } }));
+        let form = use_form(|| empty_form(form! { Terms { agreed => { required_true } } }));
         form.render_fragment()
     }
     #[component]

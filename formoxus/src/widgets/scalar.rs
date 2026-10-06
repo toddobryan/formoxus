@@ -28,7 +28,7 @@ use crate::members::ValuesStore;
 #[component]
 pub fn ScalarWidget(
     field_type: FieldType,
-    constraint_attrs: Vec<Attribute>,
+    field_attrs: Vec<Attribute>,
     required_true: bool,
     widget: WidgetType,
     choices: Option<Vec<Choice>>,
@@ -37,7 +37,7 @@ pub fn ScalarWidget(
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
     let mut mapped_attrs: IndexMap<&'static str, Attribute> =
-        constraint_attrs.into_iter().map(|a| (a.name, a)).collect();
+        field_attrs.into_iter().map(|a| (a.name, a)).collect();
 
     for attr in attrs {
         mapped_attrs.insert(attr.name, attr);

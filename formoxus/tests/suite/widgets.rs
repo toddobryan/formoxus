@@ -175,7 +175,7 @@ fn PopulatedInput() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            constraint_attrs: Vec::new(),
+            field_attrs: Vec::new(),
             required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
@@ -202,7 +202,7 @@ fn EmptyInput() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            constraint_attrs: Vec::new(),
+            field_attrs: Vec::new(),
             required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
@@ -539,7 +539,7 @@ fn PasswordWithEcho() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            constraint_attrs: Vec::new(),
+            field_attrs: Vec::new(),
             required_true: false,
             widget: WidgetType::Input(InputType::Password),
             values,

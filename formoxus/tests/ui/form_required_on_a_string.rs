@@ -1,4 +1,4 @@
-//! `required: true` means "must be true", so it applies only to a bool. Every
+//! `required_true` means "must be true", so it applies only to a bool. Every
 //! other non-`Option` field is already required by its type.
 use facet::Facet;
 use formoxus::{empty_form, form};
@@ -11,7 +11,7 @@ struct Profile {
 fn main() {
     let _ = empty_form::<Profile>(form! {
         Profile {
-            name => { required: true },
+            name => { required_true },
         }
     });
 }

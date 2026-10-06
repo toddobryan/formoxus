@@ -412,6 +412,19 @@ Entering the spec facts literally hit two snags: `min`/`max` are not valid on
     module, stated as keywords independently of the table) checked on all 22
     input types and the 3 other controls, plus a test that every row HAS one.
 
+16. **The runtime key (Todd, 2026-10-06).** A quoted key has to survive into
+    the expansion, so the runtime needs its own `AttrId`: `pub enum AttrKey {
+    Std(Attr), NonStd(&'static str) }` in `formoxus-attrs`. It cannot BE the
+    macro's `AttrId`, whose `NonStd(String)` holds text parsed at expansion
+    time; the macro writes it out as a literal, which is `&'static str`. Values
+    of quoted keys (and of the table's `String` rows: `title`, `autocomplete`,
+    ARIA) are `AttrValue::String(String)`, which cost `AttrValue` its `Copy`
+    (`&'static str` would have kept it, but then `title: format!(…)` could not
+    be written). **ONE runtime map, `IndexMap<AttrKey, AttrValue>`**, replacing
+    both `AllAttrs` and the old `FieldAttrs(IndexMap<&'static str, String>)`,
+    chosen over two maps in one struct because it keeps the author's order
+    across both kinds and the macro emits one collection.
+
 ### Agreed to come AFTER the table holds today's attributes
 
 **Reshaping `FieldProps`** (Todd's earlier shrink idea, [[shrink-fieldprops-idea]]):

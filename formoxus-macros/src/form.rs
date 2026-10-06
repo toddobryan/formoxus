@@ -166,8 +166,8 @@ impl FormSpecInput {
                     });
                 let constraints = f
                     .body
-                    .constraints_tokens()
-                    .map(|c| quote! { .with_constraints(#key, #c) });
+                    .attrs_tokens()
+                    .map(|c| quote! { .with_attrs(#key, #c) });
                 quote! { #label #widget #choices #constraints }
             })
             .collect();
