@@ -252,6 +252,30 @@ style: {
   [select.rs:63](../formoxus/src/widgets/select.rs#L63),
   [variant_select.rs:61](../formoxus/src/widgets/variant_select.rs#L61).
   (`RadioGroup` is on hold, see above.)
+- [ ] **Folded in, 2026-10-08 (Todd): `required` and `aria_invalid` leave
+  `FieldProps`** (was "Then, in order" item 2), since both changes touch every
+  widget's signature. Decisions:
+  - [ ] `FormField::render` builds a NEW map: `Required` and `AriaInvalid`
+    FIRST, then `self.attrs` copied in. Both are known only at render time
+    (`ctx.required`, the errors), so the macro's map never holds them. First
+    keeps `required` where the suite pins it (`choices.rs:318`,
+    `enums.rs:208`).
+  - [ ] Widgets ask `attrs.contains(Attr::Required)` for the ` *` marker and
+    `Select`'s placeholder. `Checkbox` is unchanged in effect (the `Required`
+    row excludes it), and the `required_true` prop goes away in favour of
+    `contains(Attr::RequiredTrue)`.
+  - [ ] `VariantSelect` gets a typed map too, not its own `required` prop;
+    `VariantSet` ([variant_set.rs:185](../formoxus/src/members/variant_set.rs#L185))
+    builds it. Its legend marker keeps reading `ctx.required`.
+  - [ ] `RadioGroup` places `aria-invalid` on EACH radio, hard-coded, not by
+    `is_valid_on`: the `AriaInvalid` row lists `Fieldset`, so validity routing
+    would put it on the fieldset and break the `input[aria-invalid="true"] + *`
+    selector (pinned in `tests/suite/widgets.rs` ~362–379).
+  - [ ] `FieldProps::field_class()` keys off `!errors.is_empty()`, which also
+    removes the contradictory hand-built `FieldProps` case.
+  - [ ] Claude: the three hand-built `FieldProps` in `tests/suite/widgets.rs`
+    and `examples/src/bin/widget_matrix.rs`.
+  - Issue #7 (`aria-invalid="false"`) is unaffected; later.
 - [ ] Tests (Claude): the parser's unit tests, and a suite test pinning ONE
   `class` attribute per element (the 2026-10-07 probe, kept).
 
@@ -308,8 +332,8 @@ Closes issue #4. Decisions 6, 10, and the custom-widget section of the note.
 1. **Two enums for input types** (decision 6): `WidgetType::Input` takes a
    smaller enum of what `Input` renders; `Input` becomes the router for every
    `<input>` (decision 5), and `WidgetType::Checkbox` goes away.
-2. **Reshape `FieldProps`**: `required` and `aria_invalid` become attributes,
-   kept typed until emission; leave room for a blur-validation callback.
+2. **Reshape `FieldProps`**: `required` and `aria_invalid` MOVED INTO 3d
+   (2026-10-08). What is left here: leave room for a blur-validation callback.
 3. **`form!` is the only door** (decision 7): builders, `FormField`'s fields and
    `ScalarWidget` behind `#[doc(hidden)] __private`; about 210 suite call
    sites move to `form!` or `__private`. Last, because it touches the most.

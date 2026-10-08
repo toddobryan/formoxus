@@ -62,6 +62,50 @@ impl FieldAttrs {
     pub fn contains(&self, attr: Attr) -> bool {
         self.0.contains_key(&AttrKey::Std(attr))
     }
+
+    fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
+        let mut out = Vec::new();
+        for (attr_key, attr_value) in &self.0 {
+            let name = match attr_key {
+                AttrKey::Std(attr) => attr.name(),
+                AttrKey::NonStd(name) => name,
+            };
+            let attribute = match attr_value {
+                AttrValue::Int(n) => Attribute::new(name, *n, None, false),
+                AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
+                AttrValue::Flag => Attribute::new(name, true, None, false),
+                AttrValue::Bound(b) => match field_type {
+                    FieldType::Int => Attribute::new(name, int_bound(*b, name), None, false),
+                    _ => Attribute::new(name, float_bound(*b), None, false),
+                },
+                AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
+                AttrValue::List(vs) => {
+                    // TODO: check style vs class, for now just join with space
+                    Attribute::new(name, vs.join(" "), None, false)
+                }
+            };
+            out.push(attribute);
+        }
+        out
+    }
+
+    pub fn merge_with_attrs(
+        &self,
+        field_type: FieldType,
+        extras: Vec<Attribute>,
+    ) -> Vec<Attribute> {
+        let mut mapped_attrs: IndexMap<&'static str, Attribute> = self
+            .to_attributes(field_type)
+            .into_iter()
+            .map(|a| (a.name, a))
+            .collect();
+
+        for attr in extras {
+            mapped_attrs.insert(attr.name, attr);
+        }
+
+        mapped_attrs.into_values().collect()
+    }
 }
 
 impl<const N: usize> From<[(AttrKey, AttrValue); N]> for FieldAttrs {
@@ -104,6 +148,25 @@ fn range_message<N: std::fmt::Display>(
     Some(ValidationMessage(message))
 }
 
+/// A bound on an integer field, as the `i128` it is compared as.
+///
+/// A whole float bound is accepted, because `min: 2.0` means what it says
+/// and `form!` cannot reject it: it cannot tell `2.0` from `2` when the
+/// bound is a named const. A fractional one still panics. `form!` rejects
+/// that at compile time (`field_kind::bound_is_whole`), so only a hand-built
+/// spec can reach the panic.
+fn int_bound(bound: Bound, which: &str) -> i128 {
+    match bound {
+        Bound::Int(n) => n,
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "only reached once `fract() == 0.0` says nothing is truncated"
+        )]
+        Bound::Float(x) if x.is_finite() && x.fract() == 0.0 => x as i128,
+        Bound::Float(x) => panic!("Integer field does not support the fractional {which} {x}"),
+    }
+}
+
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
@@ -136,28 +199,6 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             ScalarType::F32 | ScalarType::F64 => FieldType::Float,
             other => panic!(
                 "scalar type {other:?} is not supported in FormField (field {})",
-                self.name
-            ),
-        }
-    }
-
-    /// A bound on an integer field, as the `i128` it is compared as.
-    ///
-    /// A whole float bound is accepted, because `min: 2.0` means what it says
-    /// and `form!` cannot reject it: it cannot tell `2.0` from `2` when the
-    /// bound is a named const. A fractional one still panics. `form!` rejects
-    /// that at compile time (`field_kind::bound_is_whole`), so only a hand-built
-    /// spec can reach the panic.
-    fn int_bound(&self, bound: Bound, which: &str) -> i128 {
-        match bound {
-            Bound::Int(n) => n,
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "only reached once `fract() == 0.0` says nothing is truncated"
-            )]
-            Bound::Float(x) if x.is_finite() && x.fract() == 0.0 => x as i128,
-            Bound::Float(x) => panic!(
-                "Integer field {} does not support the fractional {which} {x}",
                 self.name
             ),
         }
@@ -235,34 +276,6 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
         errors
     }
 
-    /// This field's attributes in the order provided by the user.
-    fn html_attributes(&self) -> Vec<Attribute> {
-        let field_type = self.field_type();
-        let mut out = Vec::new();
-        for (attr_key, attr_value) in &self.attrs.0 {
-            let name = match attr_key {
-                AttrKey::Std(attr) => attr.name(),
-                AttrKey::NonStd(name) => name,
-            };
-            let attribute = match attr_value {
-                AttrValue::Int(n) => Attribute::new(name, *n, None, false),
-                AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
-                AttrValue::Flag => Attribute::new(name, true, None, false),
-                AttrValue::Bound(b) => match field_type {
-                    FieldType::Int => Attribute::new(name, self.int_bound(*b, name), None, false),
-                    _ => Attribute::new(name, float_bound(*b), None, false),
-                },
-                AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
-                AttrValue::List(vs) => {
-                    // TODO: check style vs class, for now just join with space
-                    Attribute::new(name, vs.join(" "), None, false)
-                }
-            };
-            out.push(attribute);
-        }
-        out
-    }
-
     /// The `min`/`max` check, for whichever of the two the field has.
     ///
     /// An integer field compares as `i128` (every supported integer fits), a
@@ -279,8 +292,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
                 let n: i128 = raw_value
                     .parse()
                     .expect("this int should have already successfully parsed");
-                let min = min.map(|b| self.int_bound(b, "min"));
-                let max = max.map(|b| self.int_bound(b, "max"));
+                let min = min.map(|b| int_bound(b, "min"));
+                let max = max.map(|b| int_bound(b, "max"));
                 range_message(
                     min,
                     max,
@@ -430,7 +443,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         rsx! {
             ScalarWidget {
                 field_type: self.field_type(),
-                field_attrs: self.html_attributes(),
+                field_attrs: self.attrs.clone(),
                 required_true: self.attrs.contains(Attr::RequiredTrue),
                 widget: self.widget(),
                 choices: self.choices.clone(),
@@ -712,7 +725,12 @@ mod tests {
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        field.html_attributes().iter().map(|a| a.name).collect()
+        field
+            .attrs
+            .to_attributes(field.field_type())
+            .iter()
+            .map(|a| a.name)
+            .collect()
     }
 
     /// The value of the one emitted attribute called `name`.
@@ -720,7 +738,7 @@ mod tests {
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        let attrs = field.html_attributes();
+        let attrs = field.attrs.to_attributes(field.field_type());
         let found: Vec<&Attribute> = attrs.iter().filter(|a| a.name == name).collect();
         assert!(
             found.len() == 1,
@@ -1303,7 +1321,7 @@ mod tests {
     // is a widget question, tested from outside in `tests/suite/`.
 
     fn author(pairs: &[(&'static str, &str)]) -> Vec<Attribute> {
-        holding::<String>(FieldAttrs(
+        FieldAttrs(
             pairs
                 .iter()
                 .map(|(name, value)| {
@@ -1313,8 +1331,8 @@ mod tests {
                     )
                 })
                 .collect(),
-        ))
-        .html_attributes()
+        )
+        .to_attributes(FieldType::Text)
     }
 
     #[gtest]

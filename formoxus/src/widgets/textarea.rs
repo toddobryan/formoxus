@@ -1,10 +1,12 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
 use super::errors::FieldErrors;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 
 /// A multi-line text input bound to one path in the value map.
@@ -16,10 +18,14 @@ use crate::members::ValuesStore;
 /// `Hidden`'s bare markup) that make `Input` carry one.
 #[component]
 pub fn Textarea(
+    field_type: FieldType,
+    field_attrs: FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
     #[props(extends = textarea)] attrs: Vec<Attribute>,
 ) -> Element {
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+
     let field_class = props.field_class();
 
     let FieldProps {

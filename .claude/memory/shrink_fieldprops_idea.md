@@ -92,3 +92,13 @@ policy decision. Also noted there: `aria_invalid` is redundant with `errors`
 today, so a hand-built `FieldProps` can hold contradictory values and nothing
 stops it (Todd flagged this as annoying, deferred) — #7 dissolves it, since
 `Some("false")` stops being derivable from an empty `errors`.
+
+**UPDATE 2026-10-08 (Todd): `required` and `aria_invalid` DO move into the
+typed map**, folded into `ATTRIBUTES_PLAN.md` 3d. What changed since the
+objections above: ownership in the attribute table stops a `form!` author
+overriding either, and widgets now get the TYPED map, so `Select` asks
+`contains(Attr::Required)` instead of reading a bool. `FormField::render`
+puts both FIRST in a fresh map, then copies the field's attrs. The
+`RadioGroup` objection still holds and is answered by hard-placing
+`aria-invalid` on each radio, NOT by `is_valid_on` routing (the `AriaInvalid`
+row lists `Fieldset`). `VariantSelect` gets a typed map too (Todd: "map").

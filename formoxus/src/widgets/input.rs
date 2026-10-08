@@ -2,19 +2,25 @@
 //! plain text.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
 use super::errors::FieldErrors;
 use super::types::{FieldProps, InputType};
 use super::values::{get_current, write_value};
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 
 #[component]
 pub fn Input(
     input_type: InputType,
+    field_type: FieldType,
+    field_attrs: FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+
     let field_class = props.field_class();
 
     let FieldProps {

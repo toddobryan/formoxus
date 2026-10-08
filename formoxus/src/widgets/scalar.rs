@@ -3,7 +3,6 @@
 use dioxus::prelude::*;
 
 use formoxus_attrs::FieldType;
-use indexmap::IndexMap;
 
 use super::checkbox::Checkbox;
 use super::input::Input;
@@ -11,6 +10,7 @@ use super::radio_group::RadioGroup;
 use super::select::Select;
 use super::textarea::Textarea;
 use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
@@ -28,7 +28,7 @@ use crate::members::ValuesStore;
 #[component]
 pub fn ScalarWidget(
     field_type: FieldType,
-    field_attrs: Vec<Attribute>,
+    field_attrs: FieldAttrs,
     required_true: bool,
     widget: WidgetType,
     choices: Option<Vec<Choice>>,
@@ -36,15 +36,6 @@ pub fn ScalarWidget(
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
-    let mut mapped_attrs: IndexMap<&'static str, Attribute> =
-        field_attrs.into_iter().map(|a| (a.name, a)).collect();
-
-    for attr in attrs {
-        mapped_attrs.insert(attr.name, attr);
-    }
-
-    let attrs = mapped_attrs.into_values().collect();
-
     match (&field_type, &widget) {
         // One arm for every `<input type=…>`, over any value kind that is a
         // single scalar. The value crosses as a string either way — the field's
@@ -55,13 +46,13 @@ pub fn ScalarWidget(
         // `type="number"` would eat a half-typed value — but `number` is a
         // perfectly good override, and so is `text` on a numeric.
         (FieldType::Text | FieldType::Int | FieldType::Float, WidgetType::Input(input_type)) => {
-            rsx! { Input { input_type: *input_type, values, props, attrs } }
+            rsx! { Input { input_type: *input_type, field_type, field_attrs, values, props, attrs } }
         }
         (FieldType::Text, WidgetType::Textarea) => {
-            rsx! { Textarea { values, props, attrs } }
+            rsx! { Textarea { field_type, field_attrs, values, props, attrs } }
         }
         (FieldType::Bool, WidgetType::Checkbox) => {
-            rsx! { Checkbox { values, props, required_true, attrs } }
+            rsx! { Checkbox { field_type, field_attrs, values, props, required_true, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. The list is the only
@@ -75,7 +66,7 @@ pub fn ScalarWidget(
                     props.path
                 )
             };
-            rsx! { Select { values, choices, props, attrs } }
+            rsx! { Select { field_type, field_attrs, values, choices, props, attrs } }
         }
         // Any single scalar can be chosen from a list of radio buttons, because a
         // choice's value is just the raw string this field already parses. The list
@@ -90,29 +81,33 @@ pub fn ScalarWidget(
                 )
             };
             reject_if_not_required(&props);
-            rsx! { RadioGroup { values, choices, props, attrs } }
+            rsx! { RadioGroup { field_type, field_attrs, values, choices, props, attrs } }
         }
 
         // A bool's choices are derivable, so it is the one kind that renders
         // without a list — but an explicit one still wins, for a form that would
         // rather say "Yes"/"No".
         (FieldType::Bool, WidgetType::Select) => {
-            rsx! { Select { values, choices: choices.unwrap_or_else(bool_choices), props, attrs } }
+            rsx! { Select { field_type, field_attrs, values, choices: choices.unwrap_or_else(bool_choices), props, attrs } }
         }
         (FieldType::Bool, WidgetType::RadioGroup) => {
             reject_if_not_required(&props);
-            rsx! { RadioGroup { values, choices: choices.unwrap_or_else(bool_choices), props, attrs }}
+            rsx! { RadioGroup { field_type, field_attrs, values, choices: choices.unwrap_or_else(bool_choices), props, attrs }}
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
         // because the built-in widgets can't serve its type, so gating it on
         // the kinds we happen to enumerate would defeat it — `Markdown` and
         // `Ref<Source>` are `Text` to the parser and nothing to a `<select>`.
         // The author named this input for this field; that IS the evidence.
-        (_, WidgetType::Custom { render, .. }) => render(WidgetProps {
-            values,
-            props,
-            attrs,
-        }),
+        (_, WidgetType::Custom { render, .. }) => {
+            let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+
+            render(WidgetProps {
+                values,
+                props,
+                attrs,
+            })
+        }
         _ => panic!(
             "{widget:?} cannot render a {field_type:?} (field {})",
             props.path

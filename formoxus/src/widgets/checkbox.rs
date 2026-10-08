@@ -1,14 +1,18 @@
 //! The checkbox.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
 use super::errors::FieldErrors;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 
 #[component]
 pub fn Checkbox(
+    field_type: FieldType,
+    field_attrs: FieldAttrs,
     mut values: ValuesStore,
     props: FieldProps,
     /// `required_true` in `form!`: the box must be ticked. Shows the ` *`
@@ -18,6 +22,8 @@ pub fn Checkbox(
     required_true: bool,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+
     let field_class = props.field_class();
 
     let FieldProps {

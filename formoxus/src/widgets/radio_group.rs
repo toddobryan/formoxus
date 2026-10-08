@@ -1,7 +1,9 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 
@@ -22,6 +24,8 @@ use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 /// value comes back as `current` and checks its own radio.
 #[component]
 pub fn RadioGroup(
+    field_type: FieldType,
+    field_attrs: FieldAttrs,
     values: ValuesStore,
     choices: Vec<Choice>,
     props: FieldProps,
@@ -29,6 +33,8 @@ pub fn RadioGroup(
 ) -> Element {
     // TODO: figure out where to put the attributes. Currently in the fieldset,
     //       but we might want people to be able to set attrs on each input
+
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class_plus("fx-radio-group");
 

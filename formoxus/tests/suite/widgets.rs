@@ -10,6 +10,7 @@ use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
 use facet::Facet;
+use formoxus::fields::FieldAttrs;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::any::Any;
@@ -175,7 +176,7 @@ fn PopulatedInput() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            field_attrs: Vec::new(),
+            field_attrs: FieldAttrs::default(),
             required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
@@ -202,7 +203,7 @@ fn EmptyInput() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            field_attrs: Vec::new(),
+            field_attrs: FieldAttrs::default(),
             required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
@@ -539,7 +540,7 @@ fn PasswordWithEcho() -> Element {
             // upstream computes it, which is the point: they pin the widget
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
-            field_attrs: Vec::new(),
+            field_attrs: FieldAttrs::default(),
             required_true: false,
             widget: WidgetType::Input(InputType::Password),
             values,

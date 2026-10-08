@@ -1,10 +1,12 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
 use super::errors::FieldErrors;
 use super::types::{Choice, FieldProps};
 use super::values::{get_current, write_value};
+use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
@@ -25,11 +27,15 @@ use crate::members::ValuesStore;
 /// nothing and loses the value.
 #[component]
 pub fn Select(
+    field_type: FieldType,
+    field_attrs: FieldAttrs,
     values: ValuesStore,
     choices: Vec<Choice>,
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+
     let field_class = props.field_class();
 
     let FieldProps {

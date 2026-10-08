@@ -37,7 +37,7 @@
 - [Chooser ideas](chooser_ideas.md) — QUEUED: select-vs-radio by choice count, per-choice hint text
 - [Enum as a value choice](enum_as_a_value_choice.md) — GAP: a unit enum can't take a widget (no radio group over an enum)
 - [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; no `step`
-- [Shrink FieldProps idea](shrink_fieldprops_idea.md) — TODO: props = what a widget reasons about, attrs = what it just emits; why `aria_invalid` is a prop
+- [Shrink FieldProps idea](shrink_fieldprops_idea.md) — 2026-10-08: `required`/`aria_invalid` DO move into the typed map (3d); `path`/`choices`/`errors` stay props; RadioGroup hard-places aria-invalid
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`
 - [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade
