@@ -5,11 +5,9 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-07.** Steps 1–2 are done and pushed (`69a9225`): the table
-> lives in `formoxus-attrs`, and the constraints formoxus already had are driven
-> from it, with no behaviour change. 3a, 3b, 3c and 3e are done (`248a86f`); the
-> workspace builds and every test passes. **Next is 3d** (its design was settled
-> 2026-10-07, see below; Todd is writing it), then the rest of 3f.
+> **Status, 2026-10-08.** 3d's `form!` side is done (`90ddaf4`). The widget
+> side is a numbered checklist under 3d, "Widgets build their own attributes":
+> Part A (steps 1–3) is done (`1d1722b`); **next is step 4**, `FieldAttrs::class`.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -234,48 +232,77 @@ style: {
     from tokens gets the spacing wrong (`# fff`).
 - [x] `entry_tokens`: the `todo!` becomes `AttrValue::List` (Todd).
 - [x] Drop `AttrType::List` (Todd).
-- [ ] **Style still renders wrong until the next item:** `html_attributes`
-  joins every `List` with `" "`, so a style comes out `color: red font-size:
-  20px`. It needs `"; "` for `Style`/`StylePlus`.
-- [ ] Widgets build their own attributes (Todd): `ScalarWidget` takes the typed
-  `FieldAttrs` instead of `field_attrs: Vec<Attribute>`, and `render`
-  ([fields.rs:433](../formoxus/src/fields.rs#L433)) passes `self.attrs` down.
-  `html_attributes` ([:239](../formoxus/src/fields.rs#L239)) becomes something each
-  widget calls with its base class, e.g. `to_attributes(field_type, "fx-control
-  fx-input")`, which emits ONE resolved `class` (`Class` replaces the base,
-  `ClassPlus` appends) and the same for `style`. The merge of the caller's extras
-  ([scalar.rs:39](../formoxus/src/widgets/scalar.rs#L39)–[:46](../formoxus/src/widgets/scalar.rs#L46))
-  moves to the same point. Each widget drops its literal `class:`:
-  [input.rs:85](../formoxus/src/widgets/input.rs#L85),
-  [textarea.rs:53](../formoxus/src/widgets/textarea.rs#L53),
-  [checkbox.rs:48](../formoxus/src/widgets/checkbox.rs#L48),
-  [select.rs:63](../formoxus/src/widgets/select.rs#L63),
-  [variant_select.rs:61](../formoxus/src/widgets/variant_select.rs#L61).
-  (`RadioGroup` is on hold, see above.)
-- [ ] **Folded in, 2026-10-08 (Todd): `required` and `aria_invalid` leave
-  `FieldProps`** (was "Then, in order" item 2), since both changes touch every
-  widget's signature. Decisions:
-  - [ ] `FormField::render` builds a NEW map: `Required` and `AriaInvalid`
-    FIRST, then `self.attrs` copied in. Both are known only at render time
-    (`ctx.required`, the errors), so the macro's map never holds them. First
-    keeps `required` where the suite pins it (`choices.rs:318`,
-    `enums.rs:208`).
-  - [ ] Widgets ask `attrs.contains(Attr::Required)` for the ` *` marker and
-    `Select`'s placeholder. `Checkbox` is unchanged in effect (the `Required`
-    row excludes it), and the `required_true` prop goes away in favour of
-    `contains(Attr::RequiredTrue)`.
-  - [ ] `VariantSelect` gets a typed map too, not its own `required` prop;
+- [ ] **Widgets build their own attributes, and `required`/`aria_invalid` leave
+  `FieldProps`** (Todd; folded together 2026-10-08, since both touch every
+  widget's signature). Run `cargo test --workspace` after each step.
+
+  **Part A: the typed map reaches the widgets. DONE `1d1722b`, no HTML change.**
+  - [x] 1. `html_attributes` → `FieldAttrs::to_attributes(field_type)`;
+    `int_bound` a free fn (its panic no longer names the field).
+  - [x] 2. `ScalarWidget` takes `field_attrs: FieldAttrs`.
+  - [x] 3. Every widget takes `field_type` + `field_attrs` and calls
+    `FieldAttrs::merge_with_attrs(field_type, attrs)`; the `Custom` arm too
+    (pinned by `a_custom_widget_receives_the_fields_attributes` in
+    `tests/suite/author_attrs.rs`).
+
+  **Part B: class and style.**
+  - [ ] 4. **One resolved `class`, written as a LITERAL.**
+    1. `FieldAttrs::class(&self, base: &str) -> String`: `Class` replaces
+       `base`, `ClassPlus` appends with a space, neither gives `base`.
+    2. Each widget writes `class: field_attrs.class("fx-control fx-input")`
+       where it has the fixed string now: `input.rs`, `textarea.rs`,
+       `checkbox.rs`, `select.rs`, `variant_select.rs`. (`RadioGroup` on hold.)
+    3. `to_attributes` skips `Class`/`ClassPlus`; `merge_with_attrs` calls it,
+       so that is the one place.
+
+    A literal rather than the spread because the spread always comes after the
+    literals, so a spread `class` would move in every tag and break the suite's
+    exact-markup tests. Expect a test or two to change where an author's
+    `class` used to be a duplicate attribute: that duplication is the bug.
+  - [ ] 5. **Style.** `to_attributes` joins `Style`/`StylePlus` with `"; "`.
+    Formoxus emits no style of its own, so `StylePlus` acts like `Style` for now.
+
+  **Part C: `required` and `aria_invalid` into the map.**
+  - [ ] 6. **Build the map at render time.** Something like
+    `FieldAttrs::with_owned(required: bool, invalid: bool, rest: &FieldAttrs)`,
+    inserting `Required` (`Flag`) and `AriaInvalid` (`String("true")`) FIRST,
+    then copying `rest`. Call it in `FormField::render` instead of
+    `self.attrs.clone()`. Both are known only at render time (`ctx.required`,
+    the errors), so the macro's map never holds them. First keeps `required`
+    where the suite pins it (`choices.rs:318`, `enums.rs:208`).
+    **Leave `Required` out when the widget is `Checkbox`**: HTML `required` on
+    a checkbox means "must be ticked".
+  - [ ] 7. **Widgets read the map, not the props.**
+    1. Delete the literal `required,` and `aria_invalid,` in each widget; the
+       spread emits them now.
+    2. `field_attrs.contains(Attr::Required)` for the ` *` marker and
+       `Select`'s placeholder choice.
+    3. `Checkbox`: `required_true` → `field_attrs.contains(Attr::RequiredTrue)`;
+       drop the prop from `Checkbox`, `ScalarWidget` and `render`.
+    4. `reject_if_not_required` (`scalar.rs`) checks the map.
+  - [ ] 8. **`RadioGroup` is the exception.** Its spread lands on the
+    `<fieldset>`, where neither belongs. Remove `Required` and `AriaInvalid`
+    from a copy before merging (`shift_remove` keeps the order) and keep both
+    as literals on EACH radio, read from the map. Not by `is_valid_on`: the
+    `AriaInvalid` row lists `Fieldset`, so validity routing would put it on the
+    fieldset and break the `input[aria-invalid="true"] + *` selector (pinned in
+    `tests/suite/widgets.rs` ~362–379).
+  - [ ] 9. **`VariantSelect`** gets `field_attrs: FieldAttrs`, built in
     `VariantSet` ([variant_set.rs:185](../formoxus/src/members/variant_set.rs#L185))
-    builds it. Its legend marker keeps reading `ctx.required`.
-  - [ ] `RadioGroup` places `aria-invalid` on EACH radio, hard-coded, not by
-    `is_valid_on`: the `AriaInvalid` row lists `Fieldset`, so validity routing
-    would put it on the fieldset and break the `input[aria-invalid="true"] + *`
-    selector (pinned in `tests/suite/widgets.rs` ~362–379).
-  - [ ] `FieldProps::field_class()` keys off `!errors.is_empty()`, which also
-    removes the contradictory hand-built `FieldProps` case.
-  - [ ] Claude: the three hand-built `FieldProps` in `tests/suite/widgets.rs`
-    and `examples/src/bin/widget_matrix.rs`.
-  - Issue #7 (`aria-invalid="false"`) is unaffected; later.
+    as in step 6; apply step 7 to it. It passes `FieldType::Text` to
+    `to_attributes` (no bounds). Its legend marker keeps reading `ctx.required`.
+  - [ ] 10. **Delete the fields.** `required` and `aria_invalid` leave
+    `FieldProps`; `field_class()` keys off `!self.errors.is_empty()`, which also
+    removes the contradictory hand-built `FieldProps` case. What is left to fix
+    is struct literals and `let FieldProps { … }` patterns. Claude: the literals
+    in `tests/suite/widgets.rs` and `examples/src/bin/widget_matrix.rs`.
+
+  Deferred: custom widgets after step 10 see `required` only by name in the
+  merged `Vec<Attribute>`; `field_attrs` in `WidgetProps` waits (Todd,
+  2026-10-08). `form!`'s `custom(…)` closure drops `attrs` entirely
+  ([widget.rs:159](../formoxus-macros/src/form/widget.rs#L159)); that is
+  "custom widgets receive attributes" in **Step 4** below (not step 4 here). Issue #7
+  (`aria-invalid="false"`) is unaffected; later.
 - [ ] Tests (Claude): the parser's unit tests, and a suite test pinning ONE
   `class` attribute per element (the 2026-10-07 probe, kept).
 

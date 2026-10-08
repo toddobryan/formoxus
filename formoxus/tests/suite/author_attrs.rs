@@ -154,6 +154,49 @@ fn a_hidden_input_gets_no_author_attributes() {
     expect_that!(html, not(contains_substring("data-x")));
 }
 
+/// A custom widget that spreads whatever it is handed onto one `<input>`.
+///
+/// Hand-built rather than `custom(…)` in `form!`, because the macro's closure
+/// passes only `values` and `props` today: attributes reaching a `form!`
+/// custom widget is step 4 of `ATTRIBUTES_PLAN.md`. This pins the runtime
+/// half, `ScalarWidget`'s `Custom` arm, on its own.
+fn spreading_widget() -> WidgetType {
+    WidgetType::Custom {
+        name: "Spreading",
+        render: |p| {
+            let attrs = p.attrs;
+            rsx! { input { class: "spreading", ..attrs } }
+        },
+    }
+}
+
+/// **A custom widget gets the field's attributes, formoxus's own included.**
+/// Not only the author's: a constraint like `maxlength` is what the browser
+/// enforces, so a custom widget that never saw it would accept what `check`
+/// later rejects. The `Custom` arm once passed only the caller's extras, and
+/// nothing failed.
+#[gtest]
+fn a_custom_widget_receives_the_fields_attributes() {
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", spreading_widget())
+            .with_attrs(
+                "name",
+                FieldAttrs::from([
+                    (AttrKey::Std(Attr::MaxLength), AttrValue::Int(10)),
+                    (
+                        AttrKey::NonStd("data-x"),
+                        AttrValue::String("1".to_string())
+                    ),
+                ])
+            )
+    );
+    let input = tag(&html, "input");
+    expect_that!(input, contains_substring(r#"class="spreading""#));
+    expect_that!(input, contains_substring("maxlength=10"));
+    expect_that!(input, contains_substring(r#"data-x="1""#));
+}
+
 // ── Against formoxus's own attributes ────────────────────────────────────
 
 /// **A quoted attribute overrides a table attribute of the same HTML name,

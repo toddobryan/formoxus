@@ -149,6 +149,25 @@ widgets this is derived from the element facts.
   `formoxus-macros/src/form/widget.rs`, and "a custom widget supplies its own
   choices"). So `WidgetProps` has to carry the attributes. Todd: "we need to
   fix that."
+- **The trait also makes a widget declare its default classes** (Todd,
+  2026-10-08). Required, with no default, so every widget author has to state
+  them, the same as `ATTRS`. **How is left OPEN:** Todd leans toward a required
+  FUNCTION rather than a `const CLASS: &'static str`; a function also leaves
+  room for (d) below. What it buys:
+  - (a) `class_plus` gets a base to append to. Formoxus resolves `Class`
+    (replace) and `ClassPlus` (append) BEFORE calling the widget, which
+    receives one finished `class` in its attributes: the same rule as
+    `FieldAttrs::class(base)` for the built-ins (ATTRIBUTES_PLAN.md 3d, step 4).
+  - (b) Built-ins can implement the same trait, so the literal base strings
+    step 4 writes into each widget move to one place per widget.
+  - Open (c): it names the class of the element the attributes land on, not
+    the wrapper (`fx-form-field`). `RadioGroup` (a group AND several inputs)
+    may need a second, optional declaration; settle together with the
+    `RadioGroup` class-placement hold (`group_class`/`input_class`).
+  - Open (d): issue #10 (configurable class names). Whatever the widget
+    declares is then a DEFAULT, overridden from `Formoxus` config at the
+    `Form` boundary ([[config-cascade]]); document it as a default, not the
+    final class.
 
 ## Build order (agreed 2026-10-03)
 

@@ -5,6 +5,20 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-08, END OF SCHOOL DAY — BUILD GREEN, NEXT IS STEP 4.**
+The widget-side work is now a numbered checklist under 3d in
+`formoxus/ATTRIBUTES_PLAN.md` ("Widgets build their own attributes"); Todd
+asked for it in a FILE because he hates scrolling up for a plan. Part A
+(steps 1–3) is done (`1d1722b`): widgets take the typed `FieldAttrs` and call
+`FieldAttrs::merge_with_attrs`. `required`/`aria_invalid` leaving `FieldProps`
+was folded in (steps 6–10). **Next is step 4, `FieldAttrs::class(base)`
+(Todd).** Also today: a suite test that a custom widget receives formoxus's
+attributes (mutation-checked); `form!`'s `custom(…)` still drops `attrs`
+(main plan Step 4); the Widget trait must make widgets declare default
+classes, fn vs const open (design note). Morning: Todd made a mess, it was
+STASHED (`stash@{0}` on the school machine only), not discarded. Green: lib
+86, suite 328, macros 136, attrs 17; fmt, clippy, rustdoc clean.
+
 **UPDATE 2026-10-07, END OF SESSION (home) — BUILD GREEN, 3d PARSING DONE.**
 The `form!` side of 3d is finished and pushed: class lists (Todd) and style
 blocks (Claude, delegated) parse bare-or-quoted names with `_` → `-`, bare
