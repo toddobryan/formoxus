@@ -1,0 +1,5 @@
+error: unknown key `maxlength`: write `max_length`
+  --> tests/ui/form_unknown_key_html_spelling.rs:13:24
+   |
+13 |             email => { maxlength: 10 },
+   |                        ^^^^^^^^^

@@ -1,0 +1,5 @@
+error: `name` is set by formoxus and cannot be given in `form!`
+  --> tests/ui/form_owned_attribute.rs:14:24
+   |
+14 |             email => { name: "hijack" },
+   |                        ^^^^

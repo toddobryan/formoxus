@@ -5,11 +5,11 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-06.** Steps 1–2 are done and pushed (`69a9225`): the table
+> **Status, 2026-10-07.** Steps 1–2 are done and pushed (`69a9225`): the table
 > lives in `formoxus-attrs`, and the constraints formoxus already had are driven
-> from it, with no behaviour change. 3a is done except the list `AttrValue`s;
-> 3b, 3c and 3e are done (uncommitted); the workspace builds and every test
-> passes. **Next is 3d**, then the rest of 3f.
+> from it, with no behaviour change. 3a, 3b, 3c and 3e are done (`248a86f`); the
+> workspace builds and every test passes. **Next is 3d** (its design was settled
+> 2026-10-07, see below; Todd is writing it), then the rest of 3f.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -45,15 +45,9 @@ pass through, and the grammar change below has landed.
   - The common author attributes, at least `autocomplete`, `readonly`, `rows`,
     `cols`, `inputmode`, `title`, `autofocus`. The full list, with where each is
     valid, is in `.claude/memory/html_attributes_reference.md`.
-- [ ] **REMINDER (Todd, 2026-10-04): add `TokenList` and `Declarations`
-  variants to `AttrValue`** ([:22](../formoxus-attrs/src/attrs.rs#L22)),
-  *deferred until 3d shows how they get used*. `AttrType`
-  ([:11](../formoxus-attrs/src/attrs.rs#L11)) already has both, and the
-  `Class`/`ClassPlus`/`Style`/`StylePlus` rows use them, but nothing builds an
-  `AttrValue` of either yet. What they wrap depends on how the widget resolves
-  its one `class` value. Candidates: a list of class names for `TokenList`;
-  either a list of `(property, value)` pairs or one string for `Declarations`.
-  Claude raises this when 3d starts.
+- [x] ~~**REMINDER (Todd, 2026-10-04): add `TokenList` and `Declarations`
+  variants to `AttrValue`**~~ CLOSED 2026-10-07: both are built as the one
+  `AttrValue::List`, and `AttrType` keeps the two kinds apart; see 3d.
 
 ### 3b. The macro parses attributes generically (`formoxus-macros/src/form/field.rs`)
 
@@ -134,23 +128,132 @@ pass through, and the grammar change below has landed.
   ([scalar.rs:39](../formoxus/src/widgets/scalar.rs#L39)–[:46](../formoxus/src/widgets/scalar.rs#L46))
   keeps "constraint attributes first, caller's last".
 
-### 3d. `class` and `class_plus`
+### 3d. `class` and `class_plus`, `style` and `style_plus`
 
-> **First:** decide what `AttrValue::TokenList` and `AttrValue::Declarations`
-> wrap (the reminder in 3a), now that this step shows how they are used.
+> **Decided 2026-10-07** (Todd; reasoning in the design note, open question 2):
+>
+> - **Attributes become `Vec<Attribute>` inside the widget**, not in
+>   `FormField::render`. Only the widget knows its own classes, and a spread
+>   `class` is *duplicated*, not merged. Probed 2026-10-07: `class_plus:
+>   ["wide", "dark"]` rendered `<input class="fx-control fx-input" … class="wide dark"/>`.
+> - **No separate `TokenList`/`Declarations` values.** Both are
+>   `AttrValue::List(&'static [&'static str])`; the macro writes each style
+>   declaration out whole (`"font-size: 20px"`), and the widget joins with `" "`
+>   or `"; "` by the `Attr`. `AttrType::List`
+>   ([attrs.rs:19](../formoxus-attrs/src/attrs.rs#L19)) is unused and goes.
+>   This closes the 3a reminder.
+> - **`RadioGroup` is on hold** until Todd has looked at examples. Maybe
+>   faux attributes `group_class`/`input_class`.
 
-- [ ] Resolve them into **the widget's one `class` value**, never a spread
-  attribute (a spread `class` is duplicated, not merged). The places each widget
-  sets its own class today:
+#### The grammar
+
+```rust
+class_plus: [dark, centered, my_class, "real_underscore"],
+style: {
+    color: red,
+    font_size: 20px,
+    justify_content: space_between,
+    position: static,
+    margin: -1px 0,
+    font_family: "'Inter', sans-serif",
+},
+```
+
+- **One rule everywhere:** a bare identifier turns `_` into `-`, in class names,
+  style properties and style values alike (`my_class` → `my-class`,
+  `space_between` → `space-between`). Quote to keep a real underscore. BEM's
+  `card__title` has to be quoted.
+- Keywords are allowed bare (`position: static`), and raw identifiers are unraw'd
+  (`r#type` → `type`).
+- **A style value** is a quoted string, used verbatim, or a run of bare items up to
+  the next `,`, joined with single spaces. An item is an identifier or a number
+  (Todd leaning yes on numbers, 2026-10-07):
+  - `20px` is ONE token, a `LitInt` with suffix `px`; `1.5rem` is a `LitFloat`
+    with suffix `rem`. `lit.to_string()` gives back `"20px"`.
+  - `50%` is TWO tokens, `LitInt(50)` then `Punct('%')`. Glue a `%` onto the
+    number before it. (`50 %` lexes identically, so it comes out `50%` too,
+    which is harmless.)
+  - `-1px` is `Punct('-')` then `LitInt`. Glue a `-` onto the number after it.
+  - **`2em`, `1.5em` and `2ex` never reach the macro**: Rust's lexer reads the `e`
+    as an exponent and fails with "expected at least one digit in exponent". They
+    must be quoted. Put this in the grammar docs, because the error is Rust's.
+  - Anything else gets an error pointing at that token: "quote the whole value:
+    `font_size: \"2em\"`". That covers `#fff`, `rgb(…)`, `var(--x)`, `calc(…)`,
+    `!important`, and anything with a comma in it.
+- **Quotes inside a quoted value pass through untouched.** CSS accepts `'Inter'`
+  as readily as `"Inter"`, and Dioxus SSR escapes both kinds inside an attribute
+  value (`askama_escape::Html`), so nothing needs converting.
+
+#### Hints for the parser (Todd is writing it)
+
+1. **Where:** `parse_value`
+   ([field.rs:427](../formoxus-macros/src/form/field.rs#L427)) picks the grammar
+   by `attr_type()`. Split the shared list arm in two: `TokenList` uses
+   `bracketed!`, `Declarations` uses `braced!`.
+2. **Keep `entry_tokens` small:** normalize at parse time and store the results as
+   `LitStr`s built with `LitStr::new(&text, span)`. `AttrSource::List(Vec<LitStr>)`
+   ([:148](../formoxus-macros/src/form/field.rs#L148)) then stays as it is, and the
+   `todo!` ([:133](../formoxus-macros/src/form/field.rs#L133)) becomes
+   `quote! { #attrs::AttrValue::List(&[#(#items),*]) }`. For style, each `LitStr`
+   is the finished `"font-size: 20px"`. Use the span of the item (or property) it
+   came from, so a later error lands on the right token.
+3. **The syn pieces:**
+   - `use syn::ext::IdentExt;` gives `Ident::parse_any` (accepts keywords) and
+     `input.peek(Ident::peek_any)`.
+   - `ident.unraw().to_string().replace('_', "-")`.
+   - `input.peek(LitStr)`, `input.peek(LitInt)`, `input.peek(LitFloat)`,
+     `input.peek(Token![%])`, `input.peek(Token![-])` to tell items apart.
+   - A run: `while !input.is_empty() && !input.peek(Token![,]) { … }`.
+   - Each class name or declaration is one item of a
+     `Punctuated::<_, Token![,]>::parse_terminated`, over a small type with its own
+     `Parse` impl, so trailing commas come free.
+4. **The test that will break:** `every_legal_key_parses`
+   ([:659](../formoxus-macros/src/form/field.rs#L659)) writes `#ident: ["x"]` for
+   every list type. `Declarations` needs `{ x: y }`.
+
+#### The checklist
+
+- [x] Parser: the grammar above. DONE 2026-10-07: class list (Todd), style
+  block (Claude, delegated, with these calls made on Todd's behalf):
+  - [x] `class_plus: []` and `style_plus: {}` are errors, "should be omitted"
+    (Todd). `class: []` stays legal: it strips formoxus's classes.
+  - [x] A hyphenated bare name (`text-center`, `font-size`, `space-between`)
+    gets "write `text_center`, or quote it"; a class list adds a comma
+    reminder, since `[text -mt-4]` lexes identically. A leading `-`
+    (`-mt-4`, `--gap`, `-webkit-…`) gets "must be quoted".
+  - [x] In a value, `-` before a NUMBER starts a negative one: `auto -1px` is
+    two items. Only `-` before a name is a hyphen error.
+  - [x] `!important` is accepted, last in a value only.
+  - [x] A property given twice is an error, compared after normalizing, so
+    `font_size` and `"font-size"` collide.
+  - [x] A missing `:` after a later property says "if it belongs to the value
+    before it, quote that whole value" (the `font_family: Inter, serif` trap).
+  - [x] `;` between declarations gets "separate declarations with `,`".
+  - [x] Anything else in a value (`#fff`, `rgb(…)`, `/`) gets "quote the whole
+    value: `color: \"…\"`". The `…` is literal: rebuilding the author's text
+    from tokens gets the spacing wrong (`# fff`).
+- [x] `entry_tokens`: the `todo!` becomes `AttrValue::List` (Todd).
+- [x] Drop `AttrType::List` (Todd).
+- [ ] **Style still renders wrong until the next item:** `html_attributes`
+  joins every `List` with `" "`, so a style comes out `color: red font-size:
+  20px`. It needs `"; "` for `Style`/`StylePlus`.
+- [ ] Widgets build their own attributes (Todd): `ScalarWidget` takes the typed
+  `FieldAttrs` instead of `field_attrs: Vec<Attribute>`, and `render`
+  ([fields.rs:433](../formoxus/src/fields.rs#L433)) passes `self.attrs` down.
+  `html_attributes` ([:239](../formoxus/src/fields.rs#L239)) becomes something each
+  widget calls with its base class, e.g. `to_attributes(field_type, "fx-control
+  fx-input")`, which emits ONE resolved `class` (`Class` replaces the base,
+  `ClassPlus` appends) and the same for `style`. The merge of the caller's extras
+  ([scalar.rs:39](../formoxus/src/widgets/scalar.rs#L39)–[:46](../formoxus/src/widgets/scalar.rs#L46))
+  moves to the same point. Each widget drops its literal `class:`:
   [input.rs:85](../formoxus/src/widgets/input.rs#L85),
   [textarea.rs:53](../formoxus/src/widgets/textarea.rs#L53),
   [checkbox.rs:48](../formoxus/src/widgets/checkbox.rs#L48),
   [select.rs:63](../formoxus/src/widgets/select.rs#L63),
-  [variant_select.rs:61](../formoxus/src/widgets/variant_select.rs#L61),
-  [radio_group.rs:56](../formoxus/src/widgets/radio_group.rs#L56) (per radio;
-  the fieldset's class is the wrapper's).
-- [ ] `class:` replaces formoxus's classes (including `fx-control`);
-  `class_plus:` appends. `style`/`style_plus` the same.
+  [variant_select.rs:61](../formoxus/src/widgets/variant_select.rs#L61).
+  (`RadioGroup` is on hold, see above.)
+- [ ] Tests (Claude): the parser's unit tests, and a suite test pinning ONE
+  `class` attribute per element (the 2026-10-07 probe, kept).
 
 ### 3e. The grammar change: `required: true` → `required_true`
 

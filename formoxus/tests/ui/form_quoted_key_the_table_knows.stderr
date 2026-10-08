@@ -1,0 +1,5 @@
+error: `"maxlength"` is an attribute formoxus knows: write `max_length:`, which is checked
+  --> tests/ui/form_quoted_key_the_table_knows.rs:14:24
+   |
+14 |             email => { "maxlength": "10" },
+   |                        ^^^^^^^^^^^

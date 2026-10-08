@@ -1,0 +1,5 @@
+error: `class` and `class_plus` cannot both be given: `class` replaces formoxus's own, `class_plus` adds to them
+  --> tests/ui/form_class_with_class_plus.rs:14:39
+   |
+14 |             email => { class: [wide], class_plus: [dark] },
+   |                                       ^^^^^^^^^^

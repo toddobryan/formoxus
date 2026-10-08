@@ -129,8 +129,8 @@ impl ParsedAttr {
             }
             (AttrType::Regex, AttrSource::Regex(s)) => quote! { #attrs::AttrValue::Regex(#s) },
             (AttrType::Flag, AttrSource::Flag) => quote! { #attrs::AttrValue::Flag },
-            (AttrType::TokenList | AttrType::Declarations, AttrSource::List(_)) => {
-                todo!("3d: `AttrValue` has no list variants yet")
+            (AttrType::TokenList | AttrType::Declarations, AttrSource::List(items)) => {
+                quote! { #attrs::AttrValue::List(&[#(#items),*]) }
             }
             (attr_type, source) => {
                 unreachable!("`{attr_id:?}` is {attr_type:?} but was parsed as {source:?}")
@@ -438,14 +438,290 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
     Ok(match attr.attr_type() {
         AttrType::String | AttrType::Int | AttrType::Bound => AttrSource::Expr(body.parse()?),
         AttrType::Regex => AttrSource::Regex(checked_pattern(body.parse()?)?),
-        AttrType::TokenList | AttrType::Declarations | AttrType::List => {
+        AttrType::TokenList => {
             let list;
             bracketed!(list in body);
-            let items = Punctuated::<LitStr, Token![,]>::parse_terminated(&list)?;
-            AttrSource::List(items.into_iter().collect())
+            let items = Punctuated::<CssClassName, Token![,]>::parse_terminated(&list)?;
+            if attr == Attr::ClassPlus && items.is_empty() {
+                return Err(list.error("`class_plus` with an empty list should be omitted"));
+            }
+            AttrSource::List(items.into_iter().map(|ccn| ccn.0).collect())
+        }
+        AttrType::Declarations => {
+            let list;
+            braced!(list in body);
+            let declarations = style_declarations(&list)?;
+            if attr == Attr::StylePlus && declarations.is_empty() {
+                return Err(list.error("`style_plus` with an empty block should be omitted"));
+            }
+            AttrSource::List(declarations)
         }
         AttrType::Flag => unreachable!("handled above"),
     })
+}
+
+struct CssClassName(LitStr);
+
+impl Parse for CssClassName {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        css_name(
+            input,
+            "class name",
+            " Separate classes need a comma between them.",
+        )
+        .map(CssClassName)
+    }
+}
+
+/// A class name or a style property: quoted and verbatim, or bare with `_`
+/// turned into `-`. `what` names it in the errors, and `hyphen_tail` ends the
+/// hyphen error, where a class list has a second reading to cover.
+fn css_name(input: ParseStream<'_>, what: &str, hyphen_tail: &str) -> Result<LitStr> {
+    if input.peek(LitStr) {
+        input.parse()
+    } else if input.peek(Ident::peek_any) {
+        let token = input.call(Ident::parse_any)?;
+        let as_str = bare_css(&token);
+        if input.peek(Token![-]) {
+            return Err(hyphenated(&token, &as_str, input, what, hyphen_tail));
+        }
+        Ok(LitStr::new(&as_str, token.span()))
+    } else if input.peek(Token![-]) {
+        let (name, tokens) = hyphen_run(String::new(), TokenStream2::new(), input);
+        Err(syn::Error::new_spanned(
+            tokens,
+            format!("a {what} starting with `-` must be quoted: `\"{name}\"`"),
+        ))
+    } else {
+        Err(input.error(format!("expected {what}, either bare or quoted")))
+    }
+}
+
+/// The one rule for a bare name: `_` becomes `-`.
+fn bare_css(ident: &Ident) -> String {
+    ident.unraw().to_string().replace('_', "-")
+}
+
+/// The error for a bare name with a `-` in it, as in `text-center`.
+///
+/// Whitespace is not a token, so `[text -mt-4]` (two classes, comma missing)
+/// arrives exactly like `[text-mt-4]`. Rather than guess, a class list's
+/// message reads right either way: the fix for one name, then a reminder
+/// about commas (its `tail`). The underscore spelling is offered only when it
+/// is an identifier (`text-1.5` has no bare form).
+fn hyphenated(
+    first: &Ident,
+    first_name: &str,
+    input: ParseStream<'_>,
+    what: &str,
+    tail: &str,
+) -> syn::Error {
+    let (name, tokens) = hyphen_run(first_name.to_string(), first.to_token_stream(), input);
+    let bare = name.replace('-', "_");
+    let fix = if syn::parse_str::<Ident>(&bare).is_ok() {
+        format!("write `{bare}`, or quote it: `\"{name}\"`")
+    } else {
+        format!("quote it: `\"{name}\"`")
+    };
+    syn::Error::new_spanned(
+        tokens,
+        format!("`-` cannot appear in a bare {what}: {fix}.{tail}"),
+    )
+}
+
+/// Reads `-part-part…` onto `name`, where a part is an identifier or a
+/// number (`mt`, `4`, `2xl`), stopping at anything else. A `-` straight after
+/// a `-` is read too, so `--gap` comes out whole. Returns the hyphenated name
+/// and the tokens read, so the error can span all of them.
+fn hyphen_run(
+    mut name: String,
+    mut tokens: TokenStream2,
+    input: ParseStream<'_>,
+) -> (String, TokenStream2) {
+    while let Ok(dash) = input.parse::<Token![-]>() {
+        name.push('-');
+        dash.to_tokens(&mut tokens);
+        if input.peek(Ident::peek_any) {
+            let Ok(part) = input.call(Ident::parse_any) else {
+                break;
+            };
+            name.push_str(&bare_css(&part));
+            part.to_tokens(&mut tokens);
+        } else if input.peek(syn::LitInt) || input.peek(syn::LitFloat) {
+            let Ok(part) = input.parse::<syn::Lit>() else {
+                break;
+            };
+            name.push_str(&part.to_token_stream().to_string());
+            part.to_tokens(&mut tokens);
+        } else if !input.peek(Token![-]) {
+            break;
+        }
+    }
+    (name, tokens)
+}
+
+/// One `property: value` in a `style:` block. `written` is the property as
+/// the author wrote it (`font_size`, `"--gap"`), for messages that show
+/// their own code.
+struct StyleStatement {
+    written: String,
+    key: LitStr,
+    value: LitStr,
+}
+
+/// A `style:` block's declarations, each written out whole
+/// (`"font-size: 20px"`) and spanned on its property, so that a style list
+/// and a class list are the same `AttrSource::List` from here on.
+///
+/// A loop rather than `Punctuated`: the missing-colon message depends on
+/// whether a declaration came before, and the duplicate check on which did.
+fn style_declarations(input: ParseStream<'_>) -> Result<Vec<LitStr>> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    while !input.is_empty() {
+        let StyleStatement {
+            written,
+            key,
+            value,
+        } = style_statement(input, !out.is_empty())?;
+        // CSS lets the last one win; a `form!` key given twice is an error,
+        // and a property reads the same way.
+        if seen.contains(&key.value()) {
+            return Err(syn::Error::new(
+                key.span(),
+                format!("`{written}` is given twice"),
+            ));
+        }
+        seen.push(key.value());
+        out.push(LitStr::new(
+            &format!("{}: {}", key.value(), value.value()),
+            key.span(),
+        ));
+        if input.is_empty() {
+            break;
+        }
+        input.parse::<Token![,]>()?;
+    }
+    Ok(out)
+}
+
+fn style_statement(input: ParseStream<'_>, after_another: bool) -> Result<StyleStatement> {
+    let fork = input.fork();
+    let written = match fork.call(Ident::parse_any) {
+        Ok(ident) => ident.to_string(),
+        Err(_) => fork
+            .parse::<LitStr>()
+            .map(|s| format!("\"{}\"", s.value()))
+            .unwrap_or_default(),
+    };
+    let key = css_name(input, "style property", "")?;
+    // `font_family: Inter, serif` ends the declaration at the comma, so
+    // `serif` arrives as a property with no colon. Say so, on `serif`.
+    if !input.peek(Token![:]) {
+        let hint = if after_another {
+            format!(". If `{written}` belongs to the value before it, quote that whole value")
+        } else {
+            String::new()
+        };
+        return Err(syn::Error::new(
+            key.span(),
+            format!("expected `:` after `{written}`{hint}"),
+        ));
+    }
+    input.parse::<Token![:]>()?;
+    let value = style_value(input, &written)?;
+    Ok(StyleStatement {
+        written,
+        key,
+        value,
+    })
+}
+
+/// A quoted string, verbatim, or a run of bare items up to the next `,`,
+/// joined with single spaces.
+fn style_value(input: ParseStream<'_>, written: &str) -> Result<LitStr> {
+    let span = input.span();
+    if input.peek(LitStr) {
+        let value: LitStr = input.parse()?;
+        if !end_of_value(input) {
+            return Err(not_whole(input, written, true));
+        }
+        return Ok(value);
+    }
+    let mut items = Vec::new();
+    while !end_of_value(input) {
+        items.push(style_item(input, written)?);
+    }
+    if items.is_empty() {
+        return Err(syn::Error::new(span, format!("`{written}` needs a value")));
+    }
+    Ok(LitStr::new(&items.join(" "), span))
+}
+
+fn end_of_value(input: ParseStream<'_>) -> bool {
+    input.is_empty() || input.peek(Token![,])
+}
+
+/// One bare item of a style value: a name, a number (`20px`, `-1px`, `50%`),
+/// or a final `!important`. Anything else is an error asking for quotes.
+fn style_item(input: ParseStream<'_>, written: &str) -> Result<String> {
+    if input.peek(Token![-]) && (input.peek2(syn::LitInt) || input.peek2(syn::LitFloat)) {
+        input.parse::<Token![-]>()?;
+        return Ok(format!("-{}", css_number(input)?));
+    }
+    if input.peek(syn::LitInt) || input.peek(syn::LitFloat) {
+        return css_number(input);
+    }
+    if input.peek(Ident::peek_any) {
+        let token = input.call(Ident::parse_any)?;
+        let as_str = bare_css(&token);
+        // Only a `-` before a NAME joins it: `auto -1px` is two items.
+        if input.peek(Token![-]) && input.peek2(Ident::peek_any) {
+            return Err(hyphenated(&token, &as_str, input, "style value", ""));
+        }
+        return Ok(as_str);
+    }
+    if input.peek(Token![!]) {
+        let bang: Token![!] = input.parse()?;
+        return match input.call(Ident::parse_any) {
+            Ok(word) if word == "important" && end_of_value(input) => Ok("!important".into()),
+            Ok(word) if word == "important" => {
+                Err(input.error("`!important` must come last in a value"))
+            }
+            _ => Err(syn::Error::new(bang.span(), quote_it(written))),
+        };
+    }
+    Err(not_whole(input, written, false))
+}
+
+/// `20px`, `1.5rem`, `0`, with a `%` written straight after (`50%`) glued
+/// on. A unit starting with `e` (`2em`) never gets here: Rust's lexer reads
+/// it as an exponent and fails before the macro runs.
+fn css_number(input: ParseStream<'_>) -> Result<String> {
+    let lit: syn::Lit = input.parse()?;
+    let mut number = lit.to_token_stream().to_string();
+    if input.parse::<Option<Token![%]>>()?.is_some() {
+        number.push('%');
+    }
+    Ok(number)
+}
+
+/// The error at a token a style value cannot take bare, or at whatever
+/// follows a quoted value (`after_quoted`).
+fn not_whole(input: ParseStream<'_>, written: &str, after_quoted: bool) -> syn::Error {
+    if input.peek(Token![;]) {
+        input.error("separate declarations with `,`, not `;`")
+    } else if after_quoted || input.peek(LitStr) {
+        input.error(format!(
+            "a quoted value must be the whole value: `{written}: \"…\"`"
+        ))
+    } else {
+        input.error(quote_it(written))
+    }
+}
+
+fn quote_it(written: &str) -> String {
+    format!("quote the whole value: `{written}: \"…\"`")
 }
 
 /// Checked here, while the macro parses, rather than in the const witness
@@ -497,21 +773,36 @@ pub(crate) fn legal_keys() -> Vec<String> {
 }
 
 /// The message for an identifier key that is not one: the HTML spelling of a
-/// table attribute, a near miss, or no idea, each followed by every legal key.
+/// table attribute (only `maxlength` and `minlength` can be written as an
+/// identifier and still differ from their key), a near miss, or else the
+/// quoting rule.
+///
+/// No list of legal keys: with the ARIA rows it is about ninety long, and the
+/// mistake it was guarding against, a custom attribute written bare, is
+/// better answered by the rule itself.
 fn unknown_key(name: &str) -> String {
-    let legal = legal_keys();
-    let hint = match Attr::from_name(name).filter(|attr| attr.owner() != Owner::Formoxus) {
-        Some(attr) => format!(" — write `{}`", attr.variant_name().to_snake_case()),
-        None => legal
-            .iter()
-            .filter(|k| edit_distance(name, k) <= 2)
-            .min_by_key(|k| edit_distance(name, k))
-            .map(|near| format!(" — did you mean `{near}`?"))
-            .unwrap_or_default(),
-    };
+    if let Some(attr) = Attr::from_name(name).filter(|attr| attr.owner() != Owner::Formoxus) {
+        return format!(
+            "unknown key `{name}`: write `{}`",
+            attr.variant_name().to_snake_case()
+        );
+    }
+    // A near miss is most likely a typo, so the full rule, whose example would
+    // quote the typo, shrinks to a reminder.
+    if let Some(near) = legal_keys()
+        .into_iter()
+        .filter(|k| edit_distance(name, k) <= 2)
+        .min_by_key(|k| edit_distance(name, k))
+    {
+        return format!(
+            "unknown key `{name}`. Did you mean `{near}`? (A custom attribute must be quoted.)"
+        );
+    }
     format!(
-        "unknown key `{name}`{hint} Expected one of: {}",
-        legal.join(", ")
+        "unknown key `{name}`. A standard HTML attribute is written unquoted, \
+         in snake_case (`max_length`, `aria_label`); any other must be quoted \
+         (`\"{}\": …`)",
+        name.replace('_', "-")
     )
 }
 
@@ -566,7 +857,7 @@ fn conflicting(attr: Attr) -> Option<Attr> {
 
 #[cfg(test)]
 mod tests {
-    use super::legal_keys;
+    use super::{AttrSource, legal_keys, parse_value};
     use crate::form::tests::{err_of, parse};
     use googletest::prelude::*;
     use quote::quote;
@@ -584,8 +875,7 @@ mod tests {
     #[gtest]
     fn an_unknown_key_names_itself() {
         let msg = err_of(quote! { Source { notes => { contrl: textarea } } });
-        expect_that!(msg, contains_substring("contrl"));
-        expect_that!(msg, contains_substring("widget"));
+        expect_that!(msg, contains_substring("unknown key `contrl`"));
     }
 
     /// Worded to match the form-level message, so the same mistake reads the
@@ -654,9 +944,8 @@ mod tests {
                         formoxus_attrs::AttrType::Int | formoxus_attrs::AttrType::Bound => {
                             quote!(#ident: 1)
                         }
-                        formoxus_attrs::AttrType::TokenList
-                        | formoxus_attrs::AttrType::Declarations
-                        | formoxus_attrs::AttrType::List => quote!(#ident: ["x"]),
+                        formoxus_attrs::AttrType::TokenList => quote!(#ident: [x, "y"]),
+                        formoxus_attrs::AttrType::Declarations => quote!(#ident: { x: y }),
                     }
                 }
             };
@@ -670,16 +959,367 @@ mod tests {
         }
     }
 
+    /// The only two attributes whose HTML name is an identifier other than
+    /// their key, so the only two this branch can ever fire for.
     #[gtest]
-    fn an_unknown_key_lists_every_legal_one() {
-        let msg = err_of(quote! { Source { notes => { maxlen: 3 } } });
-        for key in legal_keys() {
+    fn the_html_spelling_of_a_key_gets_the_form_spelling() {
+        for (html, key) in [("maxlength", "max_length"), ("minlength", "min_length")] {
+            let ident = syn::Ident::new(html, proc_macro2::Span::call_site());
             expect_that!(
-                msg,
-                contains_substring(key.as_str()),
-                "the message should name `{key}`"
+                err_of(quote! { Source { notes => { #ident: 3 } } }),
+                eq(&format!("unknown key `{html}`: write `{key}`"))
             );
         }
+    }
+
+    #[gtest]
+    fn a_near_miss_suggests_the_key_it_missed() {
+        expect_that!(
+            err_of(quote! { Source { notes => { max_lenght: 3 } } }),
+            eq("unknown key `max_lenght`. Did you mean `max_length`? \
+                (A custom attribute must be quoted.)")
+        );
+    }
+
+    /// No list of every key: the rule answers the likelier mistake, a custom
+    /// attribute written bare, and its example is the author's own name,
+    /// hyphenated the way HTML would write it.
+    #[gtest]
+    fn an_unknown_key_gets_the_quoting_rule() {
+        let msg = err_of(quote! { Source { notes => { hx_get: "/x" } } });
+        expect_that!(msg, contains_substring("any other must be quoted"));
+        expect_that!(msg, contains_substring("`\"hx-get\": …`"));
+        expect_that!(msg, not(contains_substring("Did you mean")));
+        expect_that!(msg, not(contains_substring("aria_valuetext")));
+    }
+
+    // ── Class lists ──────────────────────────────────────────────────────
+
+    /// What a list attribute's value parses to, or the error's message.
+    fn list_value(
+        attr: formoxus_attrs::Attr,
+        value: &proc_macro2::TokenStream,
+    ) -> std::result::Result<Vec<String>, String> {
+        use syn::parse::Parser;
+        let key = syn::Ident::new(
+            &heck::ToSnakeCase::to_snake_case(attr.variant_name()),
+            proc_macro2::Span::call_site(),
+        );
+        let parser = |input: syn::parse::ParseStream<'_>| parse_value(attr, &key, input);
+        match parser.parse2(quote!(: #value)) {
+            Ok(AttrSource::List(items)) => Ok(items.iter().map(syn::LitStr::value).collect()),
+            Ok(other) => panic!("{attr:?} parsed as {other:?}"),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn class_names(value: &proc_macro2::TokenStream) -> std::result::Result<Vec<String>, String> {
+        list_value(formoxus_attrs::Attr::ClassPlus, value)
+    }
+
+    fn style(value: &proc_macro2::TokenStream) -> std::result::Result<Vec<String>, String> {
+        list_value(formoxus_attrs::Attr::Style, value)
+    }
+
+    /// One rule: bare names turn `_` into `-`; quoted names are verbatim.
+    /// Keywords and raw identifiers are names like any other.
+    #[gtest]
+    fn a_class_list_takes_bare_and_quoted_names() {
+        expect_that!(
+            class_names(&quote!([dark, my_class, "real_underscore", static, r#type,])),
+            ok(elements_are![
+                eq("dark"),
+                eq("my-class"),
+                eq("real_underscore"),
+                eq("static"),
+                eq("type")
+            ])
+        );
+    }
+
+    #[gtest]
+    fn a_hyphenated_bare_class_gets_both_spellings() {
+        expect_that!(
+            class_names(&quote!([text - center])),
+            err(eq(
+                "`-` cannot appear in a bare class name: write `text_center`, \
+                    or quote it: `\"text-center\"`. Separate classes need a comma \
+                    between them."
+            ))
+        );
+    }
+
+    /// Whitespace is not a token, so a missing comma before `-mt-4` looks
+    /// exactly like one name. The comma reminder is what covers this reading.
+    #[gtest]
+    fn a_missing_comma_reads_like_one_hyphenated_name() {
+        expect_that!(
+            class_names(&quote!([text - mt - 4])),
+            err(all![
+                contains_substring("write `text_mt_4`"),
+                contains_substring("Separate classes need a comma")
+            ])
+        );
+    }
+
+    /// `2xl` is one token, a number with the suffix `xl`.
+    #[gtest]
+    fn a_hyphen_run_takes_numbers() {
+        expect_that!(
+            class_names(&quote!([text - 2xl])),
+            err(contains_substring(
+                "write `text_2xl`, or quote it: `\"text-2xl\"`"
+            ))
+        );
+    }
+
+    /// The bare-name rule holds past the first `-` too, so the two suggested
+    /// spellings name the same class.
+    #[gtest]
+    fn both_spellings_name_the_same_class() {
+        expect_that!(
+            class_names(&quote!([text - my_size])),
+            err(contains_substring(
+                "write `text_my_size`, or quote it: `\"text-my-size\"`"
+            ))
+        );
+    }
+
+    #[gtest]
+    fn a_name_with_no_bare_spelling_is_only_offered_quoted() {
+        expect_that!(
+            class_names(&quote!([text - 1.5])),
+            err(all![
+                contains_substring("quote it: `\"text-1.5\"`"),
+                not(contains_substring("write `"))
+            ])
+        );
+    }
+
+    /// Tailwind's negative utilities. Unambiguous, unlike a `-` after a name.
+    #[gtest]
+    fn a_class_starting_with_a_hyphen_must_be_quoted() {
+        expect_that!(
+            class_names(&quote!([text, -mt - 4])),
+            err(eq(
+                "a class name starting with `-` must be quoted: `\"-mt-4\"`"
+            ))
+        );
+    }
+
+    #[gtest]
+    fn a_class_list_refuses_anything_else() {
+        expect_that!(
+            class_names(&quote!([1])),
+            err(eq("expected class name, either bare or quoted"))
+        );
+    }
+
+    /// `class: []` is legal (it strips formoxus's classes); the `_plus`
+    /// forms with nothing in them do nothing, so they are refused.
+    #[gtest]
+    fn an_empty_plus_list_is_refused() {
+        expect_that!(
+            class_names(&quote!([])),
+            err(contains_substring(
+                "`class_plus` with an empty list should be omitted"
+            ))
+        );
+        expect_that!(
+            list_value(formoxus_attrs::Attr::StylePlus, &quote!({})),
+            err(contains_substring(
+                "`style_plus` with an empty block should be omitted"
+            ))
+        );
+        expect_that!(
+            list_value(formoxus_attrs::Attr::Class, &quote!([])),
+            ok(len(eq(0)))
+        );
+    }
+
+    // ── Style blocks ─────────────────────────────────────────────────────
+
+    /// Every bare form at once. Each declaration is written out whole, so a
+    /// style list and a class list are the same `AttrSource::List`.
+    #[gtest]
+    fn a_style_block_takes_bare_and_quoted_values() {
+        expect_that!(
+            style(&quote!({
+                color: red,
+                font_size: 20px,
+                justify_content: space_between,
+                position: static,
+                margin: -1px 0,
+                width: 50%,
+                line_height: 1.5,
+                border: 1px solid black,
+                display: none !important,
+                font_family: "'Inter', sans-serif",
+                "--gap": "4px",
+            })),
+            ok(elements_are![
+                eq("color: red"),
+                eq("font-size: 20px"),
+                eq("justify-content: space-between"),
+                eq("position: static"),
+                eq("margin: -1px 0"),
+                eq("width: 50%"),
+                eq("line-height: 1.5"),
+                eq("border: 1px solid black"),
+                eq("display: none !important"),
+                eq("font-family: 'Inter', sans-serif"),
+                eq("--gap: 4px")
+            ])
+        );
+    }
+
+    /// Only a `-` before a NAME joins it to the name before; before a number
+    /// it starts a negative one.
+    #[gtest]
+    fn a_name_then_a_negative_number_is_two_items() {
+        expect_that!(
+            style(&quote!({ margin: auto -1px })),
+            ok(elements_are![eq("margin: auto -1px")])
+        );
+    }
+
+    #[gtest]
+    fn a_hyphenated_bare_property_gets_both_spellings() {
+        expect_that!(
+            style(&quote!({ font-size: 20px })),
+            err(eq(
+                "`-` cannot appear in a bare style property: write `font_size`, \
+                    or quote it: `\"font-size\"`."
+            ))
+        );
+    }
+
+    /// Custom properties and vendor prefixes, with `--` read whole.
+    #[gtest]
+    fn a_property_starting_with_a_hyphen_must_be_quoted() {
+        expect_that!(
+            style(&quote!({ --gap: 4px })),
+            err(eq(
+                "a style property starting with `-` must be quoted: `\"--gap\"`"
+            ))
+        );
+        expect_that!(
+            style(&quote!({ -webkit-appearance: none })),
+            err(eq(
+                "a style property starting with `-` must be quoted: `\"-webkit-appearance\"`"
+            ))
+        );
+    }
+
+    #[gtest]
+    fn a_hyphenated_bare_value_gets_both_spellings() {
+        expect_that!(
+            style(&quote!({ justify_content: space-between })),
+            err(eq(
+                "`-` cannot appear in a bare style value: write `space_between`, \
+                    or quote it: `\"space-between\"`."
+            ))
+        );
+    }
+
+    /// The likeliest way to hit a missing colon: a comma inside a value ends
+    /// the declaration, so the rest reads as the next property.
+    #[gtest]
+    fn a_comma_inside_a_value_says_to_quote_it() {
+        expect_that!(
+            style(&quote!({ font_family: Inter, serif })),
+            err(eq(
+                "expected `:` after `serif`. If `serif` belongs to the value \
+                    before it, quote that whole value"
+            ))
+        );
+    }
+
+    /// With no declaration before it, there is no value it could belong to.
+    #[gtest]
+    fn a_first_property_without_a_colon_gets_no_comma_hint() {
+        expect_that!(
+            style(&quote!({ color red })),
+            err(eq("expected `:` after `color`"))
+        );
+    }
+
+    #[gtest]
+    fn a_property_given_twice_is_refused() {
+        expect_that!(
+            style(&quote!({ color: red, font_size: 2px, color: blue })),
+            err(eq("`color` is given twice"))
+        );
+    }
+
+    /// Two spellings of one property are still one property.
+    #[gtest]
+    fn a_property_given_twice_is_refused_across_spellings() {
+        expect_that!(
+            style(&quote!({ font_size: 2px, "font-size": 3px })),
+            err(eq("`\"font-size\"` is given twice"))
+        );
+    }
+
+    #[gtest]
+    fn what_a_bare_value_cannot_hold_must_be_quoted() {
+        // `#fff` built from a string: inside `quote!`, `#fff` interpolates.
+        let hex: proc_macro2::TokenStream = "#fff".parse().unwrap();
+        for value in [hex, quote!(rgb(0, 0, 0)), quote!(12px / 1.5)] {
+            expect_that!(
+                style(&quote!({ color: #value })),
+                err(eq("quote the whole value: `color: \"…\"`")),
+                "{value}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn a_quoted_value_must_be_the_whole_value() {
+        for value in [quote!(Inter "x"), quote!("Inter" serif)] {
+            expect_that!(
+                style(&quote!({ font_family: #value })),
+                err(eq(
+                    "a quoted value must be the whole value: `font_family: \"…\"`"
+                )),
+                "{value}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn important_must_come_last() {
+        expect_that!(
+            style(&quote!({ color: red !important blue })),
+            err(eq("`!important` must come last in a value"))
+        );
+        expect_that!(
+            style(&quote!({ color: red !imp })),
+            err(eq("quote the whole value: `color: \"…\"`"))
+        );
+    }
+
+    /// CSS habit.
+    #[gtest]
+    fn a_semicolon_gets_told_to_be_a_comma() {
+        for value in [
+            quote!({ color: red; width: 2px }),
+            quote!({ color: "red"; }),
+        ] {
+            expect_that!(
+                style(&value),
+                err(eq("separate declarations with `,`, not `;`")),
+                "{value}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn a_property_needs_a_value() {
+        expect_that!(
+            style(&quote!({ color: , width: 2px })),
+            err(eq("`color` needs a value"))
+        );
     }
 
     // ── Constraints reach the expansion ──────────────────────────────────

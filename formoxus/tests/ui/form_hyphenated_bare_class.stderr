@@ -1,0 +1,5 @@
+error: `-` cannot appear in a bare class name: write `text_mt_4`, or quote it: `"text-mt-4"`. Separate classes need a comma between them.
+  --> tests/ui/form_hyphenated_bare_class.rs:14:43
+   |
+14 |             email => { class_plus: [wide, text-mt-4] },
+   |                                           ^^^^^^^^^

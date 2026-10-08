@@ -461,7 +461,18 @@ moment does the map become the `Vec<Attribute>` that is spread.
 1. Are `form` and `multiple` owned? (`form` moves the control into another
    form; `multiple` breaks the one-string leaf.) Probably yes.
 2. How is a `style` list spelled in `form!`, and how is a `class` list?
-   (Todd: lists, not space- or semicolon-delimited strings.)
+   (Todd: lists, not space- or semicolon-delimited strings.) ANSWERED AND BUILT
+   2026-10-07 (Todd; the error cases are listed in `ATTRIBUTES_PLAN.md` 3d): `class: [dark, my_class, "real_underscore"]` (brackets) and
+   `style: { color: red, font_size: "20px" }` (braces). Bare identifiers turn
+   `_` into `-` in class names, style properties AND style values alike (one
+   rule); quote to keep a real underscore. Keywords allowed bare via
+   `Ident::parse_any` (`position: static`). BEM's `card__title` must be quoted.
+   Bare numbers ARE allowed (decided 2026-10-07), and `!important` last; was open: whether a style value may hold bare numbers (`20px`, `0`) or only
+   a run of identifiers (Todd leaning to numbers too, 2026-10-07; `50%` and `-1px` are two tokens each, glued by the parser; quotes inside a quoted value pass through, since SSR escapes both kinds). Rust's lexer rejects
+   `2em`/`1.5em` ("expected at least one digit in exponent") BEFORE the macro
+   runs, so those can never be bare. The macro writes each declaration out as
+   `"font-size: 20px"`, so both stay `AttrValue::List(&'static [&'static str])`
+   and `AttrType::List` goes. Todd is writing the parser himself (2026-10-07).
 3. `class` on a `RadioGroup`: the fieldset, every radio, or refused?
 4. `id`: reserved until issue #9 settles its id scheme (`<label for>`, per-form
    prefix); see [[html-attributes-reference]] item 4.

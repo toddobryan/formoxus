@@ -1,0 +1,5 @@
+error: `max_length` is given twice
+  --> tests/ui/form_attribute_given_twice.rs:13:40
+   |
+13 |             email => { max_length: 10, max_length: 20 },
+   |                                        ^^^^^^^^^^

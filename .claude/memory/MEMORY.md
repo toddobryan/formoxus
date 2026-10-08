@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-05: WIP mid step 3b, BUILD BROKEN ON PURPOSE; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
+- [**START HERE: next session**](next_session.md) — 2026-10-07: green; 3d parsing done, widget-side attrs next (Todd); read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets

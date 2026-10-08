@@ -16,7 +16,6 @@ pub enum AttrType {
     Flag,
     TokenList,
     Declarations,
-    List,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

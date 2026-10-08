@@ -1,0 +1,5 @@
+error: unknown key `max_lenght`. Did you mean `max_length`? (A custom attribute must be quoted.)
+  --> tests/ui/form_unknown_key_near_miss.rs:13:24
+   |
+13 |             email => { max_lenght: 10 },
+   |                        ^^^^^^^^^^

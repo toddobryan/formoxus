@@ -1,0 +1,5 @@
+error: expected `:` after `serif`. If `serif` belongs to the value before it, quote that whole value
+  --> tests/ui/form_style_comma_in_value.rs:14:65
+   |
+14 |             email => { style: { color: red, font_family: Inter, serif } },
+   |                                                                 ^^^^^

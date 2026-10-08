@@ -5,6 +5,22 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-07, END OF SESSION (home) — BUILD GREEN, 3d PARSING DONE.**
+The `form!` side of 3d is finished and pushed: class lists (Todd) and style
+blocks (Claude, delegated) parse bare-or-quoted names with `_` → `-`, bare
+numbers, `!important`, and a set of targeted errors (all listed in
+`formoxus/ATTRIBUTES_PLAN.md` 3d's checklist). `AttrType::List` is gone and
+the `todo!` is `AttrValue::List(&[#(#items),*])`. Unknown-key messages no
+longer list ~90 keys. 7 new goldens. Green: macros 136, lib 86, suite 327,
+goldens; clippy and fmt clean (e2e not rerun). **Next is Todd's: attribute
+conversion moves into the widgets** (Todd's call 2026-10-07: convert to
+`Vec<Attribute>` inside the widget, which knows its base class; a spread
+`class` duplicates, PROBED). Until then a style renders space-joined
+(`color: red font-size: 20px`): `Style`/`StylePlus` need `"; "`. `RadioGroup`
+class placement is ON HOLD (Todd wants examples; maybe `group_class` /
+`input_class`). Then Claude: the suite test pinning ONE `class` attribute,
+`author_attrs.rs` onto `form!` keys, dropping the `takes_*` wrappers.
+
 **UPDATE 2026-10-06, END OF SCHOOL DAY — BUILD GREEN, 3d IN PROGRESS.**
 3b, 3c and 3e of `formoxus/ATTRIBUTES_PLAN.md` are done and committed (see the
 plan's DONE notes); every test passes (macros 111, lib 86, suite 327, goldens,
