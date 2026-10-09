@@ -25,6 +25,12 @@ Write them, leave them in the working tree, and include them in the next commit
 that carries code. Todd: "No need to commit when you create them. When we commit
 the project, please do commit them."
 
+**END OF SESSION exception (Todd, 2026-10-09):** when he stops for the day,
+"Commit and push the latest, even if it is just the next_session file." The
+handoff has to reach the other machine (home ↔ school), so at a stopping
+point offer to commit and push memory on its own rather than leaving it
+uncommitted.
+
 So they DO still get committed and pushed, which is what keeps `.claude/memory/`
 authoritative and able to cross machines — the radio-group handover worked
 because the plan and the resume entry had been pushed. The rule is about commit
