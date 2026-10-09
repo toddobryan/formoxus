@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `pattern` cannot go on an enum field: it renders a variant picker, which submits no value to check
+  --> tests/ui/form_constraint_on_an_enum.rs:21:36
+   |
+21 |             shipping => { pattern: "[A-Z]+" },
+   |                                    ^^^^^^^^ evaluation of `main::_` failed here

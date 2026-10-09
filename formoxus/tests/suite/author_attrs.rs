@@ -280,27 +280,18 @@ fn class_and_class_plus_on_the_select() {
 }
 
 /// **An enum field's attributes reach its variant `<select>`.** `VariantSet`
-/// took no attributes at all until step 4.
-///
-/// Hand-built, because `form!` refuses `class` on an enum field at compile
-/// time: the table's `for:` column names only String, number and bool fields,
-/// and an enum is none of those. A quoted key is not type-checked, so it gets
-/// through `form!` (the next test).
+/// took no attributes at all until step 4, and `form!` refused `class` on an
+/// enum field until `field_kind` gave enums their own kind: an enum takes the
+/// unvalidated attributes a `<select>` can carry.
 #[gtest]
 fn class_and_class_plus_on_the_variant_select() {
-    let replaced = render!(FormSpec::<Drawing>::new().with_attrs(
-        "shape",
-        FieldAttrs::from([(AttrKey::Std(Attr::Class), AttrValue::List(&["wide"]))])
-    ));
+    let replaced = render!(form! { Drawing { shape => { class: [wide] } } });
     expect_that!(
         classes_of(tag(&replaced, "select")),
         elements_are![eq("wide")]
     );
 
-    let appended = render!(FormSpec::<Drawing>::new().with_attrs(
-        "shape",
-        FieldAttrs::from([(AttrKey::Std(Attr::ClassPlus), AttrValue::List(&["wide"]))])
-    ));
+    let appended = render!(form! { Drawing { shape => { class_plus: [wide] } } });
     expect_that!(
         classes_of(tag(&appended, "select")),
         elements_are![eq("fx-control fx-select wide")]

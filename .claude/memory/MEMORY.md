@@ -49,4 +49,5 @@
 ## Gotchas
 - [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
+- [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
 - [E2E harness](e2e_harness.md) — `just e2e`; use `get_by_role` with a name, not exact `get_by_label` (aria-hidden marker)

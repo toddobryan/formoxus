@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `placeholder` cannot go on an enum field: its variant `<select>` does not take it
+  --> tests/ui/form_placeholder_on_an_enum.rs:21:40
+   |
+21 |             shipping => { placeholder: "Pick one" },
+   |                                        ^^^^^^^^^^ evaluation of `main::_` failed here

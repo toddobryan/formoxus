@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_attrs::{Attr, AttrType, FieldType, Owner};
+use formoxus_attrs::{Attr, AttrType, FieldControl, FieldType, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -81,6 +81,24 @@ fn field_types_phrase(attr: Attr) -> String {
         [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
     };
     format!("a {joined} field")
+}
+
+/// Why `attr` cannot go on an enum field, whose one element is its variant
+/// `<select>`. Mirrors the `Kind::Enum` arm of `formoxus::field_kind::applies`;
+/// the last arm is for an attribute that arm refuses for a reason not listed
+/// here, so a refusal always has a message.
+fn enum_refusal(attr: Attr) -> String {
+    let name = attr.variant_name().to_snake_case();
+    if attr.validated() {
+        format!(
+            "`{name}` cannot go on an enum field: it renders a variant picker, which submits \
+            no value to check"
+        )
+    } else if !attr.is_valid_on(FieldControl::Select) {
+        format!("`{name}` cannot go on an enum field: its variant `<select>` does not take it")
+    } else {
+        format!("`{name}` cannot go on an enum field")
+    }
 }
 
 impl ParsedAttr {
@@ -242,12 +260,21 @@ impl FieldBody {
                     msg,
                 ));
             } else {
+                // Two asserts for the same reason: an enum is refused for its
+                // own reasons, which the generic message does not give. Each
+                // is `true` where the other one speaks.
+                let is_enum = quote!(::formoxus::field_kind::is_enum(#shape));
                 let msg = format!(
                     "`{}` applies only to {}",
                     attr.variant_name().to_snake_case(),
                     field_types_phrase(*attr),
                 );
-                checks.push(takes(span, test, &msg));
+                checks.push(takes(span, quote!(#is_enum || #test), &msg));
+                checks.push(takes(
+                    span,
+                    quote!(!#is_enum || #test),
+                    &enum_refusal(*attr),
+                ));
             }
         }
         // Does each bound fit the field's type? The bound goes in cast both

@@ -22,7 +22,7 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_attrs::{Attr, FieldControl, FieldType};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -43,10 +43,14 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
 /// of the field's type. `form!` emits one of these per table attribute a field
 /// body declares.
 ///
+/// An enum allows the attributes that apply to `<select>`
+///
 /// An opaque newtype is let through, since nothing here can see what it
-/// wraps; a struct, list or enum is refused, since no attribute applies to one.
+/// wraps; a struct or list is refused, since no attribute applies to one.
 pub const fn applies(attr: Attr, shape: &Shape) -> bool {
     match kind(shape) {
+        // no need to check Attr::Multiple since it's owned by Formoxus
+        Kind::Enum => !attr.validated() && attr.is_valid_on(FieldControl::Select),
         Kind::Unknown => true,
         Kind::Other => false,
         _ => match field_type(shape) {
@@ -180,7 +184,7 @@ pub enum WidgetClass {
 /// (a field set or list asserts) or silently ignored (an enum always renders its
 /// variant picker).
 pub const fn is_single_value(shape: &Shape) -> bool {
-    !matches!(kind(shape), Kind::Other)
+    !matches!(kind(shape), Kind::Other | Kind::Enum)
 }
 
 /// Whether `widget` can render a single-value field of this type. `has_choices`
@@ -191,7 +195,7 @@ pub const fn is_single_value(shape: &Shape) -> bool {
 /// for the reason `Kind::Unknown` gives.
 pub const fn renders(shape: &Shape, widget: WidgetClass, has_choices: bool) -> bool {
     let kind = kind(shape);
-    if matches!(kind, Kind::Other | Kind::Unknown) {
+    if matches!(kind, Kind::Enum | Kind::Other | Kind::Unknown) {
         return true;
     }
     let is_bool = matches!(kind, Kind::Bool);
@@ -213,6 +217,10 @@ pub const fn is_optional(shape: &Shape) -> bool {
     matches!(shape.def, Def::Option(_))
 }
 
+pub const fn is_enum(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Enum)
+}
+
 enum Kind {
     Text,
     /// The range of the integer type, widened to `i128` since every supported
@@ -226,7 +234,9 @@ enum Kind {
         max: f64,
     },
     Bool,
-    /// Something that is not one value: a struct, a list, an enum, or a scalar
+    /// An enum, which renders a `<select>` for the variants
+    Enum,
+    /// Something that is not one value: a struct, a list, or a scalar
     /// formoxus does not support.
     Other,
     /// A newtype whose inner type is out of reach. A tuple struct's field shape
@@ -255,6 +265,8 @@ const fn kind(shape: &Shape) -> Kind {
                     Some(inner) => kind(inner),
                     None => Kind::Unknown,
                 }
+            } else if matches!(shape.ty, Type::User(UserType::Enum(_))) {
+                Kind::Enum
             } else {
                 Kind::Other
             }
@@ -315,7 +327,7 @@ const fn field_type(shape: &Shape) -> Option<FieldType> {
         Kind::Int { .. } => Some(FieldType::Int),
         Kind::Float { .. } => Some(FieldType::Float),
         Kind::Bool => Some(FieldType::Bool),
-        Kind::Other | Kind::Unknown => None,
+        Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
 }
 
@@ -338,11 +350,12 @@ const fn str_eq(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        WidgetClass, bound_in_range, bound_is_exact, bound_is_whole, is_optional, is_single_value,
-        renders, required_is_not_optional, takes_bound, takes_length, takes_pattern,
-        takes_required,
+        WidgetClass, applies, bound_in_range, bound_is_exact, bound_is_whole, is_enum, is_optional,
+        is_single_value, renders, required_is_not_optional, takes_bound, takes_length,
+        takes_pattern, takes_required,
     };
     use facet::Facet;
+    use formoxus_attrs::Attr;
     use googletest::prelude::*;
 
     #[derive(Facet)]
@@ -367,6 +380,26 @@ mod tests {
 
     #[derive(Facet)]
     struct String;
+
+    #[derive(Facet)]
+    #[repr(u8)]
+    enum Shipping {
+        Ground,
+        Air,
+    }
+
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[expect(dead_code, reason = "only its shape is read")]
+    enum Footprint {
+        Circle { radius: f64 },
+        Square(f64),
+    }
+
+    #[derive(Facet)]
+    struct Address {
+        city: std::string::String,
+    }
 
     #[gtest]
     fn text_takes_lengths_and_not_bounds() {
@@ -616,6 +649,92 @@ mod tests {
     fn a_list_takes_nothing() {
         expect_that!(takes_length(<Vec<std::string::String>>::SHAPE), eq(false));
         expect_that!(takes_bound(<Vec<u32>>::SHAPE), eq(false));
+    }
+
+    // ── Enums ────────────────────────────────────────────────────────────
+
+    /// What an enum may take: anything its variant `<select>` can carry that
+    /// formoxus does not validate. Asked of a unit enum, a data enum and an
+    /// optional one, since all three render that same `<select>`.
+    #[gtest]
+    fn an_enum_takes_what_its_variant_select_can_carry() {
+        for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
+            for attr in [
+                Attr::Class,
+                Attr::ClassPlus,
+                Attr::Style,
+                Attr::Disabled,
+                Attr::Autofocus,
+                Attr::AriaLabel,
+            ] {
+                expect_that!(applies(attr, shape), eq(true), "{attr:?} on {shape}");
+            }
+        }
+    }
+
+    /// Refused for one of two reasons: formoxus validates it, and an enum
+    /// submits no value to validate (`pattern`, `min_length`, `min`, `max`);
+    /// or a `<select>` cannot carry it (`placeholder`, `readonly`, `rows`).
+    #[gtest]
+    fn an_enum_refuses_validated_keys_and_ones_a_select_cannot_carry() {
+        for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
+            for attr in [
+                Attr::Pattern,
+                Attr::MinLength,
+                Attr::Min,
+                Attr::Max,
+                Attr::Placeholder,
+                Attr::Readonly,
+                Attr::Rows,
+            ] {
+                expect_that!(applies(attr, shape), eq(false), "{attr:?} on {shape}");
+            }
+            expect_that!(takes_length(shape), eq(false), "{shape}");
+            expect_that!(takes_bound(shape), eq(false), "{shape}");
+            expect_that!(takes_pattern(shape), eq(false), "{shape}");
+            expect_that!(takes_required(shape), eq(false), "{shape}");
+        }
+    }
+
+    /// An enum always renders its variant picker, so a `widget:` on one is
+    /// refused by `is_single_value`, and `renders` leaves it to that check so
+    /// the mistake reports once.
+    #[gtest]
+    fn an_enum_still_takes_no_widget() {
+        for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
+            expect_that!(is_single_value(shape), eq(false), "{shape}");
+            for widget in [WidgetClass::Textarea, WidgetClass::Checkbox] {
+                expect_that!(
+                    renders(shape, widget, false),
+                    eq(true),
+                    "{widget:?} on {shape}"
+                );
+            }
+        }
+    }
+
+    /// facet types `Option<T>` itself as a `UserType::Enum` (`Some`/`None`),
+    /// so asking `shape.ty` would call every optional field an enum, and
+    /// `min` on an `Option<String>` would get the enum message. `is_enum`
+    /// asks `kind`, which peels the `Option` first.
+    #[gtest]
+    fn an_option_is_an_enum_only_when_it_holds_one() {
+        expect_that!(is_enum(Shipping::SHAPE), eq(true));
+        expect_that!(is_enum(<Option<Shipping>>::SHAPE), eq(true));
+        expect_that!(is_enum(<Option<std::string::String>>::SHAPE), eq(false));
+        expect_that!(is_enum(<Option<u32>>::SHAPE), eq(false));
+        expect_that!(is_enum(Address::SHAPE), eq(false));
+    }
+
+    /// The reason `Kind::Enum` is its own kind rather than a loosened
+    /// `Kind::Other`: a struct's field set renders nothing an attribute could
+    /// land on, so `class` on one must stay a compile error.
+    #[gtest]
+    fn a_struct_and_a_list_still_take_nothing_not_even_class() {
+        for shape in [Address::SHAPE, <Vec<std::string::String>>::SHAPE] {
+            expect_that!(applies(Attr::Class, shape), eq(false), "{shape}");
+            expect_that!(applies(Attr::Style, shape), eq(false), "{shape}");
+        }
     }
 
     /// `pattern` asks the table about itself rather than borrowing the length

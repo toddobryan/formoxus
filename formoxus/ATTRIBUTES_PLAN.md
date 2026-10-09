@@ -6,8 +6,8 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 order to do things in and where to do them. Claude keeps it current when asked.
 
 > **Status, 2026-10-09.** Step 3 is DONE, every box (3f's last box today).
-> 3d's widget side finished today too (steps 4–10). Open from 3f: `form!`
-> refuses typed keys on an enum field; Todd wants them allowed (see 3f). Deferred: the
+> 3d's widget side finished today too (steps 4–10). Typed keys on an enum
+> field are allowed where they make sense (3f, DONE). Deferred: the
 > `RadioGroup` author-attribute grammar, and custom widgets getting author
 > `class`. **Step 4 (emit only valid attributes, the `Widget` trait) has not
 > started.**
@@ -436,9 +436,10 @@ Breaking, so it all moves together. Claude updates the tests side.
   `form_hyphenated_bare_class`).
 - [x] `tests/suite/author_attrs.rs` switches from `with_attrs` to `form!`
   keys and quoted keys, and keeps pinning where attributes land per widget.
-  DONE 2026-10-09 (Claude). Five tests stay hand-built, each saying why: the
-  `From` impl, `custom(…)` (drops attrs), the two raw-`maxlength` hazards
-  `form!` refuses, and `class` on an enum field. **Finding:** `form!` refuses
+  DONE 2026-10-09 (Claude). Four tests stay hand-built, each saying why: the
+  `From` impl, `custom(…)` (drops attrs), and the two raw-`maxlength` hazards
+  `form!` refuses. (A fifth, `class` on an enum field, moved to `form!` once
+  the finding below was fixed.) **Finding:** `form!` refuses
   `class`/`class_plus` (any typed key) on an ENUM field at compile time, since
   the table's `for:` column has no enum kind; only quoted keys get through to
   the variant `<select>`. **Todd, 2026-10-09: allow them where they make
@@ -449,6 +450,16 @@ Breaking, so it all moves together. Claude updates the tests side.
   attributes, so loosening `Other` wholesale would drop them silently. Then
   Claude moves `class_and_class_plus_on_the_variant_select` to `form!` and
   adds a golden for a constraint key on an enum field.
+  **DONE 2026-10-09.** `Kind::Enum` (Todd): an enum takes
+  `!attr.validated() && attr.is_valid_on(FieldControl::Select)`; struct and
+  list stay `Kind::Other`, refused. `form!` emits a second assert per key,
+  `!is_enum || applies`, with an enum-specific message from `enum_refusal`
+  (validated → "submits no value to check"; not valid on `<select>` → "does
+  not take it"). Trap: facet types `Option<T>` as `UserType::Enum`, so
+  `is_enum` asks `kind` (which peels the `Option`), not `shape.ty`; caught by
+  `form_min_on_a_string`. `multiple` needs no exclusion: it is owned, refused
+  at parse. Goldens: `form_constraint_on_an_enum`,
+  `form_constraint_on_an_optional_enum`, `form_placeholder_on_an_enum`.
 - [x] Acceptance: every existing golden byte-identical except the deliberate
   grammar change; `just e2e` green. MET as of `534057b` (goldens pass; e2e 29).
 

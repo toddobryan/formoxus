@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min_length` cannot go on an enum field: it renders a variant picker, which submits no value to check
+  --> tests/ui/form_constraint_on_an_optional_enum.rs:21:39
+   |
+21 |             shipping => { min_length: 2 },
+   |                                       ^ evaluation of `main::_` failed here
