@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+**END OF SESSION 2026-10-09 (home) — STEP 3 FULLY DONE, `874e04c`, GREEN.**
+Next (Todd): split the enum out of `field_kind`'s `Kind::Other` so typed keys
+with `validated: false` are allowed on an enum field (his call: "allow them if
+they make sense"); then Claude moves `class_and_class_plus_on_the_variant_select`
+to `form!` and adds a golden refusing a constraint key on an enum. After that,
+plan Step 4 (emit only valid attributes, `Widget` trait), not started. The
+plan's status line at the top of `formoxus/ATTRIBUTES_PLAN.md` says the same.
+
 **UPDATE 2026-10-09 (home) — 3d's WIDGET SIDE DONE (steps 4–10), GREEN.**
 Steps 6–10 of `formoxus/ATTRIBUTES_PLAN.md`: `required`/`aria-invalid` are map
 entries built by `FieldAttrs::with_owned_attrs` at render; `FieldProps` is
