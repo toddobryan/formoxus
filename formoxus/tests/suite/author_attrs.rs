@@ -1,13 +1,17 @@
-//! Author attributes (C6): `FieldSpec::attrs`, through `FormField::render` and
-//! `ScalarWidget`, onto the element each widget spreads them on.
+//! Author attributes (C6): written in `form!`, through `FormField::render` and
+//! `ScalarWidget`, onto the element each widget puts them on.
 //!
-//! These go through `FormSpec::with_attrs` rather than `form!`, so they pin
-//! the runtime path on its own. The conversion itself is unit-tested beside
-//! `FormField::html_attributes` in `fields.rs`. Which element is valid for which
-//! attribute is in `.claude/memory/html_attributes_reference.md`.
+//! These go through `form!`, the way an author writes them. A few stay on
+//! `FormSpec::with_attrs`, each saying why: what `form!` refuses (a quoted key
+//! the table knows) or cannot yet express (`custom(…)` drops attributes), and
+//! the `From` impl that only a hand-built spec uses. The conversion itself is
+//! unit-tested beside `FieldAttrs::to_attributes` in `fields.rs`. Which element
+//! is valid for which attribute is in
+//! `.claude/memory/html_attributes_reference.md`.
 //!
-//! **An author attribute is always text**, so it renders quoted (`rows="4"`),
-//! unlike a constraint's `maxlength=10`.
+//! **A quoted attribute is always text**, so it renders quoted
+//! (`data-x="1"`). A table attribute renders by its row's type: `rows: 4` is
+//! an `Int`, so `rows=4`, like a constraint's `maxlength=10`.
 
 use dioxus::prelude::*;
 use facet::Facet;
@@ -15,7 +19,7 @@ use formoxus::attrs::{Attr, AttrKey, AttrValue};
 use formoxus::fields::FieldAttrs;
 use formoxus::members::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::{InputType, WidgetType};
+use formoxus::widgets::WidgetType;
 use googletest::prelude::*;
 
 use super::models::Shape;
@@ -46,9 +50,9 @@ macro_rules! render {
     }};
 }
 
-/// Quoted (`NonStd`) attributes, the pass-through kind. A hand-built spec can
-/// use a name the table knows, which `form!` would refuse quoted; several
-/// tests here do, to pin the runtime path on its own.
+/// Quoted (`NonStd`) attributes, the pass-through kind, for the tests that
+/// stay on a hand-built spec. Unlike `form!`, a hand-built spec can use a name
+/// the table knows (`"maxlength"`), which is what those tests are about.
 fn attrs<const N: usize>(pairs: [(&'static str, &str); N]) -> FieldAttrs {
     FieldAttrs::from(
         pairs.map(|(name, value)| (AttrKey::NonStd(name), AttrValue::String(value.to_string()))),
@@ -68,16 +72,16 @@ fn tag<'h>(html: &'h str, element: &str) -> &'h str {
 
 #[gtest]
 fn author_attributes_reach_the_input() {
-    let html = render!(FormSpec::<Person>::new().with_attrs(
-        "name",
-        attrs([("placeholder", "Ada"), ("autocomplete", "name")])
-    ));
+    let html = render!(form! {
+        Person { name => { placeholder: "Ada", autocomplete: "name" } }
+    });
     let input = tag(&html, "input");
     expect_that!(input, contains_substring(r#"placeholder="Ada""#));
     expect_that!(input, contains_substring(r#"autocomplete="name""#));
 }
 
 /// The `From` impl is the other way in, and the one a literal table uses.
+/// Hand-built on purpose: `form!` never goes through it.
 #[gtest]
 fn an_array_of_pairs_converts_into_author_attributes() {
     let html = render!(FormSpec::<Person>::new().with_attrs(
@@ -95,18 +99,13 @@ fn an_array_of_pairs_converts_into_author_attributes() {
 
 #[gtest]
 fn author_attributes_reach_the_textarea() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Textarea)
-            .with_attrs("name", attrs([("rows", "4")]))
-    );
-    expect_that!(tag(&html, "textarea"), contains_substring(r#"rows="4""#));
+    let html = render!(form! { Person { name => { widget: textarea, rows: 4 } } });
+    expect_that!(tag(&html, "textarea"), contains_substring("rows=4"));
 }
 
 #[gtest]
 fn author_attributes_reach_the_checkbox() {
-    let html =
-        render!(FormSpec::<Terms>::new().with_attrs("agreed", attrs([("data-terms", "v2")])));
+    let html = render!(form! { Terms { agreed => { "data-terms": "v2" } } });
     let input = tag(&html, "input");
     expect_that!(input, contains_substring(r#"type="checkbox""#));
     expect_that!(input, contains_substring(r#"data-terms="v2""#));
@@ -114,12 +113,11 @@ fn author_attributes_reach_the_checkbox() {
 
 #[gtest]
 fn author_attributes_reach_the_select() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Select)
-            .with_choices("name", STATES)
-            .with_attrs("name", attrs([("autocomplete", "address-level1")]))
-    );
+    let html = render!(form! {
+        Person {
+            name => { widget: select { choices: STATES }, autocomplete: "address-level1" },
+        }
+    });
     expect_that!(
         tag(&html, "select"),
         contains_substring(r#"autocomplete="address-level1""#)
@@ -131,12 +129,9 @@ fn author_attributes_reach_the_select() {
 /// decide about. If this changes, it should change on purpose.
 #[gtest]
 fn on_a_radio_group_author_attributes_land_on_the_fieldset() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::RadioGroup)
-            .with_choices("name", STATES)
-            .with_attrs("name", attrs([("data-group", "states")]))
-    );
+    let html = render!(form! {
+        Person { name => { widget: radio_group { choices: STATES }, "data-group": "states" } }
+    });
     expect_that!(
         tag(&html, "fieldset"),
         contains_substring(r#"data-group="states""#)
@@ -148,11 +143,7 @@ fn on_a_radio_group_author_attributes_land_on_the_fieldset() {
 /// Pinned so that a `form!` check refusing them has something to point at.
 #[gtest]
 fn a_hidden_input_gets_no_author_attributes() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Input(InputType::Hidden))
-            .with_attrs("name", attrs([("data-x", "1")]))
-    );
+    let html = render!(form! { Person { name => { widget: hidden, "data-x": "1" } } });
     expect_that!(html, not(contains_substring("data-x")));
 }
 
@@ -222,25 +213,17 @@ fn classes_of(tag: &str) -> Vec<String> {
         .collect()
 }
 
-fn class(names: &'static [&'static str]) -> FieldAttrs {
-    FieldAttrs::from([(AttrKey::Std(Attr::Class), AttrValue::List(names))])
-}
-
-fn class_plus(names: &'static [&'static str]) -> FieldAttrs {
-    FieldAttrs::from([(AttrKey::Std(Attr::ClassPlus), AttrValue::List(names))])
-}
-
 /// `class` replaces formoxus's classes outright, and `class_plus` appends to
 /// them with a space; either way the tag has exactly one `class`.
 #[gtest]
 fn class_and_class_plus_on_the_input() {
-    let replaced = render!(FormSpec::<Person>::new().with_attrs("name", class(&["wide", "dark"])));
+    let replaced = render!(form! { Person { name => { class: [wide, dark] } } });
     expect_that!(
         classes_of(tag(&replaced, "input")),
         elements_are![eq("wide dark")]
     );
 
-    let appended = render!(FormSpec::<Person>::new().with_attrs("name", class_plus(&["wide"])));
+    let appended = render!(form! { Person { name => { class_plus: [wide] } } });
     expect_that!(
         classes_of(tag(&appended, "input")),
         elements_are![eq("fx-control fx-input wide")]
@@ -249,21 +232,13 @@ fn class_and_class_plus_on_the_input() {
 
 #[gtest]
 fn class_and_class_plus_on_the_textarea() {
-    let replaced = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Textarea)
-            .with_attrs("name", class(&["wide"]))
-    );
+    let replaced = render!(form! { Person { name => { widget: textarea, class: [wide] } } });
     expect_that!(
         classes_of(tag(&replaced, "textarea")),
         elements_are![eq("wide")]
     );
 
-    let appended = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Textarea)
-            .with_attrs("name", class_plus(&["wide"]))
-    );
+    let appended = render!(form! { Person { name => { widget: textarea, class_plus: [wide] } } });
     expect_that!(
         classes_of(tag(&appended, "textarea")),
         elements_are![eq("fx-control fx-textarea wide")]
@@ -272,13 +247,13 @@ fn class_and_class_plus_on_the_textarea() {
 
 #[gtest]
 fn class_and_class_plus_on_the_checkbox() {
-    let replaced = render!(FormSpec::<Terms>::new().with_attrs("agreed", class(&["big"])));
+    let replaced = render!(form! { Terms { agreed => { class: [big] } } });
     expect_that!(
         classes_of(tag(&replaced, "input")),
         elements_are![eq("big")]
     );
 
-    let appended = render!(FormSpec::<Terms>::new().with_attrs("agreed", class_plus(&["big"])));
+    let appended = render!(form! { Terms { agreed => { class_plus: [big] } } });
     expect_that!(
         classes_of(tag(&appended, "input")),
         elements_are![eq("fx-control fx-checkbox big")]
@@ -287,23 +262,17 @@ fn class_and_class_plus_on_the_checkbox() {
 
 #[gtest]
 fn class_and_class_plus_on_the_select() {
-    let replaced = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Select)
-            .with_choices("name", STATES)
-            .with_attrs("name", class(&["wide"]))
-    );
+    let replaced = render!(form! {
+        Person { name => { widget: select { choices: STATES }, class: [wide] } }
+    });
     expect_that!(
         classes_of(tag(&replaced, "select")),
         elements_are![eq("wide")]
     );
 
-    let appended = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::Select)
-            .with_choices("name", STATES)
-            .with_attrs("name", class_plus(&["wide"]))
-    );
+    let appended = render!(form! {
+        Person { name => { widget: select { choices: STATES }, class_plus: [wide] } }
+    });
     expect_that!(
         classes_of(tag(&appended, "select")),
         elements_are![eq("fx-control fx-select wide")]
@@ -311,11 +280,18 @@ fn class_and_class_plus_on_the_select() {
 }
 
 /// **An enum field's attributes reach its variant `<select>`.** `VariantSet`
-/// took no attributes at all until step 4, so anything a `form!` author wrote
-/// on an enum field was parsed and then dropped.
+/// took no attributes at all until step 4.
+///
+/// Hand-built, because `form!` refuses `class` on an enum field at compile
+/// time: the table's `for:` column names only String, number and bool fields,
+/// and an enum is none of those. A quoted key is not type-checked, so it gets
+/// through `form!` (the next test).
 #[gtest]
 fn class_and_class_plus_on_the_variant_select() {
-    let replaced = render!(FormSpec::<Drawing>::new().with_attrs("shape", class(&["wide"])));
+    let replaced = render!(FormSpec::<Drawing>::new().with_attrs(
+        "shape",
+        FieldAttrs::from([(AttrKey::Std(Attr::Class), AttrValue::List(&["wide"]))])
+    ));
     expect_that!(
         classes_of(tag(&replaced, "select")),
         elements_are![eq("wide")]
@@ -323,20 +299,20 @@ fn class_and_class_plus_on_the_variant_select() {
 
     let appended = render!(FormSpec::<Drawing>::new().with_attrs(
         "shape",
-        FieldAttrs::from([
-            (AttrKey::Std(Attr::ClassPlus), AttrValue::List(&["wide"])),
-            (
-                AttrKey::NonStd("data-x"),
-                AttrValue::String("1".to_string())
-            ),
-        ])
+        FieldAttrs::from([(AttrKey::Std(Attr::ClassPlus), AttrValue::List(&["wide"]))])
     ));
-    let select = tag(&appended, "select");
     expect_that!(
-        classes_of(select),
+        classes_of(tag(&appended, "select")),
         elements_are![eq("fx-control fx-select wide")]
     );
-    expect_that!(select, contains_substring(r#"data-x="1""#));
+}
+
+/// A quoted key on an enum field, through `form!`, reaches the variant
+/// `<select>`.
+#[gtest]
+fn a_quoted_attribute_on_an_enum_field_reaches_the_variant_select() {
+    let html = render!(form! { Drawing { shape => { "data-x": "1" } } });
+    expect_that!(tag(&html, "select"), contains_substring(r#"data-x="1""#));
 }
 
 /// **On a radio group an author's `class` goes nowhere, for now.** Where it
@@ -346,12 +322,9 @@ fn class_and_class_plus_on_the_variant_select() {
 /// changes this on purpose.
 #[gtest]
 fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::RadioGroup)
-            .with_choices("name", STATES)
-            .with_attrs("name", class(&["wide"]))
-    );
+    let html = render!(form! {
+        Person { name => { widget: radio_group { choices: STATES }, class: [wide] } }
+    });
     expect_that!(html, not(contains_substring("wide")));
 }
 
@@ -362,22 +335,12 @@ fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
 // `form!` hands over each declaration whole (`"font-size: 20px"`); joining
 // them is `to_attributes`' job.
 
-fn style(declarations: &'static [&'static str]) -> FieldAttrs {
-    FieldAttrs::from([(AttrKey::Std(Attr::Style), AttrValue::List(declarations))])
-}
-
-fn style_plus(declarations: &'static [&'static str]) -> FieldAttrs {
-    FieldAttrs::from([(AttrKey::Std(Attr::StylePlus), AttrValue::List(declarations))])
-}
-
 /// **Declarations are separated by `;`.** A comma is not a CSS separator:
 /// `color: red, font-size: 20px` is ONE declaration with an invalid value,
 /// which a browser drops whole, so neither style applies.
 #[gtest]
 fn style_joins_its_declarations_with_semicolons() {
-    let html = render!(
-        FormSpec::<Person>::new().with_attrs("name", style(&["color: red", "font-size: 20px"]))
-    );
+    let html = render!(form! { Person { name => { style: { color: red, font_size: 20px } } } });
     let input = tag(&html, "input");
     expect_that!(
         input,
@@ -389,7 +352,7 @@ fn style_joins_its_declarations_with_semicolons() {
 /// One declaration gets no separator at all, so nothing trails it.
 #[gtest]
 fn a_single_style_declaration_stands_alone() {
-    let html = render!(FormSpec::<Person>::new().with_attrs("name", style(&["color: red"])));
+    let html = render!(form! { Person { name => { style: { color: red } } } });
     expect_that!(
         tag(&html, "input"),
         contains_substring(r#"style="color: red""#)
@@ -401,10 +364,8 @@ fn a_single_style_declaration_stands_alone() {
 /// own, this changes, and `style_plus` wants the `class` treatment.
 #[gtest]
 fn style_plus_renders_like_style_while_formoxus_has_none() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_attrs("name", style_plus(&["color: red", "font-size: 20px"]))
-    );
+    let html =
+        render!(form! { Person { name => { style_plus: { color: red, font_size: 20px } } } });
     let input = tag(&html, "input");
     expect_that!(
         input,
@@ -419,12 +380,9 @@ fn style_plus_renders_like_style_while_formoxus_has_none() {
 /// placement, this should change with it.
 #[gtest]
 fn on_a_radio_group_style_lands_on_the_fieldset() {
-    let html = render!(
-        FormSpec::<Person>::new()
-            .with_custom_widget("name", WidgetType::RadioGroup)
-            .with_choices("name", STATES)
-            .with_attrs("name", style(&["gap: 4px"]))
-    );
+    let html = render!(form! {
+        Person { name => { widget: radio_group { choices: STATES }, style: { gap: 4px } } }
+    });
     expect_that!(
         tag(&html, "fieldset"),
         contains_substring(r#"style="gap: 4px""#)
@@ -462,7 +420,8 @@ fn an_author_attribute_overrides_a_constraint_attribute() {
 
 /// **Author attributes are presentation only: the server never reads them.**
 /// A raw `maxlength` limits nothing in `validate`, which is why the constraint
-/// keys exist and why a raw attribute must not stand in for one.
+/// keys exist and why a raw attribute must not stand in for one. Hand-built,
+/// because `form!` refuses the quoted `"maxlength"` for exactly this reason.
 #[gtest]
 fn author_attributes_do_not_constrain_the_value() {
     let spec = FormSpec::<Person>::new().with_attrs("name", attrs([("maxlength", "3")]));

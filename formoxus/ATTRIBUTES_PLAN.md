@@ -5,12 +5,12 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-08.** 3d's `form!` side is done (`90ddaf4`). The widget
-> side is a numbered checklist under 3d, "Widgets build their own attributes":
-> Part A (steps 1–3) is done (`1d1722b`), and so is step 4 (`FieldAttrs::class`,
-> 2026-10-08, tests pinned), step 5 (style) and step 6 (`with_owned_attrs`);
-> steps 7–10 too: the widget side of 3d is done except the `RadioGroup` class
-> hold and the deferred custom-widget items below.
+> **Status, 2026-10-09.** Step 3 is DONE, every box (3f's last box today).
+> 3d's widget side finished today too (steps 4–10). Open from 3f: `form!`
+> refuses typed keys on an enum field; Todd wants them allowed (see 3f). Deferred: the
+> `RadioGroup` author-attribute grammar, and custom widgets getting author
+> `class`. **Step 4 (emit only valid attributes, the `Widget` trait) has not
+> started.**
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -397,8 +397,10 @@ style: {
   `FieldAttrs::class`. That belongs with the Widget trait's declared default
   classes (design note) and the `RadioGroup` hold. Issue #7
   (`aria-invalid="false"`) is unaffected; later.
-- [ ] Tests (Claude): the parser's unit tests, and ~~a suite test pinning ONE
-  `class` attribute per element~~ (DONE with step 4, above).
+- [x] Tests (Claude): the parser's unit tests (DONE 2026-10-07: the class-list
+  and style-block tests in `field.rs`, e.g. `a_class_list_takes_bare_and_quoted_names`,
+  `a_style_block_takes_bare_and_quoted_values`), and a suite test pinning ONE
+  `class` attribute per element (DONE with step 4, above).
 
 ### 3e. The grammar change: `required: true` → `required_true`
 
@@ -419,16 +421,36 @@ Breaking, so it all moves together. Claude updates the tests side.
 
 ### 3f. Tests (Claude)
 
-- [ ] `every_legal_key_parses` and `an_unknown_key_lists_every_legal_one`
+- [x] `every_legal_key_parses` and `an_unknown_key_lists_every_legal_one`
   ([field.rs:397](../formoxus-macros/src/form/field.rs#L397),
   [:418](../formoxus-macros/src/form/field.rs#L418)) move from `LEGAL_KEYS` to
-  the table.
-- [ ] New goldens: an owned key, a duplicate key, `class` with `class_plus`, a
-  quoted key the table knows, an unknown key with a suggestion.
-- [ ] `tests/suite/author_attrs.rs` switches from `with_attrs` to `form!`
+  the table. DONE: `legal_keys()` reads `Attr::ALL`. The second test is gone
+  with the list it checked (2026-10-07: unknown-key messages no longer list
+  ~90 keys); `an_unknown_key_names_itself` and
+  `an_unknown_key_gets_the_quoting_rule` cover the message now.
+- [x] New goldens: an owned key, a duplicate key, `class` with `class_plus`, a
+  quoted key the table knows, an unknown key with a suggestion. DONE:
+  `form_owned_attribute`, `form_attribute_given_twice`,
+  `form_class_with_class_plus`, `form_quoted_key_the_table_knows`,
+  `form_unknown_key_near_miss` (plus `form_unknown_key_html_spelling` and
+  `form_hyphenated_bare_class`).
+- [x] `tests/suite/author_attrs.rs` switches from `with_attrs` to `form!`
   keys and quoted keys, and keeps pinning where attributes land per widget.
-- [ ] Acceptance: every existing golden byte-identical except the deliberate
-  grammar change; `just e2e` green.
+  DONE 2026-10-09 (Claude). Five tests stay hand-built, each saying why: the
+  `From` impl, `custom(…)` (drops attrs), the two raw-`maxlength` hazards
+  `form!` refuses, and `class` on an enum field. **Finding:** `form!` refuses
+  `class`/`class_plus` (any typed key) on an ENUM field at compile time, since
+  the table's `for:` column has no enum kind; only quoted keys get through to
+  the variant `<select>`. **Todd, 2026-10-09: allow them where they make
+  sense.** Proposed: on an enum field allow rows with `validated: false`
+  (author + `class`/`style`), refuse the validated ones (nothing is
+  submitted). Split the enum out of `field_kind`'s `Kind::Other`, which also
+  covers struct and list, whose containers render nothing that takes
+  attributes, so loosening `Other` wholesale would drop them silently. Then
+  Claude moves `class_and_class_plus_on_the_variant_select` to `form!` and
+  adds a golden for a constraint key on an enum field.
+- [x] Acceptance: every existing golden byte-identical except the deliberate
+  grammar change; `just e2e` green. MET as of `534057b` (goldens pass; e2e 29).
 
 ---
 
@@ -442,8 +464,11 @@ Closes issue #4. Decisions 6, 10, and the custom-widget section of the note.
   per attribute. Refused → error naming the attribute and the widget.
 - [ ] **Runtime**: `constraint_attributes` emits only where `is_valid_on`
   (so `min` stops appearing on `type="text"`; it is still checked).
-- [ ] `RadioGroup` routes each attribute to the radios or the `<fieldset>` by
-  asking `is_valid_on`.
+- [ ] ~~`RadioGroup` routes each attribute to the radios or the `<fieldset>` by
+  asking `is_valid_on`.~~ SUPERSEDED 2026-10-09: `required`/`aria-invalid`
+  are placed by the specs (3d step 8), and validity cannot decide `class`,
+  `style`, `disabled` or `data-*`, which are valid on both. Author attributes
+  wait on the deferred `form!` grammar (`radio_group { choices, each: {…} }`).
 - [ ] The **`Widget` trait** for custom widgets (`const ATTRS: AttrSet`,
   `AttrSet::ANY` allowed); custom widgets receive attributes.
 - [ ] The **dioxus-html cross-check test** (design note, "TODO: cross-check").

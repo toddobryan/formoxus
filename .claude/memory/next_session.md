@@ -14,7 +14,7 @@ not `radio`). `FormMember::has_errors` split into `has_errors_within` /
 `has_errors_here` ([[errors-here-vs-within]]). Issue #7 got a comment mapping
 its plan onto this. Open: `RadioGroup` author attributes (Todd floated a
 `form!` grammar; Claude suggested `radio_group { choices, each: {…} }`, field
-keys on the fieldset; questions 3–4 unanswered); custom widgets get no author
+keys on the fieldset; DEFERRED by Todd 2026-10-09); custom widgets get no author
 `class`. Green: 587 tests, e2e 29, fmt, clippy, rustdoc.
 
 **UPDATE 2026-10-08, EVENING (home) — STEPS 4 AND 5 DONE, NEXT IS STEP 6 (Part C).**
