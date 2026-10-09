@@ -5,6 +5,18 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-09 (home) — 3d's WIDGET SIDE DONE (steps 4–10), GREEN.**
+Steps 6–10 of `formoxus/ATTRIBUTES_PLAN.md`: `required`/`aria-invalid` are map
+entries built by `FieldAttrs::with_owned_attrs` at render; `FieldProps` is
+`path`/`label`/`errors`. `RadioGroup`: `required` on each radio, `aria-invalid`
+on the fieldset with `role="radiogroup"` (ARIA 1.2 defines it on `radiogroup`,
+not `radio`). `FormMember::has_errors` split into `has_errors_within` /
+`has_errors_here` ([[errors-here-vs-within]]). Issue #7 got a comment mapping
+its plan onto this. Open: `RadioGroup` author attributes (Todd floated a
+`form!` grammar; Claude suggested `radio_group { choices, each: {…} }`, field
+keys on the fieldset; questions 3–4 unanswered); custom widgets get no author
+`class`. Green: 587 tests, e2e 29, fmt, clippy, rustdoc.
+
 **UPDATE 2026-10-08, EVENING (home) — STEPS 4 AND 5 DONE, NEXT IS STEP 6 (Part C).**
 Step 5 (style, `"; "` join): Todd; 5 tests, Claude.
 Todd built `FieldAttrs::class` and the five widgets' literal `class`, plus

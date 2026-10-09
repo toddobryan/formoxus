@@ -1,7 +1,7 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
@@ -37,10 +37,10 @@ pub fn VariantSelect(
     let FieldProps {
         path,
         label: label_text,
-        required,
         errors,
-        aria_invalid,
     } = props;
+
+    let required = field_attrs.contains(Attr::Required);
 
     rsx! {
         label { class: field_class,
@@ -63,8 +63,6 @@ pub fn VariantSelect(
             }
             select {
                 class: class,
-                required,
-                aria_invalid,
                 onchange: move |e: FormEvent| {
                     let v = e.value();
                     let variant = (!v.is_empty()).then_some(v);

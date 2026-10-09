@@ -346,6 +346,11 @@ fn the_group_label_is_a_legend() {
 /// is both a field and a radio group. Pinned exactly because a typo here is
 /// invisible to every other test — the legend and the radios render the same
 /// either way, and only the stylesheet notices the class it no longer matches.
+///
+/// `role="radiogroup"` because a bare `<fieldset>` is role `group`, and ARIA
+/// defines `aria-invalid` on `radiogroup` but not on `group` or `radio`. The
+/// closing `>` pins that nothing else is there: `required` belongs on the
+/// radios, since HTML has no `required` on a `<fieldset>`.
 #[gtest]
 fn the_group_is_a_field_and_a_radio_group() {
     #[component]
@@ -359,6 +364,40 @@ fn the_group_is_a_field_and_a_radio_group() {
     }
     expect_that!(
         render(App),
-        contains_substring(r#"<fieldset class="fx-form-field fx-radio-group">"#)
+        contains_substring(r#"<fieldset class="fx-form-field fx-radio-group" role="radiogroup">"#)
     );
+}
+
+/// **An invalid radio group marks the GROUP, not each radio.** Being invalid
+/// is a judgment about the group, and WAI-ARIA 1.2 says so too: it lists
+/// `aria-invalid` for role `radiogroup` and not for `radio`, where its use is
+/// "not defined". Contrast `required`, which HTML only accepts on the radios
+/// (`every_radio_is_required_and_nothing_offers_absence`).
+#[gtest]
+fn an_invalid_radio_group_marks_the_group_not_the_radios() {
+    #[component]
+    fn App() -> Element {
+        let mut state = empty_form(form! {
+            Address { state => { widget: radio_group { choices: STATES } } }
+        });
+        // Nothing picked, so `validate` gives `state` its required error.
+        let _ = state.validate();
+        let form = use_form(|| state);
+        form.render_fragment()
+    }
+    let html = render(App);
+    let fieldset = html
+        .split_inclusive('>')
+        .find(|tag| tag.starts_with("<fieldset"))
+        .expect("a radio group renders a <fieldset>");
+    expect_that!(fieldset, contains_substring(r#"role="radiogroup""#));
+    expect_that!(fieldset, contains_substring(r#"aria-invalid="true""#));
+    let radios: Vec<&str> = html
+        .split_inclusive('>')
+        .filter(|tag| tag.contains(r#"type="radio""#))
+        .collect();
+    expect_that!(radios.len(), eq(STATES.len()));
+    expect_that!(radios, each(not(contains_substring("aria-invalid"))));
+    // Still required, per radio: being invalid takes nothing away.
+    expect_that!(radios, each(contains_substring("required=true")));
 }

@@ -8,7 +8,9 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > **Status, 2026-10-08.** 3d's `form!` side is done (`90ddaf4`). The widget
 > side is a numbered checklist under 3d, "Widgets build their own attributes":
 > Part A (steps 1–3) is done (`1d1722b`), and so is step 4 (`FieldAttrs::class`,
-> 2026-10-08, tests pinned) and step 5 (style); **next is Part C, step 6**.
+> 2026-10-08, tests pinned), step 5 (style) and step 6 (`with_owned_attrs`);
+> steps 7–10 too: the widget side of 3d is done except the `RadioGroup` class
+> hold and the deferred custom-widget items below.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -233,7 +235,7 @@ style: {
     from tokens gets the spacing wrong (`# fff`).
 - [x] `entry_tokens`: the `todo!` becomes `AttrValue::List` (Todd).
 - [x] Drop `AttrType::List` (Todd).
-- [ ] **Widgets build their own attributes, and `required`/`aria_invalid` leave
+- [x] **Widgets build their own attributes, and `required`/`aria_invalid` leave
   `FieldProps`** (Todd; folded together 2026-10-08, since both touch every
   widget's signature). Run `cargo test --workspace` after each step.
 
@@ -278,7 +280,13 @@ style: {
     `a_style_from_the_macro_reaches_the_input` in `tests/suite/form_macro.rs`.
 
   **Part C: `required` and `aria_invalid` into the map.**
-  - [ ] 6. **Build the map at render time.** Something like
+  - [x] 6. **Build the map at render time.** DONE 2026-10-08 (Todd, as
+    `FieldAttrs::with_owned_attrs(widget, required, invalid, attrs)`; 4 unit
+    tests in `fields.rs`, Claude, mutation-checked). **Expected red until
+    steps 7–8:** `choices::the_group_is_a_field_and_a_radio_group` fails
+    because the spread now puts `required` on `RadioGroup`'s `<fieldset>`
+    (step 8), and inputs render `required=true` twice (literal + spread) until
+    step 7 deletes the literal. Something like
     `FieldAttrs::with_owned(required: bool, invalid: bool, rest: &FieldAttrs)`,
     inserting `Required` (`Flag`) and `AriaInvalid` (`String("true")`) FIRST,
     then copying `rest`. Call it in `FormField::render` instead of
@@ -287,7 +295,15 @@ style: {
     where the suite pins it (`choices.rs:318`, `enums.rs:208`).
     **Leave `Required` out when the widget is `Checkbox`**: HTML `required` on
     a checkbox means "must be ticked".
-  - [ ] 7. **Widgets read the map, not the props.**
+  - [x] 7. **Widgets read the map, not the props.** DONE 2026-10-08 (Todd),
+    including `RadioGroup` and `VariantSelect`, which take their literals out
+    ahead of steps 8–9. **Expected red until then:**
+    `choices::every_radio_is_required_and_nothing_offers_absence` and
+    `choices::the_group_is_a_field_and_a_radio_group` (step 8: the radios have
+    no `required` and the `<fieldset>` does); and
+    `enums::an_unchosen_required_enum_offers_no_way_back_to_unchosen` (step 9:
+    `VariantSet` still passes its raw `field_attrs`, so the variant `<select>`
+    loses `required` and offers `--none--` on a required enum).
     1. Delete the literal `required,` and `aria_invalid,` in each widget; the
        spread emits them now.
     2. `field_attrs.contains(Attr::Required)` for the ` *` marker and
@@ -295,22 +311,81 @@ style: {
     3. `Checkbox`: `required_true` → `field_attrs.contains(Attr::RequiredTrue)`;
        drop the prop from `Checkbox`, `ScalarWidget` and `render`.
     4. `reject_if_not_required` (`scalar.rs`) checks the map.
-  - [ ] 8. **`RadioGroup` is the exception.** Its spread lands on the
-    `<fieldset>`, where neither belongs. Remove `Required` and `AriaInvalid`
-    from a copy before merging (`shift_remove` keeps the order) and keep both
-    as literals on EACH radio, read from the map. Not by `is_valid_on`: the
-    `AriaInvalid` row lists `Fieldset`, so validity routing would put it on the
-    fieldset and break the `input[aria-invalid="true"] + *` selector (pinned in
-    `tests/suite/widgets.rs` ~362–379).
-  - [ ] 9. **`VariantSelect`** gets `field_attrs: FieldAttrs`, built in
+  - [x] 8. **`RadioGroup`: `required` on each radio, `aria-invalid` on the
+    group.** DONE 2026-10-09 (Claude, delegated): `FieldAttrs::without(attr)`
+    (unit-tested), `required` a literal on each radio, `role: "radiogroup"`
+    on the fieldset. Mutation-checked; e2e 29 green, including
+    `an_unanswered_radio_group_is_blocked`. Rewritten 2026-10-09 from the specs (both are judgments about the
+    GROUP; they differ only in where each spec lets you say so):
+    - HTML has `required` only on `<input>`, never `<fieldset>`, and applies it
+      per group: one required radio makes every radio in the group "suffering
+      from being missing" until any is checked. So it stays a literal on EACH
+      radio (consistent, and each announces "required" on focus), read from
+      `field_attrs.contains(Attr::Required)`, and leaves the fieldset's copy
+      (`shift_remove`, which keeps the order).
+    - WAI-ARIA 1.2 lists `aria-invalid` (and `aria-required`) for `radiogroup`
+      and NOT for `radio`, whose only supported states are `aria-posinset` /
+      `aria-setsize`; elsewhere use is "not defined". A bare `<fieldset>` is
+      role `group`, also not listed. So the fieldset gets `role: "radiogroup"`
+      as a literal right after `class`, and `AriaInvalid` simply stays in the
+      spread, which already lands there.
+    - The old reason for per-radio `aria-invalid` (the `input[aria-invalid] + *`
+      test in `widgets.rs`) renders a TEXT input, not radios; it is unaffected.
+    - Claude's tests:
+      `the_group_is_a_field_and_a_radio_group` expects
+      `<fieldset class="fx-form-field fx-radio-group" role="radiogroup">`, and
+      `an_invalid_radio_group_marks_the_group_not_the_radios` (choices.rs).
+  - [x] 9. DONE 2026-10-09 (Todd). `VariantSet::render` builds the map with
+    `with_owned_attrs(&WidgetType::Select, ctx.required, self.has_errors_here(), …)`.
+    The first try passed `has_errors()`, which counts the chosen variant's
+    fields too, so a bad `radius` marked the variant `<select>` invalid;
+    pinned by `enums::a_bad_field_in_the_variant_does_not_mark_the_choice_invalid`.
+    That led to splitting `FormMember::has_errors` into `has_errors_within`
+    and `has_errors_here` (Claude, delegated; see
+    `.claude/memory/errors_here_vs_within.md`).
+    **`VariantSelect`** gets `field_attrs: FieldAttrs`, built in
     `VariantSet` ([variant_set.rs:185](../formoxus/src/members/variant_set.rs#L185))
     as in step 6; apply step 7 to it. It passes `FieldType::Text` to
     `to_attributes` (no bounds). Its legend marker keeps reading `ctx.required`.
-  - [ ] 10. **Delete the fields.** `required` and `aria_invalid` leave
-    `FieldProps`; `field_class()` keys off `!self.errors.is_empty()`, which also
-    removes the contradictory hand-built `FieldProps` case. What is left to fix
-    is struct literals and `let FieldProps { … }` patterns. Claude: the literals
-    in `tests/suite/widgets.rs` and `examples/src/bin/widget_matrix.rs`.
+  - [x] 10. **Delete the fields.** DONE 2026-10-09 (Todd, including item 6;
+    Claude wrote item 1's doc comment on `with_owned_attrs`). No HTML change:
+    suite and e2e green unchanged. (Refreshed 2026-10-09, line numbers
+    as of then.) `required` and `aria_invalid` leave `FieldProps`; what is
+    left is `path`, `label`, `errors`.
+    1. **The struct** ([types.rs:106](../formoxus/src/widgets/types.rs#L106)):
+       delete both fields. **Keep the `aria_invalid` doc comment's reasoning**
+       (absent is the only neutral state; `"false"` asserts "checked and
+       passed"): move it onto `FieldAttrs::with_owned_attrs` in `fields.rs`,
+       which is now the thing that only ever inserts `"true"`. The `required`
+       comment's checkbox caveat already lives there as code.
+    2. **`field_class()`** ([types.rs:141](../formoxus/src/widgets/types.rs#L141)):
+       key off `!self.errors.is_empty()`. That removes the contradictory
+       hand-built case (errors but no `aria_invalid`, or the reverse).
+       `field_class_plus` follows for free.
+    3. **The two builders:** `FormField::render`
+       ([fields.rs:506–508](../formoxus/src/fields.rs#L506)) and
+       `VariantSet::render`
+       ([variant_set.rs:200–202](../formoxus/src/members/variant_set.rs#L200)):
+       delete the `required:` and `aria_invalid:` lines. `RenderCtx::required`
+       (`members.rs`) is a different thing and STAYS: it is where
+       `with_owned_attrs` and `VariantSet`'s legend marker get it from.
+    4. **The six destructures:** delete `required: _,` and `aria_invalid: _,` in
+       `input.rs:30–32`, `textarea.rs:36–37`, `checkbox.rs:29–30`,
+       `select.rs:45–47`, `radio_group.rs:53–55`, `variant_select.rs:40–42`.
+    5. **The checkbox comment** at `checkbox.rs` ~32–36: it says `props.required`
+       is "deliberately dropped" and that `required_true` "is a separate prop".
+       Both stopped being true at step 7: there is no `props.required` to
+       drop, `with_owned_attrs` keeps `Required` off a checkbox, and
+       `required_true` is an entry in the map.
+    6. **Claude, after:** the three `ScalarWidget` literals in
+       `tests/suite/widgets.rs` (~185, ~211, ~547) lose `required: true,` and
+       `aria_invalid: None,`. None of their assertions read either.
+       (`examples/src/bin/widget_matrix.rs` needs nothing: it builds its own
+       `OneFieldProps`, not a `FieldProps`.)
+
+    Expect no HTML change: since step 7 every widget reads the map, so these
+    fields are already dead weight. A clean `cargo build` after 1–5 is most
+    of the proof.
 
   Deferred: custom widgets after step 10 see `required` only by name in the
   merged `Vec<Attribute>`; `field_attrs` in `WidgetProps` waits (Todd,

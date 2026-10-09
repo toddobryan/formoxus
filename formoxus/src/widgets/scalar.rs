@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use super::checkbox::Checkbox;
 use super::input::Input;
@@ -29,7 +29,6 @@ use crate::members::ValuesStore;
 pub fn ScalarWidget(
     field_type: FieldType,
     field_attrs: FieldAttrs,
-    required_true: bool,
     widget: WidgetType,
     choices: Option<Vec<Choice>>,
     values: ValuesStore,
@@ -52,7 +51,7 @@ pub fn ScalarWidget(
             rsx! { Textarea { field_type, field_attrs, values, props, attrs } }
         }
         (FieldType::Bool, WidgetType::Checkbox) => {
-            rsx! { Checkbox { field_type, field_attrs, values, props, required_true, attrs } }
+            rsx! { Checkbox { field_type, field_attrs, values, props, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. The list is the only
@@ -80,7 +79,7 @@ pub fn ScalarWidget(
                     props.path
                 )
             };
-            reject_if_not_required(&props);
+            reject_if_not_required(&field_attrs, &props.path);
             rsx! { RadioGroup { field_type, field_attrs, values, choices, props, attrs } }
         }
 
@@ -91,7 +90,7 @@ pub fn ScalarWidget(
             rsx! { Select { field_type, field_attrs, values, choices: choices.unwrap_or_else(bool_choices), props, attrs } }
         }
         (FieldType::Bool, WidgetType::RadioGroup) => {
-            reject_if_not_required(&props);
+            reject_if_not_required(&field_attrs, &props.path);
             rsx! { RadioGroup { field_type, field_attrs, values, choices: choices.unwrap_or_else(bool_choices), props, attrs }}
         }
         // Matches ANY value kind, deliberately. A custom widget exists precisely
@@ -115,10 +114,9 @@ pub fn ScalarWidget(
     }
 }
 
-fn reject_if_not_required(props: &FieldProps) {
+fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
     assert!(
-        props.required,
-        "do not use `radio_group` because the field {} is not required - use `select` instead",
-        props.path,
+        attrs.contains(Attr::Required),
+        "do not use `radio_group` because the field {path} is not required - use `select` instead",
     );
 }

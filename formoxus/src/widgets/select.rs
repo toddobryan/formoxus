@@ -1,7 +1,7 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use super::errors::FieldErrors;
 use super::types::{Choice, FieldProps};
@@ -42,12 +42,11 @@ pub fn Select(
     let FieldProps {
         path,
         label: label_text,
-        required,
         errors,
-        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
+    let required = field_attrs.contains(Attr::Required);
 
     rsx! {
         label { class: field_class,
@@ -68,11 +67,9 @@ pub fn Select(
             }
             select {
                 class: class,
-                aria_invalid,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `distribute_form_values` would never see it.
                 name: "{path}",
-                required,
                 // No branch on emptiness: the "no value" option's value is `""`,
                 // and `""` IS absence at both boundaries, so the same write does
                 // for every option.

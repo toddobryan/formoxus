@@ -1,7 +1,7 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use super::errors::FieldErrors;
 use super::types::FieldProps;
@@ -32,9 +32,7 @@ pub fn Textarea(
     let FieldProps {
         path,
         label: label_text,
-        required,
         errors,
-        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
@@ -51,7 +49,7 @@ pub fn Textarea(
                 // accessible name.
                 span { class: "fx-field-label",
                     "{text}"
-                    if required {
+                    if field_attrs.contains(Attr::Required) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
@@ -60,8 +58,6 @@ pub fn Textarea(
                 class: class,
                 name: "{path}",
                 value: "{current}",
-                required,
-                aria_invalid,
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
                     write_value(&path, values, raw);

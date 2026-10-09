@@ -190,7 +190,7 @@ fn option_fields_are_not_required() {
     let complaining: Vec<String> = form
         .members
         .iter()
-        .filter(|m| m.has_errors())
+        .filter(|m| m.has_errors_within())
         .map(|m| m.name())
         .collect();
     expect_that!(complaining, elements_are![eq("name"), eq("guests")]);
@@ -305,7 +305,7 @@ fn blanking_a_field_makes_it_empty_again() {
     let complaining: Vec<String> = form
         .members
         .iter()
-        .filter(|m| m.has_errors())
+        .filter(|m| m.has_errors_within())
         .map(|m| m.name())
         .collect();
     expect_that!(complaining, elements_are![eq("name")]);

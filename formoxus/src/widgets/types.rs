@@ -106,18 +106,7 @@ pub use formoxus_attrs::InputType;
 pub struct FieldProps {
     pub path: String,
     pub label: Option<String>,
-    // whether the field(s) below are considered required in the form,
-    // modulo weird things like not being able to mark checkboxes required
-    pub required: bool,
     pub errors: Vec<ValidationMessage>,
-    /// Present and equal to "true" only when there is an error.
-    /// `aria-invalid="false"` is NOT the neutral value — per ARIA it
-    /// asserts "checked, and passed", so an untouched form would claim to
-    /// have validated every field, and a screen reader would say so.
-    /// Stylesheets that paint a validated-and-clean state key off it too.
-    /// Absent is the only neutral state. Dioxus omits an attribute whose
-    /// value is `None`, which is what makes absence expressible at all.
-    pub aria_invalid: Option<&'static str>,
 }
 
 impl FieldProps {
@@ -139,10 +128,10 @@ impl FieldProps {
     /// that matches the attribute exactly. Choosing between two complete
     /// strings here never produces the stray space.
     pub fn field_class(&self) -> &'static str {
-        if self.aria_invalid.is_some() {
-            "fx-form-field fx-invalid"
-        } else {
+        if self.errors.is_empty() {
             "fx-form-field"
+        } else {
+            "fx-form-field fx-invalid"
         }
     }
 

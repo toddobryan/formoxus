@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-08 eve: green; attrs steps 4 (class) and 5 (style) done, step 6 next; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
+- [**START HERE: next session**](next_session.md) — 2026-10-09: green; 3d widget side (steps 4–10) done; RadioGroup author-attr grammar open; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -25,6 +25,7 @@
 - [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code and macros use full module paths
 - [Widget is the umbrella word](widget_is_the_umbrella_word.md) — "widget", never "control"; why the 2026-09-19 rename was reversed
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30; per-field validators and `ErrorsStore` still open
+- [Errors here vs within](errors_here_vs_within.md) — 2026-10-09: `has_errors_here` (own, for rendering) vs `has_errors_within` (subtree, for validate); they can never agree
 - [Config cascade](config_cascade.md) — app → form → field via Dioxus context; RULE: resolve at the `Form` boundary, never call `defaults()` while rendering
 - [Const shape walk blocked](const_shape_walk_blocked.md) — compile-time checks are FREE `const _` items with `shape_of`, not `const {}` in a generic fn
 - [Facet newtypes & custom widgets](facet_newtypes_and_custom_widgets.md) — newtypes are leaves; `WidgetType::Custom` is a fn pointer; `wrapper` side-channel

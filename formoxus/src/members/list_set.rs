@@ -168,8 +168,12 @@ impl FormMember for ListSet {
         }
     }
 
-    fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || self.rows.iter().any(|r| r.has_errors())
+    fn has_errors_within(&self) -> bool {
+        self.has_errors_here() || self.rows.iter().any(|r| r.has_errors_within())
+    }
+
+    fn has_errors_here(&self) -> bool {
+        !self.errors.is_empty()
     }
 
     fn clone_box(&self) -> Box<dyn FormMember> {

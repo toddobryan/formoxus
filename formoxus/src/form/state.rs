@@ -31,7 +31,7 @@ pub struct FormState<T: Clone + Debug + Facet<'static>> {
 
 impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors())
+        !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors_within())
     }
 
     /// Lay the spec's per-field overrides onto the built tree.

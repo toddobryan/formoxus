@@ -63,6 +63,15 @@ impl FieldAttrs {
         self.0.contains_key(&AttrKey::Std(attr))
     }
 
+    /// A copy without `attr`, for a widget that puts it somewhere other than
+    /// where its spread lands (`RadioGroup`'s `required`). `shift_remove`, so
+    /// the rest keep their order.
+    pub fn without(&self, attr: Attr) -> FieldAttrs {
+        let mut map = self.0.clone();
+        map.shift_remove(&AttrKey::Std(attr));
+        FieldAttrs(map)
+    }
+
     fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
         let mut out = Vec::new();
         for (attr_key, attr_value) in &self.0 {
@@ -121,6 +130,41 @@ impl FieldAttrs {
         } else {
             base.to_string()
         }
+    }
+
+    /// The map a widget actually gets: formoxus's own attributes, which only
+    /// exist at render, FIRST, then the field's.
+    ///
+    /// - `Required` (a flag) when `required`, except on a `Checkbox`.
+    ///   formoxus's `required` means PRESENCE, and an unticked box is a
+    ///   complete `false`; HTML `required` on a checkbox means "must be
+    ///   ticked", which is `required_true`'s job.
+    /// - `AriaInvalid` = `"true"` when `invalid`, and otherwise ABSENT, never
+    ///   `"false"`: per ARIA, `"false"` asserts "checked, and passed", so an
+    ///   untouched form would claim every field had been validated, a screen
+    ///   reader would say so, and a stylesheet painting a validated-and-clean
+    ///   state would paint it. Telling those apart is issue #7.
+    ///
+    /// First, so `required` keeps the position the suite's exact-markup tests
+    /// expect.
+    pub fn with_owned_attrs(
+        widget: &WidgetType,
+        required: bool,
+        invalid: bool,
+        attrs: &FieldAttrs,
+    ) -> FieldAttrs {
+        let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
+        if required && !matches!(widget, WidgetType::Checkbox) {
+            map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
+        }
+        if invalid {
+            map.insert(
+                AttrKey::Std(Attr::AriaInvalid),
+                AttrValue::String("true".to_string()),
+            );
+        }
+        map.extend(attrs.0.clone());
+        FieldAttrs(map)
     }
 }
 
@@ -456,20 +500,25 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     }
 
     fn render(&self, ctx: &RenderCtx) -> Element {
+        let widget = self.widget();
+        let field_attrs = FieldAttrs::with_owned_attrs(
+            &widget,
+            ctx.required,
+            self.has_errors_here(),
+            &self.attrs,
+        );
+
         rsx! {
             ScalarWidget {
                 field_type: self.field_type(),
-                field_attrs: self.attrs.clone(),
-                required_true: self.attrs.contains(Attr::RequiredTrue),
-                widget: self.widget(),
+                field_attrs: field_attrs,
+                widget: widget,
                 choices: self.choices.clone(),
                 values: ctx.values,
                 props: FieldProps {
                     path: ctx.path(&self.name),
                     label: self.label(ctx.label_case),
-                    required: ctx.required,
                     errors: self.errors.clone(),
-                    aria_invalid: (!self.errors.is_empty()).then_some("true"),
                 },
             }
         }
@@ -515,8 +564,12 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         Box::new(self.clone())
     }
 
-    fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || matches!(self.value, FieldValue::Invalid { .. })
+    fn has_errors_within(&self) -> bool {
+        self.has_errors_here() || matches!(self.value, FieldValue::Invalid { .. })
+    }
+
+    fn has_errors_here(&self) -> bool {
+        !self.errors.is_empty()
     }
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
@@ -1405,5 +1458,112 @@ mod tests {
         let attrs = author(&[("hx-get", "/x")]);
         expect_that!(attrs[0].namespace, none());
         expect_that!(attrs[0].volatile, eq(false));
+    }
+
+    // ── Owned attributes, added at render ────────────────────────────────
+    //
+    // `required` and `aria-invalid` depend on `ctx.required` and the field's
+    // errors, which only exist at render, so `form!`'s map never holds them.
+    // `with_owned_attrs` builds the map a widget actually gets.
+
+    fn keys(attrs: &FieldAttrs) -> Vec<AttrKey> {
+        attrs.0.keys().copied().collect()
+    }
+
+    fn just_max_length() -> FieldAttrs {
+        all(&[(Attr::MaxLength, AttrValue::Int(10))])
+    }
+
+    /// **Owned attributes come FIRST**, `required` before `aria-invalid`, then
+    /// the field's own in their order. First is what keeps `required` where the
+    /// suite's exact-markup tests already expect it.
+    #[gtest]
+    fn owned_attributes_come_first_then_the_fields_own() {
+        let attrs = FieldAttrs::with_owned_attrs(
+            &WidgetType::Input(InputType::Text),
+            true,
+            true,
+            &just_max_length(),
+        );
+        expect_that!(
+            keys(&attrs),
+            elements_are![
+                eq(&AttrKey::Std(Attr::Required)),
+                eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::MaxLength)),
+            ]
+        );
+        expect_that!(attrs.get(Attr::Required), some(eq(&AttrValue::Flag)));
+        expect_that!(
+            attrs.get(Attr::AriaInvalid),
+            some(eq(&AttrValue::String("true".to_string())))
+        );
+    }
+
+    /// Each is added on its own condition, not both or neither.
+    #[gtest]
+    fn required_and_invalid_are_independent() {
+        let input = WidgetType::Input(InputType::Text);
+        let only_required = FieldAttrs::with_owned_attrs(&input, true, false, &just_max_length());
+        expect_that!(
+            keys(&only_required),
+            elements_are![
+                eq(&AttrKey::Std(Attr::Required)),
+                eq(&AttrKey::Std(Attr::MaxLength)),
+            ]
+        );
+        let only_invalid = FieldAttrs::with_owned_attrs(&input, false, true, &just_max_length());
+        expect_that!(
+            keys(&only_invalid),
+            elements_are![
+                eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::MaxLength)),
+            ]
+        );
+    }
+
+    /// Neither applying leaves the field's own attributes exactly as they were.
+    #[gtest]
+    fn without_either_the_fields_attributes_pass_through_unchanged() {
+        let attrs = FieldAttrs::with_owned_attrs(
+            &WidgetType::Input(InputType::Text),
+            false,
+            false,
+            &just_max_length(),
+        );
+        expect_that!(attrs, eq(&just_max_length()));
+    }
+
+    /// `without` drops exactly the one attribute and keeps the rest in order,
+    /// which is what lets `RadioGroup` move `required` off its fieldset without
+    /// reordering what is left there.
+    #[gtest]
+    fn without_drops_one_attribute_and_keeps_the_order() {
+        let attrs = all(&[
+            (Attr::MaxLength, AttrValue::Int(10)),
+            (Attr::Required, AttrValue::Flag),
+            (Attr::MinLength, AttrValue::Int(2)),
+        ]);
+        expect_that!(
+            keys(&attrs.without(Attr::Required)),
+            elements_are![
+                eq(&AttrKey::Std(Attr::MaxLength)),
+                eq(&AttrKey::Std(Attr::MinLength)),
+            ]
+        );
+    }
+
+    /// **A checkbox never gets `required`.** On a checkbox, HTML `required`
+    /// means "must be ticked", which is `required_true`'s job; formoxus's
+    /// `required` means PRESENCE, and an unticked box is still a present
+    /// `false`. `aria-invalid` is unaffected.
+    #[gtest]
+    fn a_checkbox_never_gets_required() {
+        let attrs =
+            FieldAttrs::with_owned_attrs(&WidgetType::Checkbox, true, true, &FieldAttrs::default());
+        expect_that!(
+            keys(&attrs),
+            elements_are![eq(&AttrKey::Std(Attr::AriaInvalid))]
+        );
     }
 }

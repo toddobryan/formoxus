@@ -177,15 +177,12 @@ fn PopulatedInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "title".to_string(),
                 label: Some("Title".to_string()),
-                required: true,
                 errors: Vec::new(),
-                aria_invalid: None,
             },
         }
     }
@@ -204,15 +201,12 @@ fn EmptyInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            required_true: false,
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
                 path: "shape.radius".to_string(),
                 label: None,
-                required: true,
                 errors: Vec::new(),
-                aria_invalid: None,
             },
         }
     }
@@ -320,9 +314,9 @@ fn ScoreFormWithBadInput() -> Element {
 #[gtest]
 fn an_unparseable_value_renders_its_error() {
     // The regression that motivated this: `FieldValue::Invalid` carries the parse
-    // error INSIDE the value, `has_errors` reads it there, and `validate` used to
-    // leave `self.errors` empty. So the form correctly refused to submit using
-    // evidence the widget could not see, and the field rendered clean.
+    // error INSIDE the value, `has_errors_within` reads it there, and `validate`
+    // used to leave `self.errors` empty. So the form correctly refused to submit
+    // using evidence the widget could not see, and the field rendered clean.
     //
     // Asserted on the wrapper class rather than the message text, because the
     // wording is deliberately still the raw shape name and is expected to change.
@@ -541,15 +535,12 @@ fn PasswordWithEcho() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            required_true: false,
             widget: WidgetType::Input(InputType::Password),
             values,
             props: FieldProps {
                 path: "secret".to_string(),
                 label: Some("Secret".to_string()),
-                required: true,
                 errors: Vec::new(),
-                aria_invalid: None,
             },
         }
         p { class: "echo", "{stored}" }

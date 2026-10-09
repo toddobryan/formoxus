@@ -868,3 +868,41 @@ fn switching_variants_actually_edits_the_dom() {
         );
     }
 }
+
+// ── Whose error is it ────────────────────────────────────────────────────
+
+#[component]
+fn DrawingWithABadRadius() -> Element {
+    let mut state = empty_form::<Drawing>(FormSpec::default());
+    state
+        .choose_variant("shape", Some("Circle"))
+        .expect("Circle is a variant of Shape");
+    state.distribute_form_values(&[
+        ("name".to_string(), "Doodle".to_string()),
+        ("shape.$Circle.radius".to_string(), "abc".to_string()),
+    ]);
+    let _ = state.validate();
+    let form = use_form(|| state);
+    form.render_fragment()
+}
+
+/// **A bad field INSIDE the chosen variant does not mark the variant
+/// `<select>` invalid.** The choice itself is fine; it is `radius` that is
+/// wrong, and it carries its own `aria-invalid`. So the select keys off the
+/// `VariantSet`'s `has_errors_here`, never `has_errors_within`, which also
+/// counts its children's.
+#[gtest]
+fn a_bad_field_in_the_variant_does_not_mark_the_choice_invalid() {
+    let html = render_to_html(DrawingWithABadRadius);
+    let tag_with = |needle: &str| {
+        html.split_inclusive('>')
+            .find(|tag| tag.contains(needle))
+            .unwrap_or_else(|| panic!("no tag containing {needle} in:\n{html}"))
+            .to_string()
+    };
+    expect_that!(
+        tag_with(r#"name="shape.$Circle.radius""#),
+        contains_substring(r#"aria-invalid="true""#)
+    );
+    expect_that!(tag_with("<select"), not(contains_substring("aria-invalid")));
+}

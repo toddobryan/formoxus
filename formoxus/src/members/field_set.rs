@@ -55,8 +55,12 @@ impl FormMember for FieldSet {
         Box::new(self.clone())
     }
 
-    fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors())
+    fn has_errors_within(&self) -> bool {
+        self.has_errors_here() || self.members.iter().any(|m| m.has_errors_within())
+    }
+
+    fn has_errors_here(&self) -> bool {
+        !self.errors.is_empty()
     }
 
     fn raw_value(&self) -> String {

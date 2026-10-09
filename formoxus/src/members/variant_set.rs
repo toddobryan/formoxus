@@ -169,6 +169,13 @@ impl FormMember for VariantSet {
                 self.members.iter().map(|m| m.render(&nested)).collect()
             }
         };
+
+        let attrs = FieldAttrs::with_owned_attrs(
+            &WidgetType::Select,
+            ctx.required,
+            self.has_errors_here(),
+            &self.field_attrs,
+        );
         rsx! {
             fieldset { class: "fx-group fx-variant-set",
                 if let Some(text) = self.label(ctx.label_case) {
@@ -180,7 +187,7 @@ impl FormMember for VariantSet {
                     }
                 }
                 VariantSelect {
-                    field_attrs: self.field_attrs.clone(),
+                    field_attrs: attrs,
                     variants: self.variants(),
                     selected: self.chosen(),
                     on_edit: ctx.on_edit,
@@ -190,9 +197,7 @@ impl FormMember for VariantSet {
                         // The legend above already names this group; a second copy
                         // beside the select would just be the same word twice.
                         label: None,
-                        required: ctx.required,
                         errors: self.errors.clone(),
-                        aria_invalid: (!self.errors.is_empty()).then_some("true"),
                     }
                 }
                 { members.into_iter() }
@@ -240,8 +245,12 @@ impl FormMember for VariantSet {
         Box::new(self.clone())
     }
 
-    fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || self.members.iter().any(|m| m.has_errors())
+    fn has_errors_within(&self) -> bool {
+        self.has_errors_here() || self.members.iter().any(|m| m.has_errors_within())
+    }
+
+    fn has_errors_here(&self) -> bool {
+        !self.errors.is_empty()
     }
 
     fn raw_value(&self) -> String {

@@ -55,8 +55,14 @@ impl FormMember for OptionMember {
         }
     }
 
-    fn has_errors(&self) -> bool {
-        self.inner.has_errors()
+    fn has_errors_within(&self) -> bool {
+        self.inner.has_errors_within()
+    }
+
+    // Transparent, like `collect_errors` above: an absent-or-present wrapper
+    // has no errors of its own, so the inner member's are its own here.
+    fn has_errors_here(&self) -> bool {
+        self.inner.has_errors_here()
     }
 
     fn clone_box(&self) -> Box<dyn FormMember> {

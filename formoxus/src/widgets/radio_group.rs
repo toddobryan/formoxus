@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
@@ -34,16 +34,23 @@ pub fn RadioGroup(
     // TODO: figure out where to put the attributes. Currently in the fieldset,
     //       but we might want people to be able to set attrs on each input
 
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+    // `required` and `aria-invalid` are both judgments about the GROUP, but each
+    // spec puts its own in a different place. HTML has `required` only on an
+    // `<input>`, never a `<fieldset>`, and one required radio makes the whole
+    // group required; so it goes on each radio and out of the spread. WAI-ARIA
+    // 1.2 defines `aria-invalid` on role `radiogroup` and NOT on `radio`; so it
+    // stays in the spread, which lands on the fieldset given that role below.
+    let required = field_attrs.contains(Attr::Required);
+    let attrs: Vec<Attribute> = field_attrs
+        .without(Attr::Required)
+        .merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class_plus("fx-radio-group");
 
     let FieldProps {
         path,
         label: label_text,
-        required,
         errors,
-        aria_invalid,
     } = props;
 
     let current = get_current(&path, values);
@@ -67,11 +74,9 @@ pub fn RadioGroup(
                         name: "{path}",
                         value: "{choice.value}",
                         checked: choice.value == current,
-                        // On a radio, `required` applies to the whole group, so
-                        // repeating it per input asks for one pick, not one per
-                        // button.
+                        // On every radio, though one would do for the browser:
+                        // each then announces "required" when it has focus.
                         required,
-                        aria_invalid,
                         onchange: move |e: FormEvent| write_value(&path, values, e.value()),
                     }
                     "{choice.display}"
@@ -83,6 +88,9 @@ pub fn RadioGroup(
     rsx! {
         fieldset {
             class: field_class,
+            // A bare `<fieldset>` is role `group`, where ARIA leaves
+            // `aria-invalid` undefined.
+            role: "radiogroup",
             ..attrs,
             // The group's label is the `legend`, not a `label` — a `<label>`
             // can only name a single control, and there are several here.
@@ -93,7 +101,7 @@ pub fn RadioGroup(
                 // what a screen reader announces.
                 if let Some(text) = label_text {
                     "{text}"
-                    if required {
+                    if field_attrs.contains(Attr::Required) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }

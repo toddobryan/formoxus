@@ -42,7 +42,19 @@ pub trait FormMember: Debug {
     /// This is the "shuffle back" from widget state into plain form data.
     fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath);
     fn validate(&mut self);
-    fn has_errors(&self) -> bool;
+    /// Whether anything is wrong at this member OR anywhere under it: what
+    /// `FormState::validate` asks before building a model.
+    ///
+    /// Not the question a widget asks; see [`has_errors_here`](Self::has_errors_here).
+    /// A `VariantSet` whose chosen variant has a bad `radius` has errors
+    /// within, but its `<select>` is fine and must not render `aria-invalid`.
+    /// A leaf counts an unvalidated `Invalid` value too, which `validate` has
+    /// not yet turned into an error message.
+    fn has_errors_within(&self) -> bool;
+    /// Whether this member has errors of its OWN, ignoring any under it: the
+    /// messages it renders, and what decides its `aria-invalid`. Always implies
+    /// [`has_errors_within`](Self::has_errors_within), never the reverse.
+    fn has_errors_here(&self) -> bool;
     fn clone_box(&self) -> Box<dyn FormMember>;
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError>;
 

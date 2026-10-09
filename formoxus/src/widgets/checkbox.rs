@@ -1,7 +1,7 @@
 //! The checkbox.
 
 use dioxus::prelude::*;
-use formoxus_attrs::FieldType;
+use formoxus_attrs::{Attr, FieldType};
 
 use super::errors::FieldErrors;
 use super::types::FieldProps;
@@ -15,11 +15,6 @@ pub fn Checkbox(
     field_attrs: FieldAttrs,
     mut values: ValuesStore,
     props: FieldProps,
-    /// `required_true` in `form!`: the box must be ticked. Shows the ` *`
-    /// marker. The HTML `required` attribute does not come from here; it
-    /// arrives in `attrs`, from `FormField::constraint_attributes`, like every other
-    /// constraint.
-    required_true: bool,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
     let class = field_attrs.class("fx-control fx-checkbox");
@@ -31,15 +26,7 @@ pub fn Checkbox(
         path,
         label,
         errors,
-        required: _,
-        aria_invalid,
     } = props;
-
-    // `props.required` is deliberately dropped rather than forwarded. It means
-    // PRESENCE, and for a `bool` unticked is a complete answer, while HTML
-    // `required` on a checkbox means "must be ticked". That second meaning is
-    // `required_true`, which is a separate prop so that `required` keeps one
-    // meaning in the Rust API.
 
     // The wrapper is unconditional and the caption is not, exactly as in
     // `Input`. Until 2026-09-29 this widget wrapped an unclassed `<label>` only
@@ -56,11 +43,6 @@ pub fn Checkbox(
                 name: "{path}",
                 r#type: "checkbox",
                 checked: get_current(&path, values) == "true",
-                // A checkbox has nowhere to put an invalid icon, but the
-                // attribute still drives any border or adjacent-message styling
-                // a consumer writes, and it is what a screen reader announces
-                // either way.
-                aria_invalid,
                 onchange: move |e: FormEvent| write_value(&path, values, e.value()),
                 // Last: rsx! reads anything after a spread as children.
                 ..attrs,
@@ -71,7 +53,7 @@ pub fn Checkbox(
                 // announces, and the asterisk is only for the eye.
                 span { class: "fx-field-label",
                     "{label_text}"
-                    if required_true {
+                    if field_attrs.contains(Attr::RequiredTrue) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
