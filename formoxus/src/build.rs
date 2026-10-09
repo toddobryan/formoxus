@@ -460,6 +460,7 @@ fn enum_member(
     });
     let variant = chosen_variant(enum_type, peek_enum, mode, prefix);
     Box::new(VariantSet {
+        field_attrs: FieldAttrs::default(),
         name: name.to_string(),
         label: None,
         custom_widget: None,

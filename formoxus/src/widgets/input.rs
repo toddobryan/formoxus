@@ -19,6 +19,7 @@ pub fn Input(
     props: FieldProps,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let class: String = field_attrs.class("fx-control fx-input");
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class();
@@ -88,7 +89,7 @@ pub fn Input(
                 }
             }
             input {
-                class: "fx-control fx-input",
+                class: class,
                 r#type: input_type.html_type(),
                 name: "{path}",
                 value: "{current}",

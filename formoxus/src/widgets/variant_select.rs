@@ -1,7 +1,9 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
+use formoxus_attrs::FieldType;
 
+use crate::fields::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
 use crate::members::Edit;
 use crate::widgets::FieldProps;
@@ -18,6 +20,7 @@ use super::select::ABSENT_DISPLAY;
 /// [`Edit`] and rebuilds the form beneath it.
 #[component]
 pub fn VariantSelect(
+    field_attrs: FieldAttrs,
     variants: Vec<&'static str>,
     selected: Option<String>,
     on_edit: Callback<Edit>,
@@ -28,6 +31,7 @@ pub fn VariantSelect(
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
+    let class = field_attrs.class("fx-control fx-select");
     let field_class = props.field_class();
 
     let FieldProps {
@@ -58,7 +62,7 @@ pub fn VariantSelect(
                 }
             }
             select {
-                class: "fx-control fx-select",
+                class: class,
                 required,
                 aria_invalid,
                 onchange: move |e: FormEvent| {
@@ -66,7 +70,7 @@ pub fn VariantSelect(
                     let variant = (!v.is_empty()).then_some(v);
                     on_edit.call(Edit::new_choose_variant(&path, variant.as_deref()));
                 },
-                ..attrs,
+                ..field_attrs.merge_with_attrs(FieldType::Text, attrs),
                 // Required + unchosen: an unselectable placeholder that keeps the browser's
                 // own validation on the hook. Not required: a real "--none--" the user can
                 // pick, which routes through the empty arm above to Unchosen.

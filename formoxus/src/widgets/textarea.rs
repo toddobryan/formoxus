@@ -24,6 +24,7 @@ pub fn Textarea(
     props: FieldProps,
     #[props(extends = textarea)] attrs: Vec<Attribute>,
 ) -> Element {
+    let class = field_attrs.class("fx-control fx-textarea");
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class();
@@ -56,7 +57,7 @@ pub fn Textarea(
                 }
             }
             textarea {
-                class: "fx-control fx-textarea",
+                class: class,
                 name: "{path}",
                 value: "{current}",
                 required,

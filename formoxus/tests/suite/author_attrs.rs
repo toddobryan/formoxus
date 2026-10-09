@@ -18,6 +18,8 @@ use formoxus::prelude::*;
 use formoxus::widgets::{InputType, WidgetType};
 use googletest::prelude::*;
 
+use super::models::Shape;
+
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Person {
     name: String,
@@ -195,6 +197,239 @@ fn a_custom_widget_receives_the_fields_attributes() {
     expect_that!(input, contains_substring(r#"class="spreading""#));
     expect_that!(input, contains_substring("maxlength=10"));
     expect_that!(input, contains_substring(r#"data-x="1""#));
+}
+
+// ── class and class_plus ─────────────────────────────────────────────────
+//
+// Each widget writes `class` as a literal, resolved by `FieldAttrs::class`
+// against its own base, and `to_attributes` leaves `Class`/`ClassPlus` out of
+// the spread. Before that, an author's `class` was spread as a SECOND `class`
+// attribute beside the widget's, and a browser keeps only the first. So every
+// test here reads ALL the `class` attributes on the tag, not just one.
+
+/// An enum field, for the variant `<select>` a `VariantSet` renders.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Drawing {
+    shape: Shape,
+}
+
+/// The value of every `class="…"` in `tag`, in order. More than one is the bug
+/// these tests exist for.
+fn classes_of(tag: &str) -> Vec<String> {
+    tag.split(r#" class=""#)
+        .skip(1)
+        .map(|rest| rest[..rest.find('"').expect("a class value ends with \"")].to_string())
+        .collect()
+}
+
+fn class(names: &'static [&'static str]) -> FieldAttrs {
+    FieldAttrs::from([(AttrKey::Std(Attr::Class), AttrValue::List(names))])
+}
+
+fn class_plus(names: &'static [&'static str]) -> FieldAttrs {
+    FieldAttrs::from([(AttrKey::Std(Attr::ClassPlus), AttrValue::List(names))])
+}
+
+/// `class` replaces formoxus's classes outright, and `class_plus` appends to
+/// them with a space; either way the tag has exactly one `class`.
+#[gtest]
+fn class_and_class_plus_on_the_input() {
+    let replaced = render!(FormSpec::<Person>::new().with_attrs("name", class(&["wide", "dark"])));
+    expect_that!(
+        classes_of(tag(&replaced, "input")),
+        elements_are![eq("wide dark")]
+    );
+
+    let appended = render!(FormSpec::<Person>::new().with_attrs("name", class_plus(&["wide"])));
+    expect_that!(
+        classes_of(tag(&appended, "input")),
+        elements_are![eq("fx-control fx-input wide")]
+    );
+}
+
+#[gtest]
+fn class_and_class_plus_on_the_textarea() {
+    let replaced = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::Textarea)
+            .with_attrs("name", class(&["wide"]))
+    );
+    expect_that!(
+        classes_of(tag(&replaced, "textarea")),
+        elements_are![eq("wide")]
+    );
+
+    let appended = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::Textarea)
+            .with_attrs("name", class_plus(&["wide"]))
+    );
+    expect_that!(
+        classes_of(tag(&appended, "textarea")),
+        elements_are![eq("fx-control fx-textarea wide")]
+    );
+}
+
+#[gtest]
+fn class_and_class_plus_on_the_checkbox() {
+    let replaced = render!(FormSpec::<Terms>::new().with_attrs("agreed", class(&["big"])));
+    expect_that!(
+        classes_of(tag(&replaced, "input")),
+        elements_are![eq("big")]
+    );
+
+    let appended = render!(FormSpec::<Terms>::new().with_attrs("agreed", class_plus(&["big"])));
+    expect_that!(
+        classes_of(tag(&appended, "input")),
+        elements_are![eq("fx-control fx-checkbox big")]
+    );
+}
+
+#[gtest]
+fn class_and_class_plus_on_the_select() {
+    let replaced = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::Select)
+            .with_choices("name", STATES)
+            .with_attrs("name", class(&["wide"]))
+    );
+    expect_that!(
+        classes_of(tag(&replaced, "select")),
+        elements_are![eq("wide")]
+    );
+
+    let appended = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::Select)
+            .with_choices("name", STATES)
+            .with_attrs("name", class_plus(&["wide"]))
+    );
+    expect_that!(
+        classes_of(tag(&appended, "select")),
+        elements_are![eq("fx-control fx-select wide")]
+    );
+}
+
+/// **An enum field's attributes reach its variant `<select>`.** `VariantSet`
+/// took no attributes at all until step 4, so anything a `form!` author wrote
+/// on an enum field was parsed and then dropped.
+#[gtest]
+fn class_and_class_plus_on_the_variant_select() {
+    let replaced = render!(FormSpec::<Drawing>::new().with_attrs("shape", class(&["wide"])));
+    expect_that!(
+        classes_of(tag(&replaced, "select")),
+        elements_are![eq("wide")]
+    );
+
+    let appended = render!(FormSpec::<Drawing>::new().with_attrs(
+        "shape",
+        FieldAttrs::from([
+            (AttrKey::Std(Attr::ClassPlus), AttrValue::List(&["wide"])),
+            (
+                AttrKey::NonStd("data-x"),
+                AttrValue::String("1".to_string())
+            ),
+        ])
+    ));
+    let select = tag(&appended, "select");
+    expect_that!(
+        classes_of(select),
+        elements_are![eq("fx-control fx-select wide")]
+    );
+    expect_that!(select, contains_substring(r#"data-x="1""#));
+}
+
+/// **On a radio group an author's `class` goes nowhere, for now.** Where it
+/// belongs (the `<fieldset>`, each radio, or a `group_class`/`input_class`
+/// pair) is on hold; meanwhile `RadioGroup` never calls `FieldAttrs::class`,
+/// and the spread no longer carries it. Pinned so the decision, when it comes,
+/// changes this on purpose.
+#[gtest]
+fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::RadioGroup)
+            .with_choices("name", STATES)
+            .with_attrs("name", class(&["wide"]))
+    );
+    expect_that!(html, not(contains_substring("wide")));
+}
+
+// ── style and style_plus ─────────────────────────────────────────────────
+//
+// Unlike `class`, `style` rides the spread: formoxus writes no style of its
+// own, so there is no literal to resolve it against and no base to append to.
+// `form!` hands over each declaration whole (`"font-size: 20px"`); joining
+// them is `to_attributes`' job.
+
+fn style(declarations: &'static [&'static str]) -> FieldAttrs {
+    FieldAttrs::from([(AttrKey::Std(Attr::Style), AttrValue::List(declarations))])
+}
+
+fn style_plus(declarations: &'static [&'static str]) -> FieldAttrs {
+    FieldAttrs::from([(AttrKey::Std(Attr::StylePlus), AttrValue::List(declarations))])
+}
+
+/// **Declarations are separated by `;`.** A comma is not a CSS separator:
+/// `color: red, font-size: 20px` is ONE declaration with an invalid value,
+/// which a browser drops whole, so neither style applies.
+#[gtest]
+fn style_joins_its_declarations_with_semicolons() {
+    let html = render!(
+        FormSpec::<Person>::new().with_attrs("name", style(&["color: red", "font-size: 20px"]))
+    );
+    let input = tag(&html, "input");
+    expect_that!(
+        input,
+        contains_substring(r#"style="color: red; font-size: 20px""#)
+    );
+    expect_that!(input.matches(" style=").count(), eq(1));
+}
+
+/// One declaration gets no separator at all, so nothing trails it.
+#[gtest]
+fn a_single_style_declaration_stands_alone() {
+    let html = render!(FormSpec::<Person>::new().with_attrs("name", style(&["color: red"])));
+    expect_that!(
+        tag(&html, "input"),
+        contains_substring(r#"style="color: red""#)
+    );
+}
+
+/// **`style_plus` acts exactly like `style`, for now.** It means "append to
+/// formoxus's", and formoxus emits none. The day a widget writes a style of its
+/// own, this changes, and `style_plus` wants the `class` treatment.
+#[gtest]
+fn style_plus_renders_like_style_while_formoxus_has_none() {
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_attrs("name", style_plus(&["color: red", "font-size: 20px"]))
+    );
+    let input = tag(&html, "input");
+    expect_that!(
+        input,
+        contains_substring(r#"style="color: red; font-size: 20px""#)
+    );
+    expect_that!(input.matches(" style=").count(), eq(1));
+}
+
+/// **On a radio group, `style` lands on the `<fieldset>`**, because it rides
+/// the spread and that is where `RadioGroup` spreads. Unlike `class`, which
+/// goes nowhere there (above). If the `RadioGroup` hold settles on per-radio
+/// placement, this should change with it.
+#[gtest]
+fn on_a_radio_group_style_lands_on_the_fieldset() {
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_custom_widget("name", WidgetType::RadioGroup)
+            .with_choices("name", STATES)
+            .with_attrs("name", style(&["gap: 4px"]))
+    );
+    expect_that!(
+        tag(&html, "fieldset"),
+        contains_substring(r#"style="gap: 4px""#)
+    );
+    expect_that!(html.matches("gap: 4px").count(), eq(1));
 }
 
 // ── Against formoxus's own attributes ────────────────────────────────────

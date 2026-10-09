@@ -7,7 +7,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 
 > **Status, 2026-10-08.** 3d's `form!` side is done (`90ddaf4`). The widget
 > side is a numbered checklist under 3d, "Widgets build their own attributes":
-> Part A (steps 1–3) is done (`1d1722b`); **next is step 4**, `FieldAttrs::class`.
+> Part A (steps 1–3) is done (`1d1722b`), and so is step 4 (`FieldAttrs::class`,
+> 2026-10-08, tests pinned) and step 5 (style); **next is Part C, step 6**.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -246,7 +247,17 @@ style: {
     `tests/suite/author_attrs.rs`).
 
   **Part B: class and style.**
-  - [ ] 4. **One resolved `class`, written as a LITERAL.**
+  - [x] 4. **One resolved `class`, written as a LITERAL.** DONE 2026-10-08 (Todd;
+    tests Claude). Beyond the plan: `VariantSet` gained `field_attrs`, copied
+    from the spec in `distribute_specs`, so an enum field's attributes now reach
+    its `<select>` (they were parsed and dropped before); `VariantSelect`
+    passes `FieldType::Text` inline rather than taking a `field_type` prop. No
+    existing test changed, because none set an author `class`. New:
+    `class_and_class_plus_on_the_{input,textarea,checkbox,select,variant_select}`
+    and `on_a_radio_group_an_author_class_goes_nowhere_yet` in
+    `tests/suite/author_attrs.rs`, and
+    `a_class_plus_from_the_macro_appends_to_the_inputs_class` in
+    `tests/suite/form_macro.rs`; all mutation-checked.
     1. `FieldAttrs::class(&self, base: &str) -> String`: `Class` replaces
        `base`, `ClassPlus` appends with a space, neither gives `base`.
     2. Each widget writes `class: field_attrs.class("fx-control fx-input")`
@@ -259,8 +270,12 @@ style: {
     literals, so a spread `class` would move in every tag and break the suite's
     exact-markup tests. Expect a test or two to change where an author's
     `class` used to be a duplicate attribute: that duplication is the bug.
-  - [ ] 5. **Style.** `to_attributes` joins `Style`/`StylePlus` with `"; "`.
+  - [x] 5. **Style.** `to_attributes` joins `Style`/`StylePlus` with `"; "`.
     Formoxus emits no style of its own, so `StylePlus` acts like `Style` for now.
+    DONE 2026-10-08 (Todd; tests Claude, mutation-checked): four `style*` tests
+    in `tests/suite/author_attrs.rs` (`;` join, one declaration, `style_plus`
+    = `style`, a radio group's style on its `<fieldset>`) and
+    `a_style_from_the_macro_reaches_the_input` in `tests/suite/form_macro.rs`.
 
   **Part C: `required` and `aria_invalid` into the map.**
   - [ ] 6. **Build the map at render time.** Something like
@@ -301,10 +316,14 @@ style: {
   merged `Vec<Attribute>`; `field_attrs` in `WidgetProps` waits (Todd,
   2026-10-08). `form!`'s `custom(…)` closure drops `attrs` entirely
   ([widget.rs:159](../formoxus-macros/src/form/widget.rs#L159)); that is
-  "custom widgets receive attributes" in **Step 4** below (not step 4 here). Issue #7
+  "custom widgets receive attributes" in **Step 4** below (not step 4 here).
+  **Since step 4, an author `class` reaches neither a custom widget nor
+  `RadioGroup`:** `to_attributes` skips it and neither calls
+  `FieldAttrs::class`. That belongs with the Widget trait's declared default
+  classes (design note) and the `RadioGroup` hold. Issue #7
   (`aria-invalid="false"`) is unaffected; later.
-- [ ] Tests (Claude): the parser's unit tests, and a suite test pinning ONE
-  `class` attribute per element (the 2026-10-07 probe, kept).
+- [ ] Tests (Claude): the parser's unit tests, and ~~a suite test pinning ONE
+  `class` attribute per element~~ (DONE with step 4, above).
 
 ### 3e. The grammar change: `required: true` → `required_true`
 

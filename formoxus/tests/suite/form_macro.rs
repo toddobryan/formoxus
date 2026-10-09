@@ -267,6 +267,68 @@ fn a_widget_from_the_macro_changes_the_rendered_input() {
     expect_that!(html, contains_substring("Spring tour"));
 }
 
+// ── A class ─────────────────────────────────────────────────────────────
+
+#[component]
+fn ClassedName() -> Element {
+    use_form(|| {
+        empty_form(form! {
+            Trip {
+                name => { class_plus: [wide, text_mt_4, "md:w-1/2"] },
+            }
+        })
+    })
+    .render_fragment()
+}
+
+/// **`class_plus:` from `form!` all the way to the markup, as ONE `class`.**
+/// A bare name turns `_` into `-`; a quoted one passes through untouched. The
+/// runtime half, for every widget, is in `author_attrs.rs`.
+#[gtest]
+fn a_class_plus_from_the_macro_appends_to_the_inputs_class() {
+    let html = render_to_html(ClassedName);
+    let input = html
+        .split_inclusive('>')
+        .find(|tag| tag.contains(r#"name="name""#))
+        .expect("the name field renders an <input>");
+    expect_that!(
+        input,
+        contains_substring(r#"class="fx-control fx-input wide text-mt-4 md:w-1/2""#)
+    );
+    expect_that!(input.matches(" class=").count(), eq(1));
+}
+
+// ── A style ─────────────────────────────────────────────────────────────
+
+#[component]
+fn StyledName() -> Element {
+    use_form(|| {
+        empty_form(form! {
+            Trip {
+                name => { style: { color: red, font_size: 20px, "--gap": "4px" } },
+            }
+        })
+    })
+    .render_fragment()
+}
+
+/// **A `style:` block from `form!` all the way to the markup**: each
+/// declaration written out whole by the macro, `_` turned into `-` in a bare
+/// property, and the declarations joined with `;` at render.
+#[gtest]
+fn a_style_from_the_macro_reaches_the_input() {
+    let html = render_to_html(StyledName);
+    let input = html
+        .split_inclusive('>')
+        .find(|tag| tag.contains(r#"name="name""#))
+        .expect("the name field renders an <input>");
+    expect_that!(
+        input,
+        contains_substring(r#"style="color: red; font-size: 20px; --gap: 4px""#)
+    );
+    expect_that!(input.matches(" style=").count(), eq(1));
+}
+
 #[component]
 fn SelectedBool() -> Element {
     use_form(|| {

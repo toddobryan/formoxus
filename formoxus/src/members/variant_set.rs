@@ -2,6 +2,7 @@
 
 use crate::build::{FormMode, variant_members};
 use crate::error::{FormAccessError, ValidationMessage};
+use crate::fields::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
@@ -35,6 +36,7 @@ pub enum VariantChoice {
 /// value.
 #[derive(Clone, Debug)]
 pub struct VariantSet {
+    pub field_attrs: FieldAttrs,
     pub name: String,
     pub label: Option<String>,
     pub custom_widget: Option<WidgetType>,
@@ -178,6 +180,7 @@ impl FormMember for VariantSet {
                     }
                 }
                 VariantSelect {
+                    field_attrs: self.field_attrs.clone(),
                     variants: self.variants(),
                     selected: self.chosen(),
                     on_edit: ctx.on_edit,
@@ -336,6 +339,7 @@ impl FormMember for VariantSet {
             // its own — the `<select>` — so an override here is meaningful (a
             // radio group), even though nothing renders one yet.
             self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
+            self.field_attrs = spec.attrs.clone();
         }
         // Two paths again, exactly as in `edit`: this member sits at `my_path`,
         // but its children sit one segment deeper under the chosen variant's

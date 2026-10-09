@@ -5,6 +5,15 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-08, EVENING (home) — STEPS 4 AND 5 DONE, NEXT IS STEP 6 (Part C).**
+Step 5 (style, `"; "` join): Todd; 5 tests, Claude.
+Todd built `FieldAttrs::class` and the five widgets' literal `class`, plus
+`VariantSet.field_attrs` (enum-field attributes reach the `<select>` now).
+Claude: `matches!`/`if let` tidy-up in `fields.rs`, 7 class tests
+(mutation-checked), plan ticked. Open: an author `class` reaches neither
+`RadioGroup` nor a custom widget (pinned for the radio group). Committed and pushed
+together with step 5. Green: 580 tests, fmt, clippy, rustdoc.
+
 **UPDATE 2026-10-08, END OF SCHOOL DAY — BUILD GREEN, NEXT IS STEP 4.**
 The widget-side work is now a numbered checklist under 3d in
 `formoxus/ATTRIBUTES_PLAN.md` ("Widgets build their own attributes"); Todd

@@ -66,6 +66,9 @@ impl FieldAttrs {
     fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
         let mut out = Vec::new();
         for (attr_key, attr_value) in &self.0 {
+            if matches!(attr_key, AttrKey::Std(Attr::Class | Attr::ClassPlus)) {
+                continue;
+            }
             let name = match attr_key {
                 AttrKey::Std(attr) => attr.name(),
                 AttrKey::NonStd(name) => name,
@@ -80,8 +83,11 @@ impl FieldAttrs {
                 },
                 AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
                 AttrValue::List(vs) => {
-                    // TODO: check style vs class, for now just join with space
-                    Attribute::new(name, vs.join(" "), None, false)
+                    assert!(matches!(
+                        attr_key,
+                        AttrKey::Std(Attr::Style | Attr::StylePlus)
+                    ));
+                    Attribute::new(name, vs.join("; "), None, false)
                 }
             };
             out.push(attribute);
@@ -105,6 +111,16 @@ impl FieldAttrs {
         }
 
         mapped_attrs.into_values().collect()
+    }
+
+    pub fn class(&self, base: &str) -> String {
+        if let Some(AttrValue::List(classes)) = self.get(Attr::Class) {
+            classes.join(" ")
+        } else if let Some(AttrValue::List(classes)) = self.get(Attr::ClassPlus) {
+            format!("{base} {}", classes.join(" "))
+        } else {
+            base.to_string()
+        }
     }
 }
 

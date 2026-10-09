@@ -22,6 +22,7 @@ pub fn Checkbox(
     required_true: bool,
     #[props(extends = input)] attrs: Vec<Attribute>,
 ) -> Element {
+    let class = field_attrs.class("fx-control fx-checkbox");
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class();
@@ -51,7 +52,7 @@ pub fn Checkbox(
             // "I agree ☐" — the label is what the box means, not what to type
             // into it.
             input {
-                class: "fx-control fx-checkbox",
+                class: class,
                 name: "{path}",
                 r#type: "checkbox",
                 checked: get_current(&path, values) == "true",

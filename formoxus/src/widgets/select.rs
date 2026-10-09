@@ -34,6 +34,7 @@ pub fn Select(
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
+    let class = field_attrs.class("fx-control fx-select");
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
     let field_class = props.field_class();
@@ -66,7 +67,7 @@ pub fn Select(
                 }
             }
             select {
-                class: "fx-control fx-select",
+                class: class,
                 aria_invalid,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `distribute_form_values` would never see it.
