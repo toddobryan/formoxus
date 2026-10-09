@@ -9,8 +9,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > 3d's widget side finished today too (steps 4–10). Typed keys on an enum
 > field are allowed where they make sense (3f, DONE). Deferred: the
 > `RadioGroup` author-attribute grammar, and custom widgets getting author
-> `class`. **Step 4 (emit only valid attributes, the `Widget` trait) has not
-> started.**
+> `class`. **Step 4 (emit only valid attributes, the `Widget` trait) is broken
+> down below but not started; it opens with four decisions (D1–D4).**
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -468,21 +468,143 @@ Breaking, so it all moves together. Claude updates the tests side.
 ## Step 4: emit only valid attributes, and the custom-widget trait
 
 Closes issue #4. Decisions 6, 10, and the custom-widget section of the note.
+Broken down 2026-10-09; line numbers are from `12cb3c3`.
 
-- [ ] Map each widget (and `InputType`) to its `FieldControl`, at expansion time
-  for named widgets.
-- [ ] **Compile-time**: `form!` asserts `Attr::is_allowed(field_type, control)`
-  per attribute. Refused → error naming the attribute and the widget.
-- [ ] **Runtime**: `constraint_attributes` emits only where `is_valid_on`
-  (so `min` stops appearing on `type="text"`; it is still checked).
-- [ ] ~~`RadioGroup` routes each attribute to the radios or the `<fieldset>` by
-  asking `is_valid_on`.~~ SUPERSEDED 2026-10-09: `required`/`aria-invalid`
-  are placed by the specs (3d step 8), and validity cannot decide `class`,
-  `style`, `disabled` or `data-*`, which are valid on both. Author attributes
-  wait on the deferred `form!` grammar (`radio_group { choices, each: {…} }`).
-- [ ] The **`Widget` trait** for custom widgets (`const ATTRS: AttrSet`,
-  `AttrSet::ANY` allowed); custom widgets receive attributes.
-- [ ] The **dioxus-html cross-check test** (design note, "TODO: cross-check").
+**The idea in one line:** every field already knows its `FieldType`; Step 4
+gives it a `FieldControl` too (the element its attributes land on), at compile
+time, and then asks the full rule `Attr::is_allowed(field_type, control)`
+([attrs.rs:215](../formoxus-attrs/src/attrs.rs#L215)), which is built and
+unit-tested but has no caller yet. Once nothing invalid can get PAST `form!`,
+the runtime can safely drop the one kind that is accepted but not emitted
+(`true_and_on`: `min`/`max` on a number rendered as text, `required_true` on a
+`<select>` or radios).
+
+**Order matters: 4b before 4c.** If the runtime filtered first, an attribute
+`form!` still accepts would vanish from the DOM silently, which is exactly the
+failure the compile-time checks exist to prevent.
+
+### Decisions to make first (Todd)
+
+- **D1. `RadioGroup`'s control.** Its spread lands on the `<fieldset>`, so
+  `Fieldset`, as `FieldControl`'s doc says. But `required_true` is
+  `true_and_on(Select | Input(Radio))`, so with `Fieldset` a required-true
+  radio group over bools would be refused. Either the row adds `Fieldset`, or
+  `RadioGroup` maps to `Input(Radio)` for VALIDATED attributes and `Fieldset`
+  for the rest. The first is simpler.
+- **D2. The message when the control comes from the DEFAULT widget.** A
+  const panic's message is fixed when the macro expands, and the macro does not
+  know the field's type, so for a field with no `widget:` it cannot say "on a
+  checkbox". Proposed: "`rows` is not valid on the element this field renders
+  by default; name a widget that takes it, like `widget: textarea`". For a
+  named widget the message can name it: "`rows` is not valid on `widget: text`".
+- **D3. `max_length` on a chooser.** `a_chooser_carries_them_onto_a_select_or_fieldset`
+  ([constraint_attrs.rs:164](tests/suite/constraint_attrs.rs#L164)) puts
+  `max_length: 10` on a `select`/`radio_group` over `String`. `MaxLength` is
+  `validated: true` and not valid on `Select`/`Fieldset`, with no
+  `true_and_on`, so 4b refuses it. Probably right (the choices are fixed, so
+  the author controls their length), but it is a behaviour change. The
+  alternative is `true_and_on(Select | Fieldset)` on the length and `pattern`
+  rows, keeping them server-checked.
+- **D4. The custom-widget trait's open questions** (design note): default
+  classes as a required `fn` or a `const`; what `AttrSet` is (a `&'static [Attr]`
+  plus an `ANY`, or a generated bitset); and whether built-ins implement the
+  trait too (note's (b)) now, or later.
+
+### 4a. Every field gets a `FieldControl` at compile time
+
+- [ ] **Named widgets, in the macro.** `widgets!`
+  ([widget.rs:63](../formoxus-macros/src/form/widget.rs#L63)) gains the
+  control per name: `text => Input(Text)` gives `Input(InputType::Text)`,
+  `textarea` gives `Textarea`, `select` gives `Select`, `checkbox` gives
+  `Input(Checkbox)`, `radio_group` gives D1's answer. `select_multiple`,
+  `checkbox_multiple` and `file` are refused at parse already, and
+  `custom(…)` has none (4d).
+- [ ] **No `widget:`, in const code.** `field_kind::default_control(shape) ->
+  Option<FieldControl>`: `Text`/`Int`/`Float` give `Input(Text)`, `bool`
+  gives `Input(Checkbox)`, `Option<bool>` gives `Select`, an enum gives
+  `Select`; `Unknown` and `Other` give `None` (nothing to check). It MIRRORS
+  `FormField::default_widget` ([fields.rs:390](src/fields.rs#L390)), so it
+  gets a "keep in step" note on both, like `renders` and `ScalarWidget`.
+- [ ] Unit tests (Claude) for `default_control`, one per row above, beside the
+  `field_kind` tests.
+
+### 4b. `form!` refuses an attribute the control cannot take
+
+- [ ] **`field_kind::allowed(attr, shape, control) -> bool`**: `applies(attr,
+  shape)` (the `for:` half, already emitted) AND `is_valid_on(control) ||
+  is_also_validated_on(control)`. `true` when `applies` is false, so a wrong
+  field type reports once, from there, as `required_is_not_optional` does.
+- [ ] **The macro emits one more assert per table key**, in
+  `FieldBody::type_checks` ([field.rs:226](../formoxus-macros/src/form/field.rs#L226)):
+  the control as tokens for a named widget, `default_control(#shape)` for
+  none (`None` passes), nothing for `custom(…)` until 4d. Messages per D2.
+- [ ] **The enum arm of `applies` simplifies.** An enum's control is `Select`
+  (from `default_control`), so its `is_valid_on(FieldControl::Select)` half
+  moves into `allowed` and the arm becomes `!attr.validated()`. `enum_refusal`'s
+  "does not take it" message moves with it.
+- [ ] **Goldens** (Claude): `rows` on a text field (default control);
+  `rows` on `widget: email` (named); `pattern` on a textarea (replaces the
+  suite test `a_textarea_gets_pattern_although_html_has_no_such_attribute`,
+  [constraint_attrs.rs:143](tests/suite/constraint_attrs.rs#L143), as the
+  build order says); `placeholder` on a bool (checkbox); `min` on a textarea
+  (validated, not on it, no `true_and_on`); plus D3's case, whichever way it
+  goes. And one that must still COMPILE: `min` on an `i32` with no widget
+  (`true_and_on(Input(Text))`).
+
+### 4c. The runtime emits only what is valid on the element
+
+- [ ] **`FieldAttrs::to_attributes` and `merge_with_attrs`** ([fields.rs:75](src/fields.rs#L75),
+  [:107](src/fields.rs#L107)) take an `Option<FieldControl>` and skip an
+  `AttrKey::Std` whose `is_valid_on(control)` is false. `NonStd` (quoted)
+  keys are never filtered; `None` (custom widgets) filters nothing. After 4b
+  the only things skipped are `true_and_on` entries and formoxus's own.
+- [ ] **The seven call sites pass their control:** `input.rs:23` (its
+  `Input(type)`), `textarea.rs:28`, `select.rs:38`, `checkbox.rs:21`,
+  `radio_group.rs:46` (`Fieldset`), `variant_select.rs:71` (`Select`),
+  `scalar.rs:102` (custom: `None`).
+- [ ] **`RadioGroup`'s `FieldAttrs::without(Attr::Required)` may go.**
+  `Required` is not valid on `Fieldset`, so the filter drops it from the
+  spread on its own; `required` stays a literal on each radio.
+- [ ] **Tests that flip, on purpose** (Claude):
+  `a_numeric_bound_reaches_the_input` ([constraint_attrs.rs:73](tests/suite/constraint_attrs.rs#L73))
+  stops seeing `min=1` on `type="text"` (still server-checked; give it a
+  `widget: number` twin that DOES see it); `no_step_is_emitted_for_a_float`
+  moves to `widget: number` for the same reason; D3's chooser test; the
+  "Emitted even where HTML says they do not belong" comment block above them
+  is rewritten, since issue #4 is what it describes.
+- [ ] **New tests** (Claude): a required-true radio group emits no `required`
+  on the `<fieldset>`; a quoted key is never filtered; a `with_attrs` spec
+  with an invalid key loses it at render (pins the filter itself, since
+  `form!` can no longer produce one).
+- [ ] **Acceptance:** the gallery's rendered HTML through the W3C validator
+  with no attribute errors (it flagged 50 of 70 pairs when #4 was filed);
+  `just e2e` green; close #4.
+
+### 4d. The `Widget` trait for custom widgets
+
+- [ ] **The trait**, per the design note and D4: `trait Widget { const ATTRS:
+  AttrSet; fn class() -> …; fn render(props: WidgetProps) -> Element; }`, with
+  `AttrSet::ANY`. BREAKING: `custom(MarkdownWidget)` names a type
+  implementing `Widget`, not a component fn.
+- [ ] **`form!` passes attributes.** The closure in `WidgetRef::path`
+  ([widget.rs:154](../formoxus-macros/src/form/widget.rs#L154)) passes
+  `values` and `props` only; `WidgetProps.attrs` is already filled by
+  `ScalarWidget`'s `Custom` arm ([scalar.rs:101](src/widgets/scalar.rs#L101)),
+  so this is the gap.
+- [ ] **`form!` checks keys against `ATTRS`**: `const _: () =
+  assert!(<W as Widget>::ATTRS.contains(Attr::X), …)`, evaluated in the
+  consumer's crate where the impl is visible.
+- [ ] Tests (Claude): `spreading_widget` in `author_attrs.rs`
+  ([:152](tests/suite/author_attrs.rs#L152)) moves to `form!`; the
+  `custom(…)` hand-built test goes; goldens for a key outside `ATTRS` and for
+  `ANY` letting one through; the custom widget in the examples crate updated.
+
+### 4e. The dioxus-html cross-check test
+
+- [ ] Per the design note ("TODO: cross-check"): every (attribute, element) the
+  table allows has a matching `dioxus::html::elements::<el>::<attr>` const;
+  known gaps listed as exceptions. In `formoxus`, not `formoxus-attrs`.
+  Independent of 4a–4d; can go any time.
 
 ## Then, in order
 

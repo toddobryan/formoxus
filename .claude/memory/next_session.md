@@ -5,6 +5,24 @@ metadata:
   type: project
 ---
 
+**END OF SCHOOL DAY 2026-10-09 — GREEN at `12cb3c3`; STEP 4 BROKEN DOWN, NOT STARTED.**
+Done today: typed keys on enum fields (`Kind::Enum`, enum-specific messages,
+`is_enum` asks `kind` because facet types `Option<T>` as an enum, see
+[[facet-option-is-an-enum]]). Step 4 is now a checklist in
+`formoxus/ATTRIBUTES_PLAN.md` (4a–4e) opening with decisions D1–D4.
+**Todd is THINKING about a reframe, nothing decided:** treat `RadioGroup` as
+the first multi-element widget (cf. Django's MultiWidget). Claude's sketch: a
+widget declares named PARTS, each with a control (`group: Fieldset`,
+`option: Input(Radio)`, one marked as the value part); validated attributes go
+to the value part (dissolves D1), unvalidated ones to the primary part unless
+addressed (`radio_group { choices, option: { class: [...] } }`), checks run per
+part; custom widgets declare `PARTS` in the trait; formoxus's own attributes
+(`aria-invalid` on the group) stay placed by the widget. Kept OUT: value
+decomposition (MultiWidget's real job: several names per value), wrapper parts
+(label/errors, overlaps #10), per-choice attributes. If he adopts it, 4a becomes
+"every field gets its parts" and D4's `AttrSet` becomes "what a `Part` holds".
+Offered to write it into the design note and plan; he has not answered.
+
 **END OF SESSION 2026-10-09 (home) — STEP 3 FULLY DONE, `874e04c`, GREEN.**
 Next (Todd): split the enum out of `field_kind`'s `Kind::Other` so typed keys
 with `validated: false` are allowed on an enum field (his call: "allow them if
