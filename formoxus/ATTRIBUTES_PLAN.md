@@ -5,12 +5,15 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-09.** Step 3 is DONE, every box (3f's last box today).
+> **Status, 2026-10-10.** Step 3 is DONE, every box (3f's last box today).
 > 3d's widget side finished today too (steps 4–10). Typed keys on an enum
 > field are allowed where they make sense (3f, DONE). Deferred: the
 > `RadioGroup` author-attribute grammar, and custom widgets getting author
 > `class`. **Step 4 (emit only valid attributes, the `Widget` trait) is broken
-> down below but not started; it opens with four decisions (D1–D4).**
+> down below but not started; it opens with decisions D0–D4.** D0 (2026-10-10)
+> (parts) is ADOPTED. **2026-10-10: three steps now come FIRST, in "Before
+> Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
+> configurable classes (#10).** All decided; open only P1-a's default prefix.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -26,22 +29,22 @@ Decisions 13–14 in the design note. Done when everything a field body says
 goes through one table lookup, owned attributes are compile errors, quoted keys
 pass through, and the grammar change below has landed.
 
-### 3a. The table grows (`formoxus-attrs/src/attrs.rs`)
+### 3a. The table grows (`formoxus-spec/src/attrs.rs`)
 
 - [x] **Generate `variant_name()` and `from_variant_name()`** (done by Todd) in the
-  `attributes!` macro ([attrs.rs:83](../formoxus-attrs/src/attrs.rs#L83)), next
-  to `from_name` ([:159](../formoxus-attrs/src/attrs.rs#L159)).
+  `attributes!` macro ([attrs.rs:83](../formoxus-spec/src/attrs.rs#L83)), next
+  to `from_name` ([:159](../formoxus-spec/src/attrs.rs#L159)).
   `variant_name` is `stringify!($variant)`; `form!` turns `max_length` into
   `MaxLength` with `heck` and looks it up here.
 - [x] **New rows** (DONE 2026-10-04: 95 rows, 44 alphabetized then 51 ARIA
   alphabetized; see the design note, decision 15, for what was left out and
   why) in `attributes! { … }`
-  ([:195](../formoxus-attrs/src/attrs.rs#L195)):
+  ([:195](../formoxus-spec/src/attrs.rs#L195)):
   - `Class` (`owner: Merged`, a token list) and `ClassPlus` (emits HTML
     `class`, like `Required`/`RequiredTrue` share `required`).
   - `Style` and `StylePlus`, the same way, with a declaration list.
   - The ARIA attributes, about 48: `owner: Author`, valid on every control.
-    **`aria-invalid` (already a row, [:320](../formoxus-attrs/src/attrs.rs#L320))
+    **`aria-invalid` (already a row, [:320](../formoxus-spec/src/attrs.rs#L320))
     and `aria-describedby` are owned by formoxus.**
   - The common author attributes, at least `autocomplete`, `readonly`, `rows`,
     `cols`, `inputmode`, `title`, `autofocus`. The full list, with where each is
@@ -141,7 +144,7 @@ pass through, and the grammar change below has landed.
 >   `AttrValue::List(&'static [&'static str])`; the macro writes each style
 >   declaration out whole (`"font-size: 20px"`), and the widget joins with `" "`
 >   or `"; "` by the `Attr`. `AttrType::List`
->   ([attrs.rs:19](../formoxus-attrs/src/attrs.rs#L19)) is unused and goes.
+>   ([attrs.rs:19](../formoxus-spec/src/attrs.rs#L19)) is unused and goes.
 >   This closes the 3a reminder.
 > - **`RadioGroup` is on hold** until Todd has looked at examples. Maybe
 >   faux attributes `group_class`/`input_class`.
@@ -465,6 +468,174 @@ Breaking, so it all moves together. Claude updates the tests side.
 
 ---
 
+## Before Step 4: the markup settles first (decided 2026-10-10)
+
+Todd pulled two later items forward, because the parts that Step 4 names are
+read off the markup, and both of these change the markup:
+
+1. **P1. Labels beside their inputs** (`<label for>`, issue #9's real fix).
+2. **P2. `BuiltinWidget` in `formoxus-spec`**, describing the widgets AFTER P1,
+   so the parts are final when they are written down (moved here from 4a).
+3. **P3. Configurable default classes** (issue #10), keyed by the parts P2
+   defines.
+
+Then Step 4, whose 4a–4d get rewritten for parts. Line numbers in this section
+are from `28e8163`. Decision record: `.claude/memory/attribute_rules_design.md`
+("Labels beside their inputs" and "Configurable classes").
+
+### P1. Labels beside their inputs
+
+**Why:** a wrapping `<label>` names its input from ALL its text, so the error
+list inside it joins the accessible name ("Title This field is required.").
+`aria-describedby` alone cannot fix that; it adds a description and removes
+nothing. Todd's design is in his comment on issue #9.
+
+**Target markup** (DECIDED: every `<label>` uses `for`, radios included, Todd
+2026-10-10, "for consistency"):
+
+```text
+input / textarea / select / an enum's variant select
+  div.fx-form-field[.fx-invalid]
+    label.fx-field-label  for=ID          (text + span.fx-required)
+    input#ID.fx-control.fx-input          aria-describedby=ID-errors, only while there are messages
+    ul.fx-field-errors#ID-errors
+
+checkbox (box, then text)
+  div.fx-form-field
+    input#ID.fx-control.fx-checkbox
+    label.fx-field-label  for=ID
+    ul.fx-field-errors#ID-errors
+
+radio_group
+  fieldset.fx-form-field.fx-radio-group  role=radiogroup
+    legend.fx-legend.fx-field-label
+    (per choice: see the open point below)
+      input#ID-N.fx-control.fx-radio
+      label  for=ID-N
+    ul.fx-field-errors#ID-errors
+```
+
+The `span.fx-field-label` inside today's wrapping label goes away: the
+`<label>` itself carries `fx-field-label`. The error list stays the input's
+next sibling (only the checkbox puts its label between), which Bootstrap's
+`.is-invalid ~ .invalid-feedback` needs.
+
+**Ids** (DECIDED in principle, Todd 2026-10-10: "a unique form id, prefixed to
+the path"): `ID = {form_id}-{path}`. Path characters `.`, `[`, `]`, `$` are
+legal in an id (they need escaping only in a CSS selector, and tests select by
+role, never `#id`). The form id must come out the same in the server render
+and the client's hydration, so no runtime counter.
+
+Decided (Todd, 2026-10-10):
+
+- **P1-a. The form id is passed at RENDER, not declared in `form!`.**
+  `form!` declares how a form renders; whether the same form appears twice
+  on a page is only known where it is placed, inside an `rsx!`. So the render
+  call takes an `Option<…>` instance number. Three entry points build a
+  `RenderCtx` today and would each take it: `Form::render`
+  ([form.rs:314](src/form.rs#L314)), `render_fragment` (:410) and
+  `render_fields` (:422). Still to settle: the default prefix when it is
+  `None`. A bare path collides between two DIFFERENT models that share a
+  field name (`email`), so Claude proposes the model's name, kebab-cased, from
+  the shape: `signup-email`, and `signup-2-email` for `Some(2)`.
+- **P1-b. A radio's id is `ID-N`**, by choice index, not by value (a value
+  can hold a space; an id cannot).
+- **P1-c. Each radio and its label get a `div.fx-choice` wrapper**; the
+  `fx-choice` class moves there from today's `<label>`, and the label gets
+  `fx-choice-label`. `radio_group` gains a `div` part.
+
+Checklist:
+
+- [ ] **The form id** (Todd), per P1-a: the instance parameter on the render
+  entry points, the default prefix, a `RenderCtx` field, and on to the widget (a `FieldProps::id`, or derived from `path`
+  inside each widget; [types.rs:106](src/widgets/types.rs#L106)).
+- [ ] **The five single-control widgets** (Todd): `input.rs:73`,
+  `textarea.rs:41`, `select.rs:52`, `checkbox.rs:36`, `variant_select.rs:46`
+  move from `label { class: field_class, … }` to the target above.
+  `FieldProps::field_class` keeps naming the wrapper, now a `div`.
+- [ ] **`FieldErrors`** ([errors.rs:37](src/widgets/errors.rs#L37)) takes the
+  id; the control gets `aria-describedby` only when `errors` is non-empty (a
+  dangling one is itself a defect). `Id` and `AriaDescribedby` are already
+  `owner: Formoxus` rows, so an author still cannot set either.
+- [ ] **`RadioGroup`** (Todd), per P1-b and P1-c.
+- [ ] **Docs:** the vocabulary comment in `examples/assets/main.css` (line 8)
+  and its rules; `FieldProps::field_class`'s doc example
+  ([types.rs:120](src/widgets/types.rs#L120)).
+- [ ] **Tests that flip** (Claude): the suite's markup assertions (few assert
+  the wrapper directly: `enums.rs`, `choices.rs`, `widgets.rs`), the
+  `widget_matrix` example, `e2e/src/roles.rs` and `e2e/tests/required_text.rs`.
+  e2e mostly survives: it finds fields by role and name, and the name gets
+  cleaner.
+- [ ] **New tests** (Claude): e2e, an errored field's accessible name is its
+  label only, and its description is the message (#9's regression guard,
+  checked in a real browser first); suite, `for` equals the control's `id`,
+  `aria-describedby` present only with messages, and two forms of one model on
+  a page get distinct ids.
+- [ ] **Found while planning, check in e2e:** an enum's variant `<select>`
+  renders inside its variant set with NO label text (the legend carries it),
+  and a `<legend>` does not name a `<select>`, so the select is probably
+  nameless today and stays so. Fix with `aria-labelledby` on the legend's id
+  now that ids exist?
+- [ ] **Close #9** (with the e2e guard green).
+
+### P2. `BuiltinWidget` in `formoxus-spec`
+
+- [x] **Rename `formoxus-attrs` → `formoxus-spec`** (DONE 2026-10-10, Claude).
+- [ ] **`BuiltinWidget`** (Todd), per the design note's "What it does to
+  Step 4" point 8: name, parts (read off P1's markup), form control, chooser,
+  optional, renders-for, default-per-field-type; plus decision 6's
+  rendered-input-type enum. Then the macro emits enum paths instead of
+  `widget_variant` strings, and `rule()`, `WidgetClass`, `CHOOSERS` and the
+  optional refusals go. `ScalarWidget`'s match becomes exhaustive over it.
+- [ ] Unit tests (Claude) in `formoxus-spec`: every widget has exactly one
+  form-control part; part names are unique within a widget; the defaults
+  table covers every `FieldType`.
+
+### P3. Configurable default classes
+
+DECIDED (Todd, 2026-10-10):
+
+- **A system is MVP; presets beyond two are not.** MVP ships `Classes::fx()`
+  (the default, today's names) and `Classes::bare()` (no classes). Later:
+  `pico()`, `bootstrap5()`, `tailwind()`, and a Bulma prototype.
+- **Keyed by (widget, part)** for the built-ins, plus fixed slots for what no
+  widget renders: `<form>`, its title, form-level errors, the button row and
+  buttons, the nested-struct/list/variant fieldsets and their legends, the row
+  buttons, the required marker, the error list and items. A slot holds the
+  whole string, so today's composed names (`fx-form-field fx-radio-group`)
+  are just one slot's value; #10's "not a flat map" worry goes away.
+- **Two override levels:** the app (`Formoxus::with_classes`, through
+  context) and the form (a `form!` key). Per field is `class`/`class_plus`,
+  which replace or append to the configured base of the part they land on.
+  Resolved once at the `Form` boundary (the rule in `.claude/memory/config_cascade.md`), then
+  provided to the widgets as #10 describes.
+
+Also decided (Todd, 2026-10-10):
+
+- **P3-a. Each slot is a base class plus an optional invalid class.** Every
+  framework checked marks the INPUT when invalid (Bootstrap `is-invalid`,
+  Bulma `is-danger`, Foundation `is-invalid-input`, daisyUI `input-error`;
+  Pico uses `aria-invalid`, already emitted); Foundation also marks the label
+  and the message, Bulma the message. `fx()` keeps `fx-invalid` on the
+  wrapper only.
+- **P3-b. A custom widget's class function receives the resolved `Classes`**,
+  so a custom text-like widget can borrow the text input's slot and follow
+  the preset.
+
+Checklist (to be broken down once P1 and P2 land, since the slots are P2's
+parts):
+
+- [ ] `Classes` type in `formoxus` (`#[non_exhaustive]`, `with_*` builders,
+  like `Formoxus`); `fx()` reproduces every literal class formoxus emits today
+  (about 40 literals across 15 files, `grep '"[^"]*fx-'`); `bare()`.
+- [ ] `Formoxus::with_classes`, the form-level key, resolution at the `Form`
+  boundary.
+- [ ] Every literal `fx-…` in `src/` replaced by a slot lookup.
+- [ ] Tests (Claude): `fx()` renders byte-identical to today (the safety net
+  for the replacement); `bare()` emits no `class` at all; a form-level
+  override beats the app's; `class`/`class_plus` resolve against a configured
+  base.
+
 ## Step 4: emit only valid attributes, and the custom-widget trait
 
 Closes issue #4. Decisions 6, 10, and the custom-widget section of the note.
@@ -473,7 +644,7 @@ Broken down 2026-10-09; line numbers are from `12cb3c3`.
 **The idea in one line:** every field already knows its `FieldType`; Step 4
 gives it a `FieldControl` too (the element its attributes land on), at compile
 time, and then asks the full rule `Attr::is_allowed(field_type, control)`
-([attrs.rs:215](../formoxus-attrs/src/attrs.rs#L215)), which is built and
+([attrs.rs:215](../formoxus-spec/src/attrs.rs#L215)), which is built and
 unit-tested but has no caller yet. Once nothing invalid can get PAST `form!`,
 the runtime can safely drop the one kind that is accepted but not emitted
 (`true_and_on`: `min`/`max` on a number rendered as text, `required_true` on a
@@ -485,6 +656,17 @@ failure the compile-time checks exist to prevent.
 
 ### Decisions to make first (Todd)
 
+- **D0. Widget PARTS: ADOPTED 2026-10-10.** A widget declares parts named by
+  their HTML elements (`label`, `input`, `fieldset`, `legend`, …), every
+  widget has a `label` part, parts are addressed inside the widget's braces
+  (`radio_group { choices, input: {...} }`), validated keys cannot be
+  addressed, and unaddressed keys go where a convention says. Recorded in
+  `.claude/memory/attribute_rules_design.md`, "DECIDED 2026-10-10: widgets have
+  PARTS". **Open there, A–D:** the convention for unaddressed keys; `label` vs
+  `legend` in a radio group; `label` one brace level apart; and a table word
+  for `<label>`/`<legend>` (rename `FieldControl`?). D1 dissolves; D4 becomes
+  per part. The checklist below is still written for one control per field
+  and gets rewritten once A–D are settled.
 - **D1. `RadioGroup`'s control.** Its spread lands on the `<fieldset>`, so
   `Fieldset`, as `FieldControl`'s doc says. But `required_true` is
   `true_and_on(Select | Input(Radio))`, so with `Fieldset` a required-true
@@ -511,6 +693,10 @@ failure the compile-time checks exist to prevent.
   trait too (note's (b)) now, or later.
 
 ### 4a. Every field gets a `FieldControl` at compile time
+
+> **2026-10-10:** the shared widget table and the crate rename moved to
+> P2 above. These boxes get rewritten for parts once P1–P2 land and A–E are
+> settled (examples: `WIDGET_PARTS_EXAMPLES.md`).
 
 - [ ] **Named widgets, in the macro.** `widgets!`
   ([widget.rs:63](../formoxus-macros/src/form/widget.rs#L63)) gains the
@@ -603,7 +789,7 @@ failure the compile-time checks exist to prevent.
 
 - [ ] Per the design note ("TODO: cross-check"): every (attribute, element) the
   table allows has a matching `dioxus::html::elements::<el>::<attr>` const;
-  known gaps listed as exceptions. In `formoxus`, not `formoxus-attrs`.
+  known gaps listed as exceptions. In `formoxus`, not `formoxus-spec`.
   Independent of 4a–4d; can go any time.
 
 ## Then, in order

@@ -5,6 +5,10 @@ metadata:
   type: project
 ---
 
+**UPDATE 2026-10-10:** the override SYSTEM is now MVP (P3 in
+`formoxus/ATTRIBUTES_PLAN.md`; [[attribute-rules-design]]), and `fx-form-field`
+moves from `<label>` to a `div` with P1 (`<label for>`).
+
 **Decided 2026-09-29**, as MVP step 1's class half ([[mvp-scope]]). The
 *override* mechanism is issue #10 and deliberately deferred — `Formoxus` is
 `#[non_exhaustive]`, so adding a `classes` field later is not breaking, while

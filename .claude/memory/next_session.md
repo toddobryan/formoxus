@@ -5,6 +5,18 @@ metadata:
   type: project
 ---
 
+**2026-10-10 (home), LATER:** Todd pulled #9 and #10 ahead of Step 4: the plan's
+"Before Step 4" is P1 `<label for>` un-nesting, P2 `BuiltinWidget`, P3 class
+config (system + `fx()`/`bare()` only). All decided the same day; the form id
+is passed at RENDER (`Option` instance number), never declared in `form!`.
+Open only: the default id prefix (Claude: model name). Nothing built.
+
+**2026-10-10 (home):** Todd ADOPTED widget PARTS (D0), parts named by their
+HTML element, every widget has a `label` part; see `attribute_rules_design.md`.
+Same day: built-in widget DESCRIPTIONS move into the shared crate, renamed
+`formoxus-spec` (first step of 4a, now). Open points A–E are worked as
+`form!` → HTML examples in `formoxus/WIDGET_PARTS_EXAMPLES.md`.
+
 **END OF SCHOOL DAY 2026-10-09 — GREEN at `12cb3c3`; STEP 4 BROKEN DOWN, NOT STARTED.**
 Done today: typed keys on enum fields (`Kind::Enum`, enum-specific messages,
 `is_enum` asks `kind` because facet types `Option<T>` as an enum, see
@@ -21,7 +33,9 @@ part; custom widgets declare `PARTS` in the trait; formoxus's own attributes
 decomposition (MultiWidget's real job: several names per value), wrapper parts
 (label/errors, overlaps #10), per-choice attributes. If he adopts it, 4a becomes
 "every field gets its parts" and D4's `AttrSet` becomes "what a `Part` holds".
-Offered to write it into the design note and plan; he has not answered.
+WRITTEN UP 2026-10-10 at his request: `attribute_rules_design.md`,
+"PROPOSED, NOT DECIDED: widgets have PARTS", and D0 in the plan. Not decided;
+it has five open points for him, and D0 goes before D1–D4.
 
 **END OF SESSION 2026-10-09 (home) — STEP 3 FULLY DONE, `874e04c`, GREEN.**
 Next (Todd): split the enum out of `field_kind`'s `Kind::Other` so typed keys

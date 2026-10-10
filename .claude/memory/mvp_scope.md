@@ -37,7 +37,11 @@ Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
      tests into `fields/value_kind.rs` (the `form.rs` + `form/` layout); the
      `FormField` side and its `validate` tests stay. Mechanical, so I do it,
      between commits so it doesn't tangle with a feature diff.
-4. **Issue #9 — `aria-describedby`** (was item 3)
+   - **PULLED FORWARD 2026-10-10 (Todd), inside C6, before its Step 4:**
+     #9 as `<label for>` un-nesting (P1), `BuiltinWidget` (P2), and #10's
+     class-config SYSTEM with only `fx()` + `bare()` presets (P3; framework
+     presets are post-MVP). See `formoxus/ATTRIBUTES_PLAN.md` "Before Step 4".
+4. **Issue #9 — `aria-describedby`** (was item 3) — now P1 of C6, above
 5. **C5 — `help_text`** (was item 6) — moved AHEAD of per-field validators, so
    help text arrives right after the describedby mechanism it will join
 6. **C4 — per-field validators** (was item 5)

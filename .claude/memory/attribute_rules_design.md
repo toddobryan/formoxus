@@ -169,6 +169,220 @@ widgets this is derived from the element facts.
     `Form` boundary ([[config-cascade]]); document it as a default, not the
     final class.
 
+## DECIDED 2026-10-10 (Todd): widgets have PARTS, named by their elements
+
+Todd floated it 2026-10-09: treat `RadioGroup` as the first multi-element
+widget (cf. Django's `MultiWidget`). Claude wrote it up 2026-10-10; Todd
+ADOPTED it the same day, with three decisions of his own (below). Points still
+open are at the end. It replaces Step 4's "one `FieldControl` per field" in
+`formoxus/ATTRIBUTES_PLAN.md` (D0 there).
+
+### The problem: one fact, patched four times
+
+Step 4 as first planned gave each field ONE `FieldControl`, the element its
+attributes land on. `RadioGroup` has several kinds of element, and each place
+that assumption failed was patched on its own:
+
+1. **D1.** `required_true` is `true_and_on(Select | Input(Radio))`, but the
+   spread lands on the `Fieldset`, so 4b would refuse a required-true radio
+   group over bools.
+2. **`FieldAttrs::without(Attr::Required)`** in `radio_group.rs` hand-routes
+   one attribute off the fieldset and onto the radios.
+3. **An author `class` goes nowhere** on a radio group
+   (`on_a_radio_group_an_author_class_goes_nowhere_yet` in
+   `tests/suite/author_attrs.rs`); open question 3 below; the
+   `group_class`/`input_class` hold; the TODO at the top of `RadioGroup`.
+4. **The trait's default class, open (c)** above: a radio group has more than
+   one base class (`fx-radio-group`, `fx-control fx-radio`, `fx-choice`).
+
+They are all the same fact: a widget can have more than one element that
+takes field attributes.
+
+### What was decided (Todd, 2026-10-10)
+
+1. **Adopted.** A widget declares its parts; an author can address one.
+2. **A part is named by its HTML ELEMENT** (Todd): "If the docs say which
+   elements a widget expands to, it's easy for users to know where attributes
+   would end up." The docs show each widget's element tree, and the part names
+   are read straight off it. **Every widget has a `label` part** (the
+   wrapper), not only the radio group.
+3. **The part block goes inside the widget's braces**, next to `choices`:
+   `widget: radio_group { choices: STATES, input: { class: [inline] } }`.
+   Field-level keys stay the attribute namespace (~95 keys).
+4. **A validated key may NOT be addressed to a part**: refused. Todd:
+   "Validation is a property of the widget as a whole." Message along the
+   lines of "`max_length` goes on the field, not inside `input: {…}`".
+5. **Which part gets an unaddressed attribute is a CONVENTION over the
+   element names**, not something each widget marks. (The convention itself
+   is open point A below.)
+
+### The parts, read off today's markup
+
+| widget                          | element tree (part names)                                   |
+|---------------------------------|-------------------------------------------------------------|
+| `Input` (text-like, `number`, …) | `label` > (label text, `input`, errors)                     |
+| `Textarea`                      | `label` > (label text, `textarea`, errors)                  |
+| `Select`, the variant select    | `label` > (label text, `select` > options, errors)          |
+| `Checkbox`                      | `label` > (`input`, label text, errors)                     |
+| `hidden`                        | `input` only                                                |
+| `RadioGroup`                    | `fieldset` > (`legend`, `label` > `input` per choice, errors) |
+
+In the single-element widgets the `<label>` IS the field wrapper: it carries
+`fx-form-field`, and holds the label text (a `<span class="fx-field-label">`),
+the control and the errors. So the `label` part is the wrapper, and a `class`
+there replaces `fx-form-field` the same way one on the control replaces
+`fx-control`. This is the "wrapper part" the first write-up kept out; Todd's
+decision 2 brings it in, and it now overlaps issue #10 (configurable class
+names), which has to treat the declared classes as defaults.
+
+**Not parts:** the label-text `<span>` and the required-marker `<span>`
+(the same element name in two roles, so the name cannot address one), the
+`<option>`s, and the error list. The working rule: a part is an element name
+that has exactly one role in its widget.
+
+### Where each attribute goes
+
+| attribute                         | lands on                                    |
+|-----------------------------------|---------------------------------------------|
+| validated (`validated()`)         | the form control(s): `input`/`textarea`/`select`; never addressable (decision 4) |
+| addressed to a part               | that part                                   |
+| not validated, unaddressed        | open point A                                |
+| formoxus's own (`aria-invalid`)   | wherever the widget puts it (unchanged: on the group, per ARIA 1.2) |
+
+**The checks are 4b's assert unchanged**, `Attr::is_allowed(field_type,
+element)`; only where the element comes from changes (the part the attribute
+routes to). Each part's `class`/`class_plus` resolves against that part's own
+base class, which answers open (c) above.
+
+### What it does to Step 4
+
+1. **D1 dissolves.** `required_true` and `required` route to the radios
+   (`Input(Radio)`), which the table allows, so `without(Attr::Required)`
+   goes. The legend's ` *` marker still asks `contains(Attr::Required)` of the
+   whole `FieldAttrs`, before it is split.
+2. **D3 is the same decision in a new place.** `max_length` on a radio group
+   is checked against `Input(Radio)` instead of `Fieldset`; `maxlength` is
+   valid on neither, so it is still refused unless D3 adds a `true_and_on`.
+3. **D4's `AttrSet` belongs to a part**, and so does the default class. The
+   trait declares `PARTS` instead of `ATTRS`.
+4. **4a: every widget gets its parts**, from the `widgets!` table for a named
+   widget. `default_control` (what the form control is when there is no
+   `widget:`) is still needed for the validated-key check. To address a part,
+   a field must name its widget: `widget: text { label: {…} }`, so
+   single-element widgets start taking braces.
+5. **4b: the assert picks its element by the routing rule**, and gains "no
+   part `x` on `radio_group`": at expansion for a built-in, and for a custom
+   widget by a const lookup in its `PARTS`.
+6. **4c: `to_attributes(control)` becomes `for_part(part)`**, which routes and
+   then filters. Every widget calls it once per part.
+7. **4d: `const PARTS`**, each carrying its `AttrSet` and default class.
+8. **The built-in widgets' DESCRIPTIONS move into the shared crate, which is
+   renamed `formoxus-attrs` → `formoxus-spec`** (Todd, 2026-10-10; first step
+   of 4a, done now). A dependency-free `BuiltinWidget` enum holds, per widget:
+   its `form!` name, its parts and which is the form control, whether it takes
+   `choices`, whether it accepts an optional field, which `FieldType`s it
+   renders, and the default widget per field type. That retires today's
+   copies: `widgets!` mapping names to variant STRINGS, `rule()` and
+   `field_kind::WidgetClass` mirroring `ScalarWidget`'s arms, `CHOOSERS`, the
+   optional-field refusals, and the planned `default_control`. Decision 6's
+   smaller "input types formoxus renders" enum lives beside it (Todd: yes).
+   Staying in `formoxus`: the components, `ScalarWidget`'s dispatch (its match
+   becomes exhaustive over `BuiltinWidget`), `WidgetType::Custom` (a component
+   fn pointer; `WidgetType` becomes roughly `Builtin(BuiltinWidget) |
+   Custom {…}`), shape → `FieldType` (needs facet), and classes
+   ([[emitted-classes-and-strings]], #10).
+
+### Still kept out
+
+1. **Value decomposition**, `MultiWidget`'s actual job: one value spread over
+   several inputs with their own names (a date as day/month/year), with
+   Django's `decompress`. Parts never change what submits.
+2. **Per-choice attributes** ("this one radio is disabled"). They belong with
+   `Choice` ([[chooser-ideas]] already has per-choice hint text); a part's
+   attributes go on every instance.
+
+### Open, for Todd (raised 2026-10-10)
+
+**B and C mostly dissolved 2026-10-10** by un-nesting the labels (see the
+next section). A, D and E stand.
+
+Todd could not decide these in the abstract ("having trouble seeing that far
+into the future"), so they are worked through as `form!` → HTML examples in
+`formoxus/WIDGET_PARTS_EXAMPLES.md`, which also adds E (custom widgets with
+two of the same element) and doubles as raw material for the docs.
+
+- **A. The convention for an unaddressed, unvalidated attribute.** "The
+  outermost part" does not work now that every widget has a `label` part: it
+  would move `placeholder`, `rows` and `autocomplete` onto the `<label>`
+  wrapper, where they are invalid and would be refused. Claude's proposal:
+  **the element that stands for the field**: its form control when it has
+  one, the `<fieldset>` when it has several. That is exactly today's behaviour
+  for every widget. The alternative, always the form control, sends a radio
+  group's `class`, `title` and `data-*` to every radio, and flips
+  `on_a_radio_group_author_attributes_land_on_the_fieldset`.
+- **B. `label` means different things in a radio group.** Read off the
+  elements, a radio group's `label` part is each CHOICE's `<label>`; the
+  group's own label is `legend`. Honest to the markup, but someone styling
+  "the label" of a text field and of a radio group writes two different keys.
+- **C. `label` one brace level apart.** Field level, `label: "Name"` is the
+  label TEXT; inside the widget's braces, `label: { class: […] }` is the label
+  ELEMENT. No parse clash, but two meanings.
+- **D. The table has no word for `<label>` or `<legend>`.** Validity is keyed
+  on `FieldControl`, which is `Input(_)`, `Textarea`, `Select` and `Fieldset`.
+  A `label` part needs `Label` and `Legend` added, and every global row
+  (`class`, `title`, …, written `on: Input(_) | Textarea | Select | Fieldset`)
+  gains them, or a `Global` shorthand. And `FieldControl` then names
+  non-controls, which the CLAUDE.md exception ("control" names the bare form
+  element, nothing else) does not cover; `Fieldset` was already called "a
+  stretch". Rename it (`Element`?), or live with it?
+
+## Labels beside their inputs, and configurable classes (DECIDED 2026-10-10)
+
+Todd pulled issues #9 and #10 ahead of Step 4, because Step 4's parts are read
+off the markup and both change it. Build order: P1 → P2 → P3 in
+`formoxus/ATTRIBUTES_PLAN.md`, "Before Step 4", which also lists what is
+what Todd decided for each (P1-a/b/c, P3-a/b, all 2026-10-10).
+**The form id is NOT a `form!` key** (Todd): `form!` declares how a form
+renders, and whether a form appears twice on a page is only known where it is
+placed, so the render call takes an `Option` instance number.
+
+**Labels beside their inputs (P1, #9).** Every `<label>` uses `for`, radios
+included ("for consistency"); the field wrapper becomes a `div`. Ids are
+`{form_id}-{path}`, with the form id deterministic (hydration must match the
+server render; Dioxus 0.7.10 has no `useId`, only `current_scope_id`). Why:
+error text inside a wrapping label joins the accessible name, and
+`aria-describedby` cannot take it back out. Effect on the PARTS open points:
+**B and C mostly dissolve.** Every `<label>` now captions exactly one input:
+a text field's `label` is its caption (the wrapper becomes a `div` part), a
+radio group's caption is its `legend`, and each radio's `label` captions that
+radio. And field-level `label: "Name"` and in-widget `label: {…}` now
+describe the same element.
+
+**Configurable classes (P3, #10).** A SYSTEM is MVP; presets beyond `fx()`
+and `bare()` are not (later: `pico()`, `bootstrap5()`, `tailwind()`, a Bulma
+prototype). Keyed by (widget, part), plus fixed slots for non-widget
+elements. Overridable at the app and the form; per field is
+`class`/`class_plus` against the configured base.
+
+**What the frameworks need (checked 2026-10-10, docs of each):** all mark
+the INPUT when invalid: Bootstrap 5 `is-invalid` (with `.invalid-feedback` a
+following SIBLING, which the un-nested markup gives), Bulma `is-danger` (and
+`help is-danger` on the message), Foundation 6 `is-invalid-input` (and
+`is-invalid-label`, and `is-visible` on `.form-error`), daisyUI 5
+`input-error`; Pico uses `aria-invalid` only, Tailwind nothing. Django's own
+`error_css_class` goes on the row wrapper, the old Bootstrap 3 style. Hence
+P3-a's proposal: base class plus optional invalid class, per part. **Bulma's
+`div.control` around the input is RECOMMENDED, not required** (Claude had said
+required); classes likely cover it, short of icons and add-ons.
+
+**Custom rendering elsewhere, for comparison:** Django swaps STRUCTURE through
+templates at four levels (widget, field `template_name` since 5.0, form,
+project `FORM_RENDERER`), and framework support lives in crispy-forms template
+packs. leptos_form configures classes and label wrapping only; its sibling
+leptos_form_tool has a `FormStyle` trait with a method per control. Formoxus's
+equivalent of Django's templates is the `Widget` trait (4d) plus the paused
+widget registry ([[widget-registry-idea]]), so no separate rendering layer.
+
 ## Build order (agreed 2026-10-03)
 
 C6 grew from "mostly `form!` grammar" into this design, so it lands as a
@@ -493,6 +707,8 @@ moment does the map become the `Vec<Attribute>` that is spread.
    `"font-size: 20px"`, so both stay `AttrValue::List(&'static [&'static str])`
    and `AttrType::List` goes. Todd is writing the parser himself (2026-10-07).
 3. `class` on a `RadioGroup`: the fieldset, every radio, or refused?
+   ANSWERED by PARTS (2026-10-10, above): whichever part it is addressed to;
+   unaddressed, per that section's open point A.
 4. `id`: reserved until issue #9 settles its id scheme (`<label for>`, per-form
    prefix); see [[html-attributes-reference]] item 4.
 5. ~~The macro side's knowledge of value types: mirrored list or loose parse?~~
