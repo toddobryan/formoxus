@@ -1586,8 +1586,8 @@ dependencies = [
  "dioxus-html",
  "dioxus-ssr",
  "facet",
- "formoxus-attrs",
  "formoxus-macros",
+ "formoxus-spec",
  "googletest",
  "heck",
  "indexmap",
@@ -1595,13 +1595,6 @@ dependencies = [
  "serde",
  "serde_json",
  "trybuild",
-]
-
-[[package]]
-name = "formoxus-attrs"
-version = "0.1.0"
-dependencies = [
- "googletest",
 ]
 
 [[package]]
@@ -1618,7 +1611,7 @@ dependencies = [
 name = "formoxus-macros"
 version = "0.1.0"
 dependencies = [
- "formoxus-attrs",
+ "formoxus-spec",
  "googletest",
  "heck",
  "indexmap",
@@ -1626,6 +1619,13 @@ dependencies = [
  "quote",
  "regress",
  "syn 3.0.6",
+]
+
+[[package]]
+name = "formoxus-spec"
+version = "0.1.0"
+dependencies = [
+ "googletest",
 ]
 
 [[package]]

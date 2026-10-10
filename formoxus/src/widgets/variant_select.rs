@@ -1,7 +1,7 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};

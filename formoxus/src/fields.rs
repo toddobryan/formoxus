@@ -8,7 +8,7 @@ use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label,
 use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
-use formoxus_attrs::{Attr, AttrKey, AttrValue, Bound, FieldType};
+use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType};
 use indexmap::IndexMap;
 use regress::Regex;
 use std::fmt::Debug;

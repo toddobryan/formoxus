@@ -22,7 +22,7 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_attrs::{Attr, FieldControl, FieldType};
+use formoxus_spec::{Attr, FieldControl, FieldType};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -355,7 +355,7 @@ mod tests {
         takes_pattern, takes_required,
     };
     use facet::Facet;
-    use formoxus_attrs::Attr;
+    use formoxus_spec::Attr;
     use googletest::prelude::*;
 
     #[derive(Facet)]

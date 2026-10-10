@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;

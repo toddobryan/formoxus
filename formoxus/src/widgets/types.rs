@@ -97,10 +97,10 @@ pub struct WidgetProps {
     pub attrs: Vec<Attribute>,
 }
 
-/// Defined in `formoxus-attrs`, because the attribute table and `form!` both
+/// Defined in `formoxus-spec`, because the attribute table and `form!` both
 /// key on it and `formoxus-macros` cannot reach this crate. Re-exported here so
 /// that `formoxus::widgets::InputType` is still its address.
-pub use formoxus_attrs::InputType;
+pub use formoxus_spec::InputType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldProps {

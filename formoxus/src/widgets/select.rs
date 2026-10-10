@@ -1,7 +1,7 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType};
 
 use super::errors::FieldErrors;
 use super::types::{Choice, FieldProps};

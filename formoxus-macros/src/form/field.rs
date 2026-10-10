@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_attrs::{Attr, AttrType, FieldControl, FieldType, Owner};
+use formoxus_spec::{Attr, AttrType, FieldControl, FieldType, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -959,20 +959,20 @@ mod tests {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
                 _ => {
-                    let attr = formoxus_attrs::Attr::ALL
+                    let attr = formoxus_spec::Attr::ALL
                         .iter()
                         .find(|a| heck::ToSnakeCase::to_snake_case(a.variant_name()) == key)
                         .unwrap();
                     match attr.attr_type() {
-                        formoxus_attrs::AttrType::Flag => quote!(#ident),
-                        formoxus_attrs::AttrType::String | formoxus_attrs::AttrType::Regex => {
+                        formoxus_spec::AttrType::Flag => quote!(#ident),
+                        formoxus_spec::AttrType::String | formoxus_spec::AttrType::Regex => {
                             quote!(#ident: "x")
                         }
-                        formoxus_attrs::AttrType::Int | formoxus_attrs::AttrType::Bound => {
+                        formoxus_spec::AttrType::Int | formoxus_spec::AttrType::Bound => {
                             quote!(#ident: 1)
                         }
-                        formoxus_attrs::AttrType::TokenList => quote!(#ident: [x, "y"]),
-                        formoxus_attrs::AttrType::Declarations => quote!(#ident: { x: y }),
+                        formoxus_spec::AttrType::TokenList => quote!(#ident: [x, "y"]),
+                        formoxus_spec::AttrType::Declarations => quote!(#ident: { x: y }),
                     }
                 }
             };
@@ -1024,7 +1024,7 @@ mod tests {
 
     /// What a list attribute's value parses to, or the error's message.
     fn list_value(
-        attr: formoxus_attrs::Attr,
+        attr: formoxus_spec::Attr,
         value: &proc_macro2::TokenStream,
     ) -> std::result::Result<Vec<String>, String> {
         use syn::parse::Parser;
@@ -1041,11 +1041,11 @@ mod tests {
     }
 
     fn class_names(value: &proc_macro2::TokenStream) -> std::result::Result<Vec<String>, String> {
-        list_value(formoxus_attrs::Attr::ClassPlus, value)
+        list_value(formoxus_spec::Attr::ClassPlus, value)
     }
 
     fn style(value: &proc_macro2::TokenStream) -> std::result::Result<Vec<String>, String> {
-        list_value(formoxus_attrs::Attr::Style, value)
+        list_value(formoxus_spec::Attr::Style, value)
     }
 
     /// One rule: bare names turn `_` into `-`; quoted names are verbatim.
@@ -1153,13 +1153,13 @@ mod tests {
             ))
         );
         expect_that!(
-            list_value(formoxus_attrs::Attr::StylePlus, &quote!({})),
+            list_value(formoxus_spec::Attr::StylePlus, &quote!({})),
             err(contains_substring(
                 "`style_plus` with an empty block should be omitted"
             ))
         );
         expect_that!(
-            list_value(formoxus_attrs::Attr::Class, &quote!([])),
+            list_value(formoxus_spec::Attr::Class, &quote!([])),
             ok(len(eq(0)))
         );
     }

@@ -12,7 +12,8 @@ stale mirror; this repo is the source of truth.
 ```
 formoxus/           — the library
 formoxus-macros/    — proc macros: form! and using_fns!, nothing else
-formoxus-attrs/     — the HTML attribute table both depend on; no dependencies (2026-10-03)
+formoxus-spec/      — the HTML attribute table both depend on; no dependencies (2026-10-03;
+                      `formoxus-attrs` until 2026-10-10)
 ```
 
 **One way to build a form, as of 2026-09-19.** A model derives `Facet` and
@@ -48,7 +49,7 @@ HTML spec's own term. Two things use it, both deliberately:
 - **the CSS class `fx-control`**, on the bare `<input>`/`<select>`/`<textarea>`.
   All emitted classes are `fx-`-prefixed; the full list and its reasoning are
   in `.claude/memory/css_class_vocabulary.md`.
-- **`FieldControl` (2026-10-03, Todd)**, the enum in `formoxus-attrs` naming the
+- **`FieldControl` (2026-10-03, Todd)**, the enum in `formoxus-spec` naming the
   element a widget puts its attributes on (`Input(InputType)`, `Textarea`,
   `Select`, `Fieldset`), which is what attribute validity is keyed on.
   `Fieldset` is a stretch (nobody types into one); it is there because

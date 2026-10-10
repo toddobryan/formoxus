@@ -30,7 +30,7 @@ serde = { workspace = true }
 formoxus-macros = { workspace = true }
 # The attribute table `form!` checks against at expansion time, read here at run
 # time to validate and emit the same attributes.
-formoxus-attrs = { workspace = true }
+formoxus-spec = { workspace = true }
 
 [dev-dependencies]
 dioxus-html = { workspace = true }

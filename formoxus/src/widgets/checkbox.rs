@@ -1,7 +1,7 @@
 //! The checkbox.
 
 use dioxus::prelude::*;
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType};
 
 use super::errors::FieldErrors;
 use super::types::FieldProps;

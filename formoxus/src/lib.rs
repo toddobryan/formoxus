@@ -47,7 +47,7 @@
 //! `MEMORY.md` index.
 
 pub mod attrs {
-    pub use formoxus_attrs::*;
+    pub use formoxus_spec::*;
 }
 
 pub mod build;

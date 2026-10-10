@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use formoxus_attrs::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType};
 
 use super::checkbox::Checkbox;
 use super::input::Input;
