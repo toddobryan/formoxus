@@ -7,9 +7,8 @@ metadata:
 
 **2026-10-11: P1 (`<label for>`, #9) DONE and committed.** Random form id via
 `use_server_cached`, every widget un-nested, `aria-describedby`, the enum
-select named by its legend; suite 345, lib 98, e2e 31 green. Left: close #9
-(Todd's call), one suite test (two copies of a form get distinct ids). NEXT is
-P2, `BuiltinWidget` in `formoxus-spec` (Todd).
+select named by its legend; suite 345, lib 98, e2e 31 green. #9 closed, P1
+fully done. NEXT is P2, `BuiltinWidget` in `formoxus-spec` (Todd).
 
 **2026-10-10 (home), LATER:** Todd pulled #9 and #10 ahead of Step 4: the plan's
 "Before Step 4" is P1 `<label for>` un-nesting, P2 `BuiltinWidget`, P3 class

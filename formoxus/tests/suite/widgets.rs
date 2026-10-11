@@ -378,6 +378,41 @@ fn a_clean_field_has_no_aria_invalid_attribute_at_all() {
     expect_that!(html, not(contains_substring("aria-invalid")));
 }
 
+// ── Ids: one per copy of a form ──────────────────────────────────────────
+
+/// **Two copies of one form on a page get different ids, and the same
+/// `name`s.** This is the per-row case, an "Edit comment" form under every
+/// comment: same model, same paths. Each `use_form` picks its own random form
+/// id, and that alone keeps one copy's `<label for>` from naming the other
+/// copy's input. The `name`s must NOT differ: both copies submit as `secret`,
+/// and the server, which never sees a form id, matches values by path.
+#[gtest]
+fn two_copies_of_a_form_get_different_ids_and_the_same_names() {
+    #[component]
+    fn TwoCopies() -> Element {
+        let first = use_form(|| empty_form(form! { OneString {} }));
+        let second = use_form(|| empty_form(form! { OneString {} }));
+        rsx! {
+            {first.render_fragment()}
+            {second.render_fragment()}
+        }
+    }
+    let html = render_to_html(TwoCopies);
+    // Clean forms render no error lists, so the only `id`s are the two inputs'.
+    let ids: Vec<&str> = html
+        .split(r#" id=""#)
+        .skip(1)
+        .filter_map(|rest| rest.split('"').next())
+        .collect();
+    expect_that!(ids, len(eq(2)));
+    expect_that!(ids[0], not(eq(ids[1])));
+    expect_that!(ids, each(ends_with("-secret")));
+    for id in &ids {
+        expect_that!(html, contains_substring(format!(r#"for="{id}""#)));
+    }
+    expect_that!(html.matches(r#"name="secret""#).count(), eq(2));
+}
+
 // ── `type=` reaching the rendered input ──────────────────────────────────
 //
 // `Input` renders every `<input type=…>` there is, so the type has to travel

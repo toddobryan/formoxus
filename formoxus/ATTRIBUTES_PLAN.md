@@ -594,8 +594,9 @@ Checklist:
   `an_error_describes_the_field_without_renaming_it` (name stays "Name" after
   an error; `aria-describedby` absent while clean and resolving to the message
   after, in the live DOM, which also proves the random id survives hydration;
-  mutation-checked). Still open: two forms of one model on a page get
-  distinct ids.
+  mutation-checked); suite
+  `two_copies_of_a_form_get_different_ids_and_the_same_names` (mutation-checked
+  against a fixed id).
 - [x] **An enum's variant `<select>` is named by its legend** (DONE
   2026-10-11, Claude at Todd's request): the legend gets `id="{id}-legend"`
   (`legend_id`, both ends in `variant_set.rs`) and the select
@@ -604,7 +605,7 @@ Checklist:
   accessible name before (a legend names its fieldset only; axe
   `select-name`). Suite + unit tests mutation-checked; e2e
   `an_enums_variant_select_is_named_by_its_legend` on `/t/enum` green.
-- [ ] **Close #9** (the e2e guard is green as of 2026-10-11; Todd's call).
+- [x] **Close #9** (closed 2026-10-11).
 
 ### P2. `BuiltinWidget` in `formoxus-spec`
 
