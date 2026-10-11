@@ -48,6 +48,7 @@ pub fn RadioGroup(
     let field_class = props.field_class_plus("fx-radio-group");
 
     let FieldProps {
+        id: field_id,
         path,
         label: label_text,
         errors,
@@ -61,16 +62,21 @@ pub fn RadioGroup(
     // the same way.
     let radios: Vec<Element> = choices
         .into_iter()
-        .map(|choice| {
+        .enumerate()
+        .map(|(index, choice)| {
             let path = path.clone();
             rsx! {
-                label { class: "fx-choice",
+                div {
+                    class: "fx-choice",
                     input {
                         class: "fx-control fx-radio",
                         r#type: "radio",
-                        // Every radio in the group carries the SAME name: that
-                        // is what makes them one group to the browser, and what
-                        // `distribute_form_values` collects the pick under.
+                        // Every radio in the group carries the SAME name, but
+                        // a different id: that is what makes them one group to
+                        // the browser, and what `distribute_form_values` collects
+                        // the pick under, but allows each label to refer to just
+                        // its choice.
+                        id: "{field_id}-{index}",
                         name: "{path}",
                         value: "{choice.value}",
                         checked: choice.value == current,
@@ -79,7 +85,11 @@ pub fn RadioGroup(
                         required,
                         onchange: move |e: FormEvent| write_value(&path, values, e.value()),
                     }
-                    "{choice.display}"
+                    label {
+                        class: "fx-choice-label",
+                        r#for: "{field_id}-{index}",
+                        "{choice.display}"
+                    }
                 }
             }
         })
@@ -107,7 +117,7 @@ pub fn RadioGroup(
                 }
             }
             { radios.into_iter() }
-            FieldErrors { errors }
+            FieldErrors { field_id: &field_id, errors }
         }
     }
 }

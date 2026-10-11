@@ -30,6 +30,7 @@ pub fn Textarea(
     let field_class = props.field_class();
 
     let FieldProps {
+        id: field_id,
         path,
         label: label_text,
         errors,
@@ -38,7 +39,8 @@ pub fn Textarea(
     let current = get_current(&path, values);
 
     rsx! {
-        label { class: field_class,
+        div {
+            class: field_class,
             if let Some(text) = label_text {
                 // The marker is INSIDE the label span, not a sibling: a
                 // consumer who makes `.fx-field-label` a block — the natural
@@ -47,7 +49,9 @@ pub fn Textarea(
                 // convention only; `required` on the input is what tells a
                 // screen reader, so the asterisk would just be noise in the
                 // accessible name.
-                span { class: "fx-field-label",
+                label {
+                    class: "fx-field-label",
+                    r#for: &field_id,
                     "{text}"
                     if field_attrs.contains(Attr::Required) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
@@ -56,6 +60,7 @@ pub fn Textarea(
             }
             textarea {
                 class: class,
+                id: &field_id,
                 name: "{path}",
                 value: "{current}",
                 oninput: move |e: FormEvent| {
@@ -65,7 +70,7 @@ pub fn Textarea(
                 // TODO: delete pattern, since not allowed in HTML
                 ..attrs,
             }
-            FieldErrors { errors }
+            FieldErrors { field_id: &field_id, errors }
         }
     }
 }

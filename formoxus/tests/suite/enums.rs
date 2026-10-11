@@ -23,7 +23,7 @@
 //! the regression net for both.
 
 use super::models::{Mode, Shape};
-use super::{Harness, new_since, render_to_html};
+use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::members::ValuesByPath;
@@ -185,7 +185,9 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
     // Not `required`: HTML5 validation must not block submitting without a shape.
     expect_that!(
         html,
-        contains_substring(r#"<select class="fx-control fx-select">"#)
+        contains_regex(format!(
+            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" aria-labelledby="{FORM_ID}-shape-legend">"#
+        ))
     );
 }
 
@@ -205,7 +207,9 @@ fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
     let html = render_to_html(UnchosenDrawingForm);
     expect_that!(
         html,
-        contains_substring(r#"<select class="fx-control fx-select" required=true>"#)
+        contains_regex(format!(
+            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" required=true aria-labelledby="{FORM_ID}-shape-legend">"#
+        ))
     );
     expect_that!(html, contains_substring("disabled=true hidden=true"));
     expect_that!(
@@ -224,22 +228,22 @@ fn the_select_and_the_fields_it_reveals_render_as_one_group() {
     let html = render_to_html(DocWithChosenOuter);
     expect_that!(
         html,
-        contains_substring(
-            r#"<fieldset class="fx-group fx-variant-set"><legend class="fx-legend fx-field-label">Outer<span class="fx-required" aria-hidden="true"> *</span></legend><label"#
-        )
+        contains_regex(format!(
+            r#"<fieldset class="fx-group fx-variant-set"><legend class="fx-legend fx-field-label" id="{FORM_ID}-outer-legend">Outer<span class="fx-required" aria-hidden="true"> \*</span></legend><div class="fx-form-field"><select"#
+        ))
     );
     expect_that!(
         html,
-        contains_substring(
-            r#"<legend class="fx-legend fx-field-label">Inner<span class="fx-required" aria-hidden="true"> *</span></legend>"#
+        contains_regex(
+            r#"<legend class="fx-legend fx-field-label" id="[^"]+-legend">Inner<span class="fx-required" aria-hidden="true"> \*</span></legend>"#
         )
     );
-    // The star annotates the label, and the label is on the legend — so it must
-    // not also appear loose in front of the select.
+    // The star annotates the label, and the label is on the legend — so the
+    // select gets no `<label>` of its own in front of it.
     expect_that!(
         html,
         not(contains_substring(
-            r#"</legend><label class="fx-form-field"><span"#
+            r#"</legend><div class="fx-form-field"><label"#
         ))
     );
 }
@@ -905,4 +909,44 @@ fn a_bad_field_in_the_variant_does_not_mark_the_choice_invalid() {
         contains_substring(r#"aria-invalid="true""#)
     );
     expect_that!(tag_with("<select"), not(contains_substring("aria-invalid")));
+}
+
+// ── The select is named by the legend ────────────────────────────────────
+
+/// **A variant select is named by its legend, through `aria-labelledby`.** The
+/// legend is the field's only label, and a `<legend>` names its fieldset, not
+/// the controls inside; without the reference the select has no accessible
+/// name (axe `select-name`). The e2e test
+/// `an_enums_variant_select_is_named_by_its_legend` proves the browser agrees;
+/// this pins that the two ids MATCH, within one render.
+#[gtest]
+fn a_variant_select_points_at_its_legend() {
+    let html = render_to_html(UnchosenDrawingForm);
+    let legend_id = html
+        .split(r#"<legend class="fx-legend fx-field-label" id=""#)
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .expect("the variant set renders a legend with an id");
+    expect_that!(legend_id, ends_with("-shape-legend"));
+    expect_that!(
+        html,
+        contains_substring(format!(r#"aria-labelledby="{legend_id}""#))
+    );
+}
+
+/// **An author's `aria_labelledby` replaces formoxus's, never joins it.** The
+/// attribute is an author key, and an enum field takes author keys a `<select>`
+/// can carry; a second copy would leave which one wins up to the renderer.
+#[gtest]
+fn an_authors_aria_labelledby_replaces_the_legend_reference() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! { Drawing { shape => { aria_labelledby: "my-heading" } } })
+        });
+        form.render_fragment()
+    }
+    let html = render_to_html(App);
+    expect_that!(html, contains_substring(r#"aria-labelledby="my-heading""#));
+    expect_that!(html.matches("aria-labelledby").count(), eq(1));
 }

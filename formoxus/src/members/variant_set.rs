@@ -13,6 +13,7 @@ use crate::members::{
 use crate::widgets::{FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
+use formoxus_spec::{Attr, AttrValue};
 
 /// The enum variant at a particular point
 ///
@@ -141,6 +142,12 @@ impl VariantSet {
     }
 }
 
+/// The id of a variant set's `<legend>`, which its select names itself by with
+/// `aria-labelledby`. One function for both ends, like `errors_id`.
+fn legend_id(field_id: &str) -> String {
+    format!("{field_id}-legend")
+}
+
 impl FormMember for VariantSet {
     fn name(&self) -> String {
         self.name.clone()
@@ -170,16 +177,33 @@ impl FormMember for VariantSet {
             }
         };
 
+        let id = ctx.id(&self.name);
+        let label = self.label(ctx.label_case);
+        // The legend is the select's ONLY label, and a `<legend>` names its
+        // fieldset, not the controls inside it. Without this the select has no
+        // accessible name: a screen reader announces a nameless combo box, and
+        // axe fails it (`select-name`). Only when there is a legend to point
+        // at, and only as a default: an author's own `aria_labelledby` on the
+        // field replaces it rather than being emitted beside it.
+        let field_attrs = match label {
+            Some(_) => self
+                .field_attrs
+                .with_default(Attr::AriaLabelledby, AttrValue::String(legend_id(&id))),
+            None => self.field_attrs.clone(),
+        };
         let attrs = FieldAttrs::with_owned_attrs(
+            &id,
             &WidgetType::Select,
             ctx.required,
             self.has_errors_here(),
-            &self.field_attrs,
+            &field_attrs,
         );
         rsx! {
             fieldset { class: "fx-group fx-variant-set",
-                if let Some(text) = self.label(ctx.label_case) {
-                    legend { class: "fx-legend fx-field-label",
+                if let Some(text) = label {
+                    legend {
+                        class: "fx-legend fx-field-label",
+                        id: legend_id(&id),
                         "{text}"
                         if ctx.required {
                             span { class: "fx-required", aria_hidden: "true", " *" }
@@ -193,6 +217,7 @@ impl FormMember for VariantSet {
                     on_edit: ctx.on_edit,
                     label_case: ctx.label_case,
                     props: FieldProps {
+                        id: id.clone(),
                         path: ctx.path(&self.name),
                         // The legend above already names this group; a second copy
                         // beside the select would just be the same word twice.

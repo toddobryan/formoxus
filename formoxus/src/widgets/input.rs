@@ -25,6 +25,7 @@ pub fn Input(
     let field_class = props.field_class();
 
     let FieldProps {
+        id: field_id,
         path,
         label: label_text,
         errors,
@@ -70,16 +71,19 @@ pub fn Input(
     }
 
     rsx! {
-        label { class: field_class,
+        div {
+            class: "{field_class}",
             if let Some(text) = label_text {
-                // The marker is INSIDE the label span, not a sibling: a
-                // consumer who makes `.fx-field-label` a block — the natural
-                // choice above an input — would otherwise push a lone asterisk
-                // onto its own line. `aria-hidden` because it is a VISUAL
-                // convention only; `required` on the input is what tells a
-                // screen reader, so the asterisk would just be noise in the
-                // accessible name.
-                span { class: "fx-field-label",
+                label {
+                    class: "fx-field-label",
+                    r#for: "{field_id}",
+                    // The marker is INSIDE the label span, not a sibling: a
+                    // consumer who makes `.fx-field-label` a block — the natural
+                    // choice above an input — would otherwise push a lone asterisk
+                    // onto its own line. `aria-hidden` because it is a VISUAL
+                    // convention only; `required` on the input is what tells a
+                    // screen reader, so the asterisk would just be noise in the
+                    // accessible name.
                     "{text}"
                     if field_attrs.contains(Attr::Required) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
@@ -89,6 +93,7 @@ pub fn Input(
             input {
                 class: class,
                 r#type: input_type.html_type(),
+                id: "{field_id}",
                 name: "{path}",
                 value: "{current}",
                 oninput: move |e: FormEvent| {
@@ -99,7 +104,7 @@ pub fn Input(
                 // as children, so an attribute below this is a parse error.
                 ..attrs,
             }
-            FieldErrors { errors }
+            FieldErrors { field_id: &field_id, errors }
         }
     }
 }

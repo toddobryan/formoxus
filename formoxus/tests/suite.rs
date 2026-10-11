@@ -68,6 +68,12 @@ mod wire;
 /// a `ValuesStore`, which only `use_store` can mint — and that's a hook, so it
 /// needs a live runtime. Rendering stopped being a pure function of the form when
 /// the values moved into a store.
+/// A regex for a form's random id, as `use_form` picks it: 8 characters from
+/// `[A-Za-z0-9]`, the first a letter. For `contains_regex` assertions, which
+/// cannot spell out an id that differs on every render, but should still notice
+/// if the format changes.
+pub const FORM_ID: &str = "[A-Za-z][A-Za-z0-9]{7}";
+
 pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();

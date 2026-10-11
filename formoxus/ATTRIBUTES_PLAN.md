@@ -13,7 +13,7 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > down below but not started; it opens with decisions D0–D4.** D0 (2026-10-10)
 > (parts) is ADOPTED. **2026-10-10: three steps now come FIRST, in "Before
 > Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
-> configurable classes (#10).** All decided; open only P1-a's default prefix.
+> configurable classes (#10).** All decided; nothing built.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -509,10 +509,11 @@ checkbox (box, then text)
 radio_group
   fieldset.fx-form-field.fx-radio-group  role=radiogroup
     legend.fx-legend.fx-field-label
-    (per choice: see the open point below)
-      input#ID-N.fx-control.fx-radio
-      label  for=ID-N
-    ul.fx-field-errors#ID-errors
+    div.fx-choice                         one per choice, N = its index (P1-b, P1-c)
+      input#ID-N.fx-control.fx-radio      name=PATH, required on each as today
+      label.fx-choice-label  for=ID-N
+    ul.fx-field-errors#ID-errors          (aria-invalid + aria-describedby land on
+                                           the fieldset, through the spread)
 ```
 
 The `span.fx-field-label` inside today's wrapping label goes away: the
@@ -528,16 +529,31 @@ and the client's hydration, so no runtime counter.
 
 Decided (Todd, 2026-10-10):
 
-- **P1-a. The form id is passed at RENDER, not declared in `form!`.**
-  `form!` declares how a form renders; whether the same form appears twice
-  on a page is only known where it is placed, inside an `rsx!`. So the render
-  call takes an `Option<…>` instance number. Three entry points build a
-  `RenderCtx` today and would each take it: `Form::render`
-  ([form.rs:314](src/form.rs#L314)), `render_fragment` (:410) and
-  `render_fields` (:422). Still to settle: the default prefix when it is
-  `None`. A bare path collides between two DIFFERENT models that share a
-  field name (`email`), so Claude proposes the model's name, kebab-cased, from
-  the shape: `signup-email`, and `signup-2-email` for `Some(2)`.
+- **P1-a. Each form gets a RANDOM id, picked in `use_form`** (Todd,
+  2026-10-10; replaces a same-day title/model/instance scheme). 8 characters
+  from `[A-Za-z0-9]`, so 62^8 ≈ 2.2 × 10^14 ids; 100 forms on one page
+  collide with odds of about 1 in 40 billion. Element ids are
+  `{form_id}-{path}`. Nothing in `form!`, nothing at render, no title rule,
+  and the same form repeated per row just works.
+  **Picked through `dioxus_fullstack_core::use_server_cached`**, so a
+  fullstack page's hydration reuses the server's id instead of rolling its
+  own. A NEW unconditional dependency, `dioxus-fullstack-core = "0.7.10"`
+  (pin with `dioxus`), and NO formoxus feature: the hook switches on that
+  crate's own `server`/`web` features, which `dioxus-server` and
+  `dioxus-web/hydrate` turn on, so Cargo's feature unification picks the
+  right behaviour; with neither (desktop, client-only, LiveView, the suite)
+  it just runs the closure.
+  **SPIKED 2026-10-10 (Claude, throwaway worktree, deleted):** the suite
+  (343) passed with the hook in every `use_form`; `cargo tree` showed the
+  plain build gets no feature and the examples' server build gets `server`;
+  in a browser an element created AFTER hydration carried the server's id
+  (`server-2`), and the control run with plain `use_hook` showed the
+  mismatch (`server-2` in the DOM, `client-0` in the client). Notes for the
+  real version: (1) start the id with a letter (or a fixed prefix) so `#id`
+  needs no CSS escaping; (2) the random source must work on
+  `wasm32-unknown-unknown` without `getrandom`'s `--cfg` setup, and need not
+  be cryptographic; (3) suite assertions compare `for` with `id`, never a
+  literal id; (4) a form rendered in pieces is fine, the id is on the `Form`.
 - **P1-b. A radio's id is `ID-N`**, by choice index, not by value (a value
   can hold a space; an id cannot).
 - **P1-c. Each radio and its label get a `div.fx-choice` wrapper**; the
@@ -546,37 +562,49 @@ Decided (Todd, 2026-10-10):
 
 Checklist:
 
-- [ ] **The form id** (Todd), per P1-a: the instance parameter on the render
-  entry points, the default prefix, a `RenderCtx` field, and on to the widget (a `FieldProps::id`, or derived from `path`
-  inside each widget; [types.rs:106](src/widgets/types.rs#L106)).
-- [ ] **The five single-control widgets** (Todd): `input.rs:73`,
+- [x] **The form id** (Todd, DONE 2026-10-11): `use_server_cached` in
+  `use_form`, kept on `Form` as a `Signal<String>` (so `Form` stays `Copy`),
+  handed to `RenderCtx::root` as a plain `String` (resolved once, like
+  `label_case`), and `RenderCtx::id(name)` = `{form_id}-{path}` builds the
+  element id in ONE place. `FieldProps` carries both: `path` is the field's
+  name in the DATA (`name=`, the value store, `Edit`s, the server; identical
+  for every copy of a form), `id` its name in the PAGE (different per copy).
+  The build is red on purpose until the widget rewrite: the six widgets'
+  exhaustive `let FieldProps { … }` patterns do not mention `id` yet.
+- [x] **The five single-control widgets** (Todd, DONE 2026-10-11): `input.rs:73`,
   `textarea.rs:41`, `select.rs:52`, `checkbox.rs:36`, `variant_select.rs:46`
   move from `label { class: field_class, … }` to the target above.
   `FieldProps::field_class` keeps naming the wrapper, now a `div`.
-- [ ] **`FieldErrors`** ([errors.rs:37](src/widgets/errors.rs#L37)) takes the
+- [x] **`FieldErrors`** (Todd, DONE 2026-10-11; `errors_id` is the one place the `-errors` format lives) ([errors.rs:37](src/widgets/errors.rs#L37)) takes the
   id; the control gets `aria-describedby` only when `errors` is non-empty (a
   dangling one is itself a defect). `Id` and `AriaDescribedby` are already
   `owner: Formoxus` rows, so an author still cannot set either.
-- [ ] **`RadioGroup`** (Todd), per P1-b and P1-c.
-- [ ] **Docs:** the vocabulary comment in `examples/assets/main.css` (line 8)
-  and its rules; `FieldProps::field_class`'s doc example
-  ([types.rs:120](src/widgets/types.rs#L120)).
-- [ ] **Tests that flip** (Claude): the suite's markup assertions (few assert
-  the wrapper directly: `enums.rs`, `choices.rs`, `widgets.rs`), the
-  `widget_matrix` example, `e2e/src/roles.rs` and `e2e/tests/required_text.rs`.
-  e2e mostly survives: it finds fields by role and name, and the name gets
-  cleaner.
-- [ ] **New tests** (Claude): e2e, an errored field's accessible name is its
-  label only, and its description is the message (#9's regression guard,
-  checked in a real browser first); suite, `for` equals the control's `id`,
-  `aria-describedby` present only with messages, and two forms of one model on
-  a page get distinct ids.
-- [ ] **Found while planning, check in e2e:** an enum's variant `<select>`
-  renders inside its variant set with NO label text (the legend carries it),
-  and a `<legend>` does not name a `<select>`, so the select is probably
-  nameless today and stays so. Fix with `aria-labelledby` on the legend's id
-  now that ids exist?
-- [ ] **Close #9** (with the e2e guard green).
+- [x] **`RadioGroup`** (Todd, DONE 2026-10-11), per P1-b and P1-c: `div.fx-choice`
+  around radio-then-label, ids by index, `FieldErrors` with the field id.
+- [x] **Docs** (DONE 2026-10-11): `main.css`'s vocabulary comment gains
+  `.fx-choice-label` and a "how they nest" section; `examples/README.md`;
+  `FieldProps::field_class` (Todd) and the `id`/`path` field docs.
+- [x] **Tests that flip** (Claude, DONE 2026-10-11): 9 suite tests moved to
+  the new markup, through `contains_regex` and a shared `FORM_ID` pattern in
+  `tests/suite.rs` (an id differs per render, its FORMAT should not); the radio
+  test now also pins index ids, `for` pairing, and radio-before-label order.
+  The 29 e2e tests needed nothing: they find fields by role and name.
+- [x] **New tests** (Claude, DONE 2026-10-11): `with_owned_attrs` unit tests
+  for `aria-describedby` (mutation-checked); e2e
+  `an_error_describes_the_field_without_renaming_it` (name stays "Name" after
+  an error; `aria-describedby` absent while clean and resolving to the message
+  after, in the live DOM, which also proves the random id survives hydration;
+  mutation-checked). Still open: two forms of one model on a page get
+  distinct ids.
+- [x] **An enum's variant `<select>` is named by its legend** (DONE
+  2026-10-11, Claude at Todd's request): the legend gets `id="{id}-legend"`
+  (`legend_id`, both ends in `variant_set.rs`) and the select
+  `aria-labelledby` through `FieldAttrs::with_default`, so an author's own
+  `aria_labelledby` replaces it instead of duplicating it. It had no
+  accessible name before (a legend names its fieldset only; axe
+  `select-name`). Suite + unit tests mutation-checked; e2e
+  `an_enums_variant_select_is_named_by_its_legend` on `/t/enum` green.
+- [ ] **Close #9** (the e2e guard is green as of 2026-10-11; Todd's call).
 
 ### P2. `BuiltinWidget` in `formoxus-spec`
 

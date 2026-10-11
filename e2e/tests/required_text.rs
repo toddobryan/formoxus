@@ -131,3 +131,50 @@ async fn the_required_marker_is_absent_from_the_accessible_name() -> Result<()> 
         .await?;
     s.close().await
 }
+
+/// **An error DESCRIBES the field; it does not rename it** (issue #9). While
+/// the label wrapped the input, the error list sat inside the label, so the
+/// message became part of the field's accessible name ("Name This field is
+/// required."). With `<label for>` the label holds the caption alone, and the
+/// input points at the error list with `aria-describedby` instead.
+///
+/// The description is checked by following `aria-describedby` to its target in
+/// the LIVE DOM, since `playwright-rs` has no accessible-description assertion.
+/// That also proves the random form id survived hydration: the input's
+/// reference was rendered by the server, the list it names is inserted by the
+/// browser after submit, and the two only meet if both used the same id.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
+async fn an_error_describes_the_field_without_renaming_it() -> Result<()> {
+    let s = Session::open("/t/required-text-novalidate").await?;
+    // Clean, there is nothing to point at, and a reference to a list that is
+    // not rendered would itself be a defect.
+    let described: bool = named(&s, "Name")
+        .evaluate("el => el.hasAttribute('aria-describedby')", None::<()>)
+        .await?;
+    assert!(!described, "a clean field must not carry aria-describedby");
+
+    s.page
+        .locator("button[type=\"submit\"]")
+        .click(None)
+        .await?;
+    expect(s.page.locator(".fx-field-error"))
+        .to_contain_text("required")
+        .await?;
+
+    // Still named exactly "Name": the message is not folded into the name.
+    expect(named(&s, "Name")).to_have_count(1).await?;
+    // And the description resolves to the message.
+    let description: Option<String> = named(&s, "Name")
+        .evaluate(
+            "el => { \
+                const id = el.getAttribute('aria-describedby'); \
+                const target = id && document.getElementById(id); \
+                return target ? target.textContent : null; \
+            }",
+            None::<()>,
+        )
+        .await?;
+    assert_eq!(description.as_deref(), Some("This field is required."));
+    s.close().await
+}

@@ -245,6 +245,7 @@ pub type ValuesStore = Store<HashMap<String, String>>;
 /// lives — see the optional-container tests.
 #[derive(Clone, Debug)]
 pub struct RenderCtx {
+    pub form_id: String,
     pub prefix: String,
     pub values: ValuesStore,
     pub required: bool,
@@ -258,8 +259,14 @@ pub struct RenderCtx {
 impl RenderCtx {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionMember` says otherwise.
-    pub fn root(values: ValuesStore, on_edit: Callback<Edit>, label_case: LabelCase) -> Self {
+    pub fn root(
+        form_id: String,
+        values: ValuesStore,
+        on_edit: Callback<Edit>,
+        label_case: LabelCase,
+    ) -> Self {
         Self {
+            form_id,
             prefix: String::new(),
             values,
             required: true,
@@ -271,6 +278,7 @@ impl RenderCtx {
     /// Descend into a named child — the `qualify` every container already does.
     pub fn nested(&self, name: &str) -> Self {
         Self {
+            form_id: self.form_id.clone(),
             prefix: qualify(&self.prefix, name),
             values: self.values,
             required: self.required,
@@ -283,6 +291,7 @@ impl RenderCtx {
     /// that *changes* the context rather than passing it along unaltered.
     pub fn optional(&self) -> Self {
         Self {
+            form_id: self.form_id.clone(),
             prefix: self.prefix.clone(),
             values: self.values,
             required: false,
@@ -294,6 +303,10 @@ impl RenderCtx {
     /// This member's own qualified path, for a leaf's `name` attribute.
     pub fn path(&self, name: &str) -> String {
         qualify(&self.prefix, name)
+    }
+
+    pub fn id(&self, name: &str) -> String {
+        format!("{}-{}", self.form_id, self.path(name))
     }
 }
 

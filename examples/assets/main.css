@@ -10,12 +10,23 @@
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
  *   a group     .fx-group + .fx-field-set .fx-variant-set .fx-list-set  .fx-legend
- *   radios      .fx-radio-group  .fx-choice
+ *   radios      .fx-radio-group  .fx-choice  .fx-choice-label
  *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
  *               .fx-problems
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
  *               .fx-button-add-row .fx-button-remove-row
+ *
+ * How they nest. A field's caption is a `<label for>` BESIDE its control, not
+ * wrapped around it (issue #9: text inside a wrapping label joins the control's
+ * accessible name, and the error list was inside it):
+ *   div.fx-form-field[.fx-invalid]
+ *     label.fx-field-label      (a checkbox puts it AFTER the box)
+ *     .fx-control
+ *     ul.fx-field-errors
+ * A radio group is a fieldset, captioned by its legend, one div per choice:
+ *   fieldset.fx-form-field.fx-radio-group > legend.fx-legend
+ *     div.fx-choice > .fx-radio + label.fx-choice-label
  *
  * `<option>` carries no class, deliberately — browsers style options barely at
  * all, and the three kinds are already distinguishable without one:

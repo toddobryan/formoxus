@@ -34,14 +34,20 @@ use crate::error::ValidationMessage;
 /// reads to announce a field as errored. Leaving it off is an accessibility
 /// defect, not a theming preference.
 #[component]
-pub fn FieldErrors(errors: Vec<ValidationMessage>) -> Element {
+pub fn FieldErrors(field_id: String, errors: Vec<ValidationMessage>) -> Element {
     rsx! {
         if !errors.is_empty() {
-            ul { class: "fx-field-errors",
+            ul {
+                class: "fx-field-errors",
+                id: "{errors_id(&field_id)}",
                 for error in errors.iter() {
                     li { class: "fx-field-error", "{error.0}" }
                 }
             }
         }
     }
+}
+
+pub fn errors_id(field_id: &str) -> String {
+    format!("{field_id}-errors")
 }

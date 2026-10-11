@@ -40,6 +40,7 @@ pub fn Select(
     let field_class = props.field_class();
 
     let FieldProps {
+        id: field_id,
         path,
         label: label_text,
         errors,
@@ -49,16 +50,19 @@ pub fn Select(
     let required = field_attrs.contains(Attr::Required);
 
     rsx! {
-        label { class: field_class,
+        div {
+            class: field_class,
             if let Some(text) = label_text {
-                // The marker is INSIDE the label span, not a sibling: a
+                // The marker is INSIDE the label, not a sibling: a
                 // consumer who makes `.fx-field-label` a block — the natural
                 // choice above an input — would otherwise push a lone asterisk
                 // onto its own line. `aria-hidden` because it is a VISUAL
                 // convention only; `required` on the input is what tells a
                 // screen reader, so the asterisk would just be noise in the
                 // accessible name.
-                span { class: "fx-field-label",
+                label{
+                    class: "fx-field-label",
+                    r#for: &field_id,
                     "{text}"
                     if required {
                         span { class: "fx-required", aria_hidden: "true", " *" }
@@ -67,6 +71,7 @@ pub fn Select(
             }
             select {
                 class: class,
+                id: field_id,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `distribute_form_values` would never see it.
                 name: "{path}",
@@ -95,7 +100,7 @@ pub fn Select(
                     }
                 }
             }
-            FieldErrors { errors }
+            FieldErrors { field_id: &field_id, errors }
         }
     }
 }

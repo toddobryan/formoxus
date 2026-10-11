@@ -122,3 +122,18 @@ async fn a_multiline_value_round_trips_through_a_textarea() -> Result<()> {
         .await?;
     s.close().await
 }
+
+// ── an enum field ────────────────────────────────────────────────────────
+
+/// **An enum's variant select is named by the field's label.** The label is
+/// rendered once, as the variant set's `<legend>`, and a legend names its
+/// fieldset, not the controls inside it; so the select needs
+/// `aria-labelledby` pointing at the legend, or a screen reader announces a
+/// nameless combo box and axe fails it (`select-name`).
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
+async fn an_enums_variant_select_is_named_by_its_legend() -> Result<()> {
+    let s = Session::open("/t/enum").await?;
+    expect(combobox(&s, "Contact")).to_have_count(1).await?;
+    s.close().await
+}

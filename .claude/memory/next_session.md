@@ -5,11 +5,18 @@ metadata:
   type: project
 ---
 
+**2026-10-11: P1 (`<label for>`, #9) DONE and committed.** Random form id via
+`use_server_cached`, every widget un-nested, `aria-describedby`, the enum
+select named by its legend; suite 345, lib 98, e2e 31 green. Left: close #9
+(Todd's call), one suite test (two copies of a form get distinct ids). NEXT is
+P2, `BuiltinWidget` in `formoxus-spec` (Todd).
+
 **2026-10-10 (home), LATER:** Todd pulled #9 and #10 ahead of Step 4: the plan's
 "Before Step 4" is P1 `<label for>` un-nesting, P2 `BuiltinWidget`, P3 class
 config (system + `fx()`/`bare()` only). All decided the same day; the form id
 is passed at RENDER (`Option` instance number), never declared in `form!`.
-Open only: the default id prefix (Claude: model name). Nothing built.
+Ids: a RANDOM 8-char base62 form id + path, picked in `use_form` via
+`use_server_cached` (spiked and proven across hydration). Nothing built.
 
 **2026-10-10 (home):** Todd ADOPTED widget PARTS (D0), parts named by their
 HTML element, every widget has a `label` part; see `attribute_rules_design.md`.

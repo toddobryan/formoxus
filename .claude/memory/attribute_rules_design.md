@@ -342,9 +342,17 @@ Todd pulled issues #9 and #10 ahead of Step 4, because Step 4's parts are read
 off the markup and both change it. Build order: P1 → P2 → P3 in
 `formoxus/ATTRIBUTES_PLAN.md`, "Before Step 4", which also lists what is
 what Todd decided for each (P1-a/b/c, P3-a/b, all 2026-10-10).
-**The form id is NOT a `form!` key** (Todd): `form!` declares how a form
-renders, and whether a form appears twice on a page is only known where it is
-placed, so the render call takes an `Option` instance number.
+**Ids: a RANDOM form id + path** (Todd, 2026-10-10, after two rejected
+schemes: a `form!` key, since `form!` only declares how a form renders; then
+`{title}-{model}[-{n}]-{path}` with a render-time instance number). 8 chars of
+base62 picked in `use_form` through `use_server_cached`, so hydration reuses
+the server's value. Only fullstack renders a component twice (server, then
+hydration), and a FormState is never sent across, so a plain random id would
+roll twice and split `id`/`for` (server's) from `aria-describedby` and newly
+inserted nodes (client's). SPIKED and proven, with a control run showing the
+split; `dioxus-fullstack-core` becomes a dependency with no formoxus feature,
+because Cargo feature unification switches the hook's behaviour. Details in
+the plan's P1-a.
 
 **Labels beside their inputs (P1, #9).** Every `<label>` uses `for`, radios
 included ("for consistency"); the field wrapper becomes a `div`. Ids are

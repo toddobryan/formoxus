@@ -1583,6 +1583,7 @@ name = "formoxus"
 version = "0.1.0"
 dependencies = [
  "dioxus",
+ "dioxus-fullstack-core",
  "dioxus-html",
  "dioxus-ssr",
  "facet",

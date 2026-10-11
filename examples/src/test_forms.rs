@@ -40,6 +40,7 @@ pub fn TestForm(slug: String) -> Element {
         "select" => rsx! { SelectForm {} },
         "radio-group" => rsx! { RadioGroupForm {} },
         "textarea" => rsx! { TextareaForm {} },
+        "enum" => rsx! { EnumForm {} },
         "buttons" => rsx! { Buttons {} },
         other => rsx! {
             main { class: "container",
@@ -327,6 +328,36 @@ fn RadioGroupForm() -> Element {
         form! {
             Pick {
                 state => { widget: radio_group { choices: STATES } },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── an enum field ────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Contact {
+    Email,
+    Phone,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Reach {
+    contact: Contact,
+}
+
+/// An enum field: a `<select>` over its variants, inside a fieldset whose
+/// legend carries the field's label. The select has no label of its own, so
+/// this is where its accessible name is checked.
+#[component]
+fn EnumForm() -> Element {
+    harness(
+        "enum",
+        "A required enum field. Its variant select sits under the fieldset's legend.",
+        form! {
+            Reach {
                 buttons: { save: { type: submit } }
             }
         },

@@ -165,6 +165,8 @@ fn signals_are_populated_from_the_model() {
 use formoxus::attrs::FieldType;
 use formoxus::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
 
+const ID: &str = "rand0123-name";
+
 #[component]
 fn PopulatedInput() -> Element {
     let values =
@@ -180,6 +182,7 @@ fn PopulatedInput() -> Element {
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
+                id: ID.into(),
                 path: "title".to_string(),
                 label: Some("Title".to_string()),
                 errors: Vec::new(),
@@ -204,6 +207,7 @@ fn EmptyInput() -> Element {
             widget: WidgetType::Input(InputType::Text),
             values,
             props: FieldProps {
+                id: ID.into(),
                 path: "shape.radius".to_string(),
                 label: None,
                 errors: Vec::new(),
@@ -361,7 +365,7 @@ fn an_errored_field_marks_its_widget_aria_invalid() {
     // to style the error state.
     expect_that!(
         html,
-        contains_substring(r#"/><ul class="fx-field-errors">"#)
+        contains_substring(r#"/><ul class="fx-field-errors" id="#)
     );
 }
 
@@ -538,6 +542,7 @@ fn PasswordWithEcho() -> Element {
             widget: WidgetType::Input(InputType::Password),
             values,
             props: FieldProps {
+                id: ID.into(),
                 path: "secret".to_string(),
                 label: Some("Secret".to_string()),
                 errors: Vec::new(),

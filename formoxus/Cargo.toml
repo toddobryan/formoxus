@@ -16,6 +16,12 @@ workspace = true
 
 [dependencies]
 dioxus = { workspace = true }
+# For `use_server_cached`: a form's random id is picked once on the server and
+# reused by hydration, or the browser would roll its own and split `for`/`id`
+# from `aria-describedby`. No features here: `dioxus-server` and
+# `dioxus-web/hydrate` switch on this crate's `server`/`web`, and Cargo's
+# feature unification hands them to us; with neither, it just runs the closure.
+dioxus-fullstack-core = { workspace = true }
 facet = { workspace = true }
 heck = { workspace = true }
 # `serde`: `FormErrors` (inside `WireForm`) uses it for `fields`, and that

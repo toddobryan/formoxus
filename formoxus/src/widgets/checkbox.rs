@@ -23,6 +23,7 @@ pub fn Checkbox(
     let field_class = props.field_class();
 
     let FieldProps {
+        id,
         path,
         label,
         errors,
@@ -33,7 +34,8 @@ pub fn Checkbox(
     // when it had text, and put that text in no span — so `.fx-form-field` and
     // `.fx-field-label` both silently missed every checkbox on the page.
     rsx! {
-        label { class: field_class,
+        div {
+            class: "{field_class}",
             // The box comes BEFORE its text. Every other widget reads
             // caption-then-control, but a checkbox reads "☐ I agree", not
             // "I agree ☐" — the label is what the box means, not what to type
@@ -41,6 +43,7 @@ pub fn Checkbox(
             input {
                 class: class,
                 name: "{path}",
+                id: "{id}",
                 r#type: "checkbox",
                 checked: get_current(&path, values) == "true",
                 onchange: move |e: FormEvent| write_value(&path, values, e.value()),
@@ -51,14 +54,16 @@ pub fn Checkbox(
                 // Inside the label span and `aria-hidden`, exactly as in
                 // `Input`: the `required` attribute is what a screen reader
                 // announces, and the asterisk is only for the eye.
-                span { class: "fx-field-label",
+                label {
+                    class: "fx-field-label",
+                    r#for: "{id}",
                     "{label_text}"
                     if field_attrs.contains(Attr::RequiredTrue) {
                         span { class: "fx-required", aria_hidden: "true", " *" }
                     }
                 }
             }
-            FieldErrors { errors }
+            FieldErrors { field_id: &id, errors }
         }
     }
 }

@@ -7,6 +7,8 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::prelude::*;
+
+use super::FORM_ID;
 use formoxus::widgets::Choice;
 use googletest::prelude::*;
 
@@ -92,7 +94,9 @@ fn a_sibling_without_choices_is_still_an_input() {
     expect_that!(html, contains_substring(r#"name="zip""#));
     expect_that!(
         html,
-        contains_substring(r#"<input class="fx-control fx-input" type="text" name="zip""#)
+        contains_regex(format!(
+            r#"<input class="fx-control fx-input" type="text" id="{FORM_ID}-zip" name="zip""#
+        ))
     );
 }
 
@@ -213,13 +217,33 @@ fn a_radio_group_renders_one_radio_per_choice() {
         form.render_fragment()
     }
     let html = render(App);
+    // One shared `name`, so the browser treats them as one group; a separate
+    // `id` each, by choice INDEX (a value can hold a space, an id cannot).
     expect_that!(
         html,
-        contains_substring(r#"type="radio" name="state" value="AL""#)
+        contains_regex(format!(
+            r#"type="radio" id="{FORM_ID}-state-0" name="state" value="AL""#
+        ))
     );
     expect_that!(
         html,
-        contains_substring(r#"type="radio" name="state" value="AK""#)
+        contains_regex(format!(
+            r#"type="radio" id="{FORM_ID}-state-1" name="state" value="AK""#
+        ))
+    );
+    // Each choice's `<label for>` names its own radio, so a click on the text
+    // picks it and the radio's accessible name is that text. And the radio
+    // comes FIRST, then its text ("◯ Alabama"), as with a checkbox; the label
+    // first was an oversight once, so the order is pinned.
+    expect_that!(
+        html,
+        contains_regex(format!(
+            r#"value="AL"[^>]*/><label class="fx-choice-label" for="{FORM_ID}-state-0">Alabama</label>"#
+        ))
+    );
+    expect_that!(
+        html,
+        contains_regex(format!(r#"for="{FORM_ID}-state-1">Alaska</label>"#))
     );
     // Value and display stay separate, exactly as in the `<select>`.
     expect_that!(html, contains_substring("Alabama"));

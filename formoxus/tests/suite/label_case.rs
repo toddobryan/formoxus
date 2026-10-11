@@ -339,9 +339,10 @@ fn the_required_marker_is_nested_in_the_label() {
     }
     expect_that!(
         super::render_to_html(App),
-        contains_substring(
-            r#"<span class="fx-field-label">Email<span class="fx-required" aria-hidden="true"> *</span></span>"#
-        )
+        contains_regex(format!(
+            r#"<label class="fx-field-label" for="{}-email">Email<span class="fx-required" aria-hidden="true"> \*</span></label>"#,
+            super::FORM_ID
+        ))
     );
 }
 

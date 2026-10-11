@@ -11,6 +11,8 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::prelude::*;
+
+use super::FORM_ID;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -295,9 +297,9 @@ fn a_required_true_checkbox_shows_the_marker() {
     }
     expect_that!(
         render(Must),
-        contains_substring(
-            r#"<span class="fx-field-label">Agreed<span class="fx-required" aria-hidden="true"> *</span></span>"#
-        )
+        contains_regex(format!(
+            r#"<label class="fx-field-label" for="{FORM_ID}-agreed">Agreed<span class="fx-required" aria-hidden="true"> \*</span></label>"#
+        ))
     );
     expect_that!(render(Plain), not(contains_substring("fx-required")));
 }

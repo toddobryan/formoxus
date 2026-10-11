@@ -35,6 +35,7 @@ pub fn VariantSelect(
     let field_class = props.field_class();
 
     let FieldProps {
+        id: field_id,
         path,
         label: label_text,
         errors,
@@ -43,7 +44,8 @@ pub fn VariantSelect(
     let required = field_attrs.contains(Attr::Required);
 
     rsx! {
-        label { class: field_class,
+        div {
+            class: field_class,
             // The star annotates the LABEL, so it only appears when there is
             // one. Rendered inside a `VariantSet`'s fieldset there isn't: the
             // legend carries both, and a lone `*` floating in front of the
@@ -54,7 +56,9 @@ pub fn VariantSelect(
                 // onto its own line. `aria-hidden` because the asterisk is a
                 // VISUAL convention — `required` on the control is what a screen
                 // reader reads, so this would only add noise to the name.
-                span { class: "fx-field-label",
+                label {
+                    class: "fx-field-label",
+                    r#for: &field_id,
                     "{text}"
                     if required {
                         span { class: "fx-required", aria_hidden: "true", " *" }
@@ -63,6 +67,7 @@ pub fn VariantSelect(
             }
             select {
                 class: class,
+                id: &field_id,
                 onchange: move |e: FormEvent| {
                     let v = e.value();
                     let variant = (!v.is_empty()).then_some(v);
@@ -85,7 +90,7 @@ pub fn VariantSelect(
                     }
                 }
             }
-            FieldErrors { errors }
+            FieldErrors { field_id: &field_id, errors }
         }
     }
 }

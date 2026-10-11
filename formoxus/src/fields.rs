@@ -5,6 +5,7 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label, qualify};
+use crate::widgets::errors::errors_id;
 use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
@@ -69,6 +70,16 @@ impl FieldAttrs {
     pub fn without(&self, attr: Attr) -> FieldAttrs {
         let mut map = self.0.clone();
         map.shift_remove(&AttrKey::Std(attr));
+        FieldAttrs(map)
+    }
+
+    /// A copy with `attr` set to `value` unless the author already set it, for
+    /// a value formoxus supplies but an author may replace (`VariantSet`'s
+    /// `aria-labelledby`). The author's entry wins and keeps its position, so
+    /// the attribute is never emitted twice.
+    pub fn with_default(&self, attr: Attr, value: AttrValue) -> FieldAttrs {
+        let mut map = self.0.clone();
+        map.entry(AttrKey::Std(attr)).or_insert(value);
         FieldAttrs(map)
     }
 
@@ -148,6 +159,7 @@ impl FieldAttrs {
     /// First, so `required` keeps the position the suite's exact-markup tests
     /// expect.
     pub fn with_owned_attrs(
+        field_id: &str,
         widget: &WidgetType,
         required: bool,
         invalid: bool,
@@ -161,6 +173,10 @@ impl FieldAttrs {
             map.insert(
                 AttrKey::Std(Attr::AriaInvalid),
                 AttrValue::String("true".to_string()),
+            );
+            map.insert(
+                AttrKey::Std(Attr::AriaDescribedby),
+                AttrValue::String(errors_id(field_id)),
             );
         }
         map.extend(attrs.0.clone());
@@ -502,6 +518,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
     fn render(&self, ctx: &RenderCtx) -> Element {
         let widget = self.widget();
         let field_attrs = FieldAttrs::with_owned_attrs(
+            &ctx.id(&self.name),
             &widget,
             ctx.required,
             self.has_errors_here(),
@@ -516,6 +533,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                 choices: self.choices.clone(),
                 values: ctx.values,
                 props: FieldProps {
+                    id: ctx.id(&self.name),
                     path: ctx.path(&self.name),
                     label: self.label(ctx.label_case),
                     errors: self.errors.clone(),
@@ -1462,9 +1480,14 @@ mod tests {
 
     // ── Owned attributes, added at render ────────────────────────────────
     //
-    // `required` and `aria-invalid` depend on `ctx.required` and the field's
-    // errors, which only exist at render, so `form!`'s map never holds them.
-    // `with_owned_attrs` builds the map a widget actually gets.
+    // `required`, `aria-invalid` and `aria-describedby` depend on
+    // `ctx.required` and the field's errors, which only exist at render, so
+    // `form!`'s map never holds them. `with_owned_attrs` builds the map a
+    // widget actually gets.
+
+    /// A field's element id, as `RenderCtx::id` builds it. `.into()` at each
+    /// call, so these read the same whether the parameter is `String` or `&str`.
+    const ID: &str = "aB3xY9kq-name";
 
     fn keys(attrs: &FieldAttrs) -> Vec<AttrKey> {
         attrs.0.keys().copied().collect()
@@ -1474,12 +1497,13 @@ mod tests {
         all(&[(Attr::MaxLength, AttrValue::Int(10))])
     }
 
-    /// **Owned attributes come FIRST**, `required` before `aria-invalid`, then
-    /// the field's own in their order. First is what keeps `required` where the
-    /// suite's exact-markup tests already expect it.
+    /// **Owned attributes come FIRST**, `required`, then `aria-invalid` and
+    /// `aria-describedby`, then the field's own in their order. First is what
+    /// keeps `required` where the suite's exact-markup tests already expect it.
     #[gtest]
     fn owned_attributes_come_first_then_the_fields_own() {
         let attrs = FieldAttrs::with_owned_attrs(
+            ID,
             &WidgetType::Input(InputType::Text),
             true,
             true,
@@ -1490,6 +1514,7 @@ mod tests {
             elements_are![
                 eq(&AttrKey::Std(Attr::Required)),
                 eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::AriaDescribedby)),
                 eq(&AttrKey::Std(Attr::MaxLength)),
             ]
         );
@@ -1500,11 +1525,34 @@ mod tests {
         );
     }
 
-    /// Each is added on its own condition, not both or neither.
+    /// **`aria-describedby` names the error list's id**, `{field id}-errors`,
+    /// which is what `FieldErrors` puts on its `<ul>`. Spelled out as a literal
+    /// rather than through `errors_id`, so a change to the format has to change
+    /// this test too, on purpose.
+    #[gtest]
+    fn aria_describedby_names_the_error_list() {
+        let attrs = FieldAttrs::with_owned_attrs(
+            ID,
+            &WidgetType::Input(InputType::Text),
+            false,
+            true,
+            &FieldAttrs::default(),
+        );
+        expect_that!(
+            attrs.get(Attr::AriaDescribedby),
+            some(eq(&AttrValue::String("aB3xY9kq-name-errors".to_string())))
+        );
+    }
+
+    /// Each is added on its own condition, not both or neither. `aria-invalid`
+    /// and `aria-describedby` share one: there is an error list to point at
+    /// exactly when the field is invalid, and pointing at a list that is not
+    /// rendered is itself a defect.
     #[gtest]
     fn required_and_invalid_are_independent() {
         let input = WidgetType::Input(InputType::Text);
-        let only_required = FieldAttrs::with_owned_attrs(&input, true, false, &just_max_length());
+        let only_required =
+            FieldAttrs::with_owned_attrs(ID, &input, true, false, &just_max_length());
         expect_that!(
             keys(&only_required),
             elements_are![
@@ -1512,11 +1560,13 @@ mod tests {
                 eq(&AttrKey::Std(Attr::MaxLength)),
             ]
         );
-        let only_invalid = FieldAttrs::with_owned_attrs(&input, false, true, &just_max_length());
+        let only_invalid =
+            FieldAttrs::with_owned_attrs(ID, &input, false, true, &just_max_length());
         expect_that!(
             keys(&only_invalid),
             elements_are![
                 eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::AriaDescribedby)),
                 eq(&AttrKey::Std(Attr::MaxLength)),
             ]
         );
@@ -1526,6 +1576,7 @@ mod tests {
     #[gtest]
     fn without_either_the_fields_attributes_pass_through_unchanged() {
         let attrs = FieldAttrs::with_owned_attrs(
+            ID,
             &WidgetType::Input(InputType::Text),
             false,
             false,
@@ -1553,17 +1604,48 @@ mod tests {
         );
     }
 
+    /// `with_default` adds a value the author has not set, at the end, and
+    /// leaves one the author HAS set alone, value and position both.
+    #[gtest]
+    fn with_default_never_overrides_the_author() {
+        let added = just_max_length()
+            .with_default(Attr::AriaLabelledby, AttrValue::String("x-legend".into()));
+        expect_that!(
+            keys(&added),
+            elements_are![
+                eq(&AttrKey::Std(Attr::MaxLength)),
+                eq(&AttrKey::Std(Attr::AriaLabelledby)),
+            ]
+        );
+        let authored = all(&[
+            (Attr::AriaLabelledby, AttrValue::String("mine".into())),
+            (Attr::MaxLength, AttrValue::Int(10)),
+        ]);
+        expect_that!(
+            authored.with_default(Attr::AriaLabelledby, AttrValue::String("x-legend".into())),
+            eq(&authored)
+        );
+    }
+
     /// **A checkbox never gets `required`.** On a checkbox, HTML `required`
     /// means "must be ticked", which is `required_true`'s job; formoxus's
     /// `required` means PRESENCE, and an unticked box is still a present
-    /// `false`. `aria-invalid` is unaffected.
+    /// `false`. `aria-invalid` and `aria-describedby` are unaffected.
     #[gtest]
     fn a_checkbox_never_gets_required() {
-        let attrs =
-            FieldAttrs::with_owned_attrs(&WidgetType::Checkbox, true, true, &FieldAttrs::default());
+        let attrs = FieldAttrs::with_owned_attrs(
+            ID,
+            &WidgetType::Checkbox,
+            true,
+            true,
+            &FieldAttrs::default(),
+        );
         expect_that!(
             keys(&attrs),
-            elements_are![eq(&AttrKey::Std(Attr::AriaInvalid))]
+            elements_are![
+                eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::AriaDescribedby)),
+            ]
         );
     }
 }

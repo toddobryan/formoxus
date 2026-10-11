@@ -35,8 +35,10 @@ Two earlier markers were false positives worth knowing about, since they said
 something real about the widgets: a `hidden` input deliberately renders bare
 with no label at all, and a checkbox used to put its text in a plain `<label>`
 rather than the `fx-field-label` span every other widget uses. The checkbox half
-was a genuine inconsistency and was fixed on 2026-09-29 — it now carries
-`fx-form-field` and an `fx-field-label` span like everything else.
+was a genuine inconsistency and was fixed on 2026-09-29. Since 2026-10-11
+(issue #9) no widget wraps its control in a label: every field is a
+`div.fx-form-field` holding a `label.fx-field-label` with `for`, beside the
+control.
 
 ## Still to come
 

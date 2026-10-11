@@ -104,6 +104,14 @@ pub use formoxus_spec::InputType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldProps {
+    /// The field's name in the PAGE: the control's `id`, what its `<label for>`
+    /// and `aria-describedby` point at. `{form id}-{path}`, built by
+    /// `RenderCtx::id`, so it differs between two copies of one form on a page.
+    pub id: String,
+    /// The field's name in the DATA: its `name` attribute, its key in the value
+    /// store, and what the server matches a submitted value to. The same for
+    /// every copy of the form, and never containing the form id, which the
+    /// server does not have.
     pub path: String,
     pub label: Option<String>,
     pub errors: Vec<ValidationMessage>,
@@ -111,13 +119,14 @@ pub struct FieldProps {
 
 impl FieldProps {
     /// The field wrapper's classes: `fx-form-field`, plus `fx-invalid` when
-    /// there are errors to show.
+    /// there are errors to show. This `div` wraps the label, the form control and
+    /// its error list.
     ///
     /// **Why this picks a whole string instead of letting `rsx!` add a class.**
     /// The tempting version is two `class:` attributes on the element:
     ///
     /// ```text
-    /// label { class: "fx-form-field", class: if invalid { "fx-invalid" }, … }
+    /// div { class: "fx-form-field", class: if invalid { "fx-invalid" }, … }
     /// ```
     ///
     /// `rsx!` does merge those — it joins every `class:` value with a space. But

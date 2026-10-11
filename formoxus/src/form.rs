@@ -24,6 +24,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::hash::{BuildHasher, Hasher, RandomState};
 use std::{collections::HashMap, fmt::Debug, future::Future, pin::Pin, rc::Rc};
 
 mod spec;
@@ -243,6 +244,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// live in the state and nowhere else, so restoring only the raw strings
     /// would leave a form with the right values in the wrong shape.
     initial_signal: Signal<FormState<T>>,
+    id: Signal<String>,
 }
 
 // Hand-written, not derived: `#[derive(Copy)]` would add a spurious `T: Copy`
@@ -312,7 +314,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         reason = "`using_fns!` builds this at the call site for this one call; taking it by value is the honest signature even though the body only reads it"
     )]
     pub fn render(&self, fns: Fns<T>) -> Element {
-        let ctx = RenderCtx::root(self.values_store, self.on_edit, self.label_case());
+        let ctx = RenderCtx::root(
+            self.id.peek().clone(),
+            self.values_store,
+            self.on_edit,
+            self.label_case(),
+        );
         let state = self.state_signal.read();
         let buttons = state.buttons().to_vec();
         let problems = fns.reconcile(&buttons);
@@ -409,6 +416,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     pub fn render_fragment(&self) -> Element {
         self.state_signal.read().render_fragment(&RenderCtx::root(
+            self.id.peek().clone(),
             self.values_store,
             self.on_edit,
             self.label_case(),
@@ -421,6 +429,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     pub fn render_fields(&self) -> Element {
         self.state_signal.read().render_fields(&RenderCtx::root(
+            self.id.peek().clone(),
             self.values_store,
             self.on_edit,
             self.label_case(),
@@ -704,10 +713,27 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             warn!("rejected form edit: {e}");
         }
     });
+    let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
+
     Form {
         state_signal: state,
         values_store: values,
         on_edit,
         initial_signal: initial,
+        id: use_signal(|| form_id),
     }
+}
+
+const ALPHANUMERIC: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+fn new_form_id() -> String {
+    let mut id = String::with_capacity(8);
+    let rand_alpha = (RandomState::new().build_hasher().finish() % 52) as usize;
+    let alpha = &ALPHANUMERIC[rand_alpha..=rand_alpha];
+    id.push_str(alpha);
+    for _ in 0..7 {
+        let rand_char = (RandomState::new().build_hasher().finish() % 62) as usize;
+        id.push_str(&ALPHANUMERIC[rand_char..=rand_char]);
+    }
+    id
 }
