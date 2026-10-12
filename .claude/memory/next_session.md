@@ -16,9 +16,10 @@ built, tested (suite 346, lib 98, e2e 31) and #9 closed. **Next: P2 in
 `formoxus/ATTRIBUTES_PLAN.md`, broken into a checklist, opening with two
 decisions for Todd: P2-a, DECIDED the same evening (option C: a flat
 `Element` for the table and parts, `FieldControl` narrowed to the form
-controls, `From` between them, `Fieldset` no longer a control), and P2-b,
-STILL OPEN (fold decision 5, `WidgetType::Checkbox` → `Input(Checkbox)`, in
-now?).** Then P3 (class config), then Step 4.
+controls, `From` between them, `Fieldset` no longer a control), and P2-b, ALSO
+DECIDED (fold decision 5 in now: `Input` routes every `<input>`,
+`WidgetType::Checkbox` → `Input(Checkbox)`). Nothing built; Todd starts with
+`Element`/`FieldControl`, Claude with sorting the 73 all-four table rows.** Then P3 (class config), then Step 4.
 
 **2026-10-11: P1 (`<label for>`, #9) DONE and committed.** Random form id via
 `use_server_cached`, every widget un-nested, `aria-describedby`, the enum

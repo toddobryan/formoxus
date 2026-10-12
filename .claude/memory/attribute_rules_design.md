@@ -510,7 +510,8 @@ Entering the spec facts literally hit two snags: `min`/`max` are not valid on
    suggestion and the legal list, never "no variant in enum `Attr`".
 4. **Owned rows are precise**, not `on: _`, so that un-owning one later says
    exactly where it is valid. `checked` is owned like `name` and `value`.
-5. **`Input` becomes the router for every `<input>`** (Todd): it matches on
+5. **`Input` becomes the router for every `<input>`** (Todd; scheduled into P2
+   2026-10-11, alongside `BuiltinWidget`): it matches on
    its input type and renders `Checkbox` for a checkbox, the text code for
    the text-like types, and so on. `WidgetType::Checkbox` goes away
    (`form!`'s `checkbox` becomes `Input(Checkbox)`), and `RadioGroup` stays

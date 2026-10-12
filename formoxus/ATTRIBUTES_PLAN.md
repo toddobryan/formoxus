@@ -14,8 +14,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > (parts) is ADOPTED. **2026-10-10: three steps now come FIRST, in "Before
 > Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
 > configurable classes (#10).** **P1 DONE 2026-10-11 (#9 closed).** P2 is
-> broken down; P2-a DECIDED 2026-10-11 (`Element` + narrowed `FieldControl`),
-> P2-b (decision 5) still open.
+> broken down; P2-a and P2-b DECIDED 2026-10-11 (`Element` + narrowed
+> `FieldControl`; decision 5's `Input` router folded in). Nothing built yet.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -662,12 +662,18 @@ crates now keep in parallel live in one place. The components and
   (`disabled`, `name`, `form`, `readonly`, …); the global list is in
   `.claude/memory/html_attributes_reference.md`. A `Global` shorthand in the
   table macro keeps those rows short.**
-- **P2-b. Fold decision 5 in?** `Input` becomes the router for every
-  `<input>`, so `WidgetType::Checkbox` becomes `Input(Checkbox)`; it pairs
-  with decision 6's smaller enum of rendered input types, which P2 already
-  includes. Now means `BuiltinWidget` is shaped right from the start; later
-  means reshaping it. About 46 `WidgetType::` references would move (23 in
-  `src`, 15 in `tests`, 8 in `examples`).
+- **P2-b. DECIDED (Todd, 2026-10-11): fold decision 5 in now.** `Input` becomes
+  the router for every `<input>` formoxus renders: it matches on its input
+  type and renders the checkbox code for `Checkbox`, the text code for the
+  text-like types. `WidgetType::Checkbox` goes; `form!`'s `checkbox` becomes
+  `Input(Checkbox)`. So decision 6's rendered-input enum is `Text` … `Week`
+  PLUS `Checkbox` (not `Radio`, which only `RadioGroup` renders, nor `File`,
+  `Range`, `Submit`, `Image`, `Reset`, `Button`), and `BuiltinWidget` is
+  roughly `Input(RenderedInput) | Textarea | Select | RadioGroup`, plus the
+  not-yet `SelectMultiple`, `CheckboxMultiple`, `File`. A checkbox's parts
+  differ from a text input's (`div`, `input`, `label`: box first), so
+  `parts()` matches on the input type too. About 46 `WidgetType::`
+  references move (23 `src`, 15 `tests`, 8 `examples`).
 
 #### Checklist
 
@@ -681,8 +687,12 @@ crates now keep in parallel live in one place. The components and
 - [ ] **The rendered-input-type enum** (Todd; decision 6): the subset of
   `InputType` that `Input` renders (`Text` … `Week`; not `Checkbox`, `Radio`,
   `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`), with a one-line
-  conversion onto `InputType` for table lookups. If P2-b is yes, `Checkbox`
-  joins it.
+  conversion onto `InputType` for table lookups. `Checkbox` is in it (P2-b).
+- [ ] **`Input` routes every rendered `<input>`** (Todd; decision 5, P2-b):
+  `Input` matches on its input type and renders `Checkbox` for a checkbox;
+  `WidgetType::Checkbox` and its `ScalarWidget` arm go; `form!`'s `checkbox`
+  maps to `Input(Checkbox)`; `with_owned_attrs`'s `!matches!(widget,
+  WidgetType::Checkbox)` becomes a check on the input type.
 - [ ] **`BuiltinWidget` in a new `formoxus-spec/src/widgets.rs`** (Todd).
   `const fn`s, so `form!`'s `const _` asserts can call them:
   `from_form_name(&str) -> Option<Self>` / `form_name()` (as `Attr` has
