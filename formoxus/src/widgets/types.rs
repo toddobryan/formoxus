@@ -4,17 +4,17 @@
 //! a widget can hold.
 
 use dioxus::prelude::*;
+use formoxus_spec::RenderedInputType;
 
 use crate::error::ValidationMessage;
 use crate::members::ValuesStore;
 
 #[derive(Clone)]
 pub enum WidgetType {
-    Input(InputType),
+    Input(RenderedInputType),
     Textarea,
     Select,
     SelectMultiple,
-    Checkbox,
     CheckboxMultiple,
     RadioGroup,
     File,
@@ -50,7 +50,6 @@ impl std::fmt::Debug for WidgetType {
             Self::Textarea => f.write_str("Textarea"),
             Self::Select => f.write_str("Select"),
             Self::SelectMultiple => f.write_str("SelectMultiple"),
-            Self::Checkbox => f.write_str("Checkbox"),
             Self::CheckboxMultiple => f.write_str("CheckboxMultiple"),
             Self::RadioGroup => f.write_str("RadioGroup"),
             Self::File => f.write_str("File"),

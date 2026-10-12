@@ -49,19 +49,14 @@ HTML spec's own term. Two things use it, both deliberately:
 - **the CSS class `fx-control`**, on the bare `<input>`/`<select>`/`<textarea>`.
   All emitted classes are `fx-`-prefixed; the full list and its reasoning are
   in `.claude/memory/css_class_vocabulary.md`.
-- **`FieldControl` (2026-10-03, Todd)**, the enum in `formoxus-spec` naming the
-  element a widget puts its attributes on (`Input(InputType)`, `Textarea`,
-  `Select`, `Fieldset`), which is what attribute validity is keyed on.
-  `Fieldset` is a stretch (nobody types into one); it is there because
-  `RadioGroup` spreads onto its `<fieldset>`, which has to be dealt with
-  anyway. **DECIDED 2026-10-11 (Todd), built in P2 of
-  `formoxus/ATTRIBUTES_PLAN.md`:** an `Element` (every element a widget
-  part can be, `Fieldset`/`Label`/`Legend`/`Div` included, the controls
-  nested as `Element::Control(FieldControl)`) becomes what
-  attribute validity is keyed on, and `FieldControl` NARROWS to
-  `Input(_) | Textarea | Select`, the form controls only, with
-  `From<FieldControl> for Element`. That ends the `Fieldset` stretch and keeps
-  "control" meaning exactly the bare form element.
+- **`FieldControl` (Todd; narrowed 2026-10-12)**, the enum in
+  `formoxus-spec/src/elements.rs` naming a bare form control:
+  `Input(InputType) | Textarea | Select`, nothing else. It types whatever
+  must be a control (`true_and_on(…)`, a widget's form-control part).
+  Attribute validity is keyed on the wider **`Element`**
+  (`Div | Fieldset | Label | Legend | Control(FieldControl)`), every element a
+  widget part can be. `Fieldset` was once a `FieldControl`, a stretch because
+  `RadioGroup` spread onto it; P2-a in `formoxus/ATTRIBUTES_PLAN.md` ended that.
 
 Anything that RENDERS a field is still a widget. A new Rust name containing
 "control" needs to pass the same test: does it name the bare element, not the

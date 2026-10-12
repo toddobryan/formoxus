@@ -27,4 +27,4 @@ mod input_types;
 pub use attrs::{Attr, AttrKey, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
 pub use bound::Bound;
 pub use elements::{Element, FieldControl};
-pub use input_types::InputType;
+pub use input_types::{InputType, RenderedInputType};

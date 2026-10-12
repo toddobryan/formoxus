@@ -5,6 +5,13 @@ metadata:
   type: project
 ---
 
+**2026-10-12 (school), AFTERNOON — GREEN, PUSHED; P2 BOXES 3–4 DONE.**
+`RenderedInputType` (formoxus-spec, `to_input_type()`); `Input` routes
+hidden/checkbox/text-like (checkbox.rs folded into input.rs, `field_label`
+shared); `WidgetType::Checkbox` gone; `form!`'s `checkbox` → `Input(Checkbox)`
+with `rule()` matching it by name (stopgap). Green: spec 18, macros 136, lib
+98, suite 346, goldens unchanged, e2e 31. **Next box: `BuiltinWidget` (Todd).**
+
 **2026-10-12 (school), MIDDAY — GREEN, PUSHED; P2's FIRST TWO BOXES DONE.**
 Todd wrote `formoxus-spec/src/elements.rs` (`Element`, NESTED:
 `Div | Fieldset | Label | Legend | Control(FieldControl)`; `FieldControl` =

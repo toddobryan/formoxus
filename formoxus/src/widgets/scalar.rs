@@ -2,9 +2,8 @@
 
 use dioxus::prelude::*;
 
-use formoxus_spec::{Attr, FieldType};
+use formoxus_spec::{Attr, FieldType, RenderedInputType};
 
-use super::checkbox::Checkbox;
 use super::input::Input;
 use super::radio_group::RadioGroup;
 use super::select::Select;
@@ -44,14 +43,16 @@ pub fn ScalarWidget(
         // `Int`/`Float` land here too: their default widget is `Text`, because
         // `type="number"` would eat a half-typed value — but `number` is a
         // perfectly good override, and so is `text` on a numeric.
-        (FieldType::Text | FieldType::Int | FieldType::Float, WidgetType::Input(input_type)) => {
+        (FieldType::Text | FieldType::Int | FieldType::Float, WidgetType::Input(input_type))
+            if !matches!(input_type, RenderedInputType::Checkbox) =>
+        {
             rsx! { Input { input_type: *input_type, field_type, field_attrs, values, props, attrs } }
+        }
+        (FieldType::Bool, WidgetType::Input(RenderedInputType::Checkbox)) => {
+            rsx! { Input { input_type: RenderedInputType::Checkbox, field_type, field_attrs, values, props, attrs } }
         }
         (FieldType::Text, WidgetType::Textarea) => {
             rsx! { Textarea { field_type, field_attrs, values, props, attrs } }
-        }
-        (FieldType::Bool, WidgetType::Checkbox) => {
-            rsx! { Checkbox { field_type, field_attrs, values, props, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. The list is the only

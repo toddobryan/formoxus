@@ -25,7 +25,8 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::widgets::{InputType, WidgetType};
+use formoxus::attrs::RenderedInputType;
+use formoxus::widgets::WidgetType;
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
 
@@ -54,20 +55,21 @@ fn OneField(path: String, widget: WidgetType) -> Element {
 /// Every widget a consumer can name, in the macro table's own order.
 fn every_widget() -> Vec<(&'static str, WidgetType)> {
     let inputs = [
-        ("text", InputType::Text),
-        ("password", InputType::Password),
-        ("hidden", InputType::Hidden),
-        ("number", InputType::Number),
-        ("email", InputType::Email),
-        ("tel", InputType::Telephone),
-        ("url", InputType::Url),
-        ("search", InputType::Search),
-        ("color", InputType::Color),
-        ("date", InputType::Date),
-        ("time", InputType::Time),
-        ("datetime_local", InputType::DatetimeLocal),
-        ("month", InputType::Month),
-        ("week", InputType::Week),
+        ("text", RenderedInputType::Text),
+        ("password", RenderedInputType::Password),
+        ("hidden", RenderedInputType::Hidden),
+        ("number", RenderedInputType::Number),
+        ("email", RenderedInputType::Email),
+        ("tel", RenderedInputType::Telephone),
+        ("url", RenderedInputType::Url),
+        ("search", RenderedInputType::Search),
+        ("color", RenderedInputType::Color),
+        ("date", RenderedInputType::Date),
+        ("time", RenderedInputType::Time),
+        ("datetime_local", RenderedInputType::DatetimeLocal),
+        ("month", RenderedInputType::Month),
+        ("week", RenderedInputType::Week),
+        ("checkbox", RenderedInputType::Checkbox),
     ];
     let mut all: Vec<(&'static str, WidgetType)> = inputs
         .into_iter()
@@ -77,7 +79,6 @@ fn every_widget() -> Vec<(&'static str, WidgetType)> {
         ("textarea", WidgetType::Textarea),
         ("select", WidgetType::Select),
         ("select_multiple", WidgetType::SelectMultiple),
-        ("checkbox", WidgetType::Checkbox),
         ("checkbox_multiple", WidgetType::CheckboxMultiple),
         ("radio_group", WidgetType::RadioGroup),
         ("file", WidgetType::File),

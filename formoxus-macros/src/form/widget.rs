@@ -39,7 +39,7 @@ macro_rules! widgets {
             match name.to_string().as_str() {
                 $( stringify!($name) => Some(quote! {
                     ::formoxus::widgets::WidgetType::$variant
-                    $( ( ::formoxus::widgets::InputType::$input ) )?
+                    $( ( ::formoxus::attrs::RenderedInputType::$input ) )?
                 }), )*
                 _ => None,
             }
@@ -65,6 +65,7 @@ widgets! {
     text           => Input(Text),
     password       => Input(Password),
     hidden         => Input(Hidden),
+    checkbox       => Input(Checkbox),
     // Selectable, but not the DEFAULT for a numeric field: `type="number"` hands
     // back `""` for anything the browser dislikes, so a half-typed value
     // vanishes. A numeric renders as text unless someone asks for this.
@@ -84,7 +85,6 @@ widgets! {
     textarea          => Textarea,
     select            => Select,
     select_multiple   => SelectMultiple,
-    checkbox          => Checkbox,
     checkbox_multiple => CheckboxMultiple,
     radio_group       => RadioGroup,
     file              => File,
@@ -183,17 +183,17 @@ enum Rule {
 fn rule(name: &str) -> Rule {
     let variant = widget_variant(name).expect("only called with names from the table");
     match variant {
-        "Input" => Rule::Checked {
+        "Input" if name != "checkbox" => Rule::Checked {
             class: "Input",
             message: "an `<input>` widget cannot render a bool field; use `checkbox` or `select`",
+        },
+        "Input" => Rule::Checked {
+            class: "Checkbox",
+            message: "`checkbox` can only render a bool field",
         },
         "Textarea" => Rule::Checked {
             class: "Textarea",
             message: "`textarea` can only render a String field",
-        },
-        "Checkbox" => Rule::Checked {
-            class: "Checkbox",
-            message: "`checkbox` can only render a bool field",
         },
         "Select" | "RadioGroup" => Rule::Checked {
             class: "Chooser",

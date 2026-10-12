@@ -10,7 +10,7 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue};
+use formoxus::attrs::{Attr, AttrKey, AttrValue, RenderedInputType};
 use formoxus::fields::FieldAttrs;
 use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
@@ -106,7 +106,8 @@ fn the_derived_widgets_are_what_the_override_has_to_beat() {
 fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| {
         empty_form(
-            FormSpec::<Flags>::default().with_custom_widget("subscribed", WidgetType::Checkbox),
+            FormSpec::<Flags>::default()
+                .with_custom_widget("subscribed", WidgetType::Input(RenderedInputType::Checkbox)),
         )
     });
     form.render_fragment()

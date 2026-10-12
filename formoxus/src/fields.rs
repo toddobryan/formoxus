@@ -6,10 +6,10 @@ use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::errors::errors_id;
-use crate::widgets::{Choice, FieldProps, InputType, ScalarWidget, WidgetType};
+use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
-use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType};
+use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType, RenderedInputType};
 use indexmap::IndexMap;
 use regress::Regex;
 use std::fmt::Debug;
@@ -166,7 +166,7 @@ impl FieldAttrs {
         attrs: &FieldAttrs,
     ) -> FieldAttrs {
         let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
-        if required && !matches!(widget, WidgetType::Checkbox) {
+        if required && !matches!(widget, WidgetType::Input(RenderedInputType::Checkbox)) {
             map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
         }
         if invalid {
@@ -408,7 +408,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             // Int and Float are deliberately `text`, not `number`: `type="number"` hands back `""`
             // for anything the browser dislikes, so a half-typed value vanishes.
             FieldType::Text | FieldType::Int | FieldType::Float => {
-                WidgetType::Input(InputType::Text)
+                WidgetType::Input(RenderedInputType::Text)
             }
 
             // An `Option<bool>` has three states and a checkbox has two, so the
@@ -416,7 +416,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             // the "no value" option rather than growing a third checkbox state
             // the DOM would have to be talked into.
             FieldType::Bool if self.optional => WidgetType::Select,
-            FieldType::Bool => WidgetType::Checkbox,
+            FieldType::Bool => WidgetType::Input(RenderedInputType::Checkbox),
         }
     }
 
@@ -428,7 +428,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     }
 
     fn is_unticked_checkbox(&self) -> bool {
-        matches!(self.value, FieldValue::Empty) && matches!(self.widget(), WidgetType::Checkbox)
+        matches!(self.value, FieldValue::Empty)
+            && matches!(
+                self.widget(),
+                WidgetType::Input(RenderedInputType::Checkbox)
+            )
     }
 
     /// The raw value `validate` checks: `"false"` for an unticked checkbox,
@@ -1504,7 +1508,7 @@ mod tests {
     fn owned_attributes_come_first_then_the_fields_own() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(InputType::Text),
+            &WidgetType::Input(RenderedInputType::Text),
             true,
             true,
             &just_max_length(),
@@ -1533,7 +1537,7 @@ mod tests {
     fn aria_describedby_names_the_error_list() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(InputType::Text),
+            &WidgetType::Input(RenderedInputType::Text),
             false,
             true,
             &FieldAttrs::default(),
@@ -1550,7 +1554,7 @@ mod tests {
     /// rendered is itself a defect.
     #[gtest]
     fn required_and_invalid_are_independent() {
-        let input = WidgetType::Input(InputType::Text);
+        let input = WidgetType::Input(RenderedInputType::Text);
         let only_required =
             FieldAttrs::with_owned_attrs(ID, &input, true, false, &just_max_length());
         expect_that!(
@@ -1577,7 +1581,7 @@ mod tests {
     fn without_either_the_fields_attributes_pass_through_unchanged() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(InputType::Text),
+            &WidgetType::Input(RenderedInputType::Text),
             false,
             false,
             &just_max_length(),
@@ -1635,7 +1639,7 @@ mod tests {
     fn a_checkbox_never_gets_required() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Checkbox,
+            &WidgetType::Input(RenderedInputType::Checkbox),
             true,
             true,
             &FieldAttrs::default(),

@@ -12,6 +12,7 @@ use dioxus_html::{
 use facet::Facet;
 use formoxus::fields::FieldAttrs;
 use formoxus::prelude::*;
+use formoxus_spec::RenderedInputType;
 use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
@@ -163,7 +164,7 @@ fn signals_are_populated_from_the_model() {
 // so they stay meaningful regardless of how the members wire it up.
 
 use formoxus::attrs::FieldType;
-use formoxus::widgets::{FieldProps, InputType, ScalarWidget, WidgetType};
+use formoxus::widgets::{FieldProps, ScalarWidget, WidgetType};
 
 const ID: &str = "rand0123-name";
 
@@ -179,7 +180,7 @@ fn PopulatedInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(InputType::Text),
+            widget: WidgetType::Input(RenderedInputType::Text),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -204,7 +205,7 @@ fn EmptyInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(InputType::Text),
+            widget: WidgetType::Input(RenderedInputType::Text),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -459,19 +460,19 @@ fn every_input_type_reaches_the_type_attribute() {
     // `tel` and `datetime-local` are the two where the variant name and the
     // attribute diverge, which is the whole reason `html_type` exists.
     let cases = [
-        (InputType::Text, "text"),
-        (InputType::Password, "password"),
-        (InputType::Number, "number"),
-        (InputType::Email, "email"),
-        (InputType::Telephone, "tel"),
-        (InputType::Url, "url"),
-        (InputType::Search, "search"),
-        (InputType::Color, "color"),
-        (InputType::Date, "date"),
-        (InputType::Time, "time"),
-        (InputType::DatetimeLocal, "datetime-local"),
-        (InputType::Month, "month"),
-        (InputType::Week, "week"),
+        (RenderedInputType::Text, "text"),
+        (RenderedInputType::Password, "password"),
+        (RenderedInputType::Number, "number"),
+        (RenderedInputType::Email, "email"),
+        (RenderedInputType::Telephone, "tel"),
+        (RenderedInputType::Url, "url"),
+        (RenderedInputType::Search, "search"),
+        (RenderedInputType::Color, "color"),
+        (RenderedInputType::Date, "date"),
+        (RenderedInputType::Time, "time"),
+        (RenderedInputType::DatetimeLocal, "datetime-local"),
+        (RenderedInputType::Month, "month"),
+        (RenderedInputType::Week, "week"),
     ];
     for (input_type, expected) in cases {
         let html = rendered_with(WidgetType::Input(input_type));
@@ -504,7 +505,7 @@ fn a_numeric_field_can_still_ask_for_a_number_input() {
     // The override half of `a_numeric_field_still_renders_as_text`: text is the
     // DEFAULT, not the only option. Someone who wants the spinner and the mobile
     // numeric keypad, and accepts that the browser may hand back `""`, can say so.
-    let html = rendered_with(WidgetType::Input(InputType::Number));
+    let html = rendered_with(WidgetType::Input(RenderedInputType::Number));
     expect_that!(html, contains_substring("type=\"number\""));
 }
 
@@ -528,7 +529,7 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                     secret: "hunter2".to_string(),
                 },
                 FormSpec::<OneString>::default()
-                    .with_custom_widget("secret", WidgetType::Input(InputType::Password)),
+                    .with_custom_widget("secret", WidgetType::Input(RenderedInputType::Password)),
             )
         });
         form.render_fragment()
@@ -551,7 +552,7 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
     // The wrapper every other leaf uses is a `label` with a caption and a
     // required marker. Around `type="hidden"` that puts visible text and an
     // asterisk on screen beside a widget nobody can see.
-    let html = rendered_with(WidgetType::Input(InputType::Hidden));
+    let html = rendered_with(WidgetType::Input(RenderedInputType::Hidden));
     expect_that!(html, contains_substring("type=\"hidden\""));
     expect_that!(html, not(contains_substring("<label")));
     expect_that!(html, not(contains_substring("field-label")));
@@ -574,7 +575,7 @@ fn PasswordWithEcho() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(InputType::Password),
+            widget: WidgetType::Input(RenderedInputType::Password),
             values,
             props: FieldProps {
                 id: ID.into(),

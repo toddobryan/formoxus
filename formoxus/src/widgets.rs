@@ -31,8 +31,9 @@
 //! in the history saying otherwise predates that.
 //!
 //! Each component is then named for the element at its core — [`Input`],
-//! [`Select`], [`Textarea`], [`Checkbox`], [`RadioGroup`] — since that is what a
-//! reader is looking for when they go hunting. [`RadioGroup`] is the one named
+//! [`Select`], [`Textarea`], [`RadioGroup`] — since that is what a reader is
+//! looking for when they go hunting. A checkbox is an [`Input`], routed by its
+//! type to its own body. [`RadioGroup`] is the one named
 //! for something HTML has no element for, which is the point made just above.
 //!
 //! # Layout
@@ -42,13 +43,13 @@
 //! - [`values`] — reading and writing one path in the store.
 //! - [`scalar`] — dispatch, deciding which widget a `(value kind, widget)`
 //!   pair actually gets. The only place that decides which pairs work at all.
-//! - [`input`], [`textarea`], [`checkbox`], [`select`], [`radio_group`] — the
-//!   widgets themselves, one module per element.
+//! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
+//!   [`select`], [`radio_group`] — the widgets themselves, one module per
+//!   element.
 //! - [`variant_select`] and [`row_buttons`] — the widgets that change a form's
 //!   SHAPE rather than a value: which variant is chosen, and the rows of a list.
 //! - [`errors`] — the error list rendered under every widget.
 
-pub mod checkbox;
 pub mod errors;
 pub mod input;
 pub mod radio_group;
@@ -62,7 +63,6 @@ pub mod variant_select;
 
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
-pub use checkbox::Checkbox;
 pub use errors::FieldErrors;
 pub use input::Input;
 pub use radio_group::RadioGroup;

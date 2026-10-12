@@ -697,11 +697,19 @@ crates now keep in parallel live in one place. The components and
   `Control(_) | Fieldset` because those are `<fieldset>`'s own attributes in
   the spec. `every_row_is_valid_exactly_where_the_spec_says` now checks
   `Label`/`Legend`/`Div` too (mutation-checked both ways).
-- [ ] **The rendered-input-type enum** (Todd; decision 6): the subset of
-  `InputType` that `Input` renders (`Text` … `Week`; not `Checkbox`, `Radio`,
-  `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`), with a one-line
-  conversion onto `InputType` for table lookups. `Checkbox` is in it (P2-b).
-- [ ] **`Input` routes every rendered `<input>`** (Todd; decision 5, P2-b):
+- [x] **The rendered-input-type enum** (Todd; decision 6; DONE 2026-10-12 as
+  `RenderedInputType` in `formoxus-spec/src/input_types.rs`, with
+  `to_input_type()` and a same-name conversion test): the subset of
+  `InputType` that `Input` renders (`Text` … `Week`, plus `Checkbox` per
+  P2-b; not `Radio`, `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`),
+  with a one-line `const fn` conversion onto `InputType` for table lookups.
+  It lives in `formoxus-spec` beside `InputType` (`BuiltinWidget` holds it),
+  so `InputType`'s doc comment saying "on the `formoxus` side" goes too.
+- [x] **`Input` routes every rendered `<input>`** (Todd; decision 5, P2-b;
+  DONE 2026-10-12: `Input` matches into private `hidden`/`checkbox`/
+  `text_like` bodies sharing `field_label`; `checkbox.rs` folded into
+  `input.rs`, `widgets::Checkbox` no longer exported; `rule()` maps
+  `checkbox` by name until `BuiltinWidget`; e2e 31 green):
   `Input` matches on its input type and renders `Checkbox` for a checkbox;
   `WidgetType::Checkbox` and its `ScalarWidget` arm go; `form!`'s `checkbox`
   maps to `Input(Checkbox)`; `with_owned_attrs`'s `!matches!(widget,
@@ -891,8 +899,8 @@ failure the compile-time checks exist to prevent.
   keys are never filtered; `None` (custom widgets) filters nothing. After 4b
   the only things skipped are `true_and_on` entries and formoxus's own.
 - [ ] **The seven call sites pass their control:** `input.rs:23` (its
-  `Input(type)`), `textarea.rs:28`, `select.rs:38`, `checkbox.rs:21`,
-  `radio_group.rs:46` (`Fieldset`), `variant_select.rs:71` (`Select`),
+  `Input(type)`), `textarea.rs:28`, `select.rs:38`, `input.rs`'s `checkbox`
+  body (was `checkbox.rs:21`), `radio_group.rs:46` (`Fieldset`), `variant_select.rs:71` (`Select`),
   `scalar.rs:102` (custom: `None`).
 - [ ] **`RadioGroup`'s `FieldAttrs::without(Attr::Required)` may go.**
   `Required` is not valid on `Fieldset`, so the filter drops it from the
