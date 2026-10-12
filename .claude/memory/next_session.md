@@ -5,6 +5,19 @@ metadata:
   type: project
 ---
 
+**END OF SESSION 2026-10-11 (home) — GREEN, PUSHED; NEXT IS P2.** Todd picks
+up on his SCHOOL machine: it needs a `git pull` (this session pushed
+`d6b5197`..HEAD), and the new `dioxus-fullstack-core` dependency means a fresh
+build. That machine also still holds an old `stash@{0}` (2026-10-08); leave it.
+Done since the last handoff: the `formoxus-attrs` → `formoxus-spec` rename;
+widget PARTS adopted; P1 (`<label for>`, random form id via
+`use_server_cached`, `aria-describedby`, the enum select named by its legend)
+built, tested (suite 346, lib 98, e2e 31) and #9 closed. **Next: P2 in
+`formoxus/ATTRIBUTES_PLAN.md`, broken into a checklist, opening with two
+decisions for Todd: P2-a (what type a part's element is; renaming
+`FieldControl`?) and P2-b (fold decision 5, `WidgetType::Checkbox` →
+`Input(Checkbox)`, in now?).** Then P3 (class config), then Step 4.
+
 **2026-10-11: P1 (`<label for>`, #9) DONE and committed.** Random form id via
 `use_server_cached`, every widget un-nested, `aria-describedby`, the enum
 select named by its legend; suite 345, lib 98, e2e 31 green. #9 closed, P1

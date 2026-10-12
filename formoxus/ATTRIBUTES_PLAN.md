@@ -5,7 +5,7 @@ A working checklist for the attribute-table work (C6, which absorbed issue #4).
 `.claude/memory/attribute_rules_design.md`**, numbered; this file is just the
 order to do things in and where to do them. Claude keeps it current when asked.
 
-> **Status, 2026-10-10.** Step 3 is DONE, every box (3f's last box today).
+> **Status, 2026-10-11.** Step 3 is DONE, every box (3f's last box today).
 > 3d's widget side finished today too (steps 4–10). Typed keys on an enum
 > field are allowed where they make sense (3f, DONE). Deferred: the
 > `RadioGroup` author-attribute grammar, and custom widgets getting author
@@ -13,7 +13,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > down below but not started; it opens with decisions D0–D4.** D0 (2026-10-10)
 > (parts) is ADOPTED. **2026-10-10: three steps now come FIRST, in "Before
 > Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
-> configurable classes (#10).** All decided; nothing built.
+> configurable classes (#10).** **P1 DONE 2026-10-11 (#9 closed).** P2 is
+> broken down and opens with decisions P2-a (element type) and P2-b (decision 5).
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -609,16 +610,91 @@ Checklist:
 
 ### P2. `BuiltinWidget` in `formoxus-spec`
 
+Broken down 2026-10-11 (Claude); line numbers from `ea76eed`. One
+dependency-free description of every built-in widget, so the facts the two
+crates now keep in parallel live in one place. The components and
+`ScalarWidget`'s dispatch stay in `formoxus`; the facts move.
+
+**What it replaces** (each a hand-kept copy today):
+
+| fact | lives today in |
+|---|---|
+| `form!` name → widget | `widgets!` table, [widget.rs:63](../formoxus-macros/src/form/widget.rs#L63), mapping names to variant STRINGS (`widget_variant`, :54) |
+| which field types it renders | `rule()` + `Rule` ([widget.rs:172](../formoxus-macros/src/form/widget.rs#L172)), `field_kind::WidgetClass` + `renders` ([field_kind.rs:173](src/field_kind.rs#L173)), and `ScalarWidget`'s match arms ([scalar.rs:38](src/widgets/scalar.rs#L38)) |
+| takes `choices` | `CHOOSERS` ([widget.rs:104](../formoxus-macros/src/form/widget.rs#L104)) |
+| refuses an optional field | the `refusal` match in `WidgetRef::checks` ([widget.rs:230](../formoxus-macros/src/form/widget.rs#L230)), mirrored by `field_kind::is_optional` and `ScalarWidget`'s `reject_if_not_required` |
+| not rendered yet | `Rule::NotYet`: `select_multiple`, `checkbox_multiple`, `file` |
+| default per field type | `FormField::default_widget` ([fields.rs:406](src/fields.rs#L406)) |
+| its parts | nowhere; read off P1's markup (below) |
+
+**Parts, from the markup P1 shipped:**
+
+| widget | parts (element) | form control |
+|---|---|---|
+| every `<input>` widget | `div`, `label`, `input` | `input` |
+| `textarea` | `div`, `label`, `textarea` | `textarea` |
+| `select` (and an enum's variant select) | `div`, `label`, `select` | `select` |
+| `checkbox` | `div`, `input`, `label` | `input` |
+| `radio_group` | `fieldset`, `legend`, `div` (per choice), `input`, `label` | `input` |
+| `hidden` | `input` | `input` |
+
+#### Decisions first (Todd)
+
+- **P2-a. The type of a part's element** (open point D in
+  `WIDGET_PARTS_EXAMPLES.md`). Parts now include `div`, `label` and
+  `legend`, but `FieldControl` names only `Input(_)`, `Textarea`, `Select`,
+  `Fieldset`. Either `FieldControl` grows `Div`/`Label`/`Legend` and is
+  renamed (`Element`?), since it would then name things that are not form
+  controls (CLAUDE.md's "control" exception covers only the bare form
+  element), with every global row (`class`, `title`, ...) adding the new
+  variants or gaining a `Global` shorthand; or parts get their own element
+  enum and `FieldControl` stays as the attribute-validity key. BLOCKS `Part`.
+- **P2-b. Fold decision 5 in?** `Input` becomes the router for every
+  `<input>`, so `WidgetType::Checkbox` becomes `Input(Checkbox)`; it pairs
+  with decision 6's smaller enum of rendered input types, which P2 already
+  includes. Now means `BuiltinWidget` is shaped right from the start; later
+  means reshaping it. About 46 `WidgetType::` references would move (23 in
+  `src`, 15 in `tests`, 8 in `examples`).
+
+#### Checklist
+
 - [x] **Rename `formoxus-attrs` → `formoxus-spec`** (DONE 2026-10-10, Claude).
-- [ ] **`BuiltinWidget`** (Todd), per the design note's "What it does to
-  Step 4" point 8: name, parts (read off P1's markup), form control, chooser,
-  optional, renders-for, default-per-field-type; plus decision 6's
-  rendered-input-type enum. Then the macro emits enum paths instead of
-  `widget_variant` strings, and `rule()`, `WidgetClass`, `CHOOSERS` and the
-  optional refusals go. `ScalarWidget`'s match becomes exhaustive over it.
-- [ ] Unit tests (Claude) in `formoxus-spec`: every widget has exactly one
-  form-control part; part names are unique within a widget; the defaults
-  table covers every `FieldType`.
+- [ ] **The element type** (Todd), per P2-a.
+- [ ] **The rendered-input-type enum** (Todd; decision 6): the subset of
+  `InputType` that `Input` renders (`Text` … `Week`; not `Checkbox`, `Radio`,
+  `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`), with a one-line
+  conversion onto `InputType` for table lookups. If P2-b is yes, `Checkbox`
+  joins it.
+- [ ] **`BuiltinWidget` in a new `formoxus-spec/src/widgets.rs`** (Todd).
+  `const fn`s, so `form!`'s `const _` asserts can call them:
+  `from_form_name(&str) -> Option<Self>` / `form_name()` (as `Attr` has
+  `from_variant_name`/`variant_name`); `parts() -> &'static [Part]`, with
+  `Part { name, element }`; `form_control()` (the part attributes are
+  validated against); `takes_choices()`; `accepts_optional()`;
+  `renders(FieldType, has_choices) -> bool`;
+  `default_for(FieldType, optional) -> Self`; and a way to say "not rendered
+  yet". The refusal and rule MESSAGES can move too, so the macro stops
+  holding them.
+- [ ] **Unit tests** (Claude) in `formoxus-spec`: every widget has exactly one
+  form-control part; part names are unique within a widget;
+  `from_form_name(form_name(w)) == Some(w)` for every widget; `default_for`
+  covers every `FieldType`, optional and not; `renders` agrees with
+  `default_for` (a default always renders).
+- [ ] **The macro side** (Todd): `widgets!` maps names to `BuiltinWidget`
+  instead of strings; `rule()`, `Rule`, `CHOOSERS` and the `refusal` match go,
+  replaced by `BuiltinWidget` calls; the emitted widget path names the enum.
+  Goldens (Claude): regenerate with `TRYBUILD=overwrite` and READ the diff;
+  only message wording should move, if anything.
+- [ ] **The runtime side** (Todd): `WidgetType` becomes roughly
+  `Builtin(BuiltinWidget) | Custom { … }`; `ScalarWidget`'s match goes
+  exhaustive over `BuiltinWidget` (the `_ => panic!` arm should be able to
+  go); `field_kind::WidgetClass` and `renders` defer to
+  `BuiltinWidget::renders` (shape → `FieldType` stays in `field_kind`, since
+  `formoxus-spec` has no facet); `FormField::default_widget` calls
+  `BuiltinWidget::default_for`.
+- [ ] **Tests that move** (Claude): the `WidgetType::` references in
+  `author_attrs.rs`, `specs.rs`, `widgets.rs` and `widget_matrix`; the suite,
+  lib, goldens and e2e all green.
 
 ### P3. Configurable default classes
 
