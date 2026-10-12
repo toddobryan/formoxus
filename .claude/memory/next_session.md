@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**2026-10-12 (school), AFTERNOON — GREEN, PUSHED; P2 BOXES 3–4 DONE.**
+**END OF SCHOOL DAY 2026-10-12 — GREEN, PUSHED; P2 BOXES 1–4 DONE.** Home: `git pull` first.
 `RenderedInputType` (formoxus-spec, `to_input_type()`); `Input` routes
 hidden/checkbox/text-like (checkbox.rs folded into input.rs, `field_label`
 shared); `WidgetType::Checkbox` gone; `form!`'s `checkbox` → `Input(Checkbox)`

@@ -10,9 +10,9 @@ use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
 use facet::Facet;
+use formoxus::attrs::RenderedInputType;
 use formoxus::fields::FieldAttrs;
 use formoxus::prelude::*;
-use formoxus_spec::RenderedInputType;
 use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
