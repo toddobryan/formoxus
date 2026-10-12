@@ -14,9 +14,11 @@ widget PARTS adopted; P1 (`<label for>`, random form id via
 `use_server_cached`, `aria-describedby`, the enum select named by its legend)
 built, tested (suite 346, lib 98, e2e 31) and #9 closed. **Next: P2 in
 `formoxus/ATTRIBUTES_PLAN.md`, broken into a checklist, opening with two
-decisions for Todd: P2-a (what type a part's element is; renaming
-`FieldControl`?) and P2-b (fold decision 5, `WidgetType::Checkbox` →
-`Input(Checkbox)`, in now?).** Then P3 (class config), then Step 4.
+decisions for Todd: P2-a, DECIDED the same evening (option C: a flat
+`Element` for the table and parts, `FieldControl` narrowed to the form
+controls, `From` between them, `Fieldset` no longer a control), and P2-b,
+STILL OPEN (fold decision 5, `WidgetType::Checkbox` → `Input(Checkbox)`, in
+now?).** Then P3 (class config), then Step 4.
 
 **2026-10-11: P1 (`<label for>`, #9) DONE and committed.** Random form id via
 `use_server_cached`, every widget un-nested, `aria-describedby`, the enum

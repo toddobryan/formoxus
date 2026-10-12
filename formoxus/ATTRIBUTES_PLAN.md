@@ -14,7 +14,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > (parts) is ADOPTED. **2026-10-10: three steps now come FIRST, in "Before
 > Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
 > configurable classes (#10).** **P1 DONE 2026-10-11 (#9 closed).** P2 is
-> broken down and opens with decisions P2-a (element type) and P2-b (decision 5).
+> broken down; P2-a DECIDED 2026-10-11 (`Element` + narrowed `FieldControl`),
+> P2-b (decision 5) still open.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -640,15 +641,27 @@ crates now keep in parallel live in one place. The components and
 
 #### Decisions first (Todd)
 
-- **P2-a. The type of a part's element** (open point D in
-  `WIDGET_PARTS_EXAMPLES.md`). Parts now include `div`, `label` and
-  `legend`, but `FieldControl` names only `Input(_)`, `Textarea`, `Select`,
-  `Fieldset`. Either `FieldControl` grows `Div`/`Label`/`Legend` and is
-  renamed (`Element`?), since it would then name things that are not form
-  controls (CLAUDE.md's "control" exception covers only the bare form
-  element), with every global row (`class`, `title`, ...) adding the new
-  variants or gaining a `Global` shorthand; or parts get their own element
-  enum and `FieldControl` stays as the attribute-validity key. BLOCKS `Part`.
+- **P2-a. DECIDED (Todd, 2026-10-11): option C, two enums, superset and
+  subset.** A flat **`Element`**, every element a part can be
+  (`Input(InputType)`, `Textarea`, `Select`, `Fieldset`, `Legend`, `Label`,
+  `Div`), and a narrowed **`FieldControl`**, the form controls only
+  (`Input(InputType)`, `Textarea`, `Select`), with
+  `impl From<FieldControl> for Element`. The table's `on:` column and the
+  generated `is_valid_on` are keyed on `Element`, so one column answers for
+  every part, labels and divs included. What must be a control is typed as
+  one: `true_and_on(…)` and a widget's form-control part take `FieldControl`,
+  so `true_and_on(Label)` does not compile. `Fieldset` leaves `FieldControl`
+  (the "stretch" ends: a radio group's validated attributes go to its
+  inputs now). Same shape as decision 6 (all the HTML facts in one enum, what
+  formoxus acts on in a smaller one). Rejected: A (one grown, renamed enum;
+  loses "is this a control?" from the type) and B (a separate part enum; would
+  need a second validity concept beside `on:`). **Consequence: the 73 rows
+  written `on: Input(_) | Textarea | Select | Fieldset` must be sorted into
+  truly global (also valid on `Label`/`Legend`/`Div`: `class`, `title`,
+  `style`, `lang`, `dir`, `hidden`, `data-*`, most `aria-*`) and form-only
+  (`disabled`, `name`, `form`, `readonly`, …); the global list is in
+  `.claude/memory/html_attributes_reference.md`. A `Global` shorthand in the
+  table macro keeps those rows short.**
 - **P2-b. Fold decision 5 in?** `Input` becomes the router for every
   `<input>`, so `WidgetType::Checkbox` becomes `Input(Checkbox)`; it pairs
   with decision 6's smaller enum of rendered input types, which P2 already
@@ -659,7 +672,12 @@ crates now keep in parallel live in one place. The components and
 #### Checklist
 
 - [x] **Rename `formoxus-attrs` → `formoxus-spec`** (DONE 2026-10-10, Claude).
-- [ ] **The element type** (Todd), per P2-a.
+- [ ] **`Element` and the narrowed `FieldControl`** (Todd), per P2-a: the two
+  enums and the `From`; the table's `on:` keyed on `Element`;
+  `true_and_on(…)` on `FieldControl`; a `Global` shorthand.
+- [ ] **Sort the 73 all-four rows** into global and form-only (Claude, from
+  `html_attributes_reference.md`; Todd reviews), plus table tests that every
+  global row is valid on `Label`/`Legend`/`Div` and no form-only row is.
 - [ ] **The rendered-input-type enum** (Todd; decision 6): the subset of
   `InputType` that `Input` renders (`Text` … `Week`; not `Checkbox`, `Radio`,
   `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`), with a one-line

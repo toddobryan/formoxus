@@ -391,6 +391,22 @@ leptos_form_tool has a `FormStyle` trait with a method per control. Formoxus's
 equivalent of Django's templates is the `Widget` trait (4d) plus the paused
 widget registry ([[widget-registry-idea]]), so no separate rendering layer.
 
+## Element vs FieldControl (DECIDED 2026-10-11, Todd: option C)
+
+Parts can be `div`/`label`/`legend`, so the table must say what those may
+carry. Three options were weighed: A, grow `FieldControl` into one renamed
+`Element` (simple, but the type no longer says "this is a control", so
+`true_and_on(Label)` compiles); B, a separate enum for parts (smallest now,
+but needs a second validity concept beside `on:`); **C, chosen: a flat
+`Element` (superset) keys the table and parts, a narrowed `FieldControl`
+(`Input(_) | Textarea | Select`, subset) types everything that must be a
+control (`true_and_on`, a widget's form-control part), with
+`From<FieldControl> for Element`.** `Fieldset` stops being a control. Same
+shape as decision 6. Found while weighing it: "valid on all four elements"
+(73 of 95 rows) is NOT "global"; `disabled`/`name`/`form`/`readonly` are on
+all four controls but not on a `<label>`, so those rows need sorting. Build
+steps in the plan's P2.
+
 ## Build order (agreed 2026-10-03)
 
 C6 grew from "mostly `form!` grammar" into this design, so it lands as a
