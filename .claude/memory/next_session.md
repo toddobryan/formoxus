@@ -5,6 +5,16 @@ metadata:
   type: project
 ---
 
+**2026-10-12 (school), MIDDAY — GREEN, PUSHED; P2's FIRST TWO BOXES DONE.**
+Todd wrote `formoxus-spec/src/elements.rs` (`Element`, NESTED:
+`Div | Fieldset | Label | Legend | Control(FieldControl)`; `FieldControl` =
+`Input(_) | Textarea | Select`) and keyed `is_valid_on` on `Element`. Claude
+rewrote the 95 `on:` rows, moved callers and tests, and sorted the 73
+all-four rows: 70 global (`on: _`), 3 form-only (`disabled`, `form`, `name`,
+still `Control(_) | Fieldset`, spec-true). Todd reviewed. Green: spec 17,
+macros 136, lib 98, suite 346, clippy, fmt (e2e not rerun). **Next box: the
+rendered-input-type enum (Todd).** Todd may next work from HOME: pull first.
+
 **END OF SESSION 2026-10-11 (home) — GREEN, PUSHED; NEXT IS P2.** Todd picks
 up on his SCHOOL machine: it needs a `git pull` (this session pushed
 `d6b5197`..HEAD), and the new `dioxus-fullstack-core` dependency means a fresh

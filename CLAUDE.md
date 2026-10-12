@@ -55,8 +55,9 @@ HTML spec's own term. Two things use it, both deliberately:
   `Fieldset` is a stretch (nobody types into one); it is there because
   `RadioGroup` spreads onto its `<fieldset>`, which has to be dealt with
   anyway. **DECIDED 2026-10-11 (Todd), built in P2 of
-  `formoxus/ATTRIBUTES_PLAN.md`:** a flat `Element` (every element a widget
-  part can be, `Fieldset`/`Label`/`Legend`/`Div` included) becomes what
+  `formoxus/ATTRIBUTES_PLAN.md`:** an `Element` (every element a widget
+  part can be, `Fieldset`/`Label`/`Legend`/`Div` included, the controls
+  nested as `Element::Control(FieldControl)`) becomes what
   attribute validity is keyed on, and `FieldControl` NARROWS to
   `Input(_) | Textarea | Select`, the form controls only, with
   `From<FieldControl> for Element`. That ends the `Fieldset` stretch and keeps

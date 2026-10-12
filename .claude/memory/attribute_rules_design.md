@@ -401,7 +401,10 @@ but needs a second validity concept beside `on:`); **C, chosen: a flat
 `Element` (superset) keys the table and parts, a narrowed `FieldControl`
 (`Input(_) | Textarea | Select`, subset) types everything that must be a
 control (`true_and_on`, a widget's form-control part), with
-`From<FieldControl> for Element`.** `Fieldset` stops being a control. Same
+`From<FieldControl> for Element`.** (As built 2026-10-12, `Element` is
+NESTED rather than flat: `Div | Fieldset | Label | Legend |
+Control(FieldControl)`. Global rows are `on: _`; only `disabled`, `form`,
+`name` are `Control(_) | Fieldset`.) `Fieldset` stops being a control. Same
 shape as decision 6. Found while weighing it: "valid on all four elements"
 (73 of 95 rows) is NOT "global"; `disabled`/`name`/`form`/`readonly` are on
 all four controls but not on a `<label>`, so those rows need sorting. Build

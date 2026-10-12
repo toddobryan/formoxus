@@ -22,7 +22,7 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_spec::{Attr, FieldControl, FieldType};
+use formoxus_spec::{Attr, Element, FieldControl, FieldType};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -50,7 +50,7 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
 pub const fn applies(attr: Attr, shape: &Shape) -> bool {
     match kind(shape) {
         // no need to check Attr::Multiple since it's owned by Formoxus
-        Kind::Enum => !attr.validated() && attr.is_valid_on(FieldControl::Select),
+        Kind::Enum => !attr.validated() && attr.is_valid_on(Element::Control(FieldControl::Select)),
         Kind::Unknown => true,
         Kind::Other => false,
         _ => match field_type(shape) {

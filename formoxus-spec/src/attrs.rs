@@ -1,4 +1,4 @@
-use crate::{Bound, FieldControl};
+use crate::{Bound, Element, FieldControl};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Owner {
@@ -80,7 +80,7 @@ macro_rules! validated_flag {
 /// - `type`: the type of the attribute's VALUE, which decides how `form!`
 ///   parses it.
 /// - `for`: the [`FieldType`]s it applies to.
-/// - `on`: the [`FieldControl`]s it may be EMITTED on, straight from the spec.
+/// - `on`: the [`Element`]s it may be EMITTED on, straight from the spec.
 /// - `validated`: whether formoxus's own validation enforces it. `false`;
 ///   `true` (enforced, and the browser enforces it too wherever it is
 ///   emitted); or `true_and_on(…)`, which is `true` PLUS these extra controls,
@@ -134,12 +134,13 @@ macro_rules! attributes {
                 }
             }
 
-            /// Whether the attribute may be EMITTED on this control.
+            /// Whether the attribute may be EMITTED on this element.
             #[deny(unused_variables)]
-            pub const fn is_valid_on(self, field_control: FieldControl) -> bool {
+            pub const fn is_valid_on(self, element: Element) -> bool {
+                use crate::Element::*;
                 use crate::FieldControl::*;
                 use crate::InputType::*;
-                match (self, field_control) {
+                match (self, element) {
                     $( (Self::$variant, $on) => true, )+
                     _ => false,
                 }
@@ -214,7 +215,8 @@ impl Attr {
     /// a [`Owner::Formoxus`] attribute is refused whatever this says.
     pub const fn is_allowed(self, field_type: FieldType, field_control: FieldControl) -> bool {
         self.applies_to(field_type)
-            && (self.is_valid_on(field_control) || self.is_also_validated_on(field_control))
+            && (self.is_valid_on(Element::Control(field_control))
+                || self.is_also_validated_on(field_control))
     }
 }
 
@@ -224,7 +226,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Alpha {
@@ -232,7 +234,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text,
-        on: Input(Color),
+        on: Control(Input(Color)),
         validated: false,
     },
     Autocapitalize {
@@ -240,7 +242,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Autocomplete {
@@ -248,7 +250,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color) | Textarea | Select,
+        on: Control(Input(Hidden | Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color) | Textarea | Select),
         validated: false,
     },
     Autocorrect {
@@ -256,7 +258,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Autofocus {
@@ -264,7 +266,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: comes from the store. Radios can carry any field type (a radio
@@ -274,7 +276,7 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Input(Checkbox | Radio),
+        on: Control(Input(Checkbox | Radio)),
         validated: false,
     },
     // REPLACES formoxus's own classes (`fx-control` included); `ClassPlus` appends.
@@ -285,7 +287,7 @@ attributes! {
         owner: Merged,
         type: TokenList,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     ClassPlus {
@@ -293,7 +295,7 @@ attributes! {
         owner: Merged,
         type: TokenList,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Colorspace {
@@ -301,7 +303,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Input(Color),
+        on: Control(Input(Color)),
         validated: false,
     },
     Cols {
@@ -309,7 +311,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Textarea,
+        on: Control(Textarea),
         validated: false,
     },
     Dir {
@@ -317,7 +319,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Submits an EXTRA `name.dir` pair, which `Submission` ignores as an unknown path.
@@ -326,7 +328,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Submit) | Textarea,
+        on: Control(Input(Hidden | Text | Search | Telephone | Url | Email | Password | Submit) | Textarea),
         validated: false,
     },
     // A disabled control is NOT submitted, so the server sees it as empty, and a
@@ -336,7 +338,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: Control(_) | Fieldset,
         validated: false,
     },
     Enterkeyhint {
@@ -344,7 +346,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: it would associate the control with a DIFFERENT `<form>`.
@@ -353,7 +355,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: Control(_) | Fieldset,
         validated: false,
     },
     // Owned, reserved until issue #9 settles formoxus's id scheme (`<label for>`,
@@ -363,7 +365,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Which keyboard a phone shows: the right fix for a number rendered as
@@ -373,7 +375,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Lang {
@@ -381,7 +383,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // The id of a `<datalist>` the author renders; formoxus renders none itself.
@@ -390,7 +392,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(Text | Search | Telephone | Url | Email | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color),
+        on: Control(Input(Text | Search | Telephone | Url | Email | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color)),
         validated: false,
     },
     Max {
@@ -398,7 +400,7 @@ attributes! {
         owner: Author,
         type: Bound,
         for: Int | Float,
-        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        on: Control(Input(Number | Range | Date | Month | Week | Time | DatetimeLocal)),
         validated: true_and_on(Input(Text)),
     },
     MaxLength {
@@ -406,7 +408,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Textarea),
         validated: true,
     },
     // Valid in HTML only on number, range and the date/time types. A number
@@ -417,7 +419,7 @@ attributes! {
         owner: Author,
         type: Bound,
         for: Int | Float,
-        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        on: Control(Input(Number | Range | Date | Month | Week | Time | DatetimeLocal)),
         validated: true_and_on(Input(Text)),
     },
     MinLength {
@@ -425,7 +427,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Textarea),
         validated: true,
     },
     // Owned: a leaf holds ONE string, so a multi-value control has nowhere to go.
@@ -434,7 +436,7 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Input(Email | File) | Select,
+        on: Control(Input(Email | File) | Select),
         validated: false,
     },
     // Owned by formoxus: the store key and the wire path.
@@ -443,7 +445,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: Control(_) | Fieldset,
         validated: false,
     },
     // No `Textarea`: HTML has no `pattern` on one, and Todd ruled it out
@@ -454,7 +456,7 @@ attributes! {
         owner: Author,
         type: Regex,
         for: Text,
-        on: Input(Text | Search | Telephone | Url | Email | Password),
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password)),
         validated: true,
     },
     Placeholder {
@@ -462,7 +464,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea,
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea),
         validated: false,
     },
     // The browser skips its own validation on a read-only control; formoxus still
@@ -472,7 +474,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text | Int | Float,
-        on: Input(Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number) | Textarea,
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number) | Textarea),
         validated: false,
     },
     // The PRESENCE sense: formoxus emits it on every non-optional field, and
@@ -484,11 +486,11 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Input(
+        on: Control(Input(
             Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time
                 | DatetimeLocal | Number | Radio | File
         ) | Textarea
-            | Select,
+            | Select),
         validated: true,
     },
     // "I agree to the terms" (#6). Emits HTML `required`, but only a checkbox
@@ -499,7 +501,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Bool,
-        on: Input(Checkbox),
+        on: Control(Input(Checkbox)),
         validated: true_and_on(Select | Input(Radio)),
     },
     // Overrides the control's native role; ARIA, though not `aria-*`.
@@ -508,7 +510,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Rows {
@@ -516,7 +518,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Textarea,
+        on: Control(Textarea),
         validated: false,
     },
     Size {
@@ -524,7 +526,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text | Int | Float | Bool,
-        on: Input(Text | Search | Telephone | Url | Email | Password) | Select,
+        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Select),
         validated: false,
     },
     Spellcheck {
@@ -532,7 +534,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Like `Class`: `Style` replaces, `StylePlus` appends, only one per field.
@@ -541,7 +543,7 @@ attributes! {
         owner: Merged,
         type: Declarations,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     StylePlus {
@@ -549,7 +551,7 @@ attributes! {
         owner: Merged,
         type: Declarations,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // `String`, not `Int`: `-1` is the common value, and `AttrType::Int` is unsigned.
@@ -558,7 +560,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Title {
@@ -566,7 +568,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     Translate {
@@ -574,7 +576,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: comes from `widget:`.
@@ -583,7 +585,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_),
+        on: Control(Input(_)),
         validated: false,
     },
     // Owned: comes from the store. `<textarea>` and `<select>` have no
@@ -593,7 +595,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_),
+        on: Control(Input(_)),
         validated: false,
     },
     Wrap {
@@ -601,7 +603,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Textarea,
+        on: Control(Textarea),
         validated: false,
     },
     Writingsuggestions {
@@ -609,7 +611,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaActivedescendant {
@@ -617,7 +619,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaAtomic {
@@ -625,7 +627,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaAutocomplete {
@@ -633,7 +635,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaBraillelabel {
@@ -641,7 +643,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaBrailleroledescription {
@@ -649,7 +651,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaBusy {
@@ -657,7 +659,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: formoxus holds the checkbox's value, so an author's `aria-checked`
@@ -667,7 +669,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaColcount {
@@ -675,7 +677,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaColindex {
@@ -683,7 +685,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaColindextext {
@@ -691,7 +693,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaColspan {
@@ -699,7 +701,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaControls {
@@ -707,7 +709,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaCurrent {
@@ -715,7 +717,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned from the start: issue #9 will point it at the field's messages,
@@ -725,7 +727,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaDescription {
@@ -733,7 +735,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaDetails {
@@ -741,7 +743,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaDisabled {
@@ -749,7 +751,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaErrormessage {
@@ -757,7 +759,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaExpanded {
@@ -765,7 +767,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaFlowto {
@@ -773,7 +775,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaHaspopup {
@@ -781,7 +783,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaHidden {
@@ -789,7 +791,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: resolved at the `Form` boundary from whether there are errors.
@@ -799,7 +801,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaKeyshortcuts {
@@ -807,7 +809,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaLabel {
@@ -815,7 +817,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaLabelledby {
@@ -823,7 +825,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaLevel {
@@ -831,7 +833,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaLive {
@@ -839,7 +841,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaModal {
@@ -847,7 +849,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaMultiline {
@@ -855,7 +857,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaMultiselectable {
@@ -863,7 +865,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaOrientation {
@@ -871,7 +873,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaOwns {
@@ -879,7 +881,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaPlaceholder {
@@ -887,7 +889,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaPosinset {
@@ -895,7 +897,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaPressed {
@@ -903,7 +905,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaReadonly {
@@ -911,7 +913,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRelevant {
@@ -919,7 +921,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     // Owned: formoxus decides requiredness and emits HTML `required`; an
@@ -929,7 +931,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRoledescription {
@@ -937,7 +939,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRowcount {
@@ -945,7 +947,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRowindex {
@@ -953,7 +955,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRowindextext {
@@ -961,7 +963,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaRowspan {
@@ -969,7 +971,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaSelected {
@@ -977,7 +979,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaSetsize {
@@ -985,7 +987,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaSort {
@@ -993,7 +995,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaValuemax {
@@ -1001,7 +1003,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaValuemin {
@@ -1009,7 +1011,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaValuenow {
@@ -1017,7 +1019,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
     AriaValuetext {
@@ -1025,7 +1027,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Input(_) | Textarea | Select | Fieldset,
+        on: _,
         validated: false,
     },
 }
@@ -1048,8 +1050,12 @@ const fn str_eq(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{Attr, AttrType, FieldType, Owner};
-    use crate::{FieldControl, InputType};
+    use crate::{Element, FieldControl, InputType};
     use googletest::prelude::*;
+
+    const TEXTAREA: Element = Element::Control(FieldControl::Textarea);
+    const SELECT: Element = Element::Control(FieldControl::Select);
+    const FIELDSET: Element = Element::Fieldset;
 
     const INPUT_TYPES: [InputType; 22] = [
         InputType::Text,
@@ -1095,10 +1101,10 @@ mod tests {
     const DATE_LIKE: &[&str] = &["date", "month", "week", "time", "datetime-local"];
 
     /// What the spec says about one attribute: the input types it applies to,
-    /// and which of `<textarea>`, `<select>` and `<fieldset>` it may appear on.
+    /// and which other elements (`<textarea>`, `<select>`, `<fieldset>`, …) it may appear on.
     struct Expected {
         inputs: Vec<&'static str>,
-        others: Vec<FieldControl>,
+        others: Vec<Element>,
     }
 
     fn every_input_keyword() -> Vec<&'static str> {
@@ -1109,16 +1115,24 @@ mod tests {
         groups.concat()
     }
 
+    /// Every element besides `<input>`, which is checked per input type.
+    fn every_other_element() -> Vec<Element> {
+        vec![
+            TEXTAREA,
+            SELECT,
+            FIELDSET,
+            Element::Label,
+            Element::Legend,
+            Element::Div,
+        ]
+    }
+
     /// The spec's answer for `attr`, or `None` if this test has no statement
     /// for it, which `every_row_has_a_spec_expectation` turns into a failure.
     fn expected(attr: Attr) -> Option<Expected> {
-        use FieldControl::{Fieldset, Select, Textarea};
-        let (inputs, others): (Vec<&'static str>, Vec<FieldControl>) = match attr {
-            // Global attributes, and the form-control attributes every control
-            // (fieldset included) has: everything.
-            _ if attr.name().starts_with("aria-") => {
-                (every_input_keyword(), vec![Textarea, Select, Fieldset])
-            }
+        let (inputs, others): (Vec<&'static str>, Vec<Element>) = match attr {
+            // Global attributes, `role` and `aria-*`: every element.
+            _ if attr.name().starts_with("aria-") => (every_input_keyword(), every_other_element()),
             Attr::Accesskey
             | Attr::Autocapitalize
             | Attr::Autocorrect
@@ -1126,13 +1140,10 @@ mod tests {
             | Attr::Class
             | Attr::ClassPlus
             | Attr::Dir
-            | Attr::Disabled
             | Attr::Enterkeyhint
-            | Attr::Form
             | Attr::Id
             | Attr::Inputmode
             | Attr::Lang
-            | Attr::Name
             | Attr::Role
             | Attr::Spellcheck
             | Attr::Style
@@ -1140,10 +1151,15 @@ mod tests {
             | Attr::Tabindex
             | Attr::Title
             | Attr::Translate
-            | Attr::Writingsuggestions => (every_input_keyword(), vec![Textarea, Select, Fieldset]),
+            | Attr::Writingsuggestions => (every_input_keyword(), every_other_element()),
+            // The form-control attributes `<fieldset>` shares with the
+            // controls; not valid on a label, legend or div.
+            Attr::Disabled | Attr::Form | Attr::Name => {
+                (every_input_keyword(), vec![TEXTAREA, SELECT, FIELDSET])
+            }
             Attr::Type | Attr::Value => (every_input_keyword(), vec![]),
-            Attr::Placeholder => (keywords(&[TEXT_LIKE, &["number"]]), vec![Textarea]),
-            Attr::MinLength | Attr::MaxLength => (TEXT_LIKE.to_vec(), vec![Textarea]),
+            Attr::Placeholder => (keywords(&[TEXT_LIKE, &["number"]]), vec![TEXTAREA]),
+            Attr::MinLength | Attr::MaxLength => (TEXT_LIKE.to_vec(), vec![TEXTAREA]),
             // No `<textarea>`: HTML has no `pattern` on one.
             Attr::Pattern => (TEXT_LIKE.to_vec(), vec![]),
             Attr::Min | Attr::Max => (keywords(&[DATE_LIKE, &["number", "range"]]), vec![]),
@@ -1151,7 +1167,7 @@ mod tests {
             // `RequiredTrue`, so the presence row leaves it out on purpose.
             Attr::Required => (
                 keywords(&[TEXT_LIKE, DATE_LIKE, &["number", "radio", "file"]]),
-                vec![Textarea, Select],
+                vec![TEXTAREA, SELECT],
             ),
             Attr::RequiredTrue => (vec!["checkbox"], vec![]),
             Attr::Checked => (vec!["checkbox", "radio"], vec![]),
@@ -1162,11 +1178,11 @@ mod tests {
                     DATE_LIKE,
                     &["number", "range", "color"],
                 ]),
-                vec![Textarea, Select],
+                vec![TEXTAREA, SELECT],
             ),
             Attr::Dirname => (
                 keywords(&[&["hidden"], TEXT_LIKE, &["submit"]]),
-                vec![Textarea],
+                vec![TEXTAREA],
             ),
             Attr::List => (
                 keywords(&[
@@ -1178,12 +1194,12 @@ mod tests {
             ),
             Attr::Readonly => (
                 keywords(&[TEXT_LIKE, DATE_LIKE, &["number"]]),
-                vec![Textarea],
+                vec![TEXTAREA],
             ),
-            Attr::Size => (TEXT_LIKE.to_vec(), vec![Select]),
-            Attr::Multiple => (vec!["email", "file"], vec![Select]),
+            Attr::Size => (TEXT_LIKE.to_vec(), vec![SELECT]),
+            Attr::Multiple => (vec!["email", "file"], vec![SELECT]),
             Attr::Alpha | Attr::Colorspace => (vec!["color"], vec![]),
-            Attr::Cols | Attr::Rows | Attr::Wrap => (vec![], vec![Textarea]),
+            Attr::Cols | Attr::Rows | Attr::Wrap => (vec![], vec![TEXTAREA]),
             _ => return None,
         };
         Some(Expected { inputs, others })
@@ -1197,7 +1213,7 @@ mod tests {
         }
     }
 
-    /// Every row, on all 22 input types and on the three other controls.
+    /// Every row, on all 22 input types and on every other element.
     #[gtest]
     fn every_row_is_valid_exactly_where_the_spec_says() {
         for &attr in Attr::ALL {
@@ -1207,20 +1223,16 @@ mod tests {
             for t in INPUT_TYPES {
                 let keyword = t.html_type();
                 expect_that!(
-                    attr.is_valid_on(FieldControl::Input(t)),
+                    attr.is_valid_on(Element::Control(FieldControl::Input(t))),
                     eq(inputs.contains(&keyword)),
                     "{attr:?} on input type={keyword}"
                 );
             }
-            for control in [
-                FieldControl::Textarea,
-                FieldControl::Select,
-                FieldControl::Fieldset,
-            ] {
+            for element in every_other_element() {
                 expect_that!(
-                    attr.is_valid_on(control),
-                    eq(others.contains(&control)),
-                    "{attr:?} on {control:?}"
+                    attr.is_valid_on(element),
+                    eq(others.contains(&element)),
+                    "{attr:?} on {element:?}"
                 );
             }
         }
@@ -1359,11 +1371,7 @@ mod tests {
             .iter()
             .copied()
             .map(FieldControl::Input)
-            .chain([
-                FieldControl::Textarea,
-                FieldControl::Select,
-                FieldControl::Fieldset,
-            ])
+            .chain([FieldControl::Textarea, FieldControl::Select])
             .collect()
     }
 
@@ -1402,7 +1410,8 @@ mod tests {
         for attr in Attr::ALL {
             for control in all_controls() {
                 expect_that!(
-                    attr.is_also_validated_on(control) && attr.is_valid_on(control),
+                    attr.is_also_validated_on(control)
+                        && attr.is_valid_on(Element::Control(control)),
                     eq(false),
                     "{attr:?} on {control:?}"
                 );
@@ -1459,9 +1468,12 @@ mod tests {
     #[gtest]
     fn min_on_a_text_input_is_allowed_but_pattern_on_a_textarea_is_not() {
         let text_input = FieldControl::Input(InputType::Text);
-        expect_that!(Attr::Min.is_valid_on(text_input), eq(false));
+        expect_that!(
+            Attr::Min.is_valid_on(Element::Control(text_input)),
+            eq(false)
+        );
         expect_that!(Attr::Min.is_allowed(FieldType::Int, text_input), eq(true));
-        expect_that!(Attr::Pattern.is_valid_on(FieldControl::Textarea), eq(false));
+        expect_that!(Attr::Pattern.is_valid_on(TEXTAREA), eq(false));
         expect_that!(
             Attr::Pattern.is_allowed(FieldType::Text, FieldControl::Textarea),
             eq(false)

@@ -15,7 +15,10 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > Step 4": P1 labels beside their inputs (#9), P2 `BuiltinWidget`, P3
 > configurable classes (#10).** **P1 DONE 2026-10-11 (#9 closed).** P2 is
 > broken down; P2-a and P2-b DECIDED 2026-10-11 (`Element` + narrowed
-> `FieldControl`; decision 5's `Input` router folded in). Nothing built yet.
+> `FieldControl`; decision 5's `Input` router folded in). **2026-10-12: the
+> first two P2 boxes DONE** (`Element`/`FieldControl` in
+> `formoxus-spec/src/elements.rs`; the 73 rows sorted). Next box: the
+> rendered-input-type enum (Todd).
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -661,7 +664,12 @@ crates now keep in parallel live in one place. The components and
   `style`, `lang`, `dir`, `hidden`, `data-*`, most `aria-*`) and form-only
   (`disabled`, `name`, `form`, `readonly`, …); the global list is in
   `.claude/memory/html_attributes_reference.md`. A `Global` shorthand in the
-  table macro keeps those rows short.**
+  table macro keeps those rows short.** **AS BUILT (Todd, 2026-10-12):
+  `Element` is NESTED, not flat: `Div | Fieldset | Label | Legend |
+  Control(FieldControl)`, so the `From` is `Element::Control`, and a row
+  reads `on: Control(Input(Color))`, `on: Control(_) | Fieldset`, or `on: _`
+  for a global. `_` made the `Global` shorthand unnecessary. In a `const fn`
+  write `Element::Control(c)`, not `.into()`.**
 - **P2-b. DECIDED (Todd, 2026-10-11): fold decision 5 in now.** `Input` becomes
   the router for every `<input>` formoxus renders: it matches on its input
   type and renders the checkbox code for `Checkbox`, the text code for the
@@ -678,12 +686,17 @@ crates now keep in parallel live in one place. The components and
 #### Checklist
 
 - [x] **Rename `formoxus-attrs` → `formoxus-spec`** (DONE 2026-10-10, Claude).
-- [ ] **`Element` and the narrowed `FieldControl`** (Todd), per P2-a: the two
+- [x] **`Element` and the narrowed `FieldControl`** (Todd), per P2-a: the two
   enums and the `From`; the table's `on:` keyed on `Element`;
-  `true_and_on(…)` on `FieldControl`; a `Global` shorthand.
-- [ ] **Sort the 73 all-four rows** into global and form-only (Claude, from
-  `html_attributes_reference.md`; Todd reviews), plus table tests that every
-  global row is valid on `Label`/`Legend`/`Div` and no form-only row is.
+  `true_and_on(…)` on `FieldControl`; ~~a `Global` shorthand~~ (`on: _`
+  does it). DONE 2026-10-12; Claude rewrote the 95 `on:` rows into
+  `Control(…)` and moved the callers and tests.
+- [x] **Sort the 73 all-four rows** (DONE 2026-10-12, Todd reviewed): 70 are
+  global (`on: _`: the spec globals, `role`, every `aria-*`); exactly three
+  are form-only, `disabled`, `form`, `name`, which keep
+  `Control(_) | Fieldset` because those are `<fieldset>`'s own attributes in
+  the spec. `every_row_is_valid_exactly_where_the_spec_says` now checks
+  `Label`/`Legend`/`Div` too (mutation-checked both ways).
 - [ ] **The rendered-input-type enum** (Todd; decision 6): the subset of
   `InputType` that `Input` renders (`Text` … `Week`; not `Checkbox`, `Radio`,
   `File`, `Range`, `Submit`, `Image`, `Reset`, `Button`), with a one-line
