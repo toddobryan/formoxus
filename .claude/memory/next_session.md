@@ -12,7 +12,13 @@ via `str_eq`, `form_name`, `parts`, `form_control`, `takes_choices`,
 `Element::tag()` (Todd). Gotcha: a `const fn` CALL is never promoted to
 `'static`, so `parts()` wraps each slice in `const { }` (`labelled!`/`grouped!`),
 and each text-like `Input` gets its own arm. 13 unit tests, mutation-checked.
-Nothing uses `BuiltinWidget` yet. **Next box: the macro side (Todd).**
+LATER SAME DAY, ALSO PUSHED: the MACRO SIDE (Claude, delegated): string tables
+gone, `WidgetKind::Named { name, widget }`, messages stay in the macro (Todd:
+fine, they are `form!`-vocabulary prose), `field_kind::renders` takes a
+`BuiltinWidget` and `WidgetClass` is gone. Goldens unchanged. The macro still
+emits `WidgetType::X`; it becomes `WidgetType::Builtin(…)` with the runtime
+box. **Next box: the runtime side, `WidgetType` (Todd, starting).** Its
+`ScalarWidget` panics still duplicate two `form!` messages; deal with them there.
 
 **END OF SCHOOL DAY 2026-10-12 — GREEN, PUSHED; P2 BOXES 1–4 DONE.** Home: `git pull` first.
 `RenderedInputType` (formoxus-spec, `to_input_type()`); `Input` routes

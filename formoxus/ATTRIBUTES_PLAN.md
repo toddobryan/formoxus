@@ -20,7 +20,7 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > `formoxus-spec/src/elements.rs`; the 73 rows sorted). **By the end of
 > 2026-10-12, boxes 1–5 DONE** (also `RenderedInputType`, and `Input` routing
 > every `<input>`). **2026-10-13: `BuiltinWidget` and its unit tests DONE.**
-> Next box: the macro side (Todd).
+> **The macro side DONE the same day.** Next box: the runtime side (Todd).
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -735,7 +735,11 @@ crates now keep in parallel live in one place. The components and
   `from_form_name(form_name(w)) == Some(w)` for every widget; `default_for`
   covers every `FieldType`, optional and not; `renders` agrees with
   `default_for` (a default always renders).
-- [ ] **The macro side** (Todd): `widgets!` maps names to `BuiltinWidget`
+- [x] **The macro side** (Claude, delegated by Todd; DONE 2026-10-13: the
+  string tables are gone, `WidgetKind::Named { name, widget }` holds the
+  resolved `BuiltinWidget`, messages stay in the macro as matches on it;
+  pulled in from the runtime box: `field_kind::renders` takes a
+  `BuiltinWidget`, `WidgetClass` gone. Goldens unchanged, byte for byte): `widgets!` maps names to `BuiltinWidget`
   instead of strings; `rule()`, `Rule`, `CHOOSERS` and the `refusal` match go,
   replaced by `BuiltinWidget` calls; the emitted widget path names the enum.
   Goldens (Claude): regenerate with `TRYBUILD=overwrite` and READ the diff;

@@ -151,9 +151,9 @@ pub(crate) enum ButtonType {
     Submit,
 }
 
-/// The author-facing button-type vocabulary, same shape and same reasoning as
-/// [`widgets!`]: one table generates both the parse and the list the error
-/// message reads from, so the two cannot drift apart.
+/// The author-facing button-type vocabulary, with the reasoning widget names
+/// have (`BuiltinWidget::ALL`): one table generates both the parse and the
+/// list the error message reads from, so the two cannot drift apart.
 ///
 /// Lowercase for the same reason widget names are — two of these five are
 /// literally the HTML `type` attribute, and the author is writing HTML's word.

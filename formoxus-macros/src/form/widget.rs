@@ -1,8 +1,9 @@
 //! `widget: <name>` and `widget: custom(…)` — the author-facing widget
 //! vocabulary, and the arguments a widget accepts.
 
+use formoxus_spec::{BuiltinWidget, RenderedInputType};
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{
     Expr, Ident, Path, Token, braced, parenthesized,
     parse::{Parse, ParseStream},
@@ -10,103 +11,69 @@ use syn::{
 
 use super::suggest::{edit_distance, to_snake};
 
-/// The author-facing widget vocabulary, and the `WidgetType` each name means.
-///
-/// **Flat and lowercase, deliberately.** `WidgetType::Input(InputType::Password)`
-/// is the shape of formoxus's own enum — grouping the `<input type=X>` family
-/// under one variant is a dispatch convenience, not a concept an author has. HTML
-/// spells it `type="password"` and so does this. That makes this table the stable
-/// surface: the enum below it can be regrouped, renamed, or split without
-/// touching a single `form!` call.
-///
-/// Names follow HTML where HTML has one (`tel`, not `telephone`; `datetime_local`
-/// for `datetime-local`, since a hyphen cannot be an ident) and formoxus where it
-/// does not (`integer`/`float`, which both become `type="number"`; `textarea`,
-/// `select`).
-///
-/// Every name here is accepted whether or not `ScalarWidget` can render it yet.
-/// Gating on that was considered and REJECTED: the macro crate cannot see
-/// `ScalarWidget`'s match arms, so an "implemented" list would be a hand-kept copy
-/// of a match in another crate — a worse sync hazard than the one this table
-/// already has — and its first false positive would be `password`. An unwired
-/// widget still panics at render, naming both the widget and the value kind.
-macro_rules! widgets {
-    (
-        $( $name:ident => $variant:ident $( ( $input:ident ) )? ),* $(,)?
-    ) => {
-        /// The tokens for a known widget name, or `None` if it is not one.
-        fn widget_tokens(name: &Ident) -> Option<TokenStream2> {
-            match name.to_string().as_str() {
-                $( stringify!($name) => Some(quote! {
-                    ::formoxus::widgets::WidgetType::$variant
-                    $( ( ::formoxus::attrs::RenderedInputType::$input ) )?
-                }), )*
-                _ => None,
-            }
-        }
+// The author-facing widget vocabulary is `BuiltinWidget::form_name`, in
+// `formoxus-spec`: flat and lowercase, deliberately. `Input(Password)` is the
+// shape of formoxus's own enum, grouping the `<input type=X>` family under one
+// variant for dispatch, not a concept an author has. HTML spells it
+// `type="password"` and so does `form!`. That keeps the names a stable surface:
+// the enums under them can be regrouped or renamed without touching a single
+// `form!` call. Names follow HTML where HTML has one (`tel`, `datetime_local`
+// for `datetime-local`, since a hyphen cannot be an ident) and formoxus where
+// it does not (`textarea`, `select`, `radio_group`).
 
-        /// Every accepted name, for the "unknown widget" message. Generated from
-        /// the same table as the match, so the two cannot disagree.
-        const WIDGET_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
-
-        /// The `WidgetType` variant a known name maps to, which is what decides
-        /// which fields it can render (see [`rule`]).
-        fn widget_variant(name: &str) -> Option<&'static str> {
-            match name {
-                $( stringify!($name) => Some(stringify!($variant)), )*
-                _ => None,
-            }
-        }
-    };
+/// Every name `form!` accepts after `widget:`, for the "unknown widget"
+/// message, in `BuiltinWidget::ALL`'s order.
+fn widget_names() -> impl Iterator<Item = &'static str> {
+    BuiltinWidget::ALL.iter().map(BuiltinWidget::form_name)
 }
 
-widgets! {
-    // <input type=…>
-    text           => Input(Text),
-    password       => Input(Password),
-    hidden         => Input(Hidden),
-    checkbox       => Input(Checkbox),
-    // Selectable, but not the DEFAULT for a numeric field: `type="number"` hands
-    // back `""` for anything the browser dislikes, so a half-typed value
-    // vanishes. A numeric renders as text unless someone asks for this.
-    number         => Input(Number),
-    email          => Input(Email),
-    tel            => Input(Telephone),
-    url            => Input(Url),
-    search         => Input(Search),
-    color          => Input(Color),
-    date           => Input(Date),
-    time           => Input(Time),
-    datetime_local => Input(DatetimeLocal),
-    month          => Input(Month),
-    week           => Input(Week),
+/// `widget`, as the expression `::formoxus::attrs::BuiltinWidget::…`.
+///
+/// The variant idents come from `Debug`, which for a unit variant is exactly
+/// its name; `formoxus-spec` tests the same about `RenderedInputType`.
+fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
+    match widget {
+        BuiltinWidget::Input(input_type) => {
+            let input_type = rendered_input_ident(input_type);
+            quote! {
+                ::formoxus::attrs::BuiltinWidget::Input(
+                    ::formoxus::attrs::RenderedInputType::#input_type
+                )
+            }
+        }
+        other => {
+            let variant = format_ident!("{other:?}");
+            quote! { ::formoxus::attrs::BuiltinWidget::#variant }
+        }
+    }
+}
 
-    // Everything that is not an <input>.
-    textarea          => Textarea,
-    select            => Select,
-    select_multiple   => SelectMultiple,
-    checkbox_multiple => CheckboxMultiple,
-    radio_group       => RadioGroup,
-    file              => File,
+/// `widget`, as the `::formoxus::widgets::WidgetType` it renders as, whose
+/// built-in variants are named as `BuiltinWidget`'s are.
+fn widget_type_tokens(widget: BuiltinWidget) -> TokenStream2 {
+    match widget {
+        BuiltinWidget::Input(input_type) => {
+            let input_type = rendered_input_ident(input_type);
+            quote! {
+                ::formoxus::widgets::WidgetType::Input(
+                    ::formoxus::attrs::RenderedInputType::#input_type
+                )
+            }
+        }
+        other => {
+            let variant = format_ident!("{other:?}");
+            quote! { ::formoxus::widgets::WidgetType::#variant }
+        }
+    }
+}
+
+fn rendered_input_ident(input_type: RenderedInputType) -> Ident {
+    format_ident!("{input_type:?}")
 }
 
 mod widget_kw {
     syn::custom_keyword!(custom);
 }
-
-/// The widgets that can be handed a list to choose from.
-///
-/// A hand-kept list, and deliberately so: the alternative is gating on
-/// `ScalarWidget`'s match arms, which this crate cannot see — the same reason
-/// [`widgets!`] accepts every name whether or not it renders yet. The cost of
-/// being wrong here is a good error message for a pair that would have panicked
-/// at render anyway.
-const CHOOSERS: &[&str] = &[
-    "select",
-    "select_multiple",
-    "checkbox_multiple",
-    "radio_group",
-];
 
 #[derive(Debug)]
 pub(crate) struct WidgetRef {
@@ -116,8 +83,10 @@ pub(crate) struct WidgetRef {
 
 #[derive(Debug)]
 pub(crate) enum WidgetKind {
-    /// One of the names in [`widgets!`], already validated.
-    Named(Ident),
+    /// A built-in widget, by the name the author wrote (kept for its span and
+    /// for messages) and what it resolved to. Never a widget that renders
+    /// nothing yet: `parse` refuses those.
+    Named { name: Ident, widget: BuiltinWidget },
     /// `custom(MarkdownWidget)` — a `Path`, not an `Ident`, so that
     /// `custom(inputs::MarkdownWidget)` works without importing the input.
     Custom(Path),
@@ -136,14 +105,9 @@ pub(crate) struct WidgetArgs {
 
 impl WidgetRef {
     /// The `WidgetType` expression this names, fully qualified.
-    ///
-    /// Infallible: `parse` rejected anything not in the table, so the lookup here
-    /// cannot miss.
     pub(crate) fn path(&self) -> TokenStream2 {
         match &self.kind {
-            WidgetKind::Named(name) => {
-                widget_tokens(name).expect("parse rejects names that are not in the table")
-            }
+            WidgetKind::Named { widget, .. } => widget_type_tokens(*widget),
             // A NON-CAPTURING closure, which coerces to `fn(WidgetProps) ->
             // Element`. The input goes inside `rsx!` rather than being called,
             // so it gets a component scope of its own and may use hooks.
@@ -166,41 +130,38 @@ impl WidgetRef {
     }
 }
 
-/// Which fields a named widget can render, mirroring `ScalarWidget`'s match
-/// arms in formoxus. Derived from the `WidgetType` variant, so a widget added to
-/// [`widgets!`] gets a rule without a second list to keep in step.
-enum Rule {
-    /// Checked against the field's type, with this `field_kind::WidgetClass`
-    /// and the fixed message a failed check shows.
-    Checked {
-        class: &'static str,
-        message: &'static str,
-    },
-    /// Nothing renders it for any field, so `form!` rejects it while parsing.
-    NotYet,
+/// Why `widget` cannot render an optional field, for the widgets whose
+/// `accepts_optional` is `false`. A `select` can say "no answer", with its
+/// blank option, which is why it is the default for an `Option<bool>`.
+fn optional_refusal(widget: BuiltinWidget) -> &'static str {
+    match widget {
+        BuiltinWidget::RadioGroup => {
+            "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`"
+        }
+        BuiltinWidget::Input(RenderedInputType::Checkbox) => {
+            "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`"
+        }
+        other => unreachable!("`{other:?}` accepts an optional field; give it a refusal here"),
+    }
 }
 
-fn rule(name: &str) -> Rule {
-    let variant = widget_variant(name).expect("only called with names from the table");
-    match variant {
-        "Input" if name != "checkbox" => Rule::Checked {
-            class: "Input",
-            message: "an `<input>` widget cannot render a bool field; use `checkbox` or `select`",
-        },
-        "Input" => Rule::Checked {
-            class: "Checkbox",
-            message: "`checkbox` can only render a bool field",
-        },
-        "Textarea" => Rule::Checked {
-            class: "Textarea",
-            message: "`textarea` can only render a String field",
-        },
-        "Select" | "RadioGroup" => Rule::Checked {
-            class: "Chooser",
-            message: "this widget needs `choices` unless the field is a bool",
-        },
-        "SelectMultiple" | "CheckboxMultiple" | "File" => Rule::NotYet,
-        other => unreachable!("widget variant `{other}` has no rule; add one here"),
+/// What a failed `renders` check says, by the rule `BuiltinWidget::renders`
+/// applied.
+fn cannot_render(widget: BuiltinWidget) -> &'static str {
+    match widget {
+        BuiltinWidget::Input(RenderedInputType::Checkbox) => {
+            "`checkbox` can only render a bool field"
+        }
+        BuiltinWidget::Input(_) => {
+            "an `<input>` widget cannot render a bool field; use `checkbox` or `select`"
+        }
+        BuiltinWidget::Textarea => "`textarea` can only render a String field",
+        BuiltinWidget::Select | BuiltinWidget::RadioGroup => {
+            "this widget needs `choices` unless the field is a bool"
+        }
+        BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
+            unreachable!("parse rejects widgets that render nothing")
+        }
     }
 }
 
@@ -210,7 +171,7 @@ impl WidgetRef {
     /// `field_kind::shape_of(…)` expression; see `FieldBody::type_checks`.
     pub(crate) fn checks(&self, shape: &TokenStream2) -> TokenStream2 {
         let span = match &self.kind {
-            WidgetKind::Named(name) => name.span(),
+            WidgetKind::Named { name, .. } => name.span(),
             WidgetKind::Custom(path) => path
                 .segments
                 .last()
@@ -222,43 +183,28 @@ impl WidgetRef {
                 "a widget applies only to a single-value field, not a struct, list or enum"
             );
         };
-        let WidgetKind::Named(name) = &self.kind else {
+        let WidgetKind::Named { widget, .. } = &self.kind else {
             return single;
         };
-        // The widgets that cannot say "no answer". A `select` can, with its
-        // blank option, which is why it is the default for an `Option<bool>`.
-        let refusal = match name.to_string().as_str() {
-            "radio_group" => Some(
-                "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`",
-            ),
-            "checkbox" => Some(
-                "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`",
-            ),
-            _ => None,
-        };
-        let not_optional = match refusal {
-            Some(message) => quote_spanned! { span =>
+        let not_optional = if widget.accepts_optional() {
+            TokenStream2::new()
+        } else {
+            let message = optional_refusal(*widget);
+            quote_spanned! { span =>
                 const _: () = ::core::assert!(
                     !::formoxus::field_kind::is_optional(#shape),
                     #message
                 );
-            },
-            None => TokenStream2::new(),
+            }
         };
-        let Rule::Checked { class, message } = rule(&name.to_string()) else {
-            unreachable!("parse rejects widgets that render nothing");
-        };
-        let class = Ident::new(class, span);
+        let message = cannot_render(*widget);
+        let builtin = builtin_tokens(*widget);
         let has_choices = self.args.choices.is_some();
         quote_spanned! { span=>
             #single
             #not_optional
             const _: () = ::core::assert!(
-                ::formoxus::field_kind::renders(
-                    #shape,
-                    ::formoxus::field_kind::WidgetClass::#class,
-                    #has_choices,
-                ),
+                ::formoxus::field_kind::renders(#shape, #builtin, #has_choices),
                 #message
             );
         }
@@ -306,10 +252,10 @@ impl Parse for WidgetKind {
         }
 
         let name: Ident = input.parse()?;
-        if widget_tokens(&name).is_none() {
+        let Some(widget) = BuiltinWidget::from_form_name(&name.to_string()) else {
             return Err(syn::Error::new(name.span(), unknown_widget(&name)));
-        }
-        if matches!(rule(&name.to_string()), Rule::NotYet) {
+        };
+        if !widget.is_rendered() {
             return Err(syn::Error::new(
                 name.span(),
                 format!(
@@ -318,7 +264,7 @@ impl Parse for WidgetKind {
                 ),
             ));
         }
-        Ok(Self::Named(name))
+        Ok(Self::Named { name, widget })
     }
 }
 
@@ -366,15 +312,15 @@ fn parse_widget_args(input: ParseStream<'_>, kind: &WidgetKind) -> syn::Result<W
 
 fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<()> {
     match kind {
-        WidgetKind::Named(name) if CHOOSERS.contains(&name.to_string().as_str()) => Ok(()),
-        WidgetKind::Named(name) => Err(syn::Error::new_spanned(
+        WidgetKind::Named { widget, .. } if widget.takes_choices() => Ok(()),
+        WidgetKind::Named { name, .. } => Err(syn::Error::new_spanned(
             key,
             format!(
                 "`{name}` takes no `choices` — they apply to {}",
-                CHOOSERS
+                BuiltinWidget::ALL
                     .iter()
-                    .filter(|c| !matches!(rule(c), Rule::NotYet))
-                    .map(|c| format!("`{c}`"))
+                    .filter(|w| w.takes_choices() && w.is_rendered())
+                    .map(|w| format!("`{}`", w.form_name()))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -396,20 +342,19 @@ fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<
 fn unknown_widget(name: &Ident) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
-    if lowered != written && WIDGET_NAMES.contains(&lowered.as_str()) {
+    if lowered != written && BuiltinWidget::from_form_name(&lowered).is_some() {
         return format!(
             "unknown widget `{written}` — widget names are lowercase, write `{lowered}`"
         );
     }
-    match WIDGET_NAMES
-        .iter()
+    match widget_names()
         .filter(|n| edit_distance(&lowered, n) <= 2)
         .min_by_key(|n| edit_distance(&lowered, n))
     {
         Some(near) => format!("unknown widget `{written}` — did you mean `{near}`?"),
         None => format!(
             "unknown widget `{written}` — expected one of {}, or `custom(MyWidget)`",
-            WIDGET_NAMES.join(", ")
+            widget_names().collect::<Vec<_>>().join(", ")
         ),
     }
 }
@@ -437,13 +382,13 @@ mod tests {
 
     #[gtest]
     fn every_name_in_the_table_parses_and_resolves() {
-        // Generated from `WIDGET_NAMES`, so a name added to the table without a
-        // match arm, or without a `rule`, fails here rather than at a call site.
-        // A name whose rule is `NotYet` must instead be refused, by name.
-        for name in WIDGET_NAMES {
+        // Generated from `BuiltinWidget::ALL`, so every widget's name is tried.
+        // A widget that renders nothing yet must instead be refused, by name.
+        for widget in BuiltinWidget::ALL {
+            let name = widget.form_name();
             let id = Ident::new(name, proc_macro2::Span::call_site());
             let parsed = parse(quote! { Source { f => { widget: #id } } });
-            if matches!(rule(name), Rule::NotYet) {
+            if !widget.is_rendered() {
                 let err = parsed.err().map(|e| e.to_string()).unwrap_or_default();
                 expect_that!(
                     err,
@@ -554,6 +499,19 @@ mod tests {
             err_of(quote! { Source { p => { widget: Input(Password) } } }).len(),
             gt(0)
         );
+    }
+
+    /// `checks` calls these only for a widget some `form!` uses, so a widget
+    /// added without a message would otherwise surface as a proc-macro panic
+    /// in an author's build. Calls each wherever `checks` could.
+    #[gtest]
+    fn every_widget_checks_can_reach_has_a_message() {
+        for &widget in BuiltinWidget::ALL.iter().filter(|w| w.is_rendered()) {
+            expect_that!(cannot_render(widget), not(eq("")), "{widget:?}");
+            if !widget.accepts_optional() {
+                expect_that!(optional_refusal(widget), not(eq("")), "{widget:?}");
+            }
+        }
     }
 
     // ── `widget: name { … }` ─────────────────────────────────────────────

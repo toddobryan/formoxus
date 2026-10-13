@@ -506,7 +506,7 @@ pub(crate) mod tests {
                     path.key(),
                     match body.widget.as_ref().map(|w| &w.kind) {
                         None => String::new(),
-                        Some(WidgetKind::Named(n)) => n.to_string(),
+                        Some(WidgetKind::Named { name, .. }) => name.to_string(),
                         Some(WidgetKind::Custom(w)) => {
                             format!("custom({})", quote!(#w))
                         }
