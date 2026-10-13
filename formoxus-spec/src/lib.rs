@@ -23,8 +23,10 @@ mod attrs;
 mod bound;
 mod elements;
 mod input_types;
+mod widgets;
 
 pub use attrs::{Attr, AttrKey, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
 pub use bound::Bound;
 pub use elements::{Element, FieldControl};
 pub use input_types::{InputType, RenderedInputType};
+pub use widgets::{BuiltinWidget, Part};

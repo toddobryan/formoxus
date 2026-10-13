@@ -1033,7 +1033,7 @@ attributes! {
 }
 
 /// `==` on `str` is a trait method, which const code cannot call.
-const fn str_eq(a: &str, b: &str) -> bool {
+pub(crate) const fn str_eq(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
     if a.len() != b.len() {
         return false;

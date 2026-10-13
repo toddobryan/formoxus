@@ -5,6 +5,15 @@ metadata:
   type: project
 ---
 
+**2026-10-13 (home) — GREEN, PUSHED; P2's `BuiltinWidget` BOX AND ITS TESTS DONE.**
+`formoxus-spec/src/widgets.rs`: `BuiltinWidget` (enum; `ALL`, `from_form_name`
+via `str_eq`, `form_name`, `parts`, `form_control`, `takes_choices`,
+`accepts_optional`, `renders`, `default_for`, `is_rendered`), `Part`, and
+`Element::tag()` (Todd). Gotcha: a `const fn` CALL is never promoted to
+`'static`, so `parts()` wraps each slice in `const { }` (`labelled!`/`grouped!`),
+and each text-like `Input` gets its own arm. 13 unit tests, mutation-checked.
+Nothing uses `BuiltinWidget` yet. **Next box: the macro side (Todd).**
+
 **END OF SCHOOL DAY 2026-10-12 — GREEN, PUSHED; P2 BOXES 1–4 DONE.** Home: `git pull` first.
 `RenderedInputType` (formoxus-spec, `to_input_type()`); `Input` routes
 hidden/checkbox/text-like (checkbox.rs folded into input.rs, `field_label`

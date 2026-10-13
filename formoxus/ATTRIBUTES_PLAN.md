@@ -17,8 +17,10 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > broken down; P2-a and P2-b DECIDED 2026-10-11 (`Element` + narrowed
 > `FieldControl`; decision 5's `Input` router folded in). **2026-10-12: the
 > first two P2 boxes DONE** (`Element`/`FieldControl` in
-> `formoxus-spec/src/elements.rs`; the 73 rows sorted). Next box: the
-> rendered-input-type enum (Todd).
+> `formoxus-spec/src/elements.rs`; the 73 rows sorted). **By the end of
+> 2026-10-12, boxes 1–5 DONE** (also `RenderedInputType`, and `Input` routing
+> every `<input>`). **2026-10-13: `BuiltinWidget` and its unit tests DONE.**
+> Next box: the macro side (Todd).
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -714,7 +716,10 @@ crates now keep in parallel live in one place. The components and
   `WidgetType::Checkbox` and its `ScalarWidget` arm go; `form!`'s `checkbox`
   maps to `Input(Checkbox)`; `with_owned_attrs`'s `!matches!(widget,
   WidgetType::Checkbox)` becomes a check on the input type.
-- [ ] **`BuiltinWidget` in a new `formoxus-spec/src/widgets.rs`** (Todd).
+- [x] **`BuiltinWidget` in a new `formoxus-spec/src/widgets.rs`** (Todd;
+  DONE 2026-10-13, with `ALL`, `is_rendered()` for the not-yet three, and
+  `parts()` built from `const { }` slices since a `const fn` call is not
+  promoted to `'static`; each text-like `Input` has its own arm).
   `const fn`s, so `form!`'s `const _` asserts can call them:
   `from_form_name(&str) -> Option<Self>` / `form_name()` (as `Attr` has
   `from_variant_name`/`variant_name`); `parts() -> &'static [Part]`, with
@@ -724,7 +729,8 @@ crates now keep in parallel live in one place. The components and
   `default_for(FieldType, optional) -> Self`; and a way to say "not rendered
   yet". The refusal and rule MESSAGES can move too, so the macro stops
   holding them.
-- [ ] **Unit tests** (Claude) in `formoxus-spec`: every widget has exactly one
+- [x] **Unit tests** (Claude; DONE 2026-10-13, 13 in `widgets.rs`, each
+  mutation-checked) in `formoxus-spec`: every widget has exactly one
   form-control part; part names are unique within a widget;
   `from_form_name(form_name(w)) == Some(w)` for every widget; `default_for`
   covers every `FieldType`, optional and not; `renders` agrees with
