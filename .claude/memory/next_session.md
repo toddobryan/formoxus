@@ -17,8 +17,12 @@ gone, `WidgetKind::Named { name, widget }`, messages stay in the macro (Todd:
 fine, they are `form!`-vocabulary prose), `field_kind::renders` takes a
 `BuiltinWidget` and `WidgetClass` is gone. Goldens unchanged. The macro still
 emits `WidgetType::X`; it becomes `WidgetType::Builtin(…)` with the runtime
-box. **Next box: the runtime side, `WidgetType` (Todd, starting).** Its
-`ScalarWidget` panics still duplicate two `form!` messages; deal with them there.
+box. THEN THE RUNTIME SIDE, ALSO 2026-10-13 (uncommitted at time of writing):
+`WidgetType = Builtin(BuiltinWidget) | Custom`, `Copy`, `From`, `Debug` prints
+`form_name()` (Todd, R1/R2/R4); `ScalarWidget` asserts `is_rendered` then
+`renders`, then an exhaustive match picks the component (Claude, R3); R5–R7 and
+the moved tests (Claude). `just ci`, e2e 31, `widget_matrix` green.
+**P2 IS DONE. Next: P3 (configurable classes); its checklist is not broken down.**
 
 **END OF SCHOOL DAY 2026-10-12 — GREEN, PUSHED; P2 BOXES 1–4 DONE.** Home: `git pull` first.
 `RenderedInputType` (formoxus-spec, `to_input_type()`); `Input` routes

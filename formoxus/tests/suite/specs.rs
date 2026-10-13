@@ -15,7 +15,7 @@ use formoxus::fields::FieldAttrs;
 use formoxus::members::Edit;
 use formoxus::members::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::WidgetType;
+use formoxus::widgets::{BuiltinWidget, WidgetType};
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -105,10 +105,10 @@ fn the_derived_widgets_are_what_the_override_has_to_beat() {
 #[component]
 fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| {
-        empty_form(
-            FormSpec::<Flags>::default()
-                .with_custom_widget("subscribed", WidgetType::Input(RenderedInputType::Checkbox)),
-        )
+        empty_form(FormSpec::<Flags>::default().with_custom_widget(
+            "subscribed",
+            WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
+        ))
     });
     form.render_fragment()
 }
@@ -130,7 +130,10 @@ fn an_override_beats_a_derived_widget() {
 #[component]
 fn BoolForcedToSelect() -> Element {
     let form = use_form(|| {
-        empty_form(FormSpec::<Flags>::default().with_custom_widget("enabled", WidgetType::Select))
+        empty_form(
+            FormSpec::<Flags>::default()
+                .with_custom_widget("enabled", WidgetType::Builtin(BuiltinWidget::Select)),
+        )
     });
     form.render_fragment()
 }
@@ -162,7 +165,8 @@ fn a_widget_on_a_field_set_is_rejected() {
     // would leave the author with no thread to pull. The message names the path
     // because a nested form has more than one candidate.
     let _ = empty_form(
-        FormSpec::<EventForCreate>::default().with_custom_widget("location", WidgetType::Textarea),
+        FormSpec::<EventForCreate>::default()
+            .with_custom_widget("location", WidgetType::Builtin(BuiltinWidget::Textarea)),
     );
 }
 
@@ -175,7 +179,8 @@ struct WithRows {
 #[should_panic(expected = "venues is a list")]
 fn a_widget_on_a_list_is_rejected() {
     let _ = empty_form(
-        FormSpec::<WithRows>::default().with_custom_widget("venues", WidgetType::Select),
+        FormSpec::<WithRows>::default()
+            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
     );
 }
 
@@ -190,7 +195,8 @@ struct Drawing {
 fn ChooserWithAWidget() -> Element {
     let form = use_form(|| {
         empty_form(
-            FormSpec::<Drawing>::default().with_custom_widget("shape", WidgetType::RadioGroup),
+            FormSpec::<Drawing>::default()
+                .with_custom_widget("shape", WidgetType::Builtin(BuiltinWidget::RadioGroup)),
         )
     });
     form.render_fragment()
@@ -324,7 +330,8 @@ fn RowWidgetsOverridden() -> Element {
             &Answers {
                 correct: vec![true, false],
             },
-            FormSpec::<Answers>::default().with_custom_widget("correct[]", WidgetType::Select),
+            FormSpec::<Answers>::default()
+                .with_custom_widget("correct[]", WidgetType::Builtin(BuiltinWidget::Select)),
         )
     });
     form.render_fragment()
@@ -346,7 +353,8 @@ fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     // The rejection still stands, but it can name the fix now.
     let _ = form_for(
         &trip(),
-        FormSpec::<Trip>::default().with_custom_widget("venues", WidgetType::Select),
+        FormSpec::<Trip>::default()
+            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
     );
 }
 

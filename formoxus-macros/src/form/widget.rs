@@ -48,23 +48,10 @@ fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
     }
 }
 
-/// `widget`, as the `::formoxus::widgets::WidgetType` it renders as, whose
-/// built-in variants are named as `BuiltinWidget`'s are.
+/// `widget`, as the `::formoxus::widgets::WidgetType` it renders as.
 fn widget_type_tokens(widget: BuiltinWidget) -> TokenStream2 {
-    match widget {
-        BuiltinWidget::Input(input_type) => {
-            let input_type = rendered_input_ident(input_type);
-            quote! {
-                ::formoxus::widgets::WidgetType::Input(
-                    ::formoxus::attrs::RenderedInputType::#input_type
-                )
-            }
-        }
-        other => {
-            let variant = format_ident!("{other:?}");
-            quote! { ::formoxus::widgets::WidgetType::#variant }
-        }
-    }
+    let builtin = builtin_tokens(widget);
+    quote! { ::formoxus::widgets::WidgetType::Builtin(#builtin) }
 }
 
 fn rendered_input_ident(input_type: RenderedInputType) -> Ident {
@@ -413,7 +400,8 @@ mod tests {
         // `Input(Password)` on the inside, and the author never sees the split.
         let spec = parse(quote! { LoginForm { password => { widget: password } } }).unwrap();
         let tokens = widget_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("WidgetType :: Input"));
+        expect_that!(tokens, contains_substring("WidgetType :: Builtin"));
+        expect_that!(tokens, contains_substring("BuiltinWidget :: Input"));
         expect_that!(tokens, contains_substring("InputType :: Password"));
     }
 
@@ -421,7 +409,7 @@ mod tests {
     fn a_non_input_name_resolves_to_a_bare_variant() {
         let spec = parse(quote! { Source { notes => { widget: textarea } } }).unwrap();
         let tokens = widget_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("WidgetType :: Textarea"));
+        expect_that!(tokens, contains_substring("BuiltinWidget :: Textarea"));
         expect_that!(tokens, not(contains_substring("InputType")));
     }
 

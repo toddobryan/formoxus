@@ -10,7 +10,7 @@ use crate::members::{
     Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
-use crate::widgets::{FieldProps, VariantSelect, WidgetType};
+use crate::widgets::{BuiltinWidget, FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue};
@@ -193,7 +193,7 @@ impl FormMember for VariantSet {
         };
         let attrs = FieldAttrs::with_owned_attrs(
             &id,
-            &WidgetType::Select,
+            &WidgetType::Builtin(BuiltinWidget::Select),
             ctx.required,
             self.has_errors_here(),
             &field_attrs,
@@ -372,7 +372,7 @@ impl FormMember for VariantSet {
             // A variant chooser is the one container that DOES have a widget of
             // its own — the `<select>` — so an override here is meaningful (a
             // radio group), even though nothing renders one yet.
-            self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
+            self.custom_widget = spec.custom_widget.or(self.custom_widget.take());
             self.field_attrs = spec.attrs.clone();
         }
         // Two paths again, exactly as in `edit`: this member sits at `my_path`,

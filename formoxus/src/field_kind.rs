@@ -157,12 +157,11 @@ pub const fn bound_is_exact(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
 
 // ── Can this widget render this field? ──────────────────────────────────
 //
-// Mirrors `widgets::scalar::ScalarWidget`'s match arms, which are the only
-// place that decides which (value kind, widget) pairs render. A pair with no
-// arm panics there, and Dioxus contains the panic to that one component, so
-// the field silently vanishes from the form. These checks turn that into a
-// build error instead. The pair rules are `BuiltinWidget::renders`; **until
-// that match is exhaustive over `BuiltinWidget`, keep the two in step.**
+// Which (field type, widget) pairs render is `BuiltinWidget::renders`.
+// `widgets::scalar::ScalarWidget` asserts it, and Dioxus contains that panic to
+// the one component, so the field silently vanishes from the form. These
+// checks, called from `form!`'s `const _` items, turn that into a build error
+// instead. Both ask the same function, so they cannot disagree.
 
 /// Whether the field is one value, and so can have a widget at all. A struct,
 /// list or enum is several, and a widget on one is either rejected at runtime

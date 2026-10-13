@@ -9,7 +9,7 @@ use crate::widgets::errors::errors_id;
 use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
-use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType, RenderedInputType};
+use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, BuiltinWidget, FieldType, RenderedInputType};
 use indexmap::IndexMap;
 use regress::Regex;
 use std::fmt::Debug;
@@ -166,7 +166,12 @@ impl FieldAttrs {
         attrs: &FieldAttrs,
     ) -> FieldAttrs {
         let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
-        if required && !matches!(widget, WidgetType::Input(RenderedInputType::Checkbox)) {
+        if required
+            && !matches!(
+                widget,
+                WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox))
+            )
+        {
             map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
         }
         if invalid {
@@ -404,34 +409,19 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// as `FormField<bool>`. A checkbox has two states and an `Option<bool>` has
     /// three, which is the whole reason that flag has to travel from the walk.
     fn default_widget(&self) -> WidgetType {
-        match self.field_type() {
-            // Int and Float are deliberately `text`, not `number`: `type="number"` hands back `""`
-            // for anything the browser dislikes, so a half-typed value vanishes.
-            FieldType::Text | FieldType::Int | FieldType::Float => {
-                WidgetType::Input(RenderedInputType::Text)
-            }
-
-            // An `Option<bool>` has three states and a checkbox has two, so the
-            // optional case gets a `Select` — reusing the one implementation of
-            // the "no value" option rather than growing a third checkbox state
-            // the DOM would have to be talked into.
-            FieldType::Bool if self.optional => WidgetType::Select,
-            FieldType::Bool => WidgetType::Input(RenderedInputType::Checkbox),
-        }
+        WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
     }
 
     /// The widget to render: an override if one was set, else the derived default.
     fn widget(&self) -> WidgetType {
-        self.custom_widget
-            .clone()
-            .unwrap_or_else(|| self.default_widget())
+        self.custom_widget.unwrap_or_else(|| self.default_widget())
     }
 
     fn is_unticked_checkbox(&self) -> bool {
         matches!(self.value, FieldValue::Empty)
             && matches!(
                 self.widget(),
-                WidgetType::Input(RenderedInputType::Checkbox)
+                WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
             )
     }
 
@@ -654,7 +644,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
 
     fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
         if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
-            self.custom_widget = spec.custom_widget.clone().or(self.custom_widget.take());
+            self.custom_widget = spec.custom_widget.or(self.custom_widget.take());
             self.label = spec.label.clone().or(self.label.take());
             self.choices = spec.choices.clone().or(self.choices.take());
             // Replaced whole, not merged field by field like the three above.
@@ -1387,7 +1377,11 @@ mod tests {
     /// error and nothing else. It gets one error, not that plus "must be true".
     #[gtest]
     fn an_empty_required_true_select_gets_only_the_required_error() {
-        let field = a_bool_field(FieldValue::Empty, Some(WidgetType::Select), true);
+        let field = a_bool_field(
+            FieldValue::Empty,
+            Some(WidgetType::Builtin(BuiltinWidget::Select)),
+            true,
+        );
         expect_that!(
             validation_messages(field),
             elements_are![eq("This field is required.")]
@@ -1396,7 +1390,11 @@ mod tests {
 
     #[gtest]
     fn a_required_true_select_rejects_false() {
-        let field = a_bool_field(FieldValue::Valid(false), Some(WidgetType::Select), true);
+        let field = a_bool_field(
+            FieldValue::Valid(false),
+            Some(WidgetType::Builtin(BuiltinWidget::Select)),
+            true,
+        );
         expect_that!(
             validation_messages(field),
             elements_are![eq("this value must be true")]
@@ -1508,7 +1506,7 @@ mod tests {
     fn owned_attributes_come_first_then_the_fields_own() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(RenderedInputType::Text),
+            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
             true,
             true,
             &just_max_length(),
@@ -1537,7 +1535,7 @@ mod tests {
     fn aria_describedby_names_the_error_list() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(RenderedInputType::Text),
+            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
             false,
             true,
             &FieldAttrs::default(),
@@ -1554,7 +1552,7 @@ mod tests {
     /// rendered is itself a defect.
     #[gtest]
     fn required_and_invalid_are_independent() {
-        let input = WidgetType::Input(RenderedInputType::Text);
+        let input = WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text));
         let only_required =
             FieldAttrs::with_owned_attrs(ID, &input, true, false, &just_max_length());
         expect_that!(
@@ -1581,7 +1579,7 @@ mod tests {
     fn without_either_the_fields_attributes_pass_through_unchanged() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(RenderedInputType::Text),
+            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
             false,
             false,
             &just_max_length(),
@@ -1639,7 +1637,7 @@ mod tests {
     fn a_checkbox_never_gets_required() {
         let attrs = FieldAttrs::with_owned_attrs(
             ID,
-            &WidgetType::Input(RenderedInputType::Checkbox),
+            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
             true,
             true,
             &FieldAttrs::default(),

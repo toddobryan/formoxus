@@ -20,7 +20,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > `formoxus-spec/src/elements.rs`; the 73 rows sorted). **By the end of
 > 2026-10-12, boxes 1–5 DONE** (also `RenderedInputType`, and `Input` routing
 > every `<input>`). **2026-10-13: `BuiltinWidget` and its unit tests DONE.**
-> **The macro side DONE the same day.** Next box: the runtime side (Todd).
+> **The macro side DONE the same day, and the runtime side: P2 IS DONE.**
+> Next: P3 (configurable classes), whose checklist waits to be broken down.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -744,16 +745,82 @@ crates now keep in parallel live in one place. The components and
   replaced by `BuiltinWidget` calls; the emitted widget path names the enum.
   Goldens (Claude): regenerate with `TRYBUILD=overwrite` and READ the diff;
   only message wording should move, if anything.
-- [ ] **The runtime side** (Todd): `WidgetType` becomes roughly
-  `Builtin(BuiltinWidget) | Custom { … }`; `ScalarWidget`'s match goes
-  exhaustive over `BuiltinWidget` (the `_ => panic!` arm should be able to
-  go); `field_kind::WidgetClass` and `renders` defer to
-  `BuiltinWidget::renders` (shape → `FieldType` stays in `field_kind`, since
-  `formoxus-spec` has no facet); `FormField::default_widget` calls
-  `BuiltinWidget::default_for`.
-- [ ] **Tests that move** (Claude): the `WidgetType::` references in
-  `author_attrs.rs`, `specs.rs`, `widgets.rs` and `widget_matrix`; the suite,
-  lib, goldens and e2e all green.
+- [x] **The runtime side** (DONE 2026-10-13; broken down 2026-10-13, line numbers from
+  `d3b4ae5`). Already done in the box before: `field_kind::renders` takes a
+  `BuiltinWidget` and `WidgetClass` is gone.
+  - [x] **R1. `WidgetType` = `Builtin(BuiltinWidget) | Custom { … }`**
+    ([types.rs](src/widgets/types.rs)). DONE (Todd), with R-a, R-b, R-c
+    as proposed.
+    `PartialEq`: `(Builtin(a), Builtin(b)) => a == b`, `Custom` by name,
+    `_ => false` (the `discriminant` fallback goes). `Debug`: see R-a. Also
+    R-b (`From`), R-c (`Copy`).
+  - [x] **R2. Exports.** DONE (Todd, per R-e). `widgets.rs:73` re-exports `WidgetType` but nothing
+    re-exports `BuiltinWidget` or `RenderedInputType` except the
+    `formoxus::attrs` glob (`lib.rs:49`). Anyone calling
+    `with_custom_widget` now has to name `BuiltinWidget`; see R-e.
+  - [x] **R3. `ScalarWidget`** (DONE, Claude, per R-d; the not-yet three
+    get their own `is_rendered` assert before the `renders` one) ([scalar.rs:37](src/widgets/scalar.rs#L37)).
+    Today it matches `(field_type, widget)` pairs and repeats the pair rules
+    that `BuiltinWidget::renders` now owns, with a `_ => panic!`. Proposed
+    shape (R-d): `Custom` first, unchanged; then for `Builtin(w)`, ONE
+    `assert!(w.renders(field_type, choices.is_some()), …)` as the gate, and
+    an inner `match w` exhaustive over `BuiltinWidget` deciding only WHICH
+    component: `Input(Checkbox)` / `Input(t)` / `Textarea` / `Select` /
+    `RadioGroup`, and `SelectMultiple | CheckboxMultiple | File` panicking
+    "not supported yet" (still reachable through `with_custom_widget`, which
+    bypasses `form!`). The bool-without-choices fallback (`bool_choices`)
+    stays where `Select`/`RadioGroup` take their choices.
+    `reject_if_not_required` (:118) stays as is: it reads the `required`
+    attribute, which `with_owned_attrs` never sets for a checkbox, so it
+    cannot be widened to "any widget whose `accepts_optional()` is false".
+    The doc comment at :17–20 ("`form!` accepts every widget name against
+    every field") is stale since `form!` checks pairs; fix it while here.
+  - [x] **R4. `fields.rs`.** (DONE, Todd) `default_widget` (:406) becomes
+    `WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(),
+    self.optional))`; its comments move to `default_for`, which already
+    carries them. `with_owned_attrs` (:169) and `is_unticked_checkbox` (:434)
+    match `Builtin(Input(Checkbox))`.
+  - [x] **R5. `VariantSet`** (DONE, Claude) ([variant_set.rs:196](src/members/variant_set.rs#L196)):
+    `&WidgetType::Builtin(BuiltinWidget::Select)`.
+  - [x] **R6. The macro** (DONE, Claude): `widget_type_tokens` becomes
+    `WidgetType::Builtin(#builtin_tokens)`, so the two token functions
+    collapse to one; its tests that look for `WidgetType :: Input` look
+    for `WidgetType :: Builtin` and `BuiltinWidget :: Input`.
+  - [x] **R7. Doc links** (DONE, Claude): `widgets.rs:22–23` (`WidgetType::RadioGroup`
+    → `BuiltinWidget::RadioGroup`); the `field_kind` comment saying "until
+    that match is exhaustive over `BuiltinWidget`, keep the two in step"
+    goes once R3 lands.
+
+  Decisions (Todd):
+  - **R-a. `Debug` for `Builtin`.** `Custom` prints `custom(Name)`, `form!`'s
+    spelling, so panics quote what the author wrote. Proposed: `Builtin(w)`
+    prints `w.form_name()` (`select`, `tel`) for the same reason. No test
+    asserts the old `Input(Text)` form.
+  - **R-b. `impl From<BuiltinWidget> for WidgetType`.** Proposed yes; tests
+    and `with_custom_widget` callers then write `BuiltinWidget::Select.into()`.
+    Whether `with_custom_widget` should take `impl Into<WidgetType>` is a
+    further, optional step.
+  - **R-c. `WidgetType: Copy`.** Both variants are now `Copy` inside (a fn
+    pointer and a `&'static str`), so it can be; that removes the
+    `custom_widget.clone()`s (`fields.rs:425`, `:657`). Proposed yes.
+  - **R-d. `ScalarWidget`'s shape**, as in R3: gate on `renders`, then an
+    exhaustive match. The two specific panics ("`select` needs choices",
+    "`radio_group` needs choices") become the one gate's message, naming the
+    widget by `form_name` and the field's type and path. Only reachable
+    without `form!`, which reports the specific message at compile time.
+  - **R-e. Where `BuiltinWidget` is exported.** Proposed: `formoxus::widgets`
+    beside `WidgetType` (with `RenderedInputType`, which it holds), not the
+    prelude. Someone writing `form!` never names either; someone building a
+    `FormSpec` by hand or writing a custom widget does.
+- [x] **Tests that move** (DONE 2026-10-13, Claude; also the five
+  `.clone()`s on the now-`Copy` `WidgetType` that clippy flagged; `just ci`,
+  `just e2e` (31) and `widget_matrix` green): `fields.rs` lib tests (:1390–1642, 7
+  references); suite `specs.rs` (7), `widgets.rs` (7), `author_attrs.rs` (1,
+  a `Custom`, likely untouched); `examples/src/bin/widget_matrix.rs`, whose
+  hand-kept list of 21 `(name, WidgetType)` pairs (:56–87) becomes
+  `BuiltinWidget::ALL` mapped through `form_name`. Then the full `just ci`
+  and **`just e2e`**, since R3 changes the dispatch every field goes
+  through.
 
 ### P3. Configurable default classes
 

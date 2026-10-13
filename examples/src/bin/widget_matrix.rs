@@ -1,11 +1,9 @@
 //! Which `(value kind, widget)` pairs actually render, and which panic.
 //!
-//! Whether a pair *renders* is decided at runtime, by a match in `ScalarWidget`
-//! whose fallthrough arm panics. `form!` now rejects the pairs that fall through
-//! at compile time (`formoxus::field_kind::renders`), but that check is a hand
-//! copy of the match, and this tool builds its forms with `FormSpec` directly,
-//! so it still measures what the match itself does. The two tables should
-//! agree; when they don't, the check needs updating.
+//! Whether a pair *renders* is `BuiltinWidget::renders`. `form!` checks it at
+//! compile time and `ScalarWidget` asserts it at runtime; this tool builds its
+//! forms with `FormSpec` directly, bypassing `form!`, so it shows what the
+//! runtime actually does with every pair.
 //!
 //! This prints it. Run with:
 //!
@@ -25,8 +23,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::RenderedInputType;
-use formoxus::widgets::WidgetType;
+use formoxus::widgets::{BuiltinWidget, WidgetType};
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
 
@@ -46,44 +43,18 @@ const FIELDS: [&str; 4] = ["text", "int", "float", "flag"];
 
 #[component]
 fn OneField(path: String, widget: WidgetType) -> Element {
-    let form = use_form(move || {
-        empty_form(FormSpec::<Sampler>::new().with_custom_widget(&path, widget.clone()))
-    });
+    let form =
+        use_form(move || empty_form(FormSpec::<Sampler>::new().with_custom_widget(&path, widget)));
     form.render_fragment()
 }
 
-/// Every widget a consumer can name, in the macro table's own order.
+/// Every built-in widget a consumer can name, by its `form!` name, in
+/// `BuiltinWidget::ALL`'s order.
 fn every_widget() -> Vec<(&'static str, WidgetType)> {
-    let inputs = [
-        ("text", RenderedInputType::Text),
-        ("password", RenderedInputType::Password),
-        ("hidden", RenderedInputType::Hidden),
-        ("number", RenderedInputType::Number),
-        ("email", RenderedInputType::Email),
-        ("tel", RenderedInputType::Telephone),
-        ("url", RenderedInputType::Url),
-        ("search", RenderedInputType::Search),
-        ("color", RenderedInputType::Color),
-        ("date", RenderedInputType::Date),
-        ("time", RenderedInputType::Time),
-        ("datetime_local", RenderedInputType::DatetimeLocal),
-        ("month", RenderedInputType::Month),
-        ("week", RenderedInputType::Week),
-        ("checkbox", RenderedInputType::Checkbox),
-    ];
-    let mut all: Vec<(&'static str, WidgetType)> = inputs
-        .into_iter()
-        .map(|(n, t)| (n, WidgetType::Input(t)))
-        .collect();
-    all.extend([
-        ("textarea", WidgetType::Textarea),
-        ("select", WidgetType::Select),
-        ("select_multiple", WidgetType::SelectMultiple),
-        ("checkbox_multiple", WidgetType::CheckboxMultiple),
-        ("radio_group", WidgetType::RadioGroup),
-        ("file", WidgetType::File),
-    ]);
-    all
+    BuiltinWidget::ALL
+        .iter()
+        .map(|&w| (w.form_name(), WidgetType::Builtin(w)))
+        .collect()
 }
 
 /// `true` if the pair actually produced markup.
@@ -144,7 +115,7 @@ fn main() {
     for (name, widget) in &widgets {
         print!("{name:width$}");
         for path in FIELDS {
-            if renders(path, widget.clone()) {
+            if renders(path, *widget) {
                 ok += 1;
                 print!("  {:>7}", "ok");
             } else {

@@ -4,59 +4,28 @@
 //! a widget can hold.
 
 use dioxus::prelude::*;
-use formoxus_spec::RenderedInputType;
+use formoxus_spec::BuiltinWidget;
 
 use crate::error::ValidationMessage;
 use crate::members::ValuesStore;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum WidgetType {
-    Input(RenderedInputType),
-    Textarea,
-    Select,
-    SelectMultiple,
-    CheckboxMultiple,
-    RadioGroup,
-    File,
-    /// A widget the author supplied, via `form!`'s `custom(MyWidget)`.
-    ///
-    /// The escape hatch for a value kind the built-in widgets cannot serve —
-    /// `Markdown` needs a live preview, a `Ref<Source>` needs an async-fed
-    /// combobox. Neither is expressible as an `<input type=…>`, and neither
-    /// belongs in the field's constraints: they are presentation, not value type.
-    ///
-    /// **`fn` pointer, NOT `Box<dyn Fn>` — the derives force it.** `WidgetType`
-    /// is `Clone + Debug + PartialEq`, and a boxed closure supplies none of the
-    /// three. A non-capturing closure coerces to a plain `fn`, which is `Copy`,
-    /// clones trivially, and compares by address. That is what lets this variant
-    /// exist without disturbing anything that already holds a `WidgetType`.
-    ///
-    /// The cost is `Debug`: a fn pointer prints as an address. Hence `name`,
-    /// which `form!` fills in from the widget's own path so panics and test
-    /// assertions read `custom(MarkdownWidget)` rather than `0x7f…`.
+    Builtin(BuiltinWidget),
     Custom {
         name: &'static str,
         render: fn(WidgetProps) -> Element,
     },
 }
 
-// `Debug` and `PartialEq` are hand-written rather than derived, and only because
-// of `Custom`'s `fn` pointer. Both impls reproduce the derive exactly for every
-// other variant.
+// `Debug` and `PartialEq` are hand-written rather than derived, because of
+// `Custom`'s `fn` pointer. `Debug` prints `form!`'s spelling (`select`, `tel`,
+// `custom(MarkdownWidget)`), so a panic quotes back what the author wrote;
+// deriving it would print the pointer's address beside a custom widget's name.
 impl std::fmt::Debug for WidgetType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Input(t) => write!(f, "Input({t:?})"),
-            Self::Textarea => f.write_str("Textarea"),
-            Self::Select => f.write_str("Select"),
-            Self::SelectMultiple => f.write_str("SelectMultiple"),
-            Self::CheckboxMultiple => f.write_str("CheckboxMultiple"),
-            Self::RadioGroup => f.write_str("RadioGroup"),
-            Self::File => f.write_str("File"),
-            // `form!`'s own spelling, so the panic in `ScalarWidget` quotes back
-            // what the author wrote. Deriving this would print the fn pointer's
-            // address beside the name, which is noise in every message it
-            // appears in.
+            Self::Builtin(w) => write!(f, "{}", w.form_name()),
             Self::Custom { name, .. } => write!(f, "custom({name})"),
         }
     }
@@ -65,7 +34,7 @@ impl std::fmt::Debug for WidgetType {
 impl PartialEq for WidgetType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Input(a), Self::Input(b)) => a == b,
+            (Self::Builtin(a), Self::Builtin(b)) => a == b,
             // Two custom widgets are the same widget when they name the same
             // input. Comparing the `fn` pointers is what rustc warns about and
             // is genuinely meaningless here: identical functions may be merged
@@ -73,8 +42,14 @@ impl PartialEq for WidgetType {
             // units, so neither equality nor inequality tells you anything about
             // which widget you have.
             (Self::Custom { name: a, .. }, Self::Custom { name: b, .. }) => a == b,
-            _ => std::mem::discriminant(self) == std::mem::discriminant(other),
+            _ => false,
         }
+    }
+}
+
+impl From<BuiltinWidget> for WidgetType {
+    fn from(value: BuiltinWidget) -> Self {
+        WidgetType::Builtin(value)
     }
 }
 

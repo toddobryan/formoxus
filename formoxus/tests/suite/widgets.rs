@@ -164,7 +164,7 @@ fn signals_are_populated_from_the_model() {
 // so they stay meaningful regardless of how the members wire it up.
 
 use formoxus::attrs::FieldType;
-use formoxus::widgets::{FieldProps, ScalarWidget, WidgetType};
+use formoxus::widgets::{BuiltinWidget, FieldProps, ScalarWidget, WidgetType};
 
 const ID: &str = "rand0123-name";
 
@@ -180,7 +180,7 @@ fn PopulatedInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(RenderedInputType::Text),
+            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -205,7 +205,7 @@ fn EmptyInput() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(RenderedInputType::Text),
+            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -447,7 +447,7 @@ thread_local! {
 
 #[component]
 fn WithWidget() -> Element {
-    let widget = WIDGET.with_borrow(|c| c.clone().expect("set by rendered_with"));
+    let widget = WIDGET.with_borrow(|c| c.expect("set by rendered_with"));
     let form = use_form(|| {
         empty_form(FormSpec::<OneString>::default().with_custom_widget("secret", widget))
     });
@@ -475,7 +475,7 @@ fn every_input_type_reaches_the_type_attribute() {
         (RenderedInputType::Week, "week"),
     ];
     for (input_type, expected) in cases {
-        let html = rendered_with(WidgetType::Input(input_type));
+        let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(input_type)));
         let wanted = format!("type=\"{expected}\"");
         expect_that!(
             html,
@@ -505,7 +505,9 @@ fn a_numeric_field_can_still_ask_for_a_number_input() {
     // The override half of `a_numeric_field_still_renders_as_text`: text is the
     // DEFAULT, not the only option. Someone who wants the spinner and the mobile
     // numeric keypad, and accepts that the browser may hand back `""`, can say so.
-    let html = rendered_with(WidgetType::Input(RenderedInputType::Number));
+    let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(
+        RenderedInputType::Number,
+    )));
     expect_that!(html, contains_substring("type=\"number\""));
 }
 
@@ -528,8 +530,10 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                 &OneString {
                     secret: "hunter2".to_string(),
                 },
-                FormSpec::<OneString>::default()
-                    .with_custom_widget("secret", WidgetType::Input(RenderedInputType::Password)),
+                FormSpec::<OneString>::default().with_custom_widget(
+                    "secret",
+                    WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),
+                ),
             )
         });
         form.render_fragment()
@@ -552,7 +556,9 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
     // The wrapper every other leaf uses is a `label` with a caption and a
     // required marker. Around `type="hidden"` that puts visible text and an
     // asterisk on screen beside a widget nobody can see.
-    let html = rendered_with(WidgetType::Input(RenderedInputType::Hidden));
+    let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(
+        RenderedInputType::Hidden,
+    )));
     expect_that!(html, contains_substring("type=\"hidden\""));
     expect_that!(html, not(contains_substring("<label")));
     expect_that!(html, not(contains_substring("field-label")));
@@ -575,7 +581,7 @@ fn PasswordWithEcho() -> Element {
             // boundary independently of how the members wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Input(RenderedInputType::Password),
+            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),
             values,
             props: FieldProps {
                 id: ID.into(),

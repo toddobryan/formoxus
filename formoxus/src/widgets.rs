@@ -20,7 +20,7 @@
 //! rather than a separate category. A combobox with a search field, or a
 //! Markdown editor with a live preview, is a bigger widget — not a different
 //! species — and [`WidgetType::Custom`] is how a consumer supplies one.
-//! [`WidgetType::RadioGroup`] shows that built-in does not mean simple: there
+//! [`BuiltinWidget::RadioGroup`] shows that built-in does not mean simple: there
 //! is no `<radiogroup>`, only *n* radios sharing a `name`. Django draws the
 //! line in the same place, and calls the whole range `Widget`.
 //!
@@ -64,6 +64,7 @@ pub mod variant_select;
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
+pub use formoxus_spec::{BuiltinWidget, RenderedInputType};
 pub use input::Input;
 pub use radio_group::RadioGroup;
 pub use row_buttons::{AddRowButton, RemoveRowButton};
