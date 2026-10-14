@@ -7,6 +7,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{Attr, FieldType, RenderedInputType};
 
 use super::errors::FieldErrors;
+use super::label::field_label;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
 use crate::fields::FieldAttrs;
@@ -171,30 +172,6 @@ fn checkbox(
             // is presence, which a checkbox always has.
             {field_label(&id, label, field_attrs.contains(Attr::RequiredTrue))}
             FieldErrors { field_id: &id, errors }
-        }
-    }
-}
-
-/// The caption, pointing at the input by `id`, with the required marker when
-/// `marked`. Nothing at all when there is no caption.
-///
-/// The marker is INSIDE the label, not a sibling: a consumer who makes
-/// `.fx-field-label` a block (the natural choice above an input) would
-/// otherwise push a lone asterisk onto its own line. `aria-hidden` because it
-/// is a VISUAL convention only; the `required` attribute is what a screen
-/// reader announces, so the asterisk would just be noise in the accessible
-/// name.
-fn field_label(id: &str, text: Option<String>, marked: bool) -> Element {
-    rsx! {
-        if let Some(text) = text {
-            label {
-                class: "fx-field-label",
-                r#for: "{id}",
-                "{text}"
-                if marked {
-                    span { class: "fx-required", aria_hidden: "true", " *" }
-                }
-            }
         }
     }
 }

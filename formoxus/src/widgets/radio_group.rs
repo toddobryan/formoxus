@@ -5,6 +5,7 @@ use formoxus_spec::{Attr, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
+use crate::widgets::label::required_marker;
 use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 
 /// A group of radio buttons over a fixed set of choices, bound to one path.
@@ -112,7 +113,7 @@ pub fn RadioGroup(
                 if let Some(text) = label_text {
                     "{text}"
                     if field_attrs.contains(Attr::Required) {
-                        span { class: "fx-required", aria_hidden: "true", " *" }
+                        {required_marker()}
                     }
                 }
             }

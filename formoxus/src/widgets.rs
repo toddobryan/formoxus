@@ -42,7 +42,10 @@
 //!   bundles every widget is handed. This is what `form!` speaks.
 //! - [`values`] — reading and writing one path in the store.
 //! - [`scalar`] — dispatch, deciding which widget a `(value kind, widget)`
-//!   pair actually gets. The only place that decides which pairs work at all.
+//!   pair actually gets. Which pairs work at all is
+//!   [`BuiltinWidget::renders`], which it asserts.
+//! - `label` (crate-private) — the caption and required marker every widget
+//!   shares.
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
@@ -52,6 +55,7 @@
 
 pub mod errors;
 pub mod input;
+pub(crate) mod label;
 pub mod radio_group;
 pub mod row_buttons;
 pub mod scalar;

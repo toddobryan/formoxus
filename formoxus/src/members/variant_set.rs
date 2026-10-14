@@ -10,6 +10,7 @@ use crate::members::{
     Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
+use crate::widgets::label::required_marker;
 use crate::widgets::{BuiltinWidget, FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
@@ -206,7 +207,7 @@ impl FormMember for VariantSet {
                         id: legend_id(&id),
                         "{text}"
                         if ctx.required {
-                            span { class: "fx-required", aria_hidden: "true", " *" }
+                            {required_marker()}
                         }
                     }
                 }

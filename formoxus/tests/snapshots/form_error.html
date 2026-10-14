@@ -1,0 +1,255 @@
+<div class="fx-form">
+<h2 class="fx-form-title">Everything
+</h2>
+<form>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-text">Text
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="text" id="FORMID-text" name="text" value="t" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-password">Password
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="password" id="FORMID-password" name="password" value="p" required=true/>
+</div>
+<input type="hidden" name="hidden" value="h"/>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-number">Number
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="number" id="FORMID-number" name="number" value="7" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-email">Email
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="email" id="FORMID-email" name="email" value="a@b.c" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-tel">Tel
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="tel" id="FORMID-tel" name="tel" value="555" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-url">Url
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="url" id="FORMID-url" name="url" value="https://example.com" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-search">Search
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="search" id="FORMID-search" name="search" value="q" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-color">Color
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="color" id="FORMID-color" name="color" value="#ff0000" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-date">Date
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="date" id="FORMID-date" name="date" value="2026-10-14" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-time">Time
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="time" id="FORMID-time" name="time" value="09:30" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-datetime_local">Datetime Local
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="datetime-local" id="FORMID-datetime_local" name="datetime_local" value="2026-10-14T09:30" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-month">Month
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="month" id="FORMID-month" name="month" value="2026-10" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-week">Week
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="week" id="FORMID-week" name="week" value="2026-W42" required=true/>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-nickname">Nickname
+</label>
+<input class="fx-control fx-input" type="text" id="FORMID-nickname" name="nickname" value=""/>
+</div>
+<div class="fx-form-field">
+<input class="fx-control fx-checkbox" name="subscribed" id="FORMID-subscribed" type="checkbox"/>
+<label class="fx-field-label" for="FORMID-subscribed">Subscribed
+</label>
+</div>
+<div class="fx-form-field">
+<input class="fx-control fx-checkbox" name="agreed" id="FORMID-agreed" type="checkbox" checked=true required=true/>
+<label class="fx-field-label" for="FORMID-agreed">Agreed
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-bio">Bio
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<textarea class="fx-control fx-textarea" id="FORMID-bio" name="bio" value="b" required=true>
+</textarea>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-state">State
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<select class="fx-control fx-select" id="FORMID-state" name="state" required=true>
+<option value="AL">Alabama
+</option>
+<option value="AK" selected=true>Alaska
+</option>
+</select>
+</div>
+<fieldset class="fx-form-field fx-radio-group" role="radiogroup">
+<legend class="fx-legend fx-field-label">Size
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</legend>
+<div class="fx-choice">
+<input class="fx-control fx-radio" type="radio" id="FORMID-size-0" name="size" value="s" required=true/>
+<label class="fx-choice-label" for="FORMID-size-0">Small
+</label>
+</div>
+<div class="fx-choice">
+<input class="fx-control fx-radio" type="radio" id="FORMID-size-1" name="size" value="l" checked=true required=true/>
+<label class="fx-choice-label" for="FORMID-size-1">Large
+</label>
+</div>
+</fieldset>
+<fieldset class="fx-form-field fx-radio-group" role="radiogroup">
+<legend class="fx-legend fx-field-label">Flag
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</legend>
+<div class="fx-choice">
+<input class="fx-control fx-radio" type="radio" id="FORMID-flag-0" name="flag" value="true" checked=true required=true/>
+<label class="fx-choice-label" for="FORMID-flag-0">True
+</label>
+</div>
+<div class="fx-choice">
+<input class="fx-control fx-radio" type="radio" id="FORMID-flag-1" name="flag" value="false" required=true/>
+<label class="fx-choice-label" for="FORMID-flag-1">False
+</label>
+</div>
+</fieldset>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-yes">Yes
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<select class="fx-control fx-select" id="FORMID-yes" name="yes" required=true>
+<option value="true">True
+</option>
+<option value="false" selected=true>False
+</option>
+</select>
+</div>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-maybe">Maybe
+</label>
+<select class="fx-control fx-select" id="FORMID-maybe" name="maybe">
+<option value="" selected=true>--none--
+</option>
+<option value="true">True
+</option>
+<option value="false">False
+</option>
+</select>
+</div>
+<fieldset class="fx-group fx-variant-set">
+<legend class="fx-legend fx-field-label" id="FORMID-contact-legend">Contact
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</legend>
+<div class="fx-form-field">
+<select class="fx-control fx-select" id="FORMID-contact" required=true aria-labelledby="FORMID-contact-legend">
+<option value="Email">Email
+</option>
+<option value="Phone" selected=true>Phone
+</option>
+</select>
+</div>
+</fieldset>
+<fieldset class="fx-group fx-field-set">
+<legend class="fx-legend fx-field-label">Address
+</legend>
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-address.city">City
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="text" id="FORMID-address.city" name="address.city" value="c" required=true/>
+</div>
+</fieldset>
+<fieldset class="fx-group fx-list-set">
+<legend class="fx-legend fx-field-label">Pets
+</legend>
+<div class="fx-form-row">
+<fieldset class="fx-group fx-field-set">
+<div class="fx-form-field">
+<label class="fx-field-label" for="FORMID-pets.#0.name">Name
+<span class="fx-required" aria-hidden="true"> *
+</span>
+</label>
+<input class="fx-control fx-input" type="text" id="FORMID-pets.#0.name" name="pets.#0.name" value="Rex" required=true/>
+</div>
+</fieldset>
+<button type="button" class="fx-button fx-button-remove-row" aria-label="Remove row 1">Remove
+</button>
+</div>
+<button type="button" class="fx-button fx-button-add-row">Add
+</button>
+</fieldset>
+<ul class="fx-form-errors">
+<li class="fx-form-error">The whole form is wrong.
+</li>
+</ul>
+<ul class="fx-form-errors fx-problems">
+<li class="fx-form-error">button `ping` validates its model, so its fn must take it — write `|m| …`, or declare `invocation: unconditional`
+</li>
+</ul>
+<div class="fx-buttons">
+<button type="submit" class="fx-button fx-button-submit">Save
+</button>
+<button type="reset" class="fx-button fx-button-reset">Undo
+</button>
+<button type="button" class="fx-button fx-button-cancel">Back
+</button>
+<button type="button" class="fx-button fx-button-destructive">Wipe
+</button>
+<button type="button" class="fx-button fx-button-action">Ping
+</button>
+</div>
+</form>
+</div>

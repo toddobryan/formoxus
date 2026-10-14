@@ -21,7 +21,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > 2026-10-12, boxes 1–5 DONE** (also `RenderedInputType`, and `Input` routing
 > every `<input>`). **2026-10-13: `BuiltinWidget` and its unit tests DONE.**
 > **The macro side DONE the same day, and the runtime side: P2 IS DONE.**
-> Next: P3 (configurable classes), whose checklist waits to be broken down.
+> Next: P3 (configurable classes), BROKEN DOWN 2026-10-13; it opens with
+> decisions P3-c to P3-h.
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -853,19 +854,216 @@ Also decided (Todd, 2026-10-10):
   so a custom text-like widget can borrow the text input's slot and follow
   the preset.
 
-Checklist (to be broken down once P1 and P2 land, since the slots are P2's
-parts):
+Broken down 2026-10-13 (Claude), line numbers from `800817f`.
 
-- [ ] `Classes` type in `formoxus` (`#[non_exhaustive]`, `with_*` builders,
-  like `Formoxus`); `fx()` reproduces every literal class formoxus emits today
-  (about 40 literals across 15 files, `grep '"[^"]*fx-'`); `bare()`.
-- [ ] `Formoxus::with_classes`, the form-level key, resolution at the `Form`
-  boundary.
-- [ ] Every literal `fx-…` in `src/` replaced by a slot lookup.
-- [ ] Tests (Claude): `fx()` renders byte-identical to today (the safety net
-  for the replacement); `bare()` emits no `class` at all; a form-level
-  override beats the app's; `class`/`class_plus` resolve against a configured
-  base.
+#### What `fx()` has to reproduce
+
+45 literals across 14 files (`grep '"[^"]*fx-' formoxus/src`). **Widget
+parts**, keyed by P2's `BuiltinWidget::parts()`:
+
+| widget | part | base | invalid | emitted at |
+|---|---|---|---|---|
+| text-like `Input` | `div` | `fx-form-field` | `fx-invalid` | `FieldProps::field_class` ([types.rs:113](src/widgets/types.rs#L113)), used at `input.rs:108` |
+| | `label` | `fx-field-label` | | `field_label`, `input.rs:191` |
+| | `input` | `fx-control fx-input` | | `input.rs:92` |
+| `Input(Hidden)` | `input` | (none) | | `input.rs` `hidden` |
+| `Input(Checkbox)` | `div` / `input` / `label` | `fx-form-field` / `fx-control fx-checkbox` / `fx-field-label` | `fx-invalid` on `div` | `input.rs:155`, `:136`, `:191` |
+| `Textarea` | `div` / `label` / `textarea` | `fx-form-field` / `fx-field-label` / `fx-control fx-textarea` | `fx-invalid` on `div` | `textarea.rs:27`, `:53` |
+| `Select` | `div` / `label` / `select` | `fx-form-field` / `fx-field-label` / `fx-control fx-select` | `fx-invalid` on `div` | `select.rs:37`, `:64` |
+| `RadioGroup` | `fieldset` | `fx-form-field fx-radio-group` | `fx-invalid` | `radio_group.rs:48` (`field_class_plus`) |
+| | `legend` | `fx-legend fx-field-label` | | `radio_group.rs:107` |
+| | `div` (per choice) | `fx-choice` | | `radio_group.rs:70` |
+| | `input` / `label` | `fx-control fx-radio` / `fx-choice-label` | | `radio_group.rs:72`, `:89` |
+
+An enum field's `VariantSelect` renders `Select`'s three parts with
+`Select`'s classes (`variant_select.rs:34`, and its wrapper `div` through
+`field_class`).
+
+**Fixed slots**, which no widget renders:
+
+| slot | base | emitted at |
+|---|---|---|
+| form | `fx-form` | `form.rs:341` |
+| form title | `fx-form-title` | `state.rs:276` |
+| form errors list / item | `fx-form-errors` / `fx-form-error` | `state.rs:295`, `:298` |
+| button-problems list / item | `fx-form-errors fx-problems` / `fx-form-error` | `form.rs:650`, `:652` |
+| button row | `fx-buttons` | `form.rs:413` |
+| a button, per `ButtonType` | `fx-button fx-button-{submit,reset,cancel,destructive,action}` | `buttons.rs:110–114` |
+| add-row / remove-row button | `fx-button fx-button-add-row` / `…-remove-row` | `row_buttons.rs:23`, `:49` |
+| nested struct fieldset / legend | `fx-group fx-field-set` / `fx-legend fx-field-label` | `field_set.rs:38`, `:40` |
+| list fieldset / legend / row | `fx-group fx-list-set` / `fx-legend fx-field-label` / `fx-form-row` | `list_set.rs:111`, `:113`, `:122` |
+| enum fieldset / legend | `fx-group fx-variant-set` / `fx-legend fx-field-label` | `variant_set.rs:202`, `:205` |
+| required marker | `fx-required` | SIX copies: `input.rs:195`, `textarea.rs:57`, `select.rs:68`, `variant_select.rs:64`, `radio_group.rs:115`, `variant_set.rs:209` |
+| field error list / item | `fx-field-errors` / `fx-field-error` | `errors.rs:41`, `:44` |
+
+#### Decisions first (Todd)
+
+- **P3-c. How slots are keyed.** DECIDED (Todd, 2026-10-14) as proposed;
+  naming a part a widget does not have PANICS (it is probably a typo). one map,
+  `SlotKey = Part(BuiltinWidget, &'static str) | Fixed(FixedSlot)`, where
+  `FixedSlot` is a `#[non_exhaustive]` enum of the rows above. `bare()` is
+  then the EMPTY map (a missing key renders no `class` at all), `fx()` fills
+  it with loops over `BuiltinWidget::ALL` and `parts()`, and an override is
+  one insert. A builder that sets one part on many widgets at once (every
+  text-like `input`, say) keeps presets short. Rejected alternative: a struct
+  with a named field per role (`wrapper`, `label`, `control`, …), which
+  cannot give `color` its own class (Bootstrap's `form-control-color`) and
+  needs a new field per new widget. 
+- **P3-d. The slot type.** DECIDED as proposed: `Slot { base: Cow<'static, str>,
+  invalid: Option<Cow<'static, str>> }`: presets are `&'static str`, while
+  an app may `format!` its own.
+- **P3-e. How the resolved `Classes` reaches the widgets.** DECIDED: (2). Issue #10
+  proposed context: `Form` resolves and provides it. **Catch: `Form` is not
+  a component.** Its render methods run inside the consumer's component, so
+  a bare `provide_context` there would land in the CONSUMER's scope, shared
+  by everything that component renders, and two forms in one component
+  would overwrite each other's classes. Two ways that work:
+  (1) context, provided by a small private component `Form` wraps its
+  output in; (2) threaded: `Rc<Classes>` on `RenderCtx` (which already
+  carries `label_case`, the precedent) and on to the widgets as a prop.
+  #10's objection to threading was cloning ~15 strings per field; an `Rc`
+  answers that. Proposed: (2). It needs no hidden scope, and it hands a
+  custom widget the resolved `Classes` through `WidgetProps`, which is
+  exactly P3-b.
+- **P3-f. The form-level key.** DECIDED as proposed: `classes: EXPR` in `form!`,
+  replacing the app's `Classes` WHOLE (`classes: Classes::bare()`, or
+  `classes: Classes::fx().with_…(…)`). Merging slot by slot would need every
+  slot to be an `Option`. Mirrors `label_case:` and `browser_validation:`.
+- **P3-g. `class:` and the invalid class.** DECIDED as proposed. An author's `class:` replaces
+  the control part's BASE. Proposed: the part's INVALID class is still added
+  when the field has errors, because it marks state, not style (Bootstrap's
+  `is-invalid` is what draws the red border). `fx()` puts no invalid class on
+  a control, so this changes nothing today.
+- **P3-h. `VariantSelect`** (DECIDED as proposed) reuses `Select`'s `label` and `select` slots
+  (proposed), rather than getting fixed slots of its own.
+
+#### Checklist
+
+- [x] **P3-1. Prep (Claude, DONE 2026-10-14):** `widgets/label.rs`'s
+  `field_label` and `required_marker` are now the only copies; the
+  snapshot is unchanged. Was: the required marker is
+  written out six times, and the label beside it four (`input.rs`'s
+  `field_label`, `textarea.rs`, `select.rs`, `variant_select.rs`). Folding
+  them into the one `field_label` first means each slot is looked up in one
+  place. Behaviour-neutral; the suite's exact-markup tests pin it.
+- [x] **P3-2. A snapshot (Claude, DONE 2026-10-14):** NOT the `/t/` forms
+  and the gallery after all (the examples crate is a binary, and it cannot
+  render error states without a browser), but `tests/suite/snapshot.rs`:
+  one model touching every slot above, rendered clean, with field errors,
+  and with form errors plus the button-problems list (a misdeclared button
+  fn renders it). Goldens in `tests/snapshots/`, one tag per line,
+  regenerated with `SNAPSHOT=overwrite`; the form id normalized to `FORMID`.
+  Mutation-checked. Was: the SSR
+  HTML of every `/t/` test form and the gallery, clean and with errors,
+  written to a golden file. The suite's exact-markup tests cover a lot but
+  not every element; this makes "byte-identical" checkable rather than
+  hoped for.
+- [ ] **P3-3. `Classes`, `Slot`, `FixedSlot`** in `formoxus/src/classes.rs`
+  (Todd; the file exists, empty). Fleshed out 2026-10-14 (Claude); a
+  proposal throughout, so change what reads wrong.
+  - [ ] **P3-3a. `Slot`**, per P3-d:
+    ```rust
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Slot {
+        pub base: Cow<'static, str>,
+        pub invalid: Option<Cow<'static, str>>,
+    }
+    impl Slot {
+        pub const fn new(base: &'static str) -> Self;   // Cow::Borrowed is const
+        pub fn with_invalid(self, invalid: impl Into<Cow<'static, str>>) -> Self;
+        /// The `class` value for this state: `base`, then `invalid` when
+        /// `invalid` is true, space-joined; `None` when that is empty, so a
+        /// slot of `""` renders no `class` attribute rather than `class=""`.
+        pub fn value(&self, invalid: bool) -> Option<String>;
+    }
+    ```
+    `pub` fields, like `Formoxus`'s, since a `Slot` is plain data with
+    nothing to protect; `new` plus `with_invalid` is for presets.
+  - [ ] **P3-3b. `FixedSlot`**: `#[derive(Clone, Copy, Debug, PartialEq, Eq,
+    Hash)] #[non_exhaustive] pub enum`, one variant per fixed-slot row:
+    `Form`, `FormTitle`, `FormErrors`, `FormError`, `ButtonProblems`,
+    `ButtonProblem`, `ButtonRow`, `Button(ButtonType)`, `AddRowButton`,
+    `RemoveRowButton`, `FieldSet`, `FieldSetLegend`, `ListSet`,
+    `ListSetLegend`, `ListRow`, `VariantSet`, `VariantSetLegend`,
+    `RequiredMarker`, `FieldErrors`, `FieldError`. Two notes:
+    `ButtonProblem` is its own variant although `fx()` gives it the same
+    `fx-form-error` as `FormError` (a preset may want them apart); and
+    `Button(ButtonType)` needs `Hash` on `ButtonType`
+    ([buttons.rs:74](src/buttons.rs#L74) derives `Eq` but not `Hash`).
+  - [ ] **P3-3c. `Classes`**, per P3-c:
+    ```rust
+    #[derive(Clone, Debug, PartialEq)]
+    #[non_exhaustive]
+    pub struct Classes { slots: IndexMap<SlotKey, Slot> }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    enum SlotKey { Part(BuiltinWidget, &'static str), Fixed(FixedSlot) }   // private
+    ```
+    The map is private and `SlotKey` with it, so the keying can change
+    without breaking anyone; the public surface is the methods below.
+    `IndexMap` (already a dependency) rather than `HashMap` so `Debug`
+    prints in a stable order; its `PartialEq` ignores order either way.
+  - [ ] **P3-3d. The presets.** `pub fn fx() -> Self`, the two tables
+    above, written as loops over `BuiltinWidget::ALL` and `parts()` so a new
+    widget cannot be forgotten silently; `pub fn bare() -> Self`, the empty
+    map; `impl Default for Classes` is `fx()`, so `Formoxus::default()`
+    keeps rendering today's names. The text-like `input` row wants a way to
+    say "every `Input` but `Checkbox` and `Hidden`": either a match in
+    `fx()`, or a `const fn is_text_input()` on `BuiltinWidget` in
+    `formoxus-spec`, where the same set already appears in `renders()`.
+  - [ ] **P3-3e. Builders**, each consuming and returning `Self`:
+    - `with_part(widget, part: &str, slot)`: one widget's part. PANICS when
+      `part` is not one of `widget.parts()` (P3-c: probably a typo), naming
+      the widget and the parts it has. Looks the name up in `parts()` to
+      get the `&'static str` the key stores.
+    - `with_parts(filter: impl Fn(BuiltinWidget) -> bool, part, slot)`: that
+      part on every widget the filter keeps that HAS the part; panics if
+      none does. Presets need it, e.g. Bootstrap's
+      `with_parts(|w| w.is_text_input(), "input", Slot::new("form-control"))`.
+    - `with_fixed(slot: FixedSlot, value: Slot)`.
+    - Removing a slot (`without_part`/`without_fixed`) is left out until
+      something needs it; inserting `Slot::new("")` already renders nothing.
+  - [ ] **P3-3f. Lookups**, what P3-7's call sites use:
+    `part(&self, widget, part: &str) -> Option<&Slot>` (same panic as
+    `with_part` on a name the widget lacks, which at a lookup is a formoxus
+    bug) and `fixed(&self, slot) -> Option<&Slot>`. Plus the one-step form
+    the call sites actually want: `part_class(widget, part, invalid) ->
+    Option<String>` and `fixed_class(slot, invalid) -> Option<String>`,
+    each `Slot::value` on the lookup. An `Option` so `rsx!` can write
+    `class: classes.part_class(…)`, which omits the attribute on `None`.
+  - [ ] **P3-3g. Exports**, per the prelude rule: `Classes` in the prelude
+    (a `form!` author writes `classes: Classes::bare()`); `Slot` and
+    `FixedSlot` from `formoxus::classes`, with `pub mod classes` in
+    `lib.rs`. Inside the crate, full paths (`crate::classes::Classes`).
+  - [ ] **P3-3h. Not in this step:** wiring `Classes` into `Formoxus`,
+    `FormSpec` and `form!` (P3-5), delivery (P3-6), and any call site
+    (P3-7). After P3-3 nothing renders differently, and the snapshot proves
+    it.
+- [ ] **P3-4. Unit tests (Claude), inline in `classes.rs`:** every
+  `(widget, part)` in `BuiltinWidget::parts()` has an `fx()` slot except
+  `hidden`'s `input`; `fx()`'s values are the tables above; `bare()` is empty;
+  a builder override replaces exactly one slot.
+- [ ] **P3-5. The cascade (Todd):** `Formoxus::classes` + `with_classes`;
+  `FormSpec::classes: Option<Classes>` + `with_classes`; `Form::classes()`
+  resolving them like `Form::label_case()` (`form.rs:284`); the `form!` key
+  per P3-f, with a golden for a misspelt one (Claude).
+- [ ] **P3-6. Delivery (Todd)**, per P3-e.
+- [ ] **P3-7. Replace the literals (Todd)**, file by file, the snapshot
+  checked after each: the widgets (`input`, `textarea`, `select`,
+  `radio_group`, `variant_select`, `errors`, `row_buttons`), the members
+  (`field_set`, `list_set`, `variant_set`), and `form.rs`/`state.rs`.
+  `ButtonType::classes()` and `FieldProps::field_class`/`field_class_plus`
+  (12 users) go, replaced by slot lookups. `FieldAttrs::class(base)` already
+  takes the base, so it just receives the slot's.
+- [ ] **P3-8. Tests (Claude):** the snapshot is unchanged; a whole form under
+  `bare()` contains no `class=` at all; a form-level `classes:` beats the
+  app's; `class`/`class_plus` replace and append to a CONFIGURED base, not
+  just `fx()`'s; P3-g's invalid class survives an author `class:`; a custom
+  widget receives the resolved `Classes` (P3-b).
+- [ ] **P3-9. Wrap-up (Claude):** a `/t/` test form under `bare()` with its
+  e2e test (they come in pairs); `examples/assets/main.css`'s vocabulary
+  comment checked against `fx()`; `css_class_vocabulary.md` updated; close
+  #10.
 
 ## Step 4: emit only valid attributes, and the custom-widget trait
 

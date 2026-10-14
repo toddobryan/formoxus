@@ -51,6 +51,8 @@ mod newtypes;
 mod optional_containers;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
+#[path = "suite/snapshot.rs"]
+mod snapshot;
 #[path = "suite/specs.rs"]
 mod specs;
 #[path = "suite/submissions.rs"]

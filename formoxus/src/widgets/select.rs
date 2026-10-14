@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{Attr, FieldType};
 
 use super::errors::FieldErrors;
+use super::label::field_label;
 use super::types::{Choice, FieldProps};
 use super::values::{get_current, write_value};
 use crate::fields::FieldAttrs;
@@ -52,23 +53,7 @@ pub fn Select(
     rsx! {
         div {
             class: field_class,
-            if let Some(text) = label_text {
-                // The marker is INSIDE the label, not a sibling: a
-                // consumer who makes `.fx-field-label` a block — the natural
-                // choice above an input — would otherwise push a lone asterisk
-                // onto its own line. `aria-hidden` because it is a VISUAL
-                // convention only; `required` on the input is what tells a
-                // screen reader, so the asterisk would just be noise in the
-                // accessible name.
-                label{
-                    class: "fx-field-label",
-                    r#for: &field_id,
-                    "{text}"
-                    if required {
-                        span { class: "fx-required", aria_hidden: "true", " *" }
-                    }
-                }
-            }
+            {field_label(&field_id, label_text, required)}
             select {
                 class: class,
                 id: field_id,

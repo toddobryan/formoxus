@@ -5,6 +5,13 @@ metadata:
   type: project
 ---
 
+**2026-10-14 — GREEN, UNCOMMITTED: P3 DECISIONS DONE, P3-1 AND P3-2 DONE, P3-3 FLESHED OUT.**
+P3-c..h all decided as proposed (part typo PANICS). P3-1: `widgets/label.rs`
+holds the only `field_label`/`required_marker`. P3-2: `tests/suite/snapshot.rs`
+pins whole-form markup (clean / field errors / form errors + problems list)
+in `tests/snapshots/*.html`; regenerate with `SNAPSHOT=overwrite`, then READ
+the diff. It is the safety net for P3-7. **Next: P3-3, `classes.rs` (Todd).**
+
 **2026-10-13 (home) — GREEN, PUSHED; P2's `BuiltinWidget` BOX AND ITS TESTS DONE.**
 `formoxus-spec/src/widgets.rs`: `BuiltinWidget` (enum; `ALL`, `from_form_name`
 via `str_eq`, `form_name`, `parts`, `form_control`, `takes_choices`,
