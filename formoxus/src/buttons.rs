@@ -71,7 +71,7 @@ impl ButtonSpec {
 }
 
 /// Mirrors the five names `form!` accepts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ButtonType {
     Submit,
     Reset,

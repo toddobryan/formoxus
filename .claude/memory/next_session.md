@@ -10,7 +10,14 @@ P3-c..h all decided as proposed (part typo PANICS). P3-1: `widgets/label.rs`
 holds the only `field_label`/`required_marker`. P3-2: `tests/suite/snapshot.rs`
 pins whole-form markup (clean / field errors / form errors + problems list)
 in `tests/snapshots/*.html`; regenerate with `SNAPSHOT=overwrite`, then READ
-the diff. It is the safety net for P3-7. **Next: P3-3, `classes.rs` (Todd).**
+the diff. It is the safety net for P3-7. P3-1/P3-2 PUSHED (`ecfaca9`).
+LATER 2026-10-14 (uncommitted): P3-3 and P3-4 DONE: `classes.rs` has `Slot`,
+`FixedKey` (renamed from `FixedSlot` by Todd: it is a key, not a slot),
+`Classes` (private `IndexMap<SlotKey, Slot>`), `fx()`/`bare()`/`Default`, the
+builders, the lookups; 23 unit tests + `tests/suite/classes.rs`. Todd also
+made the problem `<li>` `fx-form-error fx-problem` (snapshot regenerated).
+NOTHING renders through `Classes` yet. **Next: P3-5 cascade (Todd), P3-6
+threading `Rc<Classes>` through `RenderCtx` (Todd), P3-7 call sites.**
 
 **2026-10-13 (home) — GREEN, PUSHED; P2's `BuiltinWidget` BOX AND ITS TESTS DONE.**
 `formoxus-spec/src/widgets.rs`: `BuiltinWidget` (enum; `ALL`, `from_form_name`

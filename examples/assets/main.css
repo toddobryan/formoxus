@@ -12,7 +12,7 @@
  *   a group     .fx-group + .fx-field-set .fx-variant-set .fx-list-set  .fx-legend
  *   radios      .fx-radio-group  .fx-choice  .fx-choice-label
  *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
- *               .fx-problems
+ *               .fx-problems  .fx-problem
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
  *               .fx-button-add-row .fx-button-remove-row

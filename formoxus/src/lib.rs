@@ -52,6 +52,7 @@ pub mod attrs {
 
 pub mod build;
 pub mod buttons;
+pub mod classes;
 pub mod defaults;
 pub mod error;
 // Support for `form!`'s compile-time constraint checks, which name it from
@@ -122,6 +123,9 @@ pub use formoxus_macros::path;
 /// Writing a custom widget is a different audience with its own glob:
 /// `use formoxus::widgets::*`.
 pub mod prelude {
+    // `Classes` alone: a `form!` author writes `classes: Classes::bare()`. The
+    // `Slot` and `FixedKey` that build a custom one are in `formoxus::classes`.
+    pub use crate::classes::Classes;
     pub use crate::defaults::{Formoxus, defaults, provide_defaults};
     pub use crate::error::{ValidationError, ValidationMessage};
     pub use crate::form::{

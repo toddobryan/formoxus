@@ -143,6 +143,9 @@ consumer's own CSS. `formoxus-button-<type>` carries the semantic intent instead
   are literally the HTML `type` attribute" to two, with a note saying why
   `action` deliberately is not HTML's word.
 - `default_class()` → `classes()`: nothing overrides it and it returns two tokens.
+- (2026-10-14) each problem `<li>` is `fx-form-error fx-problem`, not bare
+  `fx-form-error`, so `.fx-problem` reaches a problem alone (P3's
+  `FixedKey::ButtonProblem`).
 - `formoxus-button-problems` → `fx-problems`; once `fx-button-<type>` is a
   pattern, the old name reads as "a button of type *problems*".
 

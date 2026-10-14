@@ -649,7 +649,7 @@ fn render_problems(problems: &[String]) -> Element {
         ul {
             class: "fx-form-errors fx-problems",
             for p in problems {
-                li { class: "fx-form-error", "{p}" }
+                li { class: "fx-form-error fx-problem", "{p}" }
             }
         }
     }

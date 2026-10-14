@@ -886,7 +886,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
 | form | `fx-form` | `form.rs:341` |
 | form title | `fx-form-title` | `state.rs:276` |
 | form errors list / item | `fx-form-errors` / `fx-form-error` | `state.rs:295`, `:298` |
-| button-problems list / item | `fx-form-errors fx-problems` / `fx-form-error` | `form.rs:650`, `:652` |
+| button-problems list / item | `fx-form-errors fx-problems` / `fx-form-error fx-problem` (Todd, 2026-10-14; was `fx-form-error`) | `form.rs:650`, `:652` |
 | button row | `fx-buttons` | `form.rs:413` |
 | a button, per `ButtonType` | `fx-button fx-button-{submit,reset,cancel,destructive,action}` | `buttons.rs:110–114` |
 | add-row / remove-row button | `fx-button fx-button-add-row` / `…-remove-row` | `row_buttons.rs:23`, `:49` |
@@ -900,8 +900,8 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
 
 - **P3-c. How slots are keyed.** DECIDED (Todd, 2026-10-14) as proposed;
   naming a part a widget does not have PANICS (it is probably a typo). one map,
-  `SlotKey = Part(BuiltinWidget, &'static str) | Fixed(FixedSlot)`, where
-  `FixedSlot` is a `#[non_exhaustive]` enum of the rows above. `bare()` is
+  `SlotKey = Part(BuiltinWidget, &'static str) | Fixed(FixedKey)`, where
+  `FixedKey` is a `#[non_exhaustive]` enum of the rows above. `bare()` is
   then the EMPTY map (a missing key renders no `class` at all), `fx()` fills
   it with loops over `BuiltinWidget::ALL` and `parts()`, and an override is
   one insert. A builder that sets one part on many widgets at once (every
@@ -958,10 +958,10 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   written to a golden file. The suite's exact-markup tests cover a lot but
   not every element; this makes "byte-identical" checkable rather than
   hoped for.
-- [ ] **P3-3. `Classes`, `Slot`, `FixedSlot`** in `formoxus/src/classes.rs`
+- [x] **P3-3. `Classes`, `Slot`, `FixedKey`** (DONE 2026-10-14) in `formoxus/src/classes.rs`
   (Todd; the file exists, empty). Fleshed out 2026-10-14 (Claude); a
   proposal throughout, so change what reads wrong.
-  - [ ] **P3-3a. `Slot`**, per P3-d:
+  - [x] **P3-3a. `Slot`** (DONE 2026-10-14, Todd; docs and 6 tests, Claude), per P3-d:
     ```rust
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Slot {
@@ -979,7 +979,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     ```
     `pub` fields, like `Formoxus`'s, since a `Slot` is plain data with
     nothing to protect; `new` plus `with_invalid` is for presets.
-  - [ ] **P3-3b. `FixedSlot`**: `#[derive(Clone, Copy, Debug, PartialEq, Eq,
+  - [x] **P3-3b. `FixedKey`** (DONE 2026-10-14, Claude; `Hash` on `ButtonType`, Todd): `#[derive(Clone, Copy, Debug, PartialEq, Eq,
     Hash)] #[non_exhaustive] pub enum`, one variant per fixed-slot row:
     `Form`, `FormTitle`, `FormErrors`, `FormError`, `ButtonProblems`,
     `ButtonProblem`, `ButtonRow`, `Button(ButtonType)`, `AddRowButton`,
@@ -990,20 +990,24 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     `fx-form-error` as `FormError` (a preset may want them apart); and
     `Button(ButtonType)` needs `Hash` on `ButtonType`
     ([buttons.rs:74](src/buttons.rs#L74) derives `Eq` but not `Hash`).
-  - [ ] **P3-3c. `Classes`**, per P3-c:
+  - [x] **P3-3c. `Classes`** (DONE 2026-10-14, Todd), per P3-c:
     ```rust
     #[derive(Clone, Debug, PartialEq)]
     #[non_exhaustive]
     pub struct Classes { slots: IndexMap<SlotKey, Slot> }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-    enum SlotKey { Part(BuiltinWidget, &'static str), Fixed(FixedSlot) }   // private
+    enum SlotKey { Part(BuiltinWidget, &'static str), Fixed(FixedKey) }   // private
     ```
     The map is private and `SlotKey` with it, so the keying can change
     without breaking anyone; the public surface is the methods below.
     `IndexMap` (already a dependency) rather than `HashMap` so `Debug`
     prints in a stable order; its `PartialEq` ignores order either way.
-  - [ ] **P3-3d. The presets.** `pub fn fx() -> Self`, the two tables
+  - [x] **P3-3d. The presets** (DONE 2026-10-14, Claude: `fx()` walks every
+    RENDERED widget's `parts()` through a private `fx_part(widget, part)`
+    match that panics on a pair it does not know; the not-yet widgets get
+    no classes until they ship; 4 preset tests, mutation-checked; the
+    text-like row is a match arm, so no `is_text_input` was needed yet). `pub fn fx() -> Self`, the two tables
     above, written as loops over `BuiltinWidget::ALL` and `parts()` so a new
     widget cannot be forgotten silently; `pub fn bare() -> Self`, the empty
     map; `impl Default for Classes` is `fx()`, so `Formoxus::default()`
@@ -1011,7 +1015,8 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     say "every `Input` but `Checkbox` and `Hidden`": either a match in
     `fx()`, or a `const fn is_text_input()` on `BuiltinWidget` in
     `formoxus-spec`, where the same set already appears in `renders()`.
-  - [ ] **P3-3e. Builders**, each consuming and returning `Self`:
+  - [x] **P3-3e. Builders** (DONE 2026-10-14: `with_part` and `with_fixed`,
+    Todd; `with_parts`, docs and 7 tests, Claude), each consuming and returning `Self`:
     - `with_part(widget, part: &str, slot)`: one widget's part. PANICS when
       `part` is not one of `widget.parts()` (P3-c: probably a typo), naming
       the widget and the parts it has. Looks the name up in `parts()` to
@@ -1020,10 +1025,11 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
       part on every widget the filter keeps that HAS the part; panics if
       none does. Presets need it, e.g. Bootstrap's
       `with_parts(|w| w.is_text_input(), "input", Slot::new("form-control"))`.
-    - `with_fixed(slot: FixedSlot, value: Slot)`.
+    - `with_fixed(slot: FixedKey, value: Slot)`.
     - Removing a slot (`without_part`/`without_fixed`) is left out until
       something needs it; inserting `Slot::new("")` already renders nothing.
-  - [ ] **P3-3f. Lookups**, what P3-7's call sites use:
+  - [x] **P3-3f. Lookups** (DONE 2026-10-14, Todd; a shared private
+    `part_name` gives lookup and `with_part` the same panic), what P3-7's call sites use:
     `part(&self, widget, part: &str) -> Option<&Slot>` (same panic as
     `with_part` on a name the widget lacks, which at a lookup is a formoxus
     bug) and `fixed(&self, slot) -> Option<&Slot>`. Plus the one-step form
@@ -1031,15 +1037,17 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     Option<String>` and `fixed_class(slot, invalid) -> Option<String>`,
     each `Slot::value` on the lookup. An `Option` so `rsx!` can write
     `class: classes.part_class(…)`, which omits the attribute on `None`.
-  - [ ] **P3-3g. Exports**, per the prelude rule: `Classes` in the prelude
+  - [x] **P3-3g. Exports** (DONE 2026-10-14, Claude; a suite test,
+    `tests/suite/classes.rs`, names each from outside the crate), per the prelude rule: `Classes` in the prelude
     (a `form!` author writes `classes: Classes::bare()`); `Slot` and
-    `FixedSlot` from `formoxus::classes`, with `pub mod classes` in
+    `FixedKey` from `formoxus::classes`, with `pub mod classes` in
     `lib.rs`. Inside the crate, full paths (`crate::classes::Classes`).
   - [ ] **P3-3h. Not in this step:** wiring `Classes` into `Formoxus`,
     `FormSpec` and `form!` (P3-5), delivery (P3-6), and any call site
     (P3-7). After P3-3 nothing renders differently, and the snapshot proves
     it.
-- [ ] **P3-4. Unit tests (Claude), inline in `classes.rs`:** every
+- [x] **P3-4. Unit tests (Claude; DONE 2026-10-14, 23 in `classes.rs`, each
+  group mutation-checked, plus 2 suite tests of the export paths), inline in `classes.rs`:** every
   `(widget, part)` in `BuiltinWidget::parts()` has an `fx()` slot except
   `hidden`'s `input`; `fx()`'s values are the tables above; `bare()` is empty;
   a builder override replaces exactly one slot.
