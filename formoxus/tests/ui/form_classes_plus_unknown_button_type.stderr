@@ -1,0 +1,5 @@
+error: unknown button type `submitt` — did you mean `submit`?
+  --> tests/ui/form_classes_plus_unknown_button_type.rs:14:24
+   |
+14 |                 button.submitt: [btn],
+   |                        ^^^^^^^

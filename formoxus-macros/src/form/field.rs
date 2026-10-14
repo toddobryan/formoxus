@@ -466,13 +466,9 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
         AttrType::String | AttrType::Int | AttrType::Bound => AttrSource::Expr(body.parse()?),
         AttrType::Regex => AttrSource::Regex(checked_pattern(body.parse()?)?),
         AttrType::TokenList => {
-            let list;
-            bracketed!(list in body);
-            let items = Punctuated::<CssClassName, Token![,]>::parse_terminated(&list)?;
-            if attr == Attr::ClassPlus && items.is_empty() {
-                return Err(list.error("`class_plus` with an empty list should be omitted"));
-            }
-            AttrSource::List(items.into_iter().map(|ccn| ccn.0).collect())
+            let empty = (attr == Attr::ClassPlus)
+                .then_some("`class_plus` with an empty list should be omitted");
+            AttrSource::List(class_list(body, empty)?)
         }
         AttrType::Declarations => {
             let list;
@@ -485,6 +481,27 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
         }
         AttrType::Flag => unreachable!("handled above"),
     })
+}
+
+/// `[a, "b"]`: a bracketed list of class names, bare (`_` becomes `-`) or
+/// quoted (verbatim). The one way `form!` writes classes, shared by a field's
+/// `class:`/`class_plus:` and the form's `classes_plus:`.
+///
+/// `empty` is the error for an empty list where one means nothing, as on
+/// `class_plus`; `None` where `[]` is meaningful, as on a replace, where it
+/// clears.
+pub(crate) fn class_list(input: ParseStream<'_>, empty: Option<&str>) -> Result<Vec<LitStr>> {
+    let list;
+    let brackets = bracketed!(list in input);
+    let items = Punctuated::<CssClassName, Token![,]>::parse_terminated(&list)?;
+    // On the brackets, not `list.error`: an empty buffer's error reads
+    // "unexpected end of input, …" and points past the `]`.
+    if let Some(message) = empty
+        && items.is_empty()
+    {
+        return Err(syn::Error::new(brackets.span.join(), message));
+    }
+    Ok(items.into_iter().map(|ccn| ccn.0).collect())
 }
 
 struct CssClassName(LitStr);

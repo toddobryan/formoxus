@@ -21,12 +21,18 @@
 
 mod attrs;
 mod bound;
+mod buttons;
 mod elements;
+mod fixed_keys;
 mod input_types;
+mod slot_key;
 mod widgets;
 
 pub use attrs::{Attr, AttrKey, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
 pub use bound::Bound;
+pub use buttons::{ButtonType, Invocation};
 pub use elements::{Element, FieldControl};
+pub use fixed_keys::FixedKey;
 pub use input_types::{InputType, RenderedInputType};
+pub use slot_key::SlotKey;
 pub use widgets::{BuiltinWidget, Part};

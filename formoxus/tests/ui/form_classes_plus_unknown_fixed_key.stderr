@@ -1,0 +1,5 @@
+error: unknown class selector `buton_row` — did you mean `button_row`?
+  --> tests/ui/form_classes_plus_unknown_fixed_key.rs:14:17
+   |
+14 |                 buton_row: [actions],
+   |                 ^^^^^^^^^

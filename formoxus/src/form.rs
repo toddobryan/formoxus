@@ -13,6 +13,7 @@
 //! validator, buttons — that `form!` builds and `FormState::apply_specs`
 //! lays onto the tree. Lives in `spec`.
 
+use crate::Classes;
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
@@ -288,6 +289,20 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .unwrap_or_else(|| crate::defaults::defaults().label_case)
     }
 
+    /// The classes this form renders with: its own `classes:` if it gave
+    /// one, else the app's, then each of its `classes_plus:` edits in order.
+    /// Resolved here, at the `Form` boundary, like [`Self::label_case`].
+    pub fn classes(&self) -> Classes {
+        let state = self.state_signal.peek();
+        let base = state
+            .classes()
+            .unwrap_or_else(|| crate::defaults::defaults().classes);
+        state
+            .class_edits()
+            .iter()
+            .fold(base, crate::classes::Classes::with_edit)
+    }
+
     pub fn values(&self) -> ValuesStore {
         self.values_store
     }
@@ -385,7 +400,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                     button {
                         key: "{b.name}",
                         r#type: "{b.ty.html_type()}",
-                        class: "{b.ty.classes()}",
+                        class: crate::buttons::button_classes(b.ty),
                         // A button with nothing behind it is inert rather than
                         // absent: omitting it would hide the mistake, and a
                         // live `submit` with no handler would reload the page.

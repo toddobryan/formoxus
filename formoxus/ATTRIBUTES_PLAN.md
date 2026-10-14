@@ -908,7 +908,14 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   text-like `input`, say) keeps presets short. Rejected alternative: a struct
   with a named field per role (`wrapper`, `label`, `control`, …), which
   cannot give `color` its own class (Bootstrap's `form-control-color`) and
-  needs a new field per new widget. 
+  needs a new field per new widget.
+  **REVISED 2026-10-14 (Todd):** `SlotKey` lives in `formoxus-spec`, public
+  there, so `form!`'s `classes_plus:` and `Classes` key slots one way. It is
+  kept out of `formoxus`'s surface not by being private but by
+  `formoxus::attrs` becoming an explicit re-export list that omits it (it was
+  a glob of `formoxus_spec::*`). Its variant fields cannot be private, so
+  `SlotKey::Part(w, "lable")` is writable; every checked route
+  (`SlotKey::part`, `with_part`, `ClassEdit::part`, `form!`) rejects one.
 - **P3-d. The slot type.** DECIDED as proposed: `Slot { base: Cow<'static, str>,
   invalid: Option<Cow<'static, str>> }`: presets are `&'static str`, while
   an app may `format!` its own.
@@ -925,10 +932,44 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   answers that. Proposed: (2). It needs no hidden scope, and it hands a
   custom widget the resolved `Classes` through `WidgetProps`, which is
   exactly P3-b.
-- **P3-f. The form-level key.** DECIDED as proposed: `classes: EXPR` in `form!`,
-  replacing the app's `Classes` WHOLE (`classes: Classes::bare()`, or
-  `classes: Classes::fx().with_…(…)`). Merging slot by slot would need every
-  slot to be an `Option`. Mirrors `label_case:` and `browser_validation:`.
+- **P3-f. The form level LAYERS on the app's classes.** REVISED (Todd,
+  2026-10-14), reversing the first answer, which replaced the app's
+  `Classes` whole: that was verbose (`Classes::fx().with_part(…)` in every
+  form), and it hard-coded the app's base into each form, so changing the
+  base meant finding every form. Now, mirroring the field-level
+  `class:`/`class_plus:` pair:
+  - **`classes_plus: { … }`**, the common case: slot edits applied ON TOP of
+    whatever the form would otherwise get (the app's `Classes`, through
+    `Formoxus`). A form never restates the base.
+  - **`classes: EXPR`** still replaces the whole thing, for "this one form
+    is `Classes::bare()`".
+  - **Both may be given** (unlike the field pair): `classes:` first, then
+    `classes_plus:` on top of it ("start bare, then add these").
+  - **The block's grammar, not a Rust expression** (decided: the grammar
+    alone; a `with_parts`-style filter is not expressible in it, and that is
+    accepted for now):
+    ```rust
+    classes_plus: {
+        select.select: [form_select],                                // replace the slot
+        text.input: { base: [form_control], invalid: [is_invalid] }, // replace both
+        textarea.textarea: + [mine],                                 // APPEND to the base
+        text.input: + { base: [x], invalid: [y] },                   // append to both
+        button_row: [actions],                                       // a FixedKey, snake_case
+        button.submit: [btn, btn_primary],                           // FixedKey::Button(Submit)
+    }
+    ```
+    **Class values use the field-level `class:` list syntax** (Todd,
+    2026-10-14: one way to write classes in `form!`): `[a, "b"]`, a bare name
+    with `_` → `-`, a quoted one verbatim, the same targeted errors. Shared,
+    not copied: the bracketed `CssClassName` parse at `field.rs:468–475`
+    becomes a `pub(crate)` `class_list(input)` both call.
+    A plain entry REPLACES the slot (what a slot is); `+ "…"` appends to the
+    slot's base, keeping its invalid class (decided). A widget part is
+    `form_name.part`; a fixed key is its variant in snake_case, and
+    `button.<type>` names a button by its `form!` type keyword. Every name is
+    checked at COMPILE time with a caret on it, which is why `FixedKey` and
+    `ButtonType` move to `formoxus-spec` (P3-4b): the macro can then see
+    them, as it sees `BuiltinWidget`.
 - **P3-g. `class:` and the invalid class.** DECIDED as proposed. An author's `class:` replaces
   the control part's BASE. Proposed: the part's INVALID class is still added
   when the field has errors, because it marks state, not style (Bootstrap's
@@ -999,8 +1040,8 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     enum SlotKey { Part(BuiltinWidget, &'static str), Fixed(FixedKey) }   // private
     ```
-    The map is private and `SlotKey` with it, so the keying can change
-    without breaking anyone; the public surface is the methods below.
+    The map is private; `SlotKey` is `formoxus-spec`'s but not re-exported
+    (P3-c, revised), so the public surface is still the methods below.
     `IndexMap` (already a dependency) rather than `HashMap` so `Debug`
     prints in a stable order; its `PartialEq` ignores order either way.
   - [x] **P3-3d. The presets** (DONE 2026-10-14, Claude: `fx()` walks every
@@ -1051,10 +1092,55 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   `(widget, part)` in `BuiltinWidget::parts()` has an `fx()` slot except
   `hidden`'s `input`; `fx()`'s values are the tables above; `bare()` is empty;
   a builder override replaces exactly one slot.
-- [ ] **P3-5. The cascade (Todd):** `Formoxus::classes` + `with_classes`;
-  `FormSpec::classes: Option<Classes>` + `with_classes`; `Form::classes()`
-  resolving them like `Form::label_case()` (`form.rs:284`); the `form!` key
-  per P3-f, with a golden for a misspelt one (Claude).
+- [x] **P3-4b. `ButtonType`, `Invocation` and `FixedKey` move to
+  `formoxus-spec`** (decided by Todd 2026-10-14; DONE the same day, Claude:
+  `formoxus-spec/src/{buttons,fixed_keys}.rs`, 8 spec tests; the macro's
+  copies of both enums are gone, parsed by free fns since the orphan rule
+  forbids `impl Parse` on a spec type; `button_classes(ty)` is the interim
+  fn; goldens unchanged), so
+  `form!` can check `classes_plus:` names at compile time. Like
+  `BuiltinWidget`: dependency-free, `const fn`s, an `ALL`.
+  - `ButtonType` moves with `html_type()` and `default_invocation()`, so
+    `Invocation` moves too (a plain enum; an inherent method cannot stay
+    behind in `formoxus`). It gains `form_name()`/`from_form_name()`
+    (`submit` … `action`). `classes()` holds `fx-` strings and cannot move;
+    it becomes a private fn in `buttons.rs` until P3-7 deletes it.
+  - The macro's own copy goes: `formoxus-macros/src/form/button.rs:146`'s
+    `ButtonType` and its `button_types!` table, replaced by the spec's, as
+    `widgets!` was by `BuiltinWidget`.
+  - `FixedKey` moves with a `form_name()`/`from_form_name()` pair over the
+    snake_case names, `Button(t)` spelled `button.<t>`.
+  - The paths stay: `formoxus::buttons::{ButtonType, Invocation}` and
+    `formoxus::classes::FixedKey` re-export them. Internal code uses the
+    full module path, per the prelude rule.
+- [x] **P3-5. The cascade** (DONE 2026-10-14: `Formoxus`/`FormSpec`/wiring,
+  Todd; `ClassEdit` reshaped per piece, `with_edit`, the fold, the
+  `classes_plus:` parser and expansion in `formoxus-macros/src/form/classes.rs`,
+  8 goldens and 6 cascade suite tests, Claude), per P3-f as revised:
+  - `Formoxus::classes: Classes` (default `fx()`) + `with_classes`.
+  - `FormSpec` gets `classes: Option<Classes>` (the replace) AND an ordered
+    list of slot edits (the layer), with `with_classes` and one builder per
+    edit. BUILT (Todd; made opaque by Claude 2026-10-14): `ClassEdit` in
+    `formoxus::classes`, a struct with PRIVATE `key: SlotKey`, `slot: Slot`,
+    `append: bool`, built only by `ClassEdit::part(widget, part, slot)`,
+    `::part_plus(…)`, `::fixed(key, slot)`, `::fixed_plus(…)` (the part ones
+    check the name, panicking as `with_part` does), and
+    `FormSpec::with_class_edit(edit)`; `form!` emits one call per entry.
+    An append joins the edit's base onto the slot's base and its invalid
+    class onto the slot's invalid class; onto an absent slot it gives just
+    the edit's. `Classes::with_edit` applies one; `Form::classes()` folds
+    `FormState::class_edits()` over the base. REVISED the same day: `+` is
+    PER PIECE, so an edit is `{ key, base: Option<Change>, invalid:
+    Option<Change> }`, built `ClassEdit::part(w, p).replace_base(…)
+    .append_invalid(…)`; `part_plus`/`fixed_plus` are gone.
+  - `Form::classes()` resolves: `spec.classes`, else the app's
+    (`defaults().classes`), then every edit in order. Like
+    `Form::label_case()` (`form.rs:284`), resolved once at the `Form`
+    boundary.
+  - `form!` parses `classes:` and `classes_plus:`, checking each name
+    against the spec's `BuiltinWidget::parts()`, `FixedKey` and
+    `ButtonType`. Goldens (Claude): a misspelt widget, part, fixed key and
+    button type; `+` on a malformed value; a duplicate entry.
 - [ ] **P3-6. Delivery (Todd)**, per P3-e.
 - [ ] **P3-7. Replace the literals (Todd)**, file by file, the snapshot
   checked after each: the widgets (`input`, `textarea`, `select`,
@@ -1064,8 +1150,10 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   (12 users) go, replaced by slot lookups. `FieldAttrs::class(base)` already
   takes the base, so it just receives the slot's.
 - [ ] **P3-8. Tests (Claude):** the snapshot is unchanged; a whole form under
-  `bare()` contains no `class=` at all; a form-level `classes:` beats the
-  app's; `class`/`class_plus` replace and append to a CONFIGURED base, not
+  `bare()` contains no `class=` at all; a form-level `classes:` replaces the
+  app's; `classes_plus:` changes only the slots it names, on top of an app's
+  CUSTOM `Classes` (not just `fx()`), and `+` appends; both keys together
+  apply in order; `class`/`class_plus` replace and append to a CONFIGURED base, not
   just `fx()`'s; P3-g's invalid class survives an author `class:`; a custom
   widget receives the resolved `Classes` (P3-b).
 - [ ] **P3-9. Wrap-up (Claude):** a `/t/` test form under `bare()` with its

@@ -7,7 +7,9 @@ use std::{fmt::Debug, marker::PhantomData};
 use facet::Facet;
 use indexmap::IndexMap;
 
+use crate::Classes;
 use crate::buttons::ButtonSpec;
+use crate::classes::ClassEdit;
 use crate::error::ValidationError;
 use crate::fields::FieldAttrs;
 use crate::label_case::LabelCase;
@@ -31,7 +33,16 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     /// `.claude/memory/config_cascade.md`.
     pub(super) label_case: Option<LabelCase>,
     pub(super) use_browser_validation: Option<bool>,
+    pub(super) classes: Option<Classes>,
+    pub(super) edits: Vec<ClassEdit>,
     _type: PhantomData<T>,
+}
+
+impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
+    pub fn with_class_edit(mut self, edit: ClassEdit) -> Self {
+        self.edits.push(edit);
+        self
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -62,6 +73,8 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             buttons: Vec::new(),
             label_case: None,
             use_browser_validation: None,
+            classes: None,
+            edits: Vec::new(),
             _type: PhantomData,
         }
     }
@@ -129,6 +142,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_use_browser_validation(mut self, use_browser_validation: bool) -> Self {
         self.use_browser_validation = Some(use_browser_validation);
+        self
+    }
+
+    pub fn with_classes(mut self, classes: Classes) -> Self {
+        self.classes = Some(classes);
         self
     }
 

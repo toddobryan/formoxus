@@ -1,0 +1,5 @@
+error: unknown widget `selct` — did you mean `select`?
+  --> tests/ui/form_classes_plus_unknown_widget.rs:15:17
+   |
+15 |                 selct.select: [form_select],
+   |                 ^^^^^

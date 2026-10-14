@@ -38,7 +38,7 @@
 
 use dioxus::prelude::*;
 
-use crate::label_case::LabelCase;
+use crate::{Classes, label_case::LabelCase};
 
 /// The settings a whole app can fix once — formoxus's own configuration.
 ///
@@ -52,6 +52,8 @@ pub struct Formoxus {
     pub label_case: LabelCase,
     /// Whether browser validation should run before Formoxus' own validation
     pub use_browser_validation: bool,
+    /// The classes attached to form elements
+    pub classes: Classes,
 }
 
 impl Default for Formoxus {
@@ -60,6 +62,7 @@ impl Default for Formoxus {
         Self {
             label_case: LabelCase::Title,
             use_browser_validation: true,
+            classes: Classes::fx(),
         }
     }
 }
@@ -76,6 +79,11 @@ impl Formoxus {
 
     pub fn use_browser_validation(mut self, value: bool) -> Self {
         self.use_browser_validation = value;
+        self
+    }
+
+    pub fn with_classes(mut self, classes: Classes) -> Self {
+        self.classes = classes;
         self
     }
 }

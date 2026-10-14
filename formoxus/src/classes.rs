@@ -10,10 +10,104 @@
 
 use std::borrow::Cow;
 
-use formoxus_spec::BuiltinWidget;
+use formoxus_spec::{BuiltinWidget, SlotKey};
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonType;
+
+/// One change a form makes to the classes it inherits: what a `form!`
+/// `classes_plus:` entry becomes, applied on top of the app's [`Classes`] at
+/// the `Form` boundary.
+///
+/// Names a slot, then changes its base, its invalid class, or both, each by
+/// replacing or appending:
+///
+/// ```ignore
+/// ClassEdit::part(BuiltinWidget::Input(RenderedInputType::Text), "input")
+///     .replace_base("form-control")
+///     .append_invalid("is-invalid")
+/// ```
+///
+/// A piece the edit does not mention is left as it was. Opaque, so the slot
+/// key inside stays an implementation detail and every part name is checked.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassEdit {
+    key: SlotKey,
+    base: Option<Change>,
+    invalid: Option<Change>,
+}
+
+/// What an edit does to one piece of a slot.
+#[derive(Clone, Debug, PartialEq)]
+enum Change {
+    Replace(Cow<'static, str>),
+    /// Space-joined after what is there.
+    Append(Cow<'static, str>),
+}
+
+impl ClassEdit {
+    /// An edit of `widget`'s `part` slot, changing nothing until a
+    /// `replace_*`/`append_*` says what. Panics, listing the parts `widget`
+    /// has, if it has none called `part`, as [`Classes::with_part`] does.
+    pub fn part(widget: BuiltinWidget, part: &str) -> Self {
+        Self::of(SlotKey::Part(widget, Classes::part_name(widget, part)))
+    }
+
+    /// An edit of the slot for `key`, changing nothing until told what.
+    pub fn fixed(key: FixedKey) -> Self {
+        Self::of(SlotKey::Fixed(key))
+    }
+
+    fn of(key: SlotKey) -> Self {
+        Self {
+            key,
+            base: None,
+            invalid: None,
+        }
+    }
+
+    /// Make the slot's base `classes`.
+    pub fn replace_base(mut self, classes: impl Into<Cow<'static, str>>) -> Self {
+        self.base = Some(Change::Replace(classes.into()));
+        self
+    }
+
+    /// Add `classes` after the slot's base.
+    pub fn append_base(mut self, classes: impl Into<Cow<'static, str>>) -> Self {
+        self.base = Some(Change::Append(classes.into()));
+        self
+    }
+
+    /// Make the slot's invalid class `classes`; `""` removes it.
+    pub fn replace_invalid(mut self, classes: impl Into<Cow<'static, str>>) -> Self {
+        self.invalid = Some(Change::Replace(classes.into()));
+        self
+    }
+
+    /// Add `classes` after the slot's invalid class, or make them its invalid
+    /// class if it has none.
+    pub fn append_invalid(mut self, classes: impl Into<Cow<'static, str>>) -> Self {
+        self.invalid = Some(Change::Append(classes.into()));
+        self
+    }
+}
+
+impl Change {
+    /// `current` after this change. `None` in and out means "nothing there".
+    fn apply(&self, current: Option<&str>) -> Option<Cow<'static, str>> {
+        let result: Cow<'static, str> = match self {
+            Change::Replace(classes) => classes.clone(),
+            Change::Append(classes) => match current {
+                Some(current) if !current.is_empty() && !classes.is_empty() => {
+                    Cow::Owned(format!("{current} {classes}"))
+                }
+                Some(current) if classes.is_empty() => Cow::Owned(current.to_string()),
+                _ => classes.clone(),
+            },
+        };
+        (!result.is_empty()).then_some(result)
+    }
+}
 
 /// The classes one element gets: always `base`, plus `invalid` while its
 /// field has errors.
@@ -76,59 +170,11 @@ impl Slot {
     }
 }
 
-/// The elements no widget renders, each with a slot of its own. The value in
-/// each comment is what `Classes::fx()` gives it.
-///
-/// `#[non_exhaustive]` so a slot can be added without breaking a `match`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum FixedKey {
-    /// The `<form>`: `fx-form`.
-    Form,
-    /// The form's `<h2>` title: `fx-form-title`.
-    FormTitle,
-    /// The `<ul>` of form-level errors, from the spec's validator:
-    /// `fx-form-errors`.
-    FormErrors,
-    /// One `<li>` in it: `fx-form-error`.
-    FormError,
-    /// The `<ul>` of button problems: a button whose `fn` does not match how
-    /// it was declared. A programmer's mistake, not the user's, so it is
-    /// marked apart: `fx-form-errors fx-problems`.
-    ButtonProblems,
-    /// One `<li>` in it: `fx-form-error fx-problem`, so it styles like a
-    /// form error by default and `.fx-problem` reaches it alone.
-    ButtonProblem,
-    /// The `<div>` around the buttons: `fx-buttons`.
-    ButtonRow,
-    /// One button, by its type: `fx-button fx-button-{submit, reset,
-    /// cancel, destructive, action}`.
-    Button(ButtonType),
-    /// A list's add-row button: `fx-button fx-button-add-row`.
-    AddRowButton,
-    /// A row's remove button: `fx-button fx-button-remove-row`.
-    RemoveRowButton,
-    /// The `<fieldset>` around a nested struct: `fx-group fx-field-set`.
-    FieldSet,
-    /// Its `<legend>`: `fx-legend fx-field-label`.
-    FieldSetLegend,
-    /// The `<fieldset>` around a list: `fx-group fx-list-set`.
-    ListSet,
-    /// Its `<legend>`: `fx-legend fx-field-label`.
-    ListSetLegend,
-    /// The `<div>` around one row of a list: `fx-form-row`.
-    ListRow,
-    /// The `<fieldset>` around an enum field: `fx-group fx-variant-set`.
-    VariantSet,
-    /// Its `<legend>`: `fx-legend fx-field-label`.
-    VariantSetLegend,
-    /// The ` *` after a required field's caption: `fx-required`.
-    RequiredMarker,
-    /// The `<ul>` of one field's errors: `fx-field-errors`.
-    FieldErrors,
-    /// One `<li>` in it: `fx-field-error`.
-    FieldError,
-}
+/// The elements no widget renders, each with a slot of its own. Defined in
+/// `formoxus-spec`, so `form!` can check a `classes_plus:` name against it at
+/// compile time; re-exported here so `formoxus::classes::FixedKey` is its
+/// address.
+pub use formoxus_spec::FixedKey;
 
 /// Every class formoxus emits, one [`Slot`] per element: a part of a built-in
 /// widget, or a [`FixedKey`] for what no widget renders.
@@ -146,15 +192,6 @@ pub enum FixedKey {
 #[non_exhaustive]
 pub struct Classes {
     slots: IndexMap<SlotKey, Slot>,
-}
-
-/// Which element a slot is for. A part is keyed by the `&'static str` name
-/// from [`BuiltinWidget::parts`], never a caller's string, so a key always
-/// names a part that exists.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum SlotKey {
-    Part(BuiltinWidget, &'static str),
-    Fixed(FixedKey),
 }
 
 impl Classes {
@@ -206,7 +243,7 @@ impl Classes {
     }
 
     /// `part`, as the `&'static str` that `widget.parts()` names it by, which
-    /// is what a [`SlotKey`] holds. Panics, listing the parts `widget` has,
+    /// is what a `SlotKey` holds. Panics, listing the parts `widget` has,
     /// if it has none called `part`.
     fn part_name(widget: BuiltinWidget, part: &str) -> &'static str {
         widget.parts().iter().find(|p| p.name == part).map_or_else(
@@ -265,6 +302,22 @@ impl Classes {
     /// `Classes::fx().with_fixed(FixedKey::ButtonRow, Slot::new("actions"))`.
     pub fn with_fixed(mut self, slot: FixedKey, value: Slot) -> Self {
         self.slots.insert(SlotKey::Fixed(slot), value);
+        self
+    }
+
+    /// These classes with `edit` applied: the slot it names, starting from an
+    /// empty one if there is none, with its base and invalid class changed as
+    /// the edit says. How `Form::classes()` lays a form's `classes_plus:` over
+    /// what it inherits.
+    #[must_use]
+    pub fn with_edit(mut self, edit: &ClassEdit) -> Self {
+        let slot = self.slots.entry(edit.key).or_insert_with(|| Slot::new(""));
+        if let Some(change) = &edit.base {
+            slot.base = change.apply(Some(&slot.base)).unwrap_or(Cow::Borrowed(""));
+        }
+        if let Some(change) = &edit.invalid {
+            slot.invalid = change.apply(slot.invalid.as_deref());
+        }
         self
     }
 
@@ -402,7 +455,7 @@ fn fx_part(widget: BuiltinWidget, part: &str) -> Option<Slot> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Classes, FixedKey, Slot, SlotKey};
+    use super::{ClassEdit, Classes, FixedKey, Slot, SlotKey};
     use crate::buttons::ButtonType;
     use formoxus_spec::{BuiltinWidget, RenderedInputType};
     use googletest::prelude::*;
@@ -790,5 +843,120 @@ mod tests {
             Classes::fx().fixed_class(FixedKey::Form, false),
             some(eq("fx-form"))
         );
+    }
+
+    // ── ClassEdit ────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_class_edit_keys_its_part_by_the_parts_own_name_and_changes_nothing_yet() {
+        let edit = ClassEdit::part(BuiltinWidget::Select, "select");
+        expect_that!(edit.key, eq(SlotKey::Part(BuiltinWidget::Select, "select")));
+        expect_that!(edit.base, none());
+        expect_that!(edit.invalid, none());
+    }
+
+    #[gtest]
+    #[should_panic(expected = "unknown part `lable` for widget Select (it has div, label, select)")]
+    fn a_class_edit_panics_on_a_part_the_widget_lacks() {
+        let _ = ClassEdit::part(BuiltinWidget::Select, "lable");
+    }
+
+    fn select(classes: &Classes) -> Option<(&str, Option<&str>)> {
+        base_of(classes, SlotKey::Part(BuiltinWidget::Select, "select"))
+    }
+
+    fn edited(edit: &ClassEdit) -> Classes {
+        Classes::fx().with_edit(edit)
+    }
+
+    #[gtest]
+    fn replacing_the_base_keeps_the_invalid_class() {
+        let start = Classes::fx().with_part(
+            BuiltinWidget::Select,
+            "select",
+            Slot::new("a").with_invalid("bad"),
+        );
+        let classes = start.with_edit(
+            &ClassEdit::part(BuiltinWidget::Select, "select").replace_base("form-select"),
+        );
+        expect_that!(select(&classes), eq(Some(("form-select", Some("bad")))));
+    }
+
+    #[gtest]
+    fn appending_to_the_base_joins_with_a_space() {
+        let classes = edited(&ClassEdit::part(BuiltinWidget::Select, "select").append_base("mine"));
+        expect_that!(
+            select(&classes),
+            eq(Some(("fx-control fx-select mine", None)))
+        );
+    }
+
+    /// An invalid-only edit is how Bootstrap's `is-invalid` gets onto an
+    /// input without restating the input's base.
+    #[gtest]
+    fn an_invalid_only_edit_leaves_the_base_alone() {
+        let classes =
+            edited(&ClassEdit::part(BuiltinWidget::Select, "select").append_invalid("is-invalid"));
+        expect_that!(
+            select(&classes),
+            eq(Some(("fx-control fx-select", Some("is-invalid"))))
+        );
+    }
+
+    #[gtest]
+    fn each_piece_may_be_replaced_or_appended_independently() {
+        let wrapper = SlotKey::Part(BuiltinWidget::Select, "div");
+        let classes = edited(
+            &ClassEdit::part(BuiltinWidget::Select, "div")
+                .replace_base("mb-3")
+                .append_invalid("has-error"),
+        );
+        expect_that!(
+            base_of(&classes, wrapper),
+            eq(Some(("mb-3", Some("fx-invalid has-error"))))
+        );
+    }
+
+    #[gtest]
+    fn replacing_the_invalid_class_with_nothing_removes_it() {
+        let wrapper = SlotKey::Part(BuiltinWidget::Select, "div");
+        let classes = edited(&ClassEdit::part(BuiltinWidget::Select, "div").replace_invalid(""));
+        expect_that!(
+            base_of(&classes, wrapper),
+            eq(Some(("fx-form-field", None)))
+        );
+    }
+
+    /// On `bare()` there is nothing to append to, so the edit's classes are
+    /// all there is.
+    #[gtest]
+    fn an_edit_of_an_absent_slot_starts_from_an_empty_one() {
+        let classes = Classes::bare().with_edit(
+            &ClassEdit::fixed(FixedKey::ButtonRow)
+                .append_base("actions")
+                .append_invalid("x"),
+        );
+        expect_that!(
+            base_of(&classes, SlotKey::Fixed(FixedKey::ButtonRow)),
+            eq(Some(("actions", Some("x"))))
+        );
+    }
+
+    #[gtest]
+    fn edits_apply_in_order() {
+        let classes = Classes::fx()
+            .with_edit(&ClassEdit::fixed(FixedKey::Form).replace_base("a"))
+            .with_edit(&ClassEdit::fixed(FixedKey::Form).append_base("b"))
+            .with_edit(&ClassEdit::fixed(FixedKey::Form).replace_base("c"));
+        expect_that!(
+            base_of(&classes, SlotKey::Fixed(FixedKey::Form)),
+            eq(Some(("c", None)))
+        );
+    }
+
+    #[gtest]
+    fn an_edit_that_changes_nothing_leaves_the_classes_as_they_were() {
+        let classes = edited(&ClassEdit::fixed(FixedKey::Form));
+        expect_that!(classes, eq(&Classes::fx()));
     }
 }

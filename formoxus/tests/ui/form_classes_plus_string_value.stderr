@@ -1,0 +1,5 @@
+error: expected `[classes]`, `+ [classes]`, or `{ base: …, invalid: … }`
+  --> tests/ui/form_classes_plus_string_value.rs:14:32
+   |
+14 |                 select.select: "form-select",
+   |                                ^^^^^^^^^^^^^

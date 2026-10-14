@@ -1,0 +1,5 @@
+error: `file` is not supported yet — nothing renders it, so it has no classes
+  --> tests/ui/form_classes_plus_widget_not_rendered.rs:14:17
+   |
+14 |                 file.input: [upload],
+   |                 ^^^^

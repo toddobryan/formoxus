@@ -46,8 +46,20 @@
 //! tried and abandoned — lives in `.claude/memory/`, starting from its
 //! `MEMORY.md` index.
 
+/// The HTML facts `formoxus-spec` holds, which `form!` and a hand-built
+/// `FormSpec` name: the attribute table, the elements and input types, and the
+/// built-in widgets.
+///
+/// An explicit list, not a glob of `formoxus_spec::*`, so a type added there
+/// is public here only when someone decides it should be. `SlotKey` is the one
+/// deliberately left out (it keys `Classes`, which a consumer edits through
+/// its builders), and the button types and `FixedKey` live at their own homes,
+/// `formoxus::buttons` and `formoxus::classes`.
 pub mod attrs {
-    pub use formoxus_spec::*;
+    pub use formoxus_spec::{
+        Attr, AttrKey, AttrType, AttrValue, Bound, BuiltinWidget, Element, FieldControl, FieldType,
+        FieldTypeWithOptional, InputType, Owner, Part, RenderedInputType,
+    };
 }
 
 pub mod build;

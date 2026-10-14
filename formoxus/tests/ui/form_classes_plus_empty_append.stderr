@@ -1,0 +1,5 @@
+error: `+ []` appends nothing — drop the `+` to clear instead
+  --> tests/ui/form_classes_plus_empty_append.rs:14:31
+   |
+14 |                 button_row: + [],
+   |                               ^^

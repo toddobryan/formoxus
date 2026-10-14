@@ -70,73 +70,29 @@ impl ButtonSpec {
     }
 }
 
-/// Mirrors the five names `form!` accepts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ButtonType {
-    Submit,
-    Reset,
-    Cancel,
-    Destructive,
-    /// Acts on the model like `Submit` — a preview, a save-draft — but renders
-    /// as `type="button"` so it does not submit the form out from under its own
-    /// handler. Named `Button` until 2026-09-29, which collided with the element
-    /// name and made its class read `fx-button-button`.
-    Action,
-}
+/// Defined in `formoxus-spec`, so `form!` parses the same names it expands to;
+/// re-exported here so `formoxus::buttons::{ButtonType, Invocation}` is still
+/// their address.
+pub use formoxus_spec::{ButtonType, Invocation};
 
-impl ButtonType {
-    /// The `type` attribute. Only `submit` and `reset` have native behaviour
-    /// worth keeping; everything else is an ordinary `button` so that clicking
-    /// it does not submit the form out from under its own handler.
-    pub fn html_type(&self) -> &'static str {
-        match self {
-            ButtonType::Submit => "submit",
-            ButtonType::Reset => "reset",
-            ButtonType::Cancel | ButtonType::Destructive | ButtonType::Action => "button",
-        }
+/// The classes a button of type `ty` carries: the shared `fx-button`, plus one
+/// naming its type. A function rather than `ButtonType::classes()` now that
+/// the type lives in `formoxus-spec`, and only until P3-7 makes these a
+/// `Classes` lookup.
+///
+/// An earlier version emitted bare `primary`, `danger`, `secondary` and
+/// `outline danger` — Pico CSS's vocabulary, which matched no other
+/// framework, was styled by nothing formoxus shipped, and collided with any
+/// consumer rule naming an unqualified adjective. `fx-button-destructive` says
+/// the same thing without claiming a name it does not own.
+pub(crate) fn button_classes(ty: ButtonType) -> &'static str {
+    match ty {
+        ButtonType::Submit => "fx-button fx-button-submit",
+        ButtonType::Reset => "fx-button fx-button-reset",
+        ButtonType::Cancel => "fx-button fx-button-cancel",
+        ButtonType::Destructive => "fx-button fx-button-destructive",
+        ButtonType::Action => "fx-button fx-button-action",
     }
-
-    /// The classes this button carries: the shared `fx-button`, plus one naming
-    /// its type.
-    ///
-    /// **Nothing overrides these**, which is why they are structural rather than
-    /// presentational. An earlier version emitted bare `primary`, `danger`,
-    /// `secondary` and `outline danger` — Pico CSS's vocabulary, which matched no
-    /// other framework, was styled by nothing formoxus shipped, and collided with
-    /// any consumer rule naming an unqualified adjective. `fx-button-destructive`
-    /// says the same thing without claiming a name it does not own.
-    pub fn classes(&self) -> &'static str {
-        match self {
-            ButtonType::Submit => "fx-button fx-button-submit",
-            ButtonType::Reset => "fx-button fx-button-reset",
-            ButtonType::Cancel => "fx-button fx-button-cancel",
-            ButtonType::Destructive => "fx-button fx-button-destructive",
-            ButtonType::Action => "fx-button fx-button-action",
-        }
-    }
-
-    /// `Submit` and `Action` act ON the model (a save, a preview), so they want
-    /// it validated. `Cancel`, `Reset` and `Destructive` are escape hatches
-    /// that have to work on an invalid form — validating first would trap the
-    /// user in it.
-    pub fn default_invocation(&self) -> Invocation {
-        match self {
-            ButtonType::Submit | ButtonType::Action => Invocation::IfModelValidates,
-            ButtonType::Cancel | ButtonType::Reset | ButtonType::Destructive => {
-                Invocation::Unconditional
-            }
-        }
-    }
-}
-
-/// Whether the model must pass validation before the handler is reached.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Invocation {
-    /// Validate first; the handler receives the model and never runs if it
-    /// fails.
-    IfModelValidates,
-    /// Run regardless, with no model.
-    Unconditional,
 }
 
 /// What a button does, supplied at the render call site.

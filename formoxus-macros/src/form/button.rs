@@ -1,12 +1,9 @@
 //! `buttons: { … }` — the button vocabulary, and what one button declares.
 
+use formoxus_spec::{ButtonType, Invocation};
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
-use syn::{
-    Ident, Result, Token, braced,
-    ext::IdentExt,
-    parse::{Parse, ParseStream},
-};
+use quote::{format_ident, quote};
+use syn::{Ident, Result, Token, braced, ext::IdentExt, parse::ParseStream};
 
 use super::suggest::{edit_distance, to_snake};
 
@@ -26,10 +23,10 @@ impl ButtonInfo {
     /// on, which is the whole reason handlers are reconciled at runtime.
     pub(crate) fn spec_tokens(&self) -> TokenStream2 {
         let name = self.name.to_string();
-        let ty = self.ty.tokens();
+        let ty = button_type_tokens(self.ty);
         let text = self.text.as_ref().map(|t| quote! { .with_text(#t) });
-        let invocation = self.invocation.as_ref().map(|i| {
-            let i = i.tokens();
+        let invocation = self.invocation.map(|i| {
+            let i = invocation_tokens(i);
             quote! { .with_invocation(#i) }
         });
         quote! {
@@ -61,7 +58,7 @@ impl ButtonInfo {
                 "type" if ty.is_some() => {
                     return Err(syn::Error::new_spanned(&key, "duplicate type"));
                 }
-                "type" => ty = Some(body.parse()?),
+                "type" => ty = Some(parse_button_type(&body)?),
                 "text" if text.is_some() => {
                     return Err(syn::Error::new_spanned(&key, "duplicate text"));
                 }
@@ -70,7 +67,7 @@ impl ButtonInfo {
                 "invocation" if invocation.is_some() => {
                     return Err(syn::Error::new_spanned(&key, "duplicate invocation"));
                 }
-                "invocation" => invocation = Some(body.parse()?),
+                "invocation" => invocation = Some(parse_invocation(&body)?),
                 other => {
                     return Err(syn::Error::new_spanned(
                         &key,
@@ -91,7 +88,7 @@ impl ButtonInfo {
                 braces.span.join(),
                 format!(
                     "`{name}` needs a `type` — one of {}",
-                    BUTTON_TYPE_NAMES.join(", ")
+                    button_type_names().join(", ")
                 ),
             ));
         };
@@ -104,113 +101,64 @@ impl ButtonInfo {
     }
 }
 
-/// When the button's handler runs, overriding what its type implies.
+/// `invocation: …`, overriding what the button's type implies. The names are
+/// `Invocation::form_name`'s, in `formoxus-spec`.
+fn parse_invocation(input: ParseStream<'_>) -> Result<Invocation> {
+    let name: Ident = input.parse()?;
+    Invocation::from_form_name(&name.to_string()).ok_or_else(|| {
+        let expected: Vec<&str> = Invocation::ALL.iter().map(Invocation::form_name).collect();
+        syn::Error::new(
+            name.span(),
+            format!(
+                "unknown invocation `{name}` — expected {}",
+                expected.join(" or ")
+            ),
+        )
+    })
+}
+
+/// `invocation`, as `::formoxus::buttons::Invocation::…`. The variant ident
+/// comes from `Debug`, which for a unit variant is exactly its name.
+fn invocation_tokens(invocation: Invocation) -> TokenStream2 {
+    let variant = format_ident!("{invocation:?}");
+    quote! { ::formoxus::buttons::Invocation::#variant }
+}
+
+/// `type: …`, by `ButtonType::form_name`, in `formoxus-spec`, so the names
+/// the macro accepts and the variants it expands to are one table.
 ///
-/// Spelled `invocation` rather than `handler: validated | unchecked`, which was
-/// the obvious alternative: `validated` names the *handler*, and what is
-/// actually being chosen is whether the model has to pass validation before the
-/// handler is reached at all.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Invocation {
-    IfModelValidates,
-    Unconditional,
+/// Free functions rather than `impl Parse for ButtonType`: the orphan rule
+/// forbids implementing `syn`'s trait for `formoxus-spec`'s type here.
+fn parse_button_type(input: ParseStream<'_>) -> Result<ButtonType> {
+    let name: Ident = input.parse()?;
+    ButtonType::from_form_name(&name.to_string())
+        .ok_or_else(|| syn::Error::new(name.span(), unknown_button_type(&name)))
 }
 
-impl Invocation {
-    fn tokens(&self) -> TokenStream2 {
-        let variant = match self {
-            Invocation::IfModelValidates => quote!(IfModelValidates),
-            Invocation::Unconditional => quote!(Unconditional),
-        };
-        quote! { ::formoxus::buttons::Invocation::#variant }
-    }
+/// `ty`, as `::formoxus::buttons::ButtonType::…`, by its `Debug` name as
+/// [`invocation_tokens`] does.
+fn button_type_tokens(ty: ButtonType) -> TokenStream2 {
+    let variant = format_ident!("{ty:?}");
+    quote! { ::formoxus::buttons::ButtonType::#variant }
 }
 
-impl Parse for Invocation {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let name: Ident = input.parse()?;
-        match name.to_string().as_str() {
-            "if_model_validates" => Ok(Invocation::IfModelValidates),
-            "unconditional" => Ok(Invocation::Unconditional),
-            other => Err(syn::Error::new(
-                name.span(),
-                format!(
-                    "unknown invocation `{other}` — expected if_model_validates or unconditional"
-                ),
-            )),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum ButtonType {
-    Destructive,
-    Reset,
-    Cancel,
-    Action,
-    Submit,
-}
-
-/// The author-facing button-type vocabulary, with the reasoning widget names
-/// have (`BuiltinWidget::ALL`): one table generates both the parse and the
-/// list the error message reads from, so the two cannot drift apart.
-///
-/// Lowercase for the same reason widget names are — two of these five are
-/// literally the HTML `type` attribute, and the author is writing HTML's word.
-///
-/// `action` is deliberately NOT HTML's `button`. It renders as
-/// `type="button"`, but naming it that would have meant an author writing
-/// `button` and getting a class spelled `fx-button-action` — a mapping you
-/// would have to know rather than read. The keyword, the variant and the class
-/// now all say `action`.
-macro_rules! button_types {
-    ( $( $name:ident => $variant:ident ),* $(,)? ) => {
-        impl Parse for ButtonType {
-            fn parse(input: ParseStream<'_>) -> Result<Self> {
-                let name: Ident = input.parse()?;
-                match name.to_string().as_str() {
-                    $( stringify!($name) => Ok(ButtonType::$variant), )*
-                    _ => Err(syn::Error::new(name.span(), unknown_button_type(&name))),
-                }
-            }
-        }
-
-        impl ButtonType {
-            /// The `ButtonType` variant this names, fully qualified. Generated
-            /// from the same table as the parse, so a new type cannot be
-            /// accepted and then fail to expand.
-            fn tokens(&self) -> TokenStream2 {
-                match self {
-                    $( ButtonType::$variant => quote! {
-                        ::formoxus::buttons::ButtonType::$variant
-                    }, )*
-                }
-            }
-        }
-
-        const BUTTON_TYPE_NAMES: &[&str] = &[ $( stringify!($name) ),* ];
-    };
-}
-
-button_types! {
-    submit      => Submit,
-    reset       => Reset,
-    cancel      => Cancel,
-    destructive => Destructive,
-    action      => Action,
+/// Every `type:` keyword, in `ButtonType::ALL`'s order, for messages.
+fn button_type_names() -> Vec<&'static str> {
+    ButtonType::ALL.iter().map(ButtonType::form_name).collect()
 }
 
 /// The message for a button type that is not in the table — the same three
 /// cases, in the same order, as [`unknown_widget`].
-fn unknown_button_type(name: &Ident) -> String {
+pub(crate) fn unknown_button_type(name: &Ident) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
-    if lowered != written && BUTTON_TYPE_NAMES.contains(&lowered.as_str()) {
+    let names = button_type_names();
+    if lowered != written && names.contains(&lowered.as_str()) {
         return format!(
             "unknown button type `{written}` — type names are lowercase, write `{lowered}`"
         );
     }
-    match BUTTON_TYPE_NAMES
+    match names
         .iter()
         .filter(|n| edit_distance(&lowered, n) <= 2)
         .min_by_key(|n| edit_distance(&lowered, n))
@@ -218,7 +166,7 @@ fn unknown_button_type(name: &Ident) -> String {
         Some(near) => format!("unknown button type `{written}` — did you mean `{near}`?"),
         None => format!(
             "unknown button type `{written}` — expected one of {}",
-            BUTTON_TYPE_NAMES.join(", ")
+            names.join(", ")
         ),
     }
 }
@@ -353,7 +301,7 @@ mod tests {
         let Entry::Buttons(bs) = &spec.entries[0] else {
             panic!("expected a buttons entry");
         };
-        expect_that!(bs[0].invocation, some(eq(&Invocation::IfModelValidates)));
+        expect_that!(bs[0].invocation, some(eq(Invocation::IfModelValidates)));
     }
 
     #[gtest]

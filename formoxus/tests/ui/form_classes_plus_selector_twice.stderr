@@ -1,0 +1,5 @@
+error: `select.select` is given twice — merge the two entries into one
+  --> tests/ui/form_classes_plus_selector_twice.rs:15:17
+   |
+15 |                 select.select: + [b],
+   |                 ^^^^^^^^^^^^^

@@ -31,7 +31,7 @@ fn widget_names() -> impl Iterator<Item = &'static str> {
 ///
 /// The variant idents come from `Debug`, which for a unit variant is exactly
 /// its name; `formoxus-spec` tests the same about `RenderedInputType`.
-fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
+pub(crate) fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
     match widget {
         BuiltinWidget::Input(input_type) => {
             let input_type = rendered_input_ident(input_type);
@@ -240,7 +240,7 @@ impl Parse for WidgetKind {
 
         let name: Ident = input.parse()?;
         let Some(widget) = BuiltinWidget::from_form_name(&name.to_string()) else {
-            return Err(syn::Error::new(name.span(), unknown_widget(&name)));
+            return Err(syn::Error::new(name.span(), unknown_widget(&name, true)));
         };
         if !widget.is_rendered() {
             return Err(syn::Error::new(
@@ -326,7 +326,11 @@ fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<
 /// Three cases, in order of how likely the author is to have meant them: a name
 /// that IS in the table under a different case (`Password`, `DatetimeLocal` — the
 /// old `WidgetType`-shaped spelling), a near miss, and no idea.
-fn unknown_widget(name: &Ident) -> String {
+///
+/// `custom` is whether `custom(MyWidget)` is an option where the name was
+/// written: after `widget:` it is, in a `classes_plus:` selector it is not (a
+/// custom widget has no class slots).
+pub(crate) fn unknown_widget(name: &Ident, custom: bool) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
     if lowered != written && BuiltinWidget::from_form_name(&lowered).is_some() {
@@ -340,8 +344,13 @@ fn unknown_widget(name: &Ident) -> String {
     {
         Some(near) => format!("unknown widget `{written}` — did you mean `{near}`?"),
         None => format!(
-            "unknown widget `{written}` — expected one of {}, or `custom(MyWidget)`",
-            widget_names().collect::<Vec<_>>().join(", ")
+            "unknown widget `{written}` — expected one of {}{}",
+            widget_names().collect::<Vec<_>>().join(", "),
+            if custom {
+                ", or `custom(MyWidget)`"
+            } else {
+                ""
+            }
         ),
     }
 }

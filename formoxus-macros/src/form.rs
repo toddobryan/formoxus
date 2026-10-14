@@ -4,12 +4,14 @@
 //! submodule owns one nested grammar and the errors that grammar can raise.
 
 mod button;
+mod classes;
 mod field;
 mod spec_path;
 mod suggest;
 mod widget;
 
 pub(crate) use button::ButtonInfo;
+pub(crate) use classes::ClassEntry;
 pub(crate) use field::{FieldBody, FieldSpec};
 pub(crate) use spec_path::{SpecPath, probe, project};
 pub(crate) use widget::WidgetRef;
@@ -64,6 +66,8 @@ mod kw {
     syn::custom_keyword!(title);
     syn::custom_keyword!(validator);
     syn::custom_keyword!(buttons);
+    syn::custom_keyword!(classes);
+    syn::custom_keyword!(classes_plus);
 }
 
 #[derive(Debug)]
@@ -78,6 +82,8 @@ struct FormSpecMeta {
     title: Option<Expr>,
     use_browser_validation: Option<bool>,
     label_case: Option<Ident>,
+    classes: Option<Expr>,
+    classes_plus: Vec<ClassEntry>,
     validator: Option<Expr>,
     buttons: Vec<ButtonInfo>,
     field_specs: Vec<FieldSpec>,
@@ -90,6 +96,8 @@ impl FormSpecMeta {
             title: None,
             use_browser_validation: None,
             label_case: None,
+            classes: None,
+            classes_plus: Vec::new(),
             validator: None,
             buttons: Vec::new(),
             field_specs: Vec::new(),
@@ -105,6 +113,8 @@ impl FormSpecInput {
                 Entry::Title(expr) => fsm.title = Some(expr),
                 Entry::BrowserValidation(value) => fsm.use_browser_validation = Some(value),
                 Entry::LabelCase(ident) => fsm.label_case = Some(ident),
+                Entry::Classes(expr) => fsm.classes = Some(expr),
+                Entry::ClassesPlus(entries) => fsm.classes_plus = entries,
                 Entry::Validator(expr) => fsm.validator = Some(expr),
                 // The whole body, not field by field: adding a key should touch
                 // `FieldBody` and nothing else.
@@ -131,6 +141,9 @@ impl FormSpecInput {
                 .with_use_browser_validation(#ubv)
             }
         });
+        let classes: Option<TokenStream2> = fsm.classes.map(|c| quote! { .with_classes(#c) });
+        let classes_plus: Vec<TokenStream2> =
+            fsm.classes_plus.iter().map(ClassEntry::tokens).collect();
         let validator: Option<TokenStream2> = fsm.validator.map(|v| {
             quote! {
                 .with_validator(#v)
@@ -194,6 +207,8 @@ impl FormSpecInput {
                 #title
                 #label_case
                 #use_browser_validation
+                #classes
+                #(#classes_plus)*
                 #validator
                 #buttons
                 #(#fields)*
@@ -208,6 +223,8 @@ struct FormAttribute {
     title: bool,
     browser_validation: bool,
     label_case: bool,
+    classes: bool,
+    classes_plus: bool,
     validator: bool,
     buttons: bool,
     fields: HashSet<String>,
@@ -236,6 +253,8 @@ impl FormAttribute {
             Entry::Title(_) => self.title,
             Entry::LabelCase(_) => self.label_case,
             Entry::BrowserValidation(_) => self.browser_validation,
+            Entry::Classes(_) => self.classes,
+            Entry::ClassesPlus(_) => self.classes_plus,
             Entry::Validator(_) => self.validator,
             Entry::Buttons(_) => self.buttons,
             Entry::Field { path, .. } => {
@@ -248,6 +267,8 @@ impl FormAttribute {
                 Entry::Title(_) => self.title = true,
                 Entry::LabelCase(_) => self.label_case = true,
                 Entry::BrowserValidation(_) => self.browser_validation = true,
+                Entry::Classes(_) => self.classes = true,
+                Entry::ClassesPlus(_) => self.classes_plus = true,
                 Entry::Validator(_) => self.validator = true,
                 Entry::Buttons(_) => self.buttons = true,
                 Entry::Field { path, .. } => {
@@ -283,6 +304,8 @@ pub(crate) enum Entry {
     /// The resolved `LabelCase` variant, already looked up — a bad string is a
     /// parse error, so nothing downstream has to handle one.
     LabelCase(Ident),
+    Classes(Expr),
+    ClassesPlus(Vec<ClassEntry>),
     Validator(Expr),
     /// **Boxed.** `FieldBody` carries up to three `syn::Expr`s, each of which is
     /// ~168 bytes, so inlining it here would make every `Entry` — including a
@@ -343,6 +366,15 @@ impl Entry {
         } else {
             Err(input.error("It should be impossible to get here"))
         }
+    }
+
+    /// `classes: EXPR` — any expression that is a `Classes`, replacing the
+    /// app's whole: `Classes::bare()`, or an app's own `my_classes()`.
+    fn parse_classes(input: ParseStream<'_>) -> Result<Self> {
+        let _classes: kw::classes = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        let expr: Expr = input.parse()?;
+        Ok(Entry::Classes(expr))
     }
 
     fn parse_validator(input: ParseStream<'_>) -> Result<Self> {
@@ -414,6 +446,8 @@ impl Entry {
             Entry::Title(_) => "title",
             Entry::BrowserValidation(_) => "browser_validation",
             Entry::LabelCase(_) => "label_case",
+            Entry::Classes(_) => "classes",
+            Entry::ClassesPlus(_) => "classes_plus",
             Entry::Validator(_) => "validator",
             Entry::Field { path, .. } => &path.key(),
             Entry::Buttons(_) => "buttons",
@@ -434,8 +468,14 @@ impl Parse for Entry {
             Entry::parse_validator(input)
         } else if attribute(input, kw::buttons) {
             Entry::parse_buttons(input)
+        // `classes` and `classes_plus` are separate keywords, and a
+        // `custom_keyword!` matches a whole ident, so neither claims the other.
+        } else if attribute(input, kw::classes) {
+            Entry::parse_classes(input)
+        } else if attribute(input, kw::classes_plus) {
+            classes::parse_classes_plus(input)
         // `peek_any`, not `peek(Ident)`: a field may be named with a Rust
-        // keyword (`r#type`), and a bare keyword is not an `Ident`. The five
+        // keyword (`r#type`), and a bare keyword is not an `Ident`. The
         // guards above have already had their say, and each of them needs a
         // following `:`, so nothing an author writes as a field can be
         // swallowed here.
@@ -488,6 +528,8 @@ pub(crate) mod tests {
                 Entry::Title(_) => "title",
                 Entry::BrowserValidation(_) => "browser_validation",
                 Entry::LabelCase(_) => "label_case",
+                Entry::Classes(_) => "classes",
+                Entry::ClassesPlus(_) => "classes_plus",
                 Entry::Validator(_) => "validator",
                 Entry::Field { .. } => "field",
                 Entry::Buttons(_) => "buttons",
@@ -732,6 +774,34 @@ pub(crate) mod tests {
         })
         .expect("fields named after the other two attributes should parse too");
         expect_that!(kinds(&spec), elements_are![eq(&"field"), eq(&"field")]);
+    }
+
+    #[gtest]
+    fn a_field_may_be_named_classes_or_classes_plus() {
+        let spec = parse(quote! {
+            Styled {
+                classes => { label: "Classes" },
+                classes_plus => { widget: textarea },
+            }
+        })
+        .expect("fields named after the class attributes should parse as fields");
+        expect_that!(kinds(&spec), elements_are![eq(&"field"), eq(&"field")]);
+    }
+
+    #[gtest]
+    fn classes_takes_an_expression() {
+        let spec = parse(quote! { Styled { classes: ::formoxus::Classes::bare() } })
+            .expect("`classes:` takes any expression");
+        expect_that!(kinds(&spec), elements_are![eq(&"classes")]);
+    }
+
+    /// `classes` must not claim `classes_plus`: a `custom_keyword!` matches a
+    /// whole ident.
+    #[gtest]
+    fn classes_plus_is_its_own_attribute() {
+        let spec = parse(quote! { Styled { classes_plus: { button_row: [actions] } } })
+            .expect("`classes_plus:` parses as its own attribute");
+        expect_that!(kinds(&spec), elements_are![eq(&"classes_plus")]);
     }
 
     #[gtest]

@@ -9,7 +9,6 @@ use std::{fmt::Debug, marker::PhantomData};
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
 
-use crate::ValidationError;
 use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
@@ -17,6 +16,7 @@ use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, ValuesByPath, no_such_path, owns};
+use crate::{Classes, ValidationError};
 
 use super::FormSpec;
 
@@ -64,6 +64,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// resolving it cannot happen here.
     pub fn use_browser_validation(&self) -> Option<bool> {
         self.spec.use_browser_validation
+    }
+
+    pub fn classes(&self) -> Option<Classes> {
+        self.spec.classes.clone()
+    }
+
+    /// The form's `classes_plus:` edits, in source order. Applied by
+    /// [`crate::Form::classes`] over whatever the form starts from.
+    pub fn class_edits(&self) -> &[crate::classes::ClassEdit] {
+        &self.spec.edits
     }
 
     pub fn title(&self) -> Option<String> {

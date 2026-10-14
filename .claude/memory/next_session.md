@@ -5,6 +5,29 @@ metadata:
   type: project
 ---
 
+**2026-10-14, END — GREEN, PUSHED: P3-4b AND P3-5 DONE (`classes:`/`classes_plus:` in `form!`).**
+Walkthrough steps 1–7 all done (parser + expansion in
+`formoxus-macros/src/form/classes.rs`, 8 `form_classes_plus_*` goldens, 6
+cascade tests in `tests/suite/classes.rs`). `Form::classes()` resolves the
+cascade, but NOTHING RENDERS THROUGH IT YET. **Next: P3-6 (Todd, starting):
+`Rc<Classes>` on `RenderCtx`; then P3-7 replaces the literals, snapshot-guarded.**
+Todd likes to see the diff after each step of a multi-step change.
+
+EARLIER THE SAME DAY: **2026-10-14, LATE — UNCOMMITTED, BUILDS: `classes_plus:` GRAMMAR IN PROGRESS, STEP BY STEP.**
+Todd asked to see the diff after EACH step of the walkthrough (stop and wait).
+Done since `c07fccf`: P3-4b (`ButtonType`/`Invocation`/`FixedKey`/`SlotKey` in
+formoxus-spec; `formoxus::attrs` an explicit list WITHOUT `SlotKey`);
+`ClassEdit` = `{ key, base: Option<Change>, invalid: Option<Change> }` built
+`ClassEdit::part(w, p).replace_base(…).append_invalid(…)`; `Classes::with_edit`;
+`Form::classes()` folds `FormState::class_edits()`. Todd wired `Entry::Classes`/
+`ClassesPlus` + `FormSpecMeta`. Grammar DECIDED: values use field-level list
+syntax `[a, "b"]`; `+` is PER PIECE (`{ base: [x], invalid: + [y] }`); short
+form touches base only; `+ []` refused, `[]` clears; not-yet widget parts
+refused. Walkthrough steps: 1 `class_list` shared (DONE), 2 keywords+dispatch
+(DONE; `parse_classes_plus` is a placeholder error), **3 `parse_slot_key`
+NEXT**, 4 value, 5 block (+ `ClassEntry` reshaped: `append` goes), 6 expansion
+(also emit `.with_classes`), 7 tests + goldens + suite.
+
 **2026-10-14 — GREEN, UNCOMMITTED: P3 DECISIONS DONE, P3-1 AND P3-2 DONE, P3-3 FLESHED OUT.**
 P3-c..h all decided as proposed (part typo PANICS). P3-1: `widgets/label.rs`
 holds the only `field_label`/`required_marker`. P3-2: `tests/suite/snapshot.rs`
@@ -16,8 +39,14 @@ LATER 2026-10-14 (uncommitted): P3-3 and P3-4 DONE: `classes.rs` has `Slot`,
 `Classes` (private `IndexMap<SlotKey, Slot>`), `fx()`/`bare()`/`Default`, the
 builders, the lookups; 23 unit tests + `tests/suite/classes.rs`. Todd also
 made the problem `<li>` `fx-form-error fx-problem` (snapshot regenerated).
-NOTHING renders through `Classes` yet. **Next: P3-5 cascade (Todd), P3-6
-threading `Rc<Classes>` through `RenderCtx` (Todd), P3-7 call sites.**
+NOTHING renders through `Classes` yet. PUSHED `c07fccf`.
+THEN P3-f REVERSED (Todd): a form LAYERS on the app's classes with
+`classes_plus: { widget.part: "…", fixed_key: "…", x: + "append" }`,
+compile-checked; `classes: EXPR` still replaces whole; both allowed, in that
+order. So `ButtonType`, `Invocation`, `FixedKey` move to `formoxus-spec`
+(P3-4b, who-does-it open). **Next: P3-4b, P3-5 cascade (reshaped: `FormSpec`
+holds `Option<Classes>` + ordered `ClassEdit`s), P3-6 `Rc<Classes>` on
+`RenderCtx`, P3-7 call sites.**
 
 **2026-10-13 (home) — GREEN, PUSHED; P2's `BuiltinWidget` BOX AND ITS TESTS DONE.**
 `formoxus-spec/src/widgets.rs`: `BuiltinWidget` (enum; `ALL`, `from_form_name`
