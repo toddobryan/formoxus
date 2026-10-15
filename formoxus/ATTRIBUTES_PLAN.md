@@ -1369,6 +1369,9 @@ failure the compile-time checks exist to prevent.
   for `<label>`/`<legend>` (rename `FieldControl`?). D1 dissolves; D4 becomes
   per part. The checklist below is still written for one control per field
   and gets rewritten once A–D are settled.
+  **2026-10-15:** settle A as a per-widget PRIMARY part, so a later
+  multi-control widget (MultiWidget; see "Still kept out" in the design
+  note, revisited that day) needs no new rule.
 - **D1. `RadioGroup`'s control.** Its spread lands on the `<fieldset>`, so
   `Fieldset`, as `FieldControl`'s doc says. But `required_true` is
   `true_and_on(Select | Input(Radio))`, so with `Fieldset` a required-true

@@ -297,6 +297,38 @@ base class, which answers open (c) above.
 1. **Value decomposition**, `MultiWidget`'s actual job: one value spread over
    several inputs with their own names (a date as day/month/year), with
    Django's `decompress`. Parts never change what submits.
+
+   **Revisited 2026-10-15 (Todd raised it; still kept out of Step 4, but
+   Step 4 must not rule it out).** Todd's motivating case was a
+   `QuestionWidget` for a multiple-choice question, as a teacher writes it
+   and as a student answers it. Worked through, neither half is a
+   MultiWidget:
+   - *Teacher authoring* is a struct (`prompt`, `choices: Vec<String>`,
+     `correct`), which reflection already renders as a `FieldSet` holding a
+     `ListSet`. The gap is custom LAYOUT for a composite member (e.g. a radio
+     beside each choice to mark the correct one), i.e. a custom renderer for
+     a struct/list member, plausibly the same trait as custom widgets.
+   - *Student answering* submits ONE value. The question and options are
+     display data: a `RadioGroup` with run-time choices
+     (`FormSpec::with_choices` already takes any iterator) plus somewhere to
+     show the prompt.
+   The real MultiWidget cases are one value over several form controls:
+   split date and time (Django's `SplitDateTimeWidget`), date as three
+   selects (`SelectDateWidget`), money as amount + currency, duration as
+   h/m/s, a min/max range, lat/long.
+   **Attributes are not the hard part:** D0's parts already allow N form
+   controls (`RadioGroup` has one `<input>` per choice), so a multi-part
+   widget is the same per-part addressing. What Step 4 should do is settle
+   A below as a per-widget PRIMARY part that unaddressed keys go to, which a
+   multi-control widget can name too. **Values are the hard part:**
+   `ValuesStore` is one raw string per path, and the server matches a
+   submitted `name` to that path, so a multi-part value needs sub-paths
+   (`when.date`, `when.time`, combined at parse) or one packed string:
+   Django's `decompress`/`value_from_datadict` pair. That touches
+   `ValuesStore`, `distribute_form_values` and the wire format.
+   Plan agreed: build it only for a real consumer, starting from ONE
+   concrete widget (split date-time or money), not a general framework.
+   Todd "having trouble thinking of examples" is the signal to wait.
 2. **Per-choice attributes** ("this one radio is disabled"). They belong with
    `Choice` ([[chooser-ideas]] already has per-choice hint text); a part's
    attributes go on every instance.
