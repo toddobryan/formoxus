@@ -270,12 +270,27 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.buttons()
     }
 
+    /// The title, as a `div` the `<form>` names itself by, NOT a heading.
+    ///
+    /// Until 2026-10-15 it was an `<h2>`, which picked a level for a page
+    /// formoxus cannot see: a form in a section under an `<h2>` wants an
+    /// `<h3>`, and a form that IS the page may want an `<h1>` or none. The
+    /// examples page put its own `<h2>` above each form, so every one read as
+    /// two headings in a row. A plain `div` would lose the title for assistive
+    /// technology instead; `aria-labelledby` on the `<form>` (see
+    /// `Form::render`) keeps it, by making the form a named landmark, which a
+    /// screen reader lists as it lists headings. An app that wants a heading
+    /// writes its own and leaves the title off.
     pub(crate) fn render_title(&self, ctx: &RenderCtx) -> Element {
         self.title().as_ref().map_or_else(
             || rsx! {},
             |t| {
                 rsx! {
-                    h2 { class: ctx.classes.fixed_class(FixedKey::FormTitle, false), "{t}" }
+                    div {
+                        class: ctx.classes.fixed_class(FixedKey::FormTitle, false),
+                        id: ctx.title_id(),
+                        "{t}"
+                    }
                 }
             },
         )

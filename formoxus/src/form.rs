@@ -357,6 +357,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                     // which matters, because in HTML a boolean attribute that
                     // is merely PRESENT is true, `novalidate="false"` included.
                     novalidate: !self.use_browser_validation(),
+                    // Named by the title when there is one, which makes the
+                    // form a landmark; see `FormState::render_title`.
+                    aria_labelledby: state.title().map(|_| ctx.title_id()),
                     onsubmit: move |e: FormEvent| {
                         // Without this the browser navigates and the handler's
                         // future is dropped mid-flight.

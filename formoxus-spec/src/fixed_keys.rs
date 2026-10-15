@@ -21,7 +21,7 @@ use crate::buttons::ButtonType;
 pub enum FixedKey {
     /// The `<form>`: `fx-form`.
     Form,
-    /// The form's `<h2>` title: `fx-form-title`.
+    /// The form's title, a `<div>` its `<form>` is labelled by: `fx-form-title`.
     FormTitle,
     /// The `<ul>` of form-level errors, from the spec's validator:
     /// `fx-form-errors`.

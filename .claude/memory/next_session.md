@@ -5,6 +5,11 @@ metadata:
   type: project
 ---
 
+**2026-10-15 (school), LATER: P3-7 DONE AND COMMITTED (`2a7d82d`); the
+form title is now a `div` + `aria-labelledby` on the `<form>`, not an `<h2>`.
+Next: P3-8 (tests, Claude), then P3-9 (wrap-up). The widget-boilerplate
+refactor is parked under Step 4d until the `Widget` trait exists.**
+
 **2026-10-15 (school): pulled; `radio-group` branch deleted (local + origin,
 fully merged). P3-7-A..D DECIDED as proposed. Next: P3-7a (`FieldAttrs::class`).**
 

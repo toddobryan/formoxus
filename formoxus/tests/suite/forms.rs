@@ -147,9 +147,9 @@ fn a_specs_title_reaches_the_rendered_form() {
 }
 
 #[gtest]
-fn a_form_with_no_title_renders_no_heading() {
+fn a_form_with_no_title_renders_no_title() {
     // The other half, and the one that would catch a stray default: an absent
-    // title must produce no element at all, not an empty heading that still
+    // title must produce no element at all, not an empty title that still
     // takes vertical space and gets announced by a screen reader.
     let rendered = render_to_html(EmptyEventForm);
     expect_that!(rendered, not(contains_substring("form-title")));
@@ -590,18 +590,40 @@ fn render_places_the_title_before_the_form_element_not_inside_it() {
     expect_that!(title_pos, lt(form_open_pos));
 }
 
-/// A titleless form renders no heading at all, not an empty `<h2>` that
-/// still occupies a DOM node.
+/// A titleless form renders no title at all, not an empty one that still
+/// occupies a DOM node, and its `<form>` points at nothing: an
+/// `aria-labelledby` naming a missing id leaves the form unnamed while
+/// claiming a name.
 #[gtest]
-fn a_form_without_a_title_renders_no_heading() {
+fn a_form_without_a_title_renders_no_title_and_no_reference_to_one() {
     #[component]
     fn Untitled() -> Element {
         use_form(|| empty_form::<EventForCreate>(FormSpec::default())).render(Fns::new())
     }
     let rendered = render_to_html(Untitled);
-    expect_that!(rendered, not(contains_substring("<h2")));
+    expect_that!(rendered, not(contains_substring("--title")));
     expect_that!(rendered, not(contains_substring("fx-form-title")));
+    expect_that!(rendered, not(contains_substring("aria-labelledby")));
     expect_that!(rendered, contains_substring("<form"));
+}
+
+/// The title is not a heading, since formoxus cannot know the page's heading
+/// levels; it names the `<form>` instead, through `aria-labelledby`, which
+/// makes the form a landmark a screen reader lists.
+#[gtest]
+fn a_titled_form_is_labelled_by_its_title() {
+    let rendered = render_to_html(WrappedTitledEventForm);
+    expect_that!(rendered, not(contains_substring("<h2")));
+    let id = rendered
+        .split(r#"class="fx-form-title" id=""#)
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .expect("the title should carry an id");
+    expect_that!(id, ends_with("--title"));
+    expect_that!(
+        rendered,
+        contains_substring(format!(r#"<form aria-labelledby="{id}""#))
+    );
 }
 
 #[gtest]

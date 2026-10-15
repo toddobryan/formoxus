@@ -1230,7 +1230,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     up their own slots**, even where only one is needed (the row buttons).
     Proposed, for uniformity; the alternative is passing a resolved
     `class: Option<String>` to the one-element components.
-- [ ] **P3-7. Replace the literals** (Todd), file by file, running
+- [x] **P3-7. Replace the literals** (DONE 2026-10-15, `2a7d82d`; Todd), file by file, running
   `cargo test -p formoxus --test suite snapshot` after each: it must stay
   green throughout, since `fx()` holds exactly today's literals. Broken down
   2026-10-14 (Claude); 37 literals in 14 files, line numbers from the
@@ -1306,13 +1306,20 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     (`form.rs`'s `button_classes(b.ty)` call →
     `fixed_class(Button(b.ty), false)`), `:644`/`:646` (problems). Then
     `buttons::button_classes` (`buttons.rs:90–94`) is deleted.
-  - [ ] **P3-7h. Sweep:** widgets test invalidity with `props.is_invalid()`,
+  - [x] **P3-7h. Sweep** (DONE 2026-10-15: grep clean, `just ci` and
+    `just e2e` green, 31 e2e tests): widgets test invalidity with `props.is_invalid()`,
     never `!props.errors.is_empty()` (Todd, 2026-10-15; P3-7a's five already
     do). `grep '"[^"]*fx-' formoxus/src` finds nothing
     outside `classes.rs` (`fx()` itself) and comments; the snapshot is
     unchanged; `just ci` and `just e2e` (the e2e selectors use these
     classes) green.
 
+- [x] **After P3-7: the form title is a `div`, not an `<h2>`** (Todd's call,
+  2026-10-15). The `<form>` gets `aria-labelledby` pointing at it
+  (`RenderCtx::title_id()`, `{form id}--title`), which makes the form a
+  named landmark. formoxus cannot know the page's heading levels; the
+  reasoning is on `FormState::render_title`. The `FormTitle` slot is
+  unchanged.
 - [ ] **P3-8. Tests (Claude):** the snapshot is unchanged; a whole form under
   `bare()` contains no `class=` at all; a form-level `classes:` replaces the
   app's; `classes_plus:` changes only the slots it names, on top of an app's

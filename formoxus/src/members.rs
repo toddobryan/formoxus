@@ -325,6 +325,14 @@ impl RenderCtx {
     pub fn id(&self, name: &str) -> String {
         format!("{}-{}", self.form_id, self.path(name))
     }
+
+    /// The form title's `id`, which the `<form>`'s `aria-labelledby` points
+    /// at. `--`, not `-`: a top-level field named `title` already has
+    /// `{form id}-title`, and no field's id, nor its `-errors` or `-legend`,
+    /// can contain `--`, since a path is identifiers joined by `.`.
+    pub fn title_id(&self) -> String {
+        format!("{}--title", self.form_id)
+    }
 }
 
 /// A change to the form's *shape*, as opposed to its values — the counterpart
