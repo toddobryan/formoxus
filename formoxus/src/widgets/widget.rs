@@ -14,6 +14,6 @@ pub struct Field {
 
 }
 
-trait Widget : Debug {
+pub trait Widget : Debug {
 
 }
