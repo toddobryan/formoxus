@@ -21,7 +21,9 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::{FormSpec, ValidationError, empty_form, form, form_for, use_form, using_fns};
+use formoxus::{
+    Classes, FormSpec, ValidationError, empty_form, form, form_for, use_form, using_fns,
+};
 use googletest::prelude::*;
 
 use super::render_to_html;
@@ -174,6 +176,10 @@ fn FormError() -> Element {
     let mut state = form_for(&seeded(), spec().with_validator(the_whole_form_is_wrong));
     let _ = state.validate();
     let form = use_form(|| state);
+    render_with_a_problem(form)
+}
+
+fn render_with_a_problem(form: formoxus::Form<Everything>) -> Element {
     // `action` validates by default, so its fn must take the model. This one
     // does not, ON PURPOSE: it is what renders the button-problems list.
     form.render(using_fns! {
@@ -208,6 +214,72 @@ fn a_form_with_field_errors_matches_its_snapshot() {
 #[gtest]
 fn a_form_with_a_form_error_matches_its_snapshot() {
     check("form_error", &render_to_html(FormError));
+}
+
+// ── Under `bare()` ───────────────────────────────────────────────────────
+//
+// The same three forms with `classes: Classes::bare()`: every slot empty, so
+// no element may carry a `class` at all, not even `class=""`. What proves
+// every lookup goes through `Classes`, and that an empty slot omits the
+// attribute rather than rendering it blank.
+
+fn bare_spec() -> FormSpec<Everything> {
+    spec().with_classes(Classes::bare())
+}
+
+#[component]
+fn BareClean() -> Element {
+    let form = use_form(|| form_for(&seeded(), bare_spec()));
+    render_with_buttons(form)
+}
+
+#[component]
+fn BareFieldErrors() -> Element {
+    let mut state = empty_form(bare_spec());
+    let _ = state.validate();
+    let form = use_form(|| state);
+    render_with_buttons(form)
+}
+
+#[component]
+fn BareFormError() -> Element {
+    let mut state = form_for(
+        &seeded(),
+        bare_spec().with_validator(the_whole_form_is_wrong),
+    );
+    let _ = state.validate();
+    let form = use_form(|| state);
+    render_with_a_problem(form)
+}
+
+#[gtest]
+fn a_bare_form_renders_no_class_attribute_anywhere() {
+    for (name, html) in [
+        ("clean", render_to_html(BareClean)),
+        ("field errors", render_to_html(BareFieldErrors)),
+        ("form error", render_to_html(BareFormError)),
+    ] {
+        expect_that!(html, not(contains_substring("class=")), "{name}");
+    }
+}
+
+/// The other half, so the test above cannot pass on an empty page: the bare
+/// forms still render what carries a class under `fx()`, the errors and
+/// problems included.
+#[gtest]
+fn a_bare_form_still_renders_every_part() {
+    let errors = render_to_html(BareFieldErrors);
+    expect_that!(errors, contains_substring(r#"type="radio""#));
+    expect_that!(errors, contains_substring("This field is required."));
+    let problem = render_to_html(BareFormError);
+    expect_that!(problem, contains_substring("The whole form is wrong."));
+    expect_that!(problem, contains_substring("<button"));
+    expect_that!(problem, contains_substring("<legend"));
+    expect_that!(
+        problem.matches("<ul").count(),
+        eq(2),
+        "the form's errors and the button problems"
+    );
 }
 
 /// Compares `html` with `tests/snapshots/{name}.html`, or writes it there

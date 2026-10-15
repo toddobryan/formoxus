@@ -1320,7 +1320,9 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   named landmark. formoxus cannot know the page's heading levels; the
   reasoning is on `FormState::render_title`. The `FormTitle` slot is
   unchanged.
-- [ ] **P3-8. Tests (Claude):** the snapshot is unchanged; a whole form under
+- [x] **P3-8. Tests (Claude; DONE 2026-10-15: 9 rendered cascade tests in
+  `tests/suite/classes.rs`, 2 `bare()` tests in `snapshot.rs`, each
+  checked by breaking what it guards):** the snapshot is unchanged; a whole form under
   `bare()` contains no `class=` at all; a form-level `classes:` replaces the
   app's; `classes_plus:` changes only the slots it names, on top of an app's
   CUSTOM `Classes` (not just `fx()`), and `+` appends; both keys together

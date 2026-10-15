@@ -5,15 +5,17 @@
 //! `src/classes.rs`; what the classes render as is the snapshot's job.
 //!
 //! The second half is the cascade: `Form::classes()` resolving the app's
-//! `Classes`, a form's `classes:` and its `classes_plus:` edits. Each test
-//! renders the resolved lookups as text, since nothing renders THROUGH the
-//! classes until P3-7; it needs a component for `provide_defaults`.
+//! `Classes`, a form's `classes:` and its `classes_plus:` edits. Those tests
+//! render the resolved lookups as text; the third half renders real forms, to
+//! show the same cascade reaching the markup (P3-7), along with a field's own
+//! `class:`/`class_plus:` on top of it. Each needs a component for
+//! `provide_defaults`.
 
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::classes::{FixedKey, Slot};
 use formoxus::widgets::{BuiltinWidget, FieldProps, RenderedInputType, ValuesStore};
-use formoxus::{Classes, Form, Formoxus, empty_form, form, provide_defaults, use_form};
+use formoxus::{Classes, Form, FormSpec, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
 #[gtest]
@@ -235,4 +237,172 @@ fn a_custom_widget_receives_the_forms_resolved_classes() {
         resolved(App),
         contains_substring("probe form=[app-form mine] select=[app-select]")
     );
+}
+
+// ── Through to the markup ────────────────────────────────────────────────
+
+/// The app's classes for the rendered tests: none of them `fx()`'s, so any
+/// `fx-` in the output would be a lookup that skipped the cascade.
+fn rendered_app_classes() -> Classes {
+    let text = BuiltinWidget::Input(RenderedInputType::Text);
+    Classes::bare()
+        .with_fixed(FixedKey::Form, Slot::new("app-form"))
+        .with_part(text, "div", Slot::new("app-field"))
+        .with_part(
+            text,
+            "input",
+            Slot::new("app-input").with_invalid("app-bad"),
+        )
+}
+
+/// `spec` rendered under [`rendered_app_classes`], validated first when
+/// `invalid`, so the required `name` has an error to show.
+fn render_under_app(spec: fn() -> FormSpec<Signup>, invalid: bool) -> String {
+    /// What `App` renders: the spec, and whether to validate it first. A
+    /// thread-local because `render_to_html` takes a bare `fn() -> Element`.
+    type Case = (fn() -> FormSpec<Signup>, bool);
+    thread_local! {
+        static SPEC: std::cell::Cell<Option<Case>> = const { std::cell::Cell::new(None) };
+    }
+    #[component]
+    fn App() -> Element {
+        let (spec, invalid) = SPEC.with(std::cell::Cell::get).expect("set before render");
+        provide_defaults(Formoxus::new().with_classes(rendered_app_classes()));
+        let form = use_form(|| {
+            let mut state = empty_form(spec());
+            if invalid {
+                let _ = state.validate();
+            }
+            state
+        });
+        form.render(formoxus::using_fns! {})
+    }
+    SPEC.with(|cell| cell.set(Some((spec, invalid))));
+    resolved(App)
+}
+
+/// Every `class="…"` value in `html`, in order.
+fn class_values(html: &str) -> Vec<&str> {
+    html.split(r#"class=""#)
+        .skip(1)
+        .filter_map(|rest| rest.split('"').next())
+        .collect()
+}
+
+#[gtest]
+fn a_silent_form_renders_the_apps_classes() {
+    let html = render_under_app(|| form! { Signup {} }, false);
+    expect_that!(
+        class_values(&html),
+        elements_are![eq(&"app-form"), eq(&"app-field"), eq(&"app-input")]
+    );
+}
+
+/// A form's `classes:` replaces the app's whole, in the markup too: not one
+/// of the app's classes survives.
+#[gtest]
+fn a_forms_classes_replace_the_apps_in_the_markup() {
+    let html = render_under_app(
+        || {
+            form! {
+                Signup {
+                    classes: Classes::bare().with_fixed(FixedKey::Form, Slot::new("mine")),
+                }
+            }
+        },
+        false,
+    );
+    expect_that!(class_values(&html), elements_are![eq(&"mine")]);
+}
+
+/// `classes_plus:` on an app's CUSTOM classes, not `fx()`'s: what it names
+/// changes, `+` appending to the app's base, and nothing else does.
+#[gtest]
+fn classes_plus_edits_only_what_it_names_on_the_apps_classes() {
+    let html = render_under_app(
+        || {
+            form! {
+                Signup {
+                    classes_plus: {
+                        form: + [mine],
+                        text.input: [replaced],
+                    },
+                }
+            }
+        },
+        false,
+    );
+    expect_that!(
+        class_values(&html),
+        elements_are![eq(&"app-form mine"), eq(&"app-field"), eq(&"replaced")]
+    );
+}
+
+/// Both keys: `classes:` first, then `classes_plus:` on top, so with
+/// `bare()` the edits are the only classes on the page.
+#[gtest]
+fn classes_then_classes_plus_in_the_markup() {
+    let html = render_under_app(
+        || {
+            form! {
+                Signup {
+                    classes_plus: { text.input: + [only] },
+                    classes: Classes::bare(),
+                }
+            }
+        },
+        false,
+    );
+    expect_that!(class_values(&html), elements_are![eq(&"only")]);
+}
+
+/// A field's `class:` replaces a CONFIGURED base, the app's, not just
+/// `fx()`'s.
+#[gtest]
+fn a_fields_class_replaces_the_apps_base() {
+    let html = render_under_app(|| form! { Signup { name => { class: [wide] } } }, false);
+    expect_that!(class_values(&html), contains(eq(&"wide")));
+    expect_that!(html, not(contains_substring("app-input")));
+}
+
+/// A field's `class_plus:` appends to the app's base.
+#[gtest]
+fn a_fields_class_plus_appends_to_the_apps_base() {
+    let html = render_under_app(
+        || form! { Signup { name => { class_plus: [wide] } } },
+        false,
+    );
+    expect_that!(class_values(&html), contains(eq(&"app-input wide")));
+}
+
+/// P3-g: an author's `class:` replaces the base, but the slot's invalid class
+/// still marks an errored field, so a preset's error styling survives it.
+#[gtest]
+fn the_invalid_class_survives_a_fields_class() {
+    let html = render_under_app(|| form! { Signup { name => { class: [wide] } } }, true);
+    expect_that!(class_values(&html), contains(eq(&"wide app-bad")));
+}
+
+/// And under `class_plus:`, between the base it appends to and the invalid
+/// class: base, author's, invalid.
+#[gtest]
+fn the_invalid_class_follows_a_fields_class_plus() {
+    let html = render_under_app(|| form! { Signup { name => { class_plus: [wide] } } }, true);
+    expect_that!(class_values(&html), contains(eq(&"app-input wide app-bad")));
+}
+
+/// A part with no slot still takes the author's classes, and `class_plus:`
+/// onto nothing has no stray leading space.
+#[gtest]
+fn a_fields_classes_reach_a_part_with_no_slot() {
+    let replaced = render_under_app(
+        || form! { Signup { name => { class: [wide] }, classes: Classes::bare() } },
+        false,
+    );
+    expect_that!(class_values(&replaced), elements_are![eq(&"wide")]);
+    let appended = render_under_app(
+        || form! { Signup { name => { class_plus: [wide] }, classes: Classes::bare() } },
+        false,
+    );
+    expect_that!(class_values(&appended), elements_are![eq(&"wide")]);
 }
