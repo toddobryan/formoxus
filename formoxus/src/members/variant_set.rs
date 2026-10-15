@@ -14,7 +14,7 @@ use crate::widgets::label::required_marker;
 use crate::widgets::{BuiltinWidget, FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
-use formoxus_spec::{Attr, AttrValue};
+use formoxus_spec::{Attr, AttrValue, FixedKey};
 
 /// The enum variant at a particular point
 ///
@@ -199,11 +199,14 @@ impl FormMember for VariantSet {
             self.has_errors_here(),
             &field_attrs,
         );
+
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::VariantSet, false);
+        let legend_class = ctx.classes.fixed_class(FixedKey::VariantSetLegend, false);
         rsx! {
-            fieldset { class: "fx-group fx-variant-set",
+            fieldset { class: fieldset_class,
                 if let Some(text) = label {
                     legend {
-                        class: "fx-legend fx-field-label",
+                        class: legend_class,
                         id: legend_id(&id),
                         "{text}"
                         if ctx.required {

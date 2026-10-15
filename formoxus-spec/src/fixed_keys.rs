@@ -9,6 +9,12 @@ use crate::buttons::ButtonType;
 /// `formoxus::classes::Classes`. The value in each comment is what
 /// `Classes::fx()` gives it.
 ///
+/// Keyed by the member or role that renders the element, not by the element:
+/// three keys render a `<fieldset>`, and the key says which. So `FieldSet` is
+/// `formoxus::members::FieldSet`'s `<fieldset>`, capitalized like that type,
+/// and not [`Element::Fieldset`](crate::Element::Fieldset), which is spelled
+/// as HTML spells the element.
+///
 /// `#[non_exhaustive]` so a slot can be added without breaking a `match`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]

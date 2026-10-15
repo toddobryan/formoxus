@@ -22,7 +22,8 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > every `<input>`). **2026-10-13: `BuiltinWidget` and its unit tests DONE.**
 > **The macro side DONE the same day, and the runtime side: P2 IS DONE.**
 > Next: P3 (configurable classes), BROKEN DOWN 2026-10-13; it opens with
-> decisions P3-c to P3-h.
+> decisions P3-c to P3-h. **2026-10-14: P3-1 to P3-6 DONE. 2026-10-15:
+> P3-7-A..D DECIDED as proposed; P3-7a is next.**
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -1235,8 +1236,8 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   2026-10-14 (Claude); 37 literals in 14 files, line numbers from the
   working tree after P3-6.
 
-  **Decisions first (Todd), each with a proposal:**
-  - **P3-7-A. How a widget part asks for its class:**
+  **Decisions first (Todd): ALL FOUR DECIDED as proposed (Todd, 2026-10-15).**
+  - **P3-7-A. How a widget part asks for its class.** DECIDED as proposed:
     `props.classes.part_class(WIDGET, "part", invalid)`, where `invalid` is
     `!props.errors.is_empty()` (the field's own errors, what `fx-invalid`
     and `aria-invalid` already follow). Each widget names its own
@@ -1245,12 +1246,12 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     no slot and so no `class`), `Textarea`, `Select`, `RadioGroup`, and
     `VariantSelect` borrows `Select`'s (P3-h). The radio group's per-choice
     `div`, `input` and `label` pass the same `invalid`.
-  - **P3-7-B. `field_label` needs the widget.** It is shared, but the
+  - **P3-7-B. `field_label` needs the widget.** DECIDED as proposed. It is shared, but the
     `label` slot is per widget, and Foundation-style presets give the label
     an invalid class. Proposed: `field_label(widget, id, text, marked,
-    invalid, classes)`, so it looks the slot up itself; the alternative is
-    each caller passing a resolved `class: Option<String>`.
-  - **P3-7-C. `FieldAttrs::class(base)` takes the slot.** Today
+    invalid, classes)`, so it looks the slot up itself (not each caller
+    passing a resolved `class: Option<String>`).
+  - **P3-7-C. `FieldAttrs::class(base)` takes the slot.** DECIDED as proposed. Today
     `class(&self, base: &str) -> String` ([fields.rs:136](src/fields.rs#L136)).
     It becomes `class(&self, slot: Option<&Slot>, invalid: bool) ->
     Option<String>`: an author's `class:` replaces the slot's BASE,
@@ -1260,9 +1261,9 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     no-author-classes case.)
   - **P3-7-D. `invalid` for slots that only exist when there ARE errors**
     (`FixedKey::FieldErrors`/`FieldError`, `FormErrors`/`FormError`,
-    `ButtonProblems`/`ButtonProblem`): proposed `false`, so a preset styles
+    `ButtonProblems`/`ButtonProblem`): `false`, so a preset styles
     them with their base, and the invalid class stays the mark of an errored
-    FIELD. The groups (`FieldSet`, `ListSet`, `VariantSet` and legends) pass
+    FIELD. DECIDED as proposed. The groups (`FieldSet`, `ListSet`, `VariantSet` and legends) pass
     `false` too: `fx()` gives them no invalid class, and only `VariantSet`
     tracks errors of its own.
 
@@ -1272,11 +1273,16 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   `Some("a b")` renders `class="a b"`. P3-8's `bare()` test pins it.
 
   **The files, in an order where each builds on the last:**
-  - [ ] **P3-7a. `FieldAttrs::class`** to the P3-7-C signature; its five
+  - [x] **P3-7a. `FieldAttrs::class`** (DONE 2026-10-15, Todd; an absent slot
+    counts as an empty one, so an author `class:` survives a slotless part) to the P3-7-C signature; its five
     callers (`input.rs:93`, `:130`, `textarea.rs:28`, `select.rs:38`,
     `variant_select.rs:35`) pass `props.classes.part(WIDGET, "input" /
     "textarea" / "select")` and `invalid`.
-  - [ ] **P3-7b. The wrapper `div`.** `FieldProps::field_class()` and
+  - [x] **P3-7b. The wrapper `div`** (DONE 2026-10-15, Todd; the doc moved
+    by Claude). ONE snapshot change, accepted by Todd: the radio group's
+    `fieldset` reads `fx-form-field fx-radio-group fx-invalid`, not
+    `fx-form-field fx-invalid fx-radio-group`, because a `Slot` is always
+    base-then-invalid. `FieldProps::field_class()` and
     `field_class_plus()` ([types.rs:123](src/widgets/types.rs#L123), 7
     callers) are deleted; each widget uses `part_class(WIDGET, "div",
     invalid)`, and the radio group `part_class(RadioGroup, "fieldset",
@@ -1284,23 +1290,25 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     comment on `field_class` explaining why it picks whole strings (rsx!
     joins two `class:`es with a stray space) is worth keeping on
     `Slot::value`, which now does that job.
-  - [ ] **P3-7c. `label.rs`:** `field_label` per P3-7-B (`label.rs:24`);
+  - [x] **P3-7c. `label.rs`** (DONE 2026-10-15, Todd): `field_label` per P3-7-B (`label.rs:24`);
     `required_marker` uses `fixed_class(RequiredMarker, false)`
     (`label.rs:42`), its `_classes` parameter losing the underscore.
-  - [ ] **P3-7d. The radio group** (`radio_group.rs:64` `div`, `:66`
+  - [x] **P3-7d. The radio group** (DONE 2026-10-15, Todd) (`radio_group.rs:64` `div`, `:66`
     `input`, `:83` `label`, `:101` `legend`).
-  - [ ] **P3-7e. `FieldErrors`** (`errors.rs:47` list, `:50` item) from its
+  - [x] **P3-7e. `FieldErrors`** (DONE 2026-10-15, Todd) (`errors.rs:47` list, `:50` item) from its
     `classes` prop.
-  - [ ] **P3-7f. The members:** `field_set.rs:38`/`:40`,
+  - [x] **P3-7f. The members** (DONE 2026-10-15, Todd): `field_set.rs:38`/`:40`,
     `list_set.rs:111`/`:113`/`:122`, `variant_set.rs:203`/`:206`, each a
     `ctx.classes.fixed_class(…, false)`; the row buttons
     (`row_buttons.rs:25`, `:56`) from their `classes` prop.
-  - [ ] **P3-7g. The form:** `state.rs:277` (title), `:296`/`:299` (form
+  - [x] **P3-7g. The form** (DONE 2026-10-15, Todd): `state.rs:277` (title), `:296`/`:299` (form
     errors); `form.rs:351` (`fx-form`), `:423` (button row), the buttons
     (`form.rs`'s `button_classes(b.ty)` call →
     `fixed_class(Button(b.ty), false)`), `:644`/`:646` (problems). Then
     `buttons::button_classes` (`buttons.rs:90–94`) is deleted.
-  - [ ] **P3-7h. Sweep:** `grep '"[^"]*fx-' formoxus/src` finds nothing
+  - [ ] **P3-7h. Sweep:** widgets test invalidity with `props.is_invalid()`,
+    never `!props.errors.is_empty()` (Todd, 2026-10-15; P3-7a's five already
+    do). `grep '"[^"]*fx-' formoxus/src` finds nothing
     outside `classes.rs` (`fx()` itself) and comments; the snapshot is
     unchanged; `just ci` and `just e2e` (the e2e selectors use these
     classes) green.
@@ -1465,6 +1473,20 @@ failure the compile-time checks exist to prevent.
   ([:152](tests/suite/author_attrs.rs#L152)) moves to `form!`; the
   `custom(…)` hand-built test goes; goldens for a key outside `ATTRS` and for
   `ANY` letting one through; the custom widget in the examples crate updated.
+- [ ] **The built-in widgets' boilerplate** (raised by Todd during P3-7c,
+  2026-10-15; deferred to here so the trait shapes it). `text_like`,
+  `checkbox`, `Textarea`, `Select` and `VariantSelect` all render
+  `div > label (+ marker) > form control > FieldErrors`, the checkbox with
+  label and control swapped; only the control differs. Each also repeats
+  `is_invalid`, the control's `class`, the wrapper's `class` and the label.
+  Sketched then: (1) `FieldProps::part_class(widget, part)` and
+  `control_class(attrs, widget, part)`, which supply `is_invalid()`
+  themselves (custom widgets get them too); (2) a plain fn `field_row(widget,
+  props, marked, LabelSide, control: Element)` rendering the wrapper, label
+  and errors around a control the widget builds (it still sets its own
+  `class`/`id`: a wrapper cannot add attributes to a finished `Element`). A
+  fn, not a `#[component]` with `children`: no extra scope, same markup. The
+  radio group (`fieldset`/`legend`) keeps its own shape. The snapshot guards it.
 
 ### 4e. The dioxus-html cross-check test
 

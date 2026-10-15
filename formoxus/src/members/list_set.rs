@@ -16,6 +16,7 @@ use crate::members::{
 use crate::widgets::{AddRowButton, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
+use formoxus_spec::FixedKey;
 
 #[derive(Clone, Debug)]
 pub struct ListSet {
@@ -98,6 +99,9 @@ impl FormMember for ListSet {
         // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on a row.
         let path = ctx.path(&self.name);
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::ListSet, false);
+        let legend_class = ctx.classes.fixed_class(FixedKey::ListSetLegend, false);
+        let list_row_class = ctx.classes.fixed_class(FixedKey::ListRow, false);
         // A `fieldset` for the same reason `VariantSet` uses one: the rows and
         // the widgets that manage them are one thing. It also gives the list's
         // label somewhere to appear — until now no container but `FieldSet`
@@ -108,9 +112,9 @@ impl FormMember for ListSet {
         // count, so marking a list required would be a promise `validate()`
         // doesn't keep.
         rsx! {
-            fieldset { class: "fx-group fx-list-set",
+            fieldset { class: fieldset_class,
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { class: "fx-legend fx-field-label", "{text}" }
+                    legend { class: legend_class, "{text}" }
                 }
                 for (index, row) in self.rows.iter().enumerate() {
                     // Keyed by the row's own name, which is stable across
@@ -119,7 +123,7 @@ impl FormMember for ListSet {
                     // re-render every row below it; with one it moves the nodes
                     // it already has. The wrapper exists because a key has to sit
                     // on an element, and it is what pairs a row with its widget.
-                    div { class: "fx-form-row", key: "{row.name()}",
+                    div { class: &list_row_class, key: "{row.name()}",
                         { row.render(&nested) }
                         RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                     }

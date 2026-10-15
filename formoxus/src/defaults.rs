@@ -38,7 +38,7 @@
 
 use dioxus::prelude::*;
 
-use crate::{Classes, label_case::LabelCase};
+use crate::{classes::Classes, label_case::LabelCase};
 
 /// The settings a whole app can fix once — formoxus's own configuration.
 ///

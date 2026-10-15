@@ -7,8 +7,9 @@
 use std::rc::Rc;
 
 use dioxus::prelude::*;
+use formoxus_spec::FixedKey;
 
-use crate::{Classes, members::Edit};
+use crate::{classes::Classes, members::Edit};
 
 /// The widget that appends a row to a list.
 ///
@@ -22,7 +23,7 @@ pub fn AddRowButton(path: String, on_edit: Callback<Edit>, classes: Rc<Classes>)
     rsx! {
         button {
             r#type: "button",
-            class: "fx-button fx-button-add-row",
+            class: classes.fixed_class(FixedKey::AddRowButton, false),
             onclick: move |_| {
                 // Append. `before` exists for mid-list insertion, which needs a
                 // widget between every pair of rows — a UI question that hasn't
@@ -53,7 +54,7 @@ pub fn RemoveRowButton(
     rsx! {
         button {
             r#type: "button",
-            class: "fx-button fx-button-remove-row",
+            class: classes.fixed_class(FixedKey::RemoveRowButton, false),
             aria_label: "Remove row {ordinal}",
             onclick: move |_| {
                 on_edit.call(Edit::RemoveRow { path: path.clone(), index });

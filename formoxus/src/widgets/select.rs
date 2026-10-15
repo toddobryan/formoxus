@@ -1,7 +1,7 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
@@ -35,18 +35,29 @@ pub fn Select(
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
-    let class = field_attrs.class("fx-control fx-select");
+    let my_widget = BuiltinWidget::Select;
+    let is_invalid = props.is_invalid();
+
+    let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
-    let field_class = props.field_class();
+    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 
     let current = get_current(&props.path, values);
     let required = field_attrs.contains(Attr::Required);
+    let label = field_label(
+        &props.id,
+        props.label,
+        required,
+        &props.classes,
+        is_invalid,
+        my_widget,
+    );
 
     rsx! {
         div {
             class: field_class,
-            {field_label(&props.id, props.label, required, &props.classes)}
+            {label}
             select {
                 class: class,
                 id: props.id,

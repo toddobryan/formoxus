@@ -155,6 +155,22 @@ impl Slot {
     /// `invalid` is the FIELD's state, not a claim about the slot: a slot
     /// with no invalid class just renders its base when it is true. Most of
     /// `fx()`'s slots are like that, since it marks only the wrapper.
+    ///
+    /// **Why this builds a whole string instead of letting `rsx!` add a
+    /// class.** The tempting version is two `class:` attributes on the
+    /// element:
+    ///
+    /// ```text
+    /// div { class: "fx-form-field", class: if invalid { "fx-invalid" }, … }
+    /// ```
+    ///
+    /// `rsx!` does merge those — it joins every `class:` value with a space.
+    /// But it joins them *unconditionally*: when `invalid` is false the second
+    /// value is the empty string, and the result is `class="fx-form-field "`,
+    /// with a trailing space, on every field that has no error. Harmless to a
+    /// browser, but it is on nearly every field on every page, and it breaks
+    /// any test that matches the attribute exactly. One joined string never
+    /// produces the stray space.
     pub fn value(&self, invalid: bool) -> Option<String> {
         let invalid = if invalid {
             self.invalid.as_deref()

@@ -2,8 +2,9 @@
 //! is rendered, and later given its class, in one place.
 
 use dioxus::prelude::*;
+use formoxus_spec::{BuiltinWidget, FixedKey};
 
-use crate::Classes;
+use crate::classes::Classes;
 
 /// The caption, pointing at the form control by `id`, with the required marker
 /// when `marked`. Nothing at all when there is no caption, so the marker never
@@ -17,11 +18,14 @@ pub(crate) fn field_label(
     text: Option<String>,
     marked: bool,
     classes: &Classes,
+    invalid: bool,
+    widget: BuiltinWidget,
 ) -> Element {
+    let label_class = classes.part_class(widget, "label", invalid);
     rsx! {
         if let Some(text) = text {
             label {
-                class: "fx-field-label",
+                class: label_class,
                 r#for: "{id}",
                 "{text}"
                 if marked {
@@ -37,8 +41,9 @@ pub(crate) fn field_label(
 /// `aria-hidden` because it is a VISUAL convention only: the `required`
 /// attribute is what a screen reader announces, so the asterisk would just be
 /// noise in the accessible name.
-pub(crate) fn required_marker(_classes: &Classes) -> Element {
+pub(crate) fn required_marker(classes: &Classes) -> Element {
+    let class_for_required = classes.fixed_class(FixedKey::RequiredMarker, false);
     rsx! {
-        span { class: "fx-required", aria_hidden: "true", " *" }
+        span { class: class_for_required, aria_hidden: "true", " *" }
     }
 }

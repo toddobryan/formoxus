@@ -18,7 +18,7 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
-use crate::Classes;
+use crate::classes::Classes;
 use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;

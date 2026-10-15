@@ -75,26 +75,6 @@ impl ButtonSpec {
 /// their address.
 pub use formoxus_spec::{ButtonType, Invocation};
 
-/// The classes a button of type `ty` carries: the shared `fx-button`, plus one
-/// naming its type. A function rather than `ButtonType::classes()` now that
-/// the type lives in `formoxus-spec`, and only until P3-7 makes these a
-/// `Classes` lookup.
-///
-/// An earlier version emitted bare `primary`, `danger`, `secondary` and
-/// `outline danger` — Pico CSS's vocabulary, which matched no other
-/// framework, was styled by nothing formoxus shipped, and collided with any
-/// consumer rule naming an unqualified adjective. `fx-button-destructive` says
-/// the same thing without claiming a name it does not own.
-pub(crate) fn button_classes(ty: ButtonType) -> &'static str {
-    match ty {
-        ButtonType::Submit => "fx-button fx-button-submit",
-        ButtonType::Reset => "fx-button fx-button-reset",
-        ButtonType::Cancel => "fx-button fx-button-cancel",
-        ButtonType::Destructive => "fx-button fx-button-destructive",
-        ButtonType::Action => "fx-button fx-button-action",
-    }
-}
-
 /// What a button does, supplied at the render call site.
 ///
 /// Which variant a closure becomes is decided by `using_fns!` from the

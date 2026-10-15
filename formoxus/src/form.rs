@@ -13,8 +13,8 @@
 //! validator, buttons — that `form!` builds and `FormState::apply_specs`
 //! lays onto the tree. Lives in `spec`.
 
-use crate::Classes;
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
+use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
 use crate::members::{Edit, RenderCtx};
@@ -23,6 +23,7 @@ use crate::widgets::ValuesStore;
 use crate::wire::WireForm;
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus_spec::FixedKey;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::hash::{BuildHasher, Hasher, RandomState};
@@ -348,7 +349,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
         rsx! {
             div {
-                class: "fx-form",
+                class: ctx.classes.fixed_class(FixedKey::Form, false),
                 { state.render_title(&ctx) }
                 form {
                     // Dioxus omits a boolean attribute whose value is false,
@@ -378,7 +379,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     /// The button row, in declaration order. Nothing at all when the form
     /// declares none, so a view that hand-writes its own buttons is unaffected.
-    fn render_buttons(&self, _ctx: &RenderCtx, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
+    fn render_buttons(&self, ctx: &RenderCtx, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
         if buttons.is_empty() {
             return rsx! {};
         }
@@ -395,7 +396,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                     button {
                         key: "{b.name}",
                         r#type: "{b.ty.html_type()}",
-                        class: crate::buttons::button_classes(b.ty),
+                        class: ctx.classes.fixed_class(FixedKey::Button(b.ty), false),
                         // A button with nothing behind it is inert rather than
                         // absent: omitting it would hide the mistake, and a
                         // live `submit` with no handler would reload the page.
@@ -420,7 +421,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             // thing: `.fx-buttons` is the hook for laying it out, and
             // for opting its buttons out of any full-width rule a consumer's
             // stylesheet applies to form widgets.
-            div { class: "fx-buttons", { rendered.into_iter() } }
+            div { class: ctx.classes.fixed_class(FixedKey::ButtonRow, false), { rendered.into_iter() } }
         }
     }
 
@@ -634,16 +635,16 @@ where
 /// Handler/spec mismatches, rendered beside the form's own errors and marked
 /// apart from them — these are a programming mistake, not something the person
 /// filling in the form did.
-fn render_problems(_ctx: &RenderCtx, problems: &[String]) -> Element {
+fn render_problems(ctx: &RenderCtx, problems: &[String]) -> Element {
     if problems.is_empty() {
         return rsx! {};
     }
     let problems = problems.to_vec();
     rsx! {
         ul {
-            class: "fx-form-errors fx-problems",
+            class: ctx.classes.fixed_class(FixedKey::ButtonProblems, false),
             for p in problems {
-                li { class: "fx-form-error fx-problem", "{p}" }
+                li { class: ctx.classes.fixed_class(FixedKey::ButtonProblem, false), "{p}" }
             }
         }
     }

@@ -1,7 +1,7 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
@@ -32,10 +32,21 @@ pub fn VariantSelect(
     props: FieldProps,
     #[props(extends = select)] attrs: Vec<Attribute>,
 ) -> Element {
-    let class = field_attrs.class("fx-control fx-select");
-    let field_class = props.field_class();
+    let my_widget = BuiltinWidget::Select;
+    let is_invalid = props.is_invalid();
+    let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
+    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 
     let required = field_attrs.contains(Attr::Required);
+
+    let label = field_label(
+        &props.id,
+        props.label,
+        required,
+        &props.classes,
+        is_invalid,
+        my_widget,
+    );
 
     rsx! {
         div {
@@ -44,7 +55,7 @@ pub fn VariantSelect(
             // one. Rendered inside a `VariantSet`'s fieldset there isn't: the
             // legend carries both, and a lone `*` floating in front of the
             // select reads as belonging to nothing.
-            {field_label(&props.id, props.label, required, &props.classes)}
+            {label}
             select {
                 class: class,
                 id: &props.id,

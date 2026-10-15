@@ -10,6 +10,7 @@ use crate::members::{
 };
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
+use formoxus_spec::FixedKey;
 
 #[derive(Clone, Debug)]
 pub struct FieldSet {
@@ -34,10 +35,12 @@ impl FormMember for FieldSet {
     fn render(&self, ctx: &RenderCtx) -> Element {
         let nested = ctx.nested(&self.name);
         let members_rendered = self.members.iter().map(|m| m.render(&nested));
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::FieldSet, false);
+        let legend_class = ctx.classes.fixed_class(FixedKey::FieldSetLegend, false);
         rsx! {
-            fieldset { class: "fx-group fx-field-set",
+            fieldset { class: fieldset_class,
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { class: "fx-legend fx-field-label", "{text}" }
+                    legend { class: legend_class, "{text}" }
                 }
                 { members_rendered.into_iter() }
             }

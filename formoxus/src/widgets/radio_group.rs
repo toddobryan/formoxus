@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::members::ValuesStore;
@@ -32,6 +32,9 @@ pub fn RadioGroup(
     props: FieldProps,
     #[props(extends = fieldset)] attrs: Vec<Attribute>,
 ) -> Element {
+    let my_widget = BuiltinWidget::RadioGroup;
+    let is_invalid = props.is_invalid();
+
     // TODO: figure out where to put the attributes. Currently in the fieldset,
     //       but we might want people to be able to set attrs on each input
 
@@ -46,9 +49,14 @@ pub fn RadioGroup(
         .without(Attr::Required)
         .merge_with_attrs(field_type, attrs);
 
-    let field_class = props.field_class_plus("fx-radio-group");
+    let field_class = props.classes.part_class(my_widget, "fieldset", is_invalid);
 
     let current = get_current(&props.path, values);
+
+    let div_class = props.classes.part_class(my_widget, "div", is_invalid);
+    let input_class = props.classes.part_class(my_widget, "input", is_invalid);
+    let label_class = props.classes.part_class(my_widget, "label", is_invalid);
+    let legend_class = props.classes.part_class(my_widget, "legend", is_invalid);
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
     // radio needs its OWN `path` to move into its own `onchange` and an rsx
@@ -61,9 +69,9 @@ pub fn RadioGroup(
             let path = props.path.clone();
             rsx! {
                 div {
-                    class: "fx-choice",
+                    class: &div_class,
                     input {
-                        class: "fx-control fx-radio",
+                        class: &input_class,
                         r#type: "radio",
                         // Every radio in the group carries the SAME name, but
                         // a different id: that is what makes them one group to
@@ -80,7 +88,7 @@ pub fn RadioGroup(
                         onchange: move |e: FormEvent| write_value(&path, values, e.value()),
                     }
                     label {
-                        class: "fx-choice-label",
+                        class: &label_class,
                         r#for: "{props.id}-{index}",
                         "{choice.display}"
                     }
@@ -98,7 +106,7 @@ pub fn RadioGroup(
             ..attrs,
             // The group's label is the `legend`, not a `label` — a `<label>`
             // can only name a single control, and there are several here.
-            legend { class: "fx-legend fx-field-label",
+            legend { class: legend_class,
                 // No label, no marker — an asterisk with nothing to qualify
                 // means nothing. `aria-hidden` because it is visual only: on a
                 // radio group `required` applies to the whole group and that is

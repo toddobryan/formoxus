@@ -7,9 +7,9 @@ use std::{fmt::Debug, marker::PhantomData};
 use facet::Facet;
 use indexmap::IndexMap;
 
-use crate::Classes;
 use crate::buttons::ButtonSpec;
 use crate::classes::ClassEdit;
+use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::fields::FieldAttrs;
 use crate::label_case::LabelCase;

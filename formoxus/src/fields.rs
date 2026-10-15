@@ -1,6 +1,7 @@
 //! Leaf members: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 use crate::ErrorsByPath;
+use crate::classes::Slot;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
@@ -133,14 +134,25 @@ impl FieldAttrs {
         mapped_attrs.into_values().collect()
     }
 
-    pub fn class(&self, base: &str) -> String {
-        if let Some(AttrValue::List(classes)) = self.get(Attr::Class) {
+    pub fn class(&self, slot: Option<&Slot>, invalid: bool) -> Option<String> {
+        let empty = Slot::new("");
+        let slot = slot.unwrap_or(&empty);
+        let base = if let Some(AttrValue::List(classes)) = self.get(Attr::Class) {
             classes.join(" ")
         } else if let Some(AttrValue::List(classes)) = self.get(Attr::ClassPlus) {
-            format!("{base} {}", classes.join(" "))
+            [&*slot.base, &classes.join(" ")]
+                .into_iter()
+                .filter(|c| !c.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
         } else {
-            base.to_string()
+            return slot.value(invalid);
+        };
+        Slot {
+            base: base.into(),
+            invalid: slot.invalid.clone(),
         }
+        .value(invalid)
     }
 
     /// The map a widget actually gets: formoxus's own attributes, which only

@@ -8,6 +8,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
+use formoxus_spec::FixedKey;
 
 use crate::build::{FormMode, members_for};
 use crate::buttons::ButtonSpec;
@@ -16,7 +17,7 @@ use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
 use crate::members::RenderCtx;
 use crate::members::{Edit, FormMember, ValuesByPath, no_such_path, owns};
-use crate::{Classes, ValidationError};
+use crate::{classes::Classes, error::ValidationError};
 
 use super::FormSpec;
 
@@ -269,12 +270,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.buttons()
     }
 
-    pub(crate) fn render_title(&self, _ctx: &RenderCtx) -> Element {
+    pub(crate) fn render_title(&self, ctx: &RenderCtx) -> Element {
         self.title().as_ref().map_or_else(
             || rsx! {},
             |t| {
                 rsx! {
-                    h2 { class: "fx-form-title", "{t}" }
+                    h2 { class: ctx.classes.fixed_class(FixedKey::FormTitle, false), "{t}" }
                 }
             },
         )
@@ -287,16 +288,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    pub(crate) fn render_errors(&self, _ctx: &RenderCtx) -> Element {
+    pub(crate) fn render_errors(&self, ctx: &RenderCtx) -> Element {
         if self.errors.is_empty() {
             rsx! {}
         } else {
             rsx! {
                 ul {
-                    class: "fx-form-errors",
+                    class: ctx.classes.fixed_class(FixedKey::FormErrors, false),
                     for e in self.errors.clone() {
                         li {
-                            class: "fx-form-error",
+                            class: ctx.classes.fixed_class(FixedKey::FormError, false),
                             "{e.0}"
                         }
                     }

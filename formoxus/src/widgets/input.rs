@@ -4,7 +4,7 @@
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, FieldType, RenderedInputType};
+use formoxus_spec::{Attr, BuiltinWidget, FieldType, RenderedInputType};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
@@ -90,17 +90,30 @@ fn text_like(
     props: FieldProps,
     attrs: Vec<Attribute>,
 ) -> Element {
-    let class: String = field_attrs.class("fx-control fx-input");
+    let my_widget = BuiltinWidget::Input(input_type);
+    let is_invalid = props.is_invalid();
+
+    let class: Option<String> =
+        field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
-    let field_class = props.field_class();
+    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 
     let current = get_current(&props.path, values);
 
+    let label = field_label(
+        &props.id,
+        props.label,
+        field_attrs.contains(Attr::Required),
+        &props.classes,
+        is_invalid,
+        my_widget,
+    );
+
     rsx! {
         div {
-            class: "{field_class}",
-            {field_label(&props.id, props.label, field_attrs.contains(Attr::Required), &props.classes)}
+            class: field_class,
+            {label}
             input {
                 class: class,
                 r#type: input_type.to_input_type().html_type(),
@@ -127,10 +140,22 @@ fn checkbox(
     props: FieldProps,
     attrs: Vec<Attribute>,
 ) -> Element {
-    let class = field_attrs.class("fx-control fx-checkbox");
+    let my_widget = BuiltinWidget::Input(RenderedInputType::Checkbox);
+    let is_invalid = props.is_invalid();
+
+    let class = field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
     let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
 
-    let field_class = props.field_class();
+    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
+
+    let label = field_label(
+        &props.id,
+        props.label,
+        field_attrs.contains(Attr::RequiredTrue),
+        &props.classes,
+        is_invalid,
+        my_widget,
+    );
 
     // The wrapper is unconditional and the caption is not, exactly as for a
     // text input. Until 2026-09-29 this widget wrapped an unclassed `<label>`
@@ -139,7 +164,7 @@ fn checkbox(
     // checkbox on the page.
     rsx! {
         div {
-            class: "{field_class}",
+            class: field_class,
             // The box comes BEFORE its text. Every other widget reads
             // caption-then-control, but a checkbox reads "☐ I agree", not
             // "I agree ☐": the label is what the box means, not what to type
@@ -156,7 +181,7 @@ fn checkbox(
             }
             // Marked by `required_true`, not `required`: on a bool, `required`
             // is presence, which a checkbox always has.
-            {field_label(&props.id, props.label, field_attrs.contains(Attr::RequiredTrue), &props.classes)}
+            {label}
             FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }

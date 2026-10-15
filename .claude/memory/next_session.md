@@ -5,6 +5,9 @@ metadata:
   type: project
 ---
 
+**2026-10-15 (school): pulled; `radio-group` branch deleted (local + origin,
+fully merged). P3-7-A..D DECIDED as proposed. Next: P3-7a (`FieldAttrs::class`).**
+
 **2026-10-14, END OF SESSION (home) — GREEN, PUSHED: P3-6 DONE; P3-7 BROKEN DOWN, NEXT.**
 Todd picks up at SCHOOL on 2026-10-15: `git pull` first.
 P3-6: `Rc<Classes>` on `RenderCtx` (built by `Form::root_ctx()`) and on
