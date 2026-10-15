@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 
 mod basics;
+mod contact_info;
 mod select;
 
 /// Every example, in the order they appear on the page.
