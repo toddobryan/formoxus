@@ -6,6 +6,7 @@ use facet::{Partial, ReflectError};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 mod field_set;
 mod list_set;
@@ -17,6 +18,7 @@ pub use list_set::ListSet;
 pub use option_member::OptionMember;
 pub use variant_set::{VariantChoice, VariantSet};
 
+use crate::Classes;
 use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
@@ -254,6 +256,17 @@ pub struct RenderCtx {
     /// rather than re-decided at every member. See
     /// `.claude/memory/config_cascade.md`.
     pub label_case: LabelCase,
+    /// The form's classes, resolved once by `Form::classes()` (the app's,
+    /// then the form's `classes:` and `classes_plus:`), shared by every member
+    /// and widget of one render.
+    ///
+    /// **`Rc`, and only here and in `FieldProps`.** Dioxus renders on one
+    /// thread, so `Arc` would only add an atomic count. But an `Rc` must never
+    /// go into `FormSpec` or `FormState`: both reach the server, where
+    /// `Submission` rebuilds a `FormState` and a handler's future must be
+    /// `Send`. They hold `Classes` by value. See
+    /// `.claude/memory/config_cascade.md`.
+    pub classes: Rc<Classes>,
 }
 
 impl RenderCtx {
@@ -264,6 +277,7 @@ impl RenderCtx {
         values: ValuesStore,
         on_edit: Callback<Edit>,
         label_case: LabelCase,
+        classes: Classes,
     ) -> Self {
         Self {
             form_id,
@@ -272,6 +286,7 @@ impl RenderCtx {
             required: true,
             on_edit,
             label_case,
+            classes: Rc::new(classes),
         }
     }
 
@@ -284,6 +299,7 @@ impl RenderCtx {
             required: self.required,
             on_edit: self.on_edit,
             label_case: self.label_case,
+            classes: self.classes.clone(),
         }
     }
 
@@ -297,6 +313,7 @@ impl RenderCtx {
             required: false,
             on_edit: self.on_edit,
             label_case: self.label_case,
+            classes: self.classes.clone(),
         }
     }
 

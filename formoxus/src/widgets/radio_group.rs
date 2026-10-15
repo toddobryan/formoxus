@@ -48,14 +48,7 @@ pub fn RadioGroup(
 
     let field_class = props.field_class_plus("fx-radio-group");
 
-    let FieldProps {
-        id: field_id,
-        path,
-        label: label_text,
-        errors,
-    } = props;
-
-    let current = get_current(&path, values);
+    let current = get_current(&props.path, values);
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
     // radio needs its OWN `path` to move into its own `onchange` and an rsx
@@ -65,7 +58,7 @@ pub fn RadioGroup(
         .into_iter()
         .enumerate()
         .map(|(index, choice)| {
-            let path = path.clone();
+            let path = props.path.clone();
             rsx! {
                 div {
                     class: "fx-choice",
@@ -77,8 +70,8 @@ pub fn RadioGroup(
                         // the browser, and what `distribute_form_values` collects
                         // the pick under, but allows each label to refer to just
                         // its choice.
-                        id: "{field_id}-{index}",
-                        name: "{path}",
+                        id: "{props.id}-{index}",
+                        name: "{props.path}",
                         value: "{choice.value}",
                         checked: choice.value == current,
                         // On every radio, though one would do for the browser:
@@ -88,7 +81,7 @@ pub fn RadioGroup(
                     }
                     label {
                         class: "fx-choice-label",
-                        r#for: "{field_id}-{index}",
+                        r#for: "{props.id}-{index}",
                         "{choice.display}"
                     }
                 }
@@ -110,15 +103,15 @@ pub fn RadioGroup(
                 // means nothing. `aria-hidden` because it is visual only: on a
                 // radio group `required` applies to the whole group and that is
                 // what a screen reader announces.
-                if let Some(text) = label_text {
+                if let Some(text) = props.label {
                     "{text}"
                     if field_attrs.contains(Attr::Required) {
-                        {required_marker()}
+                        {required_marker(&props.classes)}
                     }
                 }
             }
             { radios.into_iter() }
-            FieldErrors { field_id: &field_id, errors }
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }

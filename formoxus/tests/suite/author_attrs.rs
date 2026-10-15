@@ -44,7 +44,7 @@ macro_rules! render {
         #[component]
         fn App() -> Element {
             let form = use_form(|| empty_form($spec));
-            form.render_fragment()
+            form.render(using_fns! {})
         }
         super::render_to_html(App)
     }};

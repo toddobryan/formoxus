@@ -35,7 +35,7 @@ fn RelabelledField() -> Element {
     let form = use_form(|| {
         empty_form(FormSpec::<EventForCreate>::default().with_label("title", "Event name"))
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -51,7 +51,7 @@ fn RelabelledNestedField() -> Element {
     let form = use_form(|| {
         empty_form(FormSpec::<EventForCreate>::default().with_label("location.city", "Town"))
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -71,7 +71,7 @@ fn RelabelledFieldSet() -> Element {
     let form = use_form(|| {
         empty_form(FormSpec::<EventForCreate>::default().with_label("location", "Where"))
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -90,7 +90,7 @@ fn a_field_sets_own_label_becomes_its_legend() {
 #[component]
 fn UntouchedFlags() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Flags>::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -110,7 +110,7 @@ fn OptionalBoolForcedToCheckbox() -> Element {
             WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
         ))
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -135,7 +135,7 @@ fn BoolForcedToSelect() -> Element {
                 .with_custom_widget("enabled", WidgetType::Builtin(BuiltinWidget::Select)),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -199,7 +199,7 @@ fn ChooserWithAWidget() -> Element {
                 .with_custom_widget("shape", WidgetType::Builtin(BuiltinWidget::RadioGroup)),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -262,7 +262,7 @@ fn RowsWithLabels() -> Element {
             FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -285,7 +285,7 @@ fn RowFieldsWithLabels() -> Element {
             FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -307,7 +307,7 @@ fn ListWithItsOwnLabel() -> Element {
             FormSpec::<Trip>::default().with_label("venues", "Where we went"),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -334,7 +334,7 @@ fn RowWidgetsOverridden() -> Element {
                 .with_custom_widget("correct[]", WidgetType::Builtin(BuiltinWidget::Select)),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -377,7 +377,7 @@ fn RowAddedAfterTheSpec() -> Element {
             .expect("appending to `answers` should succeed");
         state
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -407,7 +407,7 @@ fn RowFieldAddedAfterTheSpec() -> Element {
             .expect("appending to `venues` should succeed");
         state
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]

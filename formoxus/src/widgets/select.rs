@@ -40,30 +40,23 @@ pub fn Select(
 
     let field_class = props.field_class();
 
-    let FieldProps {
-        id: field_id,
-        path,
-        label: label_text,
-        errors,
-    } = props;
-
-    let current = get_current(&path, values);
+    let current = get_current(&props.path, values);
     let required = field_attrs.contains(Attr::Required);
 
     rsx! {
         div {
             class: field_class,
-            {field_label(&field_id, label_text, required)}
+            {field_label(&props.id, props.label, required, &props.classes)}
             select {
                 class: class,
-                id: field_id,
+                id: props.id,
                 // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
                 // `name` or `distribute_form_values` would never see it.
-                name: "{path}",
+                name: "{props.path}",
                 // No branch on emptiness: the "no value" option's value is `""`,
                 // and `""` IS absence at both boundaries, so the same write does
                 // for every option.
-                onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
                 // Last among attributes, before the options: rsx! reads
                 // anything after a spread as children, and the options ARE
                 // children, so this sits between the two.
@@ -85,7 +78,7 @@ pub fn Select(
                     }
                 }
             }
-            FieldErrors { field_id: &field_id, errors }
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }

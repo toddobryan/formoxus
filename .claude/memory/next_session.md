@@ -5,6 +5,20 @@ metadata:
   type: project
 ---
 
+**2026-10-14, END OF SESSION (home) — GREEN, PUSHED: P3-6 DONE; P3-7 BROKEN DOWN, NEXT.**
+Todd picks up at SCHOOL on 2026-10-15: `git pull` first.
+P3-6: `Rc<Classes>` on `RenderCtx` (built by `Form::root_ctx()`) and on
+`FieldProps`; `FieldErrors`/row buttons take a `classes: Rc<Classes>` prop;
+`field_label`/`required_marker` take `&Classes`. `render` is now the ONLY
+public render: `Form::render_fragment`/`render_title`/`render_fields`/
+`render_errors` DELETED (suite's 99 calls → `render(using_fns! {})`), and
+`FormState`'s pieces are `pub(crate)`. Widgets use `props.x`, no more
+`let FieldProps { … }`. P3-6f test: a custom widget sees the form's resolved
+classes. **Next: P3-7 (replace the 37 literals), opening with decisions
+P3-7-A..D in the plan; Todd wants to "whiz through" it.** Gotcha: in an
+rsx! format string, `"{x.unwrap_or_default()}"` can be evaluated twice; unwrap
+into a local first.
+
 **2026-10-14, END — GREEN, PUSHED: P3-4b AND P3-5 DONE (`classes:`/`classes_plus:` in `form!`).**
 Walkthrough steps 1–7 all done (parser + expansion in
 `formoxus-macros/src/form/classes.rs`, 8 `form_classes_plus_*` goldens, 6

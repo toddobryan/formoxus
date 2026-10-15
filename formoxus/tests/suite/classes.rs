@@ -12,7 +12,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::classes::{FixedKey, Slot};
-use formoxus::widgets::{BuiltinWidget, RenderedInputType};
+use formoxus::widgets::{BuiltinWidget, FieldProps, RenderedInputType, ValuesStore};
 use formoxus::{Classes, Form, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
@@ -191,4 +191,48 @@ fn classes_plus_values_are_normalised_as_a_fields_are() {
         rsx! { "{lookups(&form)}" }
     }
     expect_that!(resolved(App), contains_substring("row=[btn-group mt-4]"));
+}
+
+// ── A custom widget sees them too ────────────────────────────────────────
+
+/// A custom widget that shows what it was handed: the form slot and the
+/// select's, from `props.classes`.
+#[component]
+fn ClassProbe(values: ValuesStore, props: FieldProps) -> Element {
+    let _ = values;
+    let form = props
+        .classes
+        .fixed_class(FixedKey::Form, false)
+        .unwrap_or_default();
+    let select = props
+        .classes
+        .part_class(BuiltinWidget::Select, "select", false)
+        .unwrap_or_default();
+    rsx! {
+        span { "probe form=[{form}] select=[{select}]" }
+    }
+}
+
+/// P3-b: a custom widget's classes are the FORM's resolved ones, the app's
+/// with `classes_plus:` applied, so a custom widget can borrow a built-in
+/// slot (here the select's) and follow whatever preset the app chose.
+#[gtest]
+fn a_custom_widget_receives_the_forms_resolved_classes() {
+    #[component]
+    fn App() -> Element {
+        provide_defaults(Formoxus::new().with_classes(app_classes()));
+        let form = use_form(|| {
+            empty_form(form! {
+                Signup {
+                    name => { widget: custom(ClassProbe) },
+                    classes_plus: { form: + [mine] },
+                }
+            })
+        });
+        form.render(formoxus::using_fns! {})
+    }
+    expect_that!(
+        resolved(App),
+        contains_substring("probe form=[app-form mine] select=[app-select]")
+    );
 }

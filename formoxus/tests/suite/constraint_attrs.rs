@@ -46,7 +46,7 @@ fn each_text_constraint_reaches_the_input() {
                 Zip { code => { min_length: 5, max_length: 10, pattern: r"\d+" } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring("minlength=5"));
@@ -64,7 +64,7 @@ fn a_pattern_reaches_the_dom_unanchored() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Zip { code => { pattern: r"\d{5}" } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"pattern="\d{5}""#));
@@ -83,7 +83,7 @@ fn a_numeric_bound_reaches_the_input() {
                 }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring("min=1"));
@@ -101,7 +101,7 @@ fn no_step_is_emitted_for_a_float() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Counts { fraction => { min: 0.5, max: 9.5 } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     // Positive first, so the absence below cannot pass by rendering nothing.
@@ -124,7 +124,7 @@ fn a_hidden_input_gets_no_constraints() {
                 Zip { code => { max_length: 10, widget: hidden } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"type="hidden""#));
@@ -150,7 +150,7 @@ fn a_textarea_gets_pattern_although_html_has_no_such_attribute() {
                 Bio { about => { max_length: 200, pattern: r"\w+", widget: textarea } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring("<textarea"));
@@ -173,7 +173,7 @@ fn a_chooser_carries_them_onto_a_select_or_fieldset() {
                 Zip { code => { max_length: 10, widget: select { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     #[component]
     fn AsRadios() -> Element {
@@ -182,7 +182,7 @@ fn a_chooser_carries_them_onto_a_select_or_fieldset() {
                 Zip { code => { max_length: 10, widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(AsSelect), contains_substring("<select"));
     expect_that!(render(AsSelect), contains_substring("maxlength=10"));
@@ -204,7 +204,7 @@ fn no_attribute_is_emitted_twice() {
                 Zip { code => { min_length: 5, max_length: 10, pattern: r"\d+" } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     for attr in ["minlength", "maxlength", "pattern"] {
@@ -263,7 +263,7 @@ fn a_required_true_checkbox_carries_required() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Terms { agreed => { required_true } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), contains_substring("required=true"));
 }
@@ -276,7 +276,7 @@ fn a_plain_checkbox_does_not_carry_required() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Terms {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), not(contains_substring("required")));
 }
@@ -288,12 +288,12 @@ fn a_required_true_checkbox_shows_the_marker() {
     #[component]
     fn Must() -> Element {
         let form = use_form(|| empty_form(form! { Terms { agreed => { required_true } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     #[component]
     fn Plain() -> Element {
         let form = use_form(|| empty_form(form! { Terms {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         render(Must),
@@ -311,7 +311,7 @@ fn a_bool_select_gets_the_marker_from_presence() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Terms { agreed => { widget: select } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), contains_substring("fx-required"));
 }

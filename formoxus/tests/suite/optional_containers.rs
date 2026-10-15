@@ -334,7 +334,7 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
 #[component]
 fn EmptyContactForm() -> Element {
     let form = use_form(|| empty_form::<Contact>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 /// The attribute list of the `<input>` named `name`, cut at the first `>` so a
@@ -408,7 +408,7 @@ struct Event {
 #[component]
 fn BooleanKindsForm() -> Element {
     let form = use_form(|| empty_form::<Event>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -454,7 +454,7 @@ struct Prefs {
 #[component]
 fn PrefsForm() -> Element {
     let form = use_form(|| empty_form::<Prefs>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]

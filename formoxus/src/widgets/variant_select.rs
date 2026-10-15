@@ -35,13 +35,6 @@ pub fn VariantSelect(
     let class = field_attrs.class("fx-control fx-select");
     let field_class = props.field_class();
 
-    let FieldProps {
-        id: field_id,
-        path,
-        label: label_text,
-        errors,
-    } = props;
-
     let required = field_attrs.contains(Attr::Required);
 
     rsx! {
@@ -51,14 +44,14 @@ pub fn VariantSelect(
             // one. Rendered inside a `VariantSet`'s fieldset there isn't: the
             // legend carries both, and a lone `*` floating in front of the
             // select reads as belonging to nothing.
-            {field_label(&field_id, label_text, required)}
+            {field_label(&props.id, props.label, required, &props.classes)}
             select {
                 class: class,
-                id: &field_id,
+                id: &props.id,
                 onchange: move |e: FormEvent| {
                     let v = e.value();
                     let variant = (!v.is_empty()).then_some(v);
-                    on_edit.call(Edit::new_choose_variant(&path, variant.as_deref()));
+                    on_edit.call(Edit::new_choose_variant(&props.path, variant.as_deref()));
                 },
                 ..field_attrs.merge_with_attrs(FieldType::Text, attrs),
                 // Required + unchosen: an unselectable placeholder that keeps the browser's
@@ -77,7 +70,7 @@ pub fn VariantSelect(
                     }
                 }
             }
-            FieldErrors { field_id: &field_id, errors }
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }

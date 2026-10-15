@@ -181,6 +181,7 @@ fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
 // an override arrived.
 
 use dioxus::prelude::*;
+use formoxus::using_fns;
 
 /// Render a component to HTML with a real Dioxus runtime behind it.
 ///
@@ -227,7 +228,7 @@ fn LabelledName() -> Element {
             }
         })
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -253,7 +254,7 @@ fn PasswordSecret() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -278,7 +279,7 @@ fn ClassedName() -> Element {
             }
         })
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 /// **`class_plus:` from `form!` all the way to the markup, as ONE `class`.**
@@ -309,7 +310,7 @@ fn StyledName() -> Element {
             }
         })
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 /// **A `style:` block from `form!` all the way to the markup**: each
@@ -341,7 +342,7 @@ fn SelectedBool() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -366,7 +367,7 @@ fn TextareaSecret() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -392,7 +393,7 @@ fn BothKeys() -> Element {
             }
         })
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -416,7 +417,7 @@ fn NestedLabel() -> Element {
             }
         })
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -448,7 +449,7 @@ fn ListLabelAndRowWidgets() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -488,7 +489,7 @@ fn EverythingAtOnce() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 fn trip_has_a_name(t: &Trip) -> Vec<formoxus::ValidationError<Trip>> {
@@ -655,7 +656,7 @@ fn CustomSecret() -> Element {
             },
         )
     })
-    .render_fragment()
+    .render(using_fns! {})
 }
 
 #[gtest]
@@ -710,12 +711,12 @@ struct Token {
 
 #[component]
 fn RawSpelling() -> Element {
-    use_form(|| empty_form(form! { Token { r#type => { label: "Kind" } } })).render_fragment()
+    use_form(|| empty_form(form! { Token { r#type => { label: "Kind" } } })).render(using_fns! {})
 }
 
 #[component]
 fn BareSpelling() -> Element {
-    use_form(|| empty_form(form! { Token { type => { label: "Kind" } } })).render_fragment()
+    use_form(|| empty_form(form! { Token { type => { label: "Kind" } } })).render(using_fns! {})
 }
 
 /// The macro-side tests pin the tokens this emits; only a consumer test pins

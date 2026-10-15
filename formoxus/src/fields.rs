@@ -530,6 +530,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
                     id: ctx.id(&self.name),
                     path: ctx.path(&self.name),
                     label: self.label(ctx.label_case),
+                    classes: ctx.classes.clone(),
                     errors: self.errors.clone(),
                 },
             }

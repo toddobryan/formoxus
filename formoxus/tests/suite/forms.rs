@@ -101,7 +101,7 @@ fn repeated_struct_types_get_distinct_paths() {
 #[component]
 fn EmptyEventForm() -> Element {
     let form = use_form(|| empty_form::<EventForCreate>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -133,7 +133,7 @@ fn form_for_none_walks_the_shape_into_empty_members() {
 fn TitledEventForm() -> Element {
     let form =
         use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -460,7 +460,7 @@ fn QuizForm() -> Element {
             FormSpec::default(),
         )
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 /// A model using a scalar with no built-in widget. `usize` is the realistic
@@ -525,7 +525,7 @@ fn click_button(app: fn() -> Element) -> String {
 fn PushesAnErrorOnClick() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Credentials>::default()));
     rsx! {
-        { form.render_fragment() }
+        { form.render(using_fns! {}) }
         button {
             onclick: move |_| form.push_error("invalid credentials".into()),
             "Sign in"
@@ -549,7 +549,7 @@ fn a_form_starts_with_no_error_markup() {
     // only that the string appears somewhere, not that the click put it there.
     #[component]
     fn Untouched() -> Element {
-        use_form(|| empty_form(FormSpec::<Credentials>::default())).render_fragment()
+        use_form(|| empty_form(FormSpec::<Credentials>::default())).render(using_fns! {})
     }
     expect_that!(
         render_to_html(Untouched),
@@ -557,119 +557,12 @@ fn a_form_starts_with_no_error_markup() {
     );
 }
 
-// ── The split render methods ─────────────────────────────────────────────
-//
-// `render_fragment` is title -> fields -> errors, all three. These pin that
-// each of the three pieces `Form` now exposes on its own — `render_fields`,
-// `render_title`, `render_errors` — renders exactly its own slice and nothing
-// from the other two, so a page can recombine them (e.g. put the buttons
-// between fields and errors) without any slice smuggling in markup that
-// belongs to another.
-
-#[component]
-fn TitledFieldsOnly() -> Element {
-    let form =
-        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
-    form.render_fields()
-}
-
-#[gtest]
-fn render_fields_omits_the_title() {
-    let rendered = render_to_html(TitledFieldsOnly);
-    expect_that!(rendered, not(contains_substring("form-title")));
-    expect_that!(rendered, not(contains_substring("New Event")));
-    // The fields themselves are still there.
-    expect_that!(rendered, contains_substring(r#"name="title""#));
-    expect_that!(rendered, contains_substring(r#"name="location.street""#));
-}
-
-#[component]
-fn FieldsOnlyWithPushedError() -> Element {
-    let form = use_form(|| empty_form(FormSpec::<Credentials>::default()));
-    rsx! {
-        { form.render_fields() }
-        button {
-            onclick: move |_| form.push_error("invalid credentials".into()),
-            "Sign in"
-        }
-    }
-}
-
-#[gtest]
-fn render_fields_omits_a_pushed_error() {
-    let html = click_button(FieldsOnlyWithPushedError);
-    expect_that!(html, not(contains_substring("invalid credentials")));
-    expect_that!(html, not(contains_substring("form-error")));
-    expect_that!(html, contains_substring(r#"name="username""#));
-}
-
-#[component]
-fn TitleOnly() -> Element {
-    let form =
-        use_form(|| empty_form::<EventForCreate>(FormSpec::default().with_title("New Event")));
-    form.render_title()
-}
-
-#[gtest]
-fn render_title_renders_just_the_heading() {
-    let rendered = render_to_html(TitleOnly);
-    expect_that!(rendered, contains_substring("New Event"));
-    expect_that!(rendered, contains_substring(r#"class="fx-form-title""#));
-    // None of the fields came along for the ride.
-    expect_that!(rendered, not(contains_substring("name=")));
-}
-
-#[component]
-fn TitleOnlyAbsent() -> Element {
-    let form = use_form(|| empty_form::<EventForCreate>(FormSpec::default()));
-    form.render_title()
-}
-
-#[gtest]
-fn render_title_is_empty_when_there_is_none() {
-    // The widget for the test above: a titleless form's `render_title` slice
-    // is nothing at all, not an empty heading that still occupies a DOM node.
-    let rendered = render_to_html(TitleOnlyAbsent);
-    expect_that!(rendered.trim(), eq(""));
-}
-
-#[component]
-fn ErrorsOnlyWithPushedError() -> Element {
-    let form = use_form(|| empty_form(FormSpec::<Credentials>::default()));
-    rsx! {
-        { form.render_errors() }
-        button {
-            onclick: move |_| form.push_error("invalid credentials".into()),
-            "Sign in"
-        }
-    }
-}
-
-#[gtest]
-fn render_errors_shows_a_pushed_error() {
-    let html = click_button(ErrorsOnlyWithPushedError);
-    expect_that!(html, contains_substring("invalid credentials"));
-    expect_that!(html, contains_substring("form-error"));
-    // No field markup leaked in from the same form.
-    expect_that!(html, not(contains_substring(r#"name="username""#)));
-}
-
-#[gtest]
-fn render_errors_is_empty_before_any_push() {
-    #[component]
-    fn Untouched() -> Element {
-        use_form(|| empty_form(FormSpec::<Credentials>::default())).render_errors()
-    }
-    let rendered = render_to_html(Untouched);
-    expect_that!(rendered.trim(), eq(""));
-}
-
 // ── `render` owns the `<div class="fx-form">` / `<form>` wrapper ────────────
 //
-// `render_fragment` never gained a wrapper — that's the escape hatch, and a
-// regression here would silently start wrapping every one of the 46 existing
-// call sites that rely on it staying bare. `render` is the new, opt-in
-// method that owns the div/form/title placement.
+// `render` is the one public way to draw a form, and it owns the div, the
+// `<form>` and where the title goes. (The title/fields/errors pieces it is
+// built from are crate-private since 2026-10-14: without the `<form>` and its
+// buttons around them, a consumer could not submit what they rendered.)
 
 #[component]
 fn WrappedTitledEventForm() -> Element {
@@ -697,15 +590,18 @@ fn render_places_the_title_before_the_form_element_not_inside_it() {
     expect_that!(title_pos, lt(form_open_pos));
 }
 
+/// A titleless form renders no heading at all, not an empty `<h2>` that
+/// still occupies a DOM node.
 #[gtest]
-fn render_fragment_stays_unwrapped() {
-    // The widget: `render_fragment` must NOT pick up `render`'s div/form
-    // wrapper, since every existing call site depends on getting back exactly
-    // today's bare fragment. `TitledEventForm` (defined above) renders via
-    // `render_fragment`, with the same model and title as `WrappedTitledEventForm`.
-    let rendered = render_to_html(TitledEventForm);
-    expect_that!(rendered, not(contains_substring(r#"class="fx-form""#)));
-    expect_that!(rendered, not(contains_substring("<form")));
+fn a_form_without_a_title_renders_no_heading() {
+    #[component]
+    fn Untitled() -> Element {
+        use_form(|| empty_form::<EventForCreate>(FormSpec::default())).render(Fns::new())
+    }
+    let rendered = render_to_html(Untitled);
+    expect_that!(rendered, not(contains_substring("<h2")));
+    expect_that!(rendered, not(contains_substring("fx-form-title")));
+    expect_that!(rendered, contains_substring("<form"));
 }
 
 #[gtest]

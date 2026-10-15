@@ -45,7 +45,7 @@ fn a_choice_renders_its_value_and_its_display_separately() {
                 Address { state => { widget: select { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"<option value="AL""#));
@@ -68,7 +68,7 @@ fn the_current_value_is_the_selected_option() {
                 form! { Address { state => { widget: select { choices: STATES } } } },
             )
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(
@@ -88,7 +88,7 @@ fn a_sibling_without_choices_is_still_an_input() {
                 Address { state => { widget: select { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"name="zip""#));
@@ -113,7 +113,7 @@ fn an_optional_choice_field_offers_the_absent_entry() {
                 Optional { state => { widget: select { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         render(App),
@@ -130,7 +130,7 @@ fn a_required_choice_field_gets_an_unselectable_placeholder() {
                 Address { state => { widget: select { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), contains_substring("disabled=true"));
 }
@@ -146,7 +146,7 @@ fn an_explicit_list_overrides_a_bools_derived_one() {
                 Flagged { agreed => { widget: select { choices: &[("true", "Yes"), ("false", "No")] } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring("Yes</option>"));
@@ -214,7 +214,7 @@ fn a_radio_group_renders_one_radio_per_choice() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     // One shared `name`, so the browser treats them as one group; a separate
@@ -261,7 +261,7 @@ fn every_radio_shares_the_fields_name() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App).matches(r#"name="state""#).count(), eq(2));
 }
@@ -278,7 +278,7 @@ fn no_radio_is_checked_before_the_user_picks() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), not(contains_substring("checked")));
 }
@@ -297,7 +297,7 @@ fn the_stored_value_is_the_checked_radio() {
                 form! { Address { state => { widget: radio_group { choices: STATES } } } },
             )
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="AK" checked=true"#));
@@ -312,7 +312,7 @@ fn a_bool_derives_true_and_false_radios() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Flagged { agreed => { widget: radio_group } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="true""#));
@@ -334,7 +334,7 @@ fn every_radio_is_required_and_nothing_offers_absence() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     // Per radio, not a count over the whole form: `zip` is a required field
@@ -358,7 +358,7 @@ fn the_group_label_is_a_legend() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         render(App),
@@ -384,7 +384,7 @@ fn the_group_is_a_field_and_a_radio_group() {
                 Address { state => { widget: radio_group { choices: STATES } } }
             })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         render(App),
@@ -407,7 +407,7 @@ fn an_invalid_radio_group_marks_the_group_not_the_radios() {
         // Nothing picked, so `validate` gives `state` its required error.
         let _ = state.validate();
         let form = use_form(|| state);
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     let fieldset = html

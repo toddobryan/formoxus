@@ -23,6 +23,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::using_fns;
 use formoxus::widgets::{BuiltinWidget, WidgetType};
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
@@ -45,7 +46,7 @@ const FIELDS: [&str; 4] = ["text", "int", "float", "flag"];
 fn OneField(path: String, widget: WidgetType) -> Element {
     let form =
         use_form(move || empty_form(FormSpec::<Sampler>::new().with_custom_widget(&path, widget)));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 /// Every built-in widget a consumer can name, by its `form!` name, in

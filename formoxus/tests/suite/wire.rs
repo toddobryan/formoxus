@@ -91,7 +91,7 @@ fn applied_field_errors_render_where_the_widget_shows_them() {
         let form = use_form(|| empty_form(form! { Contact {} }));
         form.distribute_errors(&errors_at("email", "That address is already registered."))
             .expect("email is a field of this form");
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         render(App),
@@ -126,7 +126,7 @@ fn an_applied_error_finds_a_nested_leaf() {
         let form = use_form(|| empty_form(form! { Contact {} }));
         form.distribute_errors(&errors_at("location.zip", "No such ZIP code."))
             .expect("a qualified leaf is a legal target");
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(render(App), contains_substring("No such ZIP code."));
 }
@@ -167,7 +167,7 @@ fn good_paths_land_and_every_bad_path_is_named() {
         let problem = outcome.err().map(|e| e.to_string()).unwrap_or_default();
         rsx! {
             p { "{problem}" }
-            { form.render_fragment() }
+            { form.render(using_fns! {}) }
         }
     }
     let html = render(App);
@@ -238,7 +238,7 @@ fn absorb_replaces_values_the_server_normalized() {
         form.absorb(WireForm::new(normalized, FormErrors::default()))
             .expect("email is a field of this form");
 
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="ada@example.com""#));
@@ -259,7 +259,7 @@ fn absorb_applies_values_and_errors_in_one_pass() {
             errors_at("email", "Already registered."),
         ))
         .expect("both halves name fields of this form");
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="Ada""#));
@@ -279,7 +279,7 @@ fn absorbing_errors_alone_leaves_the_values_alone() {
             "Already registered.",
         )))
         .expect("email is a field of this form");
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="Ada""#));

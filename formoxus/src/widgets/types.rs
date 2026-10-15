@@ -3,9 +3,12 @@
 //! This includes [`Choice`], which represents one of the legal values
 //! a widget can hold.
 
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 use formoxus_spec::BuiltinWidget;
 
+use crate::Classes;
 use crate::error::ValidationMessage;
 use crate::members::ValuesStore;
 
@@ -88,6 +91,11 @@ pub struct FieldProps {
     /// server does not have.
     pub path: String,
     pub label: Option<String>,
+    /// The form's resolved classes, for the widget to look up its parts' slots
+    /// (`classes.part_class(widget, "label", invalid)`). A custom widget gets
+    /// them too, so it can borrow a built-in slot and follow the app's preset.
+    /// An `Rc` from `RenderCtx`; see the rule on `RenderCtx::classes`.
+    pub classes: Rc<Classes>,
     pub errors: Vec<ValidationMessage>,
 }
 

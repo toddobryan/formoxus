@@ -9,6 +9,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::label_case::{LabelCase, ToCase};
+use formoxus::using_fns;
 use formoxus::{Formoxus, defaults, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
@@ -158,7 +159,7 @@ fn the_chosen_case_reaches_the_rendered_label() {
     #[component]
     fn Kebab() -> Element {
         let form = use_form(|| empty_form(form! { Signup { label_case: "LABEL-CASE" } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
 
     let html = super::render_to_html(Kebab);
@@ -180,7 +181,7 @@ fn with_no_app_default_a_silent_form_is_title_case() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Person {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(super::render_to_html(App), contains_substring("First Name"));
 }
@@ -192,7 +193,7 @@ fn an_app_default_reaches_a_silent_form() {
     fn App() -> Element {
         provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let form = use_form(|| empty_form(form! { Person {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = super::render_to_html(App);
     expect_that!(html, contains_substring("FIRST_NAME"));
@@ -207,7 +208,7 @@ fn a_form_overrides_the_app_default() {
     fn App() -> Element {
         provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let form = use_form(|| empty_form(form! { Person { label_case: "label-case" } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = super::render_to_html(App);
     expect_that!(html, contains_substring("first-name"));
@@ -222,7 +223,7 @@ fn a_nested_provider_shadows_an_outer_one() {
     fn Inner() -> Element {
         provide_defaults(defaults().with_label_case(LabelCase::KebabAllCaps));
         let form = use_form(|| empty_form(form! { Person {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
 
     #[component]
@@ -230,7 +231,7 @@ fn a_nested_provider_shadows_an_outer_one() {
         provide_defaults(Formoxus::new().with_label_case(LabelCase::SnakeAllCaps));
         let outer = use_form(|| empty_form(form! { Person {} }));
         rsx! {
-            {outer.render_fragment()}
+            {outer.render(using_fns! {})}
             Inner {}
         }
     }
@@ -311,7 +312,7 @@ fn a_variant_name_uses_the_forms_case() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Order { label_case: "label-case" } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = super::render_to_html(App);
     expect_that!(html, contains_substring(">credit-card<"));
@@ -335,7 +336,7 @@ fn the_required_marker_is_nested_in_the_label() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Signup {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     expect_that!(
         super::render_to_html(App),
@@ -365,7 +366,7 @@ fn the_required_marker_is_hidden_from_assistive_technology() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Signup {} }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = super::render_to_html(App);
     expect_that!(html, contains_substring(r#"aria-hidden="true""#));
@@ -386,7 +387,7 @@ fn an_unlabelled_required_field_gets_no_marker() {
     fn App() -> Element {
         // `hidden` renders bare, with no label at all.
         let form = use_form(|| empty_form(form! { Hidden { token => { widget: hidden } } }));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = super::render_to_html(App);
     expect_that!(html, contains_substring(r#"type="hidden""#));

@@ -269,16 +269,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.buttons()
     }
 
-    pub fn render_fragment(&self, ctx: &RenderCtx) -> Element {
-        rsx! {
-            { self.render_title() }
-            { self.render_fields(ctx) }
-            { self.render_errors() }
-
-        }
-    }
-
-    pub fn render_title(&self) -> Element {
+    pub(crate) fn render_title(&self, _ctx: &RenderCtx) -> Element {
         self.title().as_ref().map_or_else(
             || rsx! {},
             |t| {
@@ -289,14 +280,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         )
     }
 
-    pub fn render_fields(&self, ctx: &RenderCtx) -> Element {
+    pub(crate) fn render_fields(&self, ctx: &RenderCtx) -> Element {
         let members_rendered = self.members.iter().map(|m| m.render(ctx));
         rsx! {
             { members_rendered.into_iter() }
         }
     }
 
-    pub fn render_errors(&self) -> Element {
+    pub(crate) fn render_errors(&self, _ctx: &RenderCtx) -> Element {
         if self.errors.is_empty() {
             rsx! {}
         } else {

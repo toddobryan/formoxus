@@ -329,12 +329,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         reason = "`using_fns!` builds this at the call site for this one call; taking it by value is the honest signature even though the body only reads it"
     )]
     pub fn render(&self, fns: Fns<T>) -> Element {
-        let ctx = RenderCtx::root(
-            self.id.peek().clone(),
-            self.values_store,
-            self.on_edit,
-            self.label_case(),
-        );
+        let ctx = self.root_ctx();
         let state = self.state_signal.read();
         let buttons = state.buttons().to_vec();
         let problems = fns.reconcile(&buttons);
@@ -349,12 +344,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .and_then(|b| fns.get(&b.name).cloned());
         let handle = *self;
 
-        let rendered_buttons = self.render_buttons(&buttons, &fns);
+        let rendered_buttons = self.render_buttons(&ctx, &buttons, &fns);
 
         rsx! {
             div {
                 class: "fx-form",
-                { state.render_title() }
+                { state.render_title(&ctx) }
                 form {
                     // Dioxus omits a boolean attribute whose value is false,
                     // so this is absent exactly when validation stays on —
@@ -373,8 +368,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                         }
                     },
                     { state.render_fields(&ctx) }
-                    { state.render_errors() }
-                    { render_problems(&problems) }
+                    { state.render_errors(&ctx) }
+                    { render_problems(&ctx, &problems) }
                     { rendered_buttons }
                 }
             }
@@ -383,7 +378,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     /// The button row, in declaration order. Nothing at all when the form
     /// declares none, so a view that hand-writes its own buttons is unaffected.
-    fn render_buttons(&self, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
+    fn render_buttons(&self, _ctx: &RenderCtx, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
         if buttons.is_empty() {
             return rsx! {};
         }
@@ -429,30 +424,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         }
     }
 
-    pub fn render_fragment(&self) -> Element {
-        self.state_signal.read().render_fragment(&RenderCtx::root(
+    fn root_ctx(&self) -> RenderCtx {
+        RenderCtx::root(
             self.id.peek().clone(),
             self.values_store,
             self.on_edit,
             self.label_case(),
-        ))
-    }
-
-    pub fn render_title(&self) -> Element {
-        self.state_signal.read().render_title()
-    }
-
-    pub fn render_fields(&self) -> Element {
-        self.state_signal.read().render_fields(&RenderCtx::root(
-            self.id.peek().clone(),
-            self.values_store,
-            self.on_edit,
-            self.label_case(),
-        ))
-    }
-
-    pub fn render_errors(&self) -> Element {
-        self.state_signal.read().render_errors()
+            self.classes(),
+        )
     }
 
     /// Add a form-level error — one that belongs to the form as a whole rather
@@ -655,7 +634,7 @@ where
 /// Handler/spec mismatches, rendered beside the form's own errors and marked
 /// apart from them — these are a programming mistake, not something the person
 /// filling in the form did.
-fn render_problems(problems: &[String]) -> Element {
+fn render_problems(_ctx: &RenderCtx, problems: &[String]) -> Element {
     if problems.is_empty() {
         return rsx! {};
     }

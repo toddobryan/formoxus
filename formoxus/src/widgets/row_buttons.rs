@@ -4,9 +4,11 @@
 //! SHAPE, so all either one does is put an [`Edit`] on the wire and let
 //! [`ListSet`](crate::members::ListSet) rebuild itself.
 
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 
-use crate::members::Edit;
+use crate::{Classes, members::Edit};
 
 /// The widget that appends a row to a list.
 ///
@@ -16,7 +18,7 @@ use crate::members::Edit;
 /// defaults to `type="submit"`, so omitting it would submit the form instead of
 /// adding a row.
 #[component]
-pub fn AddRowButton(path: String, on_edit: Callback<Edit>) -> Element {
+pub fn AddRowButton(path: String, on_edit: Callback<Edit>, classes: Rc<Classes>) -> Element {
     rsx! {
         button {
             r#type: "button",
@@ -39,7 +41,12 @@ pub fn AddRowButton(path: String, on_edit: Callback<Edit>) -> Element {
 /// directly. Keys identify a row across edits; a position locates one at an
 /// instant, which is all a click needs to say.
 #[component]
-pub fn RemoveRowButton(path: String, index: usize, on_edit: Callback<Edit>) -> Element {
+pub fn RemoveRowButton(
+    path: String,
+    index: usize,
+    on_edit: Callback<Edit>,
+    classes: Rc<Classes>,
+) -> Element {
     // 1-based for humans: this is the only place a row's position is spoken
     // aloud, and it is never used as a path segment.
     let ordinal = index + 1;

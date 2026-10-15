@@ -207,7 +207,7 @@ impl FormMember for VariantSet {
                         id: legend_id(&id),
                         "{text}"
                         if ctx.required {
-                            {required_marker()}
+                            {required_marker(&ctx.classes)}
                         }
                     }
                 }
@@ -223,6 +223,7 @@ impl FormMember for VariantSet {
                         // The legend above already names this group; a second copy
                         // beside the select would just be the same word twice.
                         label: None,
+                        classes: ctx.classes.clone(),
                         errors: self.errors.clone(),
                     }
                 }

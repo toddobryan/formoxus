@@ -34,6 +34,13 @@ data — `defaults()` needs a live Dioxus runtime and a `ButtonSpec` outlives an
 render, which is the same reason the cascade is resolved on `Form` and not
 `FormState`.
 
+**Rc, never inside FormSpec/FormState (2026-10-14, Todd).** Resolved values
+handed down for rendering (P3's `Rc<Classes>` on `RenderCtx` and `FieldProps`)
+use `Rc`: Dioxus renders on one thread and asks for no `Send`. But `FormSpec`
+and `FormState` reach the server (`Submission` rebuilds a `FormState`, and a
+handler's future must be `Send`), so they hold resolved settings BY VALUE; an
+`Rc` there would make them `!Send` and break the server path.
+
 **The rule, for the next derived-text site:** resolve the cascade at the `Form`
 boundary and hand the answer down. Never reach for `defaults()` from inside
 something that renders.

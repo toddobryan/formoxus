@@ -121,10 +121,10 @@ impl FormMember for ListSet {
                     // on an element, and it is what pairs a row with its widget.
                     div { class: "fx-form-row", key: "{row.name()}",
                         { row.render(&nested) }
-                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit }
+                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                     }
                 }
-                AddRowButton { path: path.clone(), on_edit: ctx.on_edit }
+                AddRowButton { path: path.clone(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
             }
         }
     }

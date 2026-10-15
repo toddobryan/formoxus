@@ -1,8 +1,10 @@
 //! The per-field error list every widget renders under its widget.
 
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 
-use crate::error::ValidationMessage;
+use crate::{Classes, error::ValidationMessage};
 
 /// The per-field error list, rendered under every widget.
 ///
@@ -34,7 +36,11 @@ use crate::error::ValidationMessage;
 /// reads to announce a field as errored. Leaving it off is an accessibility
 /// defect, not a theming preference.
 #[component]
-pub fn FieldErrors(field_id: String, errors: Vec<ValidationMessage>) -> Element {
+pub fn FieldErrors(
+    field_id: String,
+    errors: Vec<ValidationMessage>,
+    classes: Rc<Classes>,
+) -> Element {
     rsx! {
         if !errors.is_empty() {
             ul {

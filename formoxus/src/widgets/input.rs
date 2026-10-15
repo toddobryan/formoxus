@@ -95,34 +95,27 @@ fn text_like(
 
     let field_class = props.field_class();
 
-    let FieldProps {
-        id: field_id,
-        path,
-        label,
-        errors,
-    } = props;
-
-    let current = get_current(&path, values);
+    let current = get_current(&props.path, values);
 
     rsx! {
         div {
             class: "{field_class}",
-            {field_label(&field_id, label, field_attrs.contains(Attr::Required))}
+            {field_label(&props.id, props.label, field_attrs.contains(Attr::Required), &props.classes)}
             input {
                 class: class,
                 r#type: input_type.to_input_type().html_type(),
-                id: "{field_id}",
-                name: "{path}",
+                id: "{props.id}",
+                name: "{props.path}",
                 value: "{current}",
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
-                    write_value(&path, values, raw);
+                    write_value(&props.path, values, raw);
                 },
                 // Last, and it has to be: rsx! treats everything after a spread
                 // as children, so an attribute below this is a parse error.
                 ..attrs,
             }
-            FieldErrors { field_id: &field_id, errors }
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }
@@ -139,13 +132,6 @@ fn checkbox(
 
     let field_class = props.field_class();
 
-    let FieldProps {
-        id,
-        path,
-        label,
-        errors,
-    } = props;
-
     // The wrapper is unconditional and the caption is not, exactly as for a
     // text input. Until 2026-09-29 this widget wrapped an unclassed `<label>`
     // only when it had text, and put that text in no span, so
@@ -160,18 +146,18 @@ fn checkbox(
             // into it.
             input {
                 class: class,
-                name: "{path}",
-                id: "{id}",
+                name: "{props.path}",
+                id: "{props.id}",
                 r#type: "checkbox",
-                checked: get_current(&path, values) == "true",
-                onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+                checked: get_current(&props.path, values) == "true",
+                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
                 // Last: rsx! reads anything after a spread as children.
                 ..attrs,
             }
             // Marked by `required_true`, not `required`: on a bool, `required`
             // is presence, which a checkbox always has.
-            {field_label(&id, label, field_attrs.contains(Attr::RequiredTrue))}
-            FieldErrors { field_id: &id, errors }
+            {field_label(&props.id, props.label, field_attrs.contains(Attr::RequiredTrue), &props.classes)}
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }

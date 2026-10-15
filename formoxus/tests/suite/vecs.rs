@@ -438,7 +438,7 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
 #[component]
 fn QuizForm() -> Element {
     let form = use_form(|| form_for(&quiz(), FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -471,7 +471,7 @@ fn each_row_renders_inside_its_own_wrapper() {
 #[component]
 fn BlankQuizForm() -> Element {
     let form = use_form(|| empty_form::<Quiz>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]

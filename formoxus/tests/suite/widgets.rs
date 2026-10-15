@@ -186,6 +186,7 @@ fn PopulatedInput() -> Element {
                 id: ID.into(),
                 path: "title".to_string(),
                 label: Some("Title".to_string()),
+                classes: Rc::new(Classes::default()),
                 errors: Vec::new(),
             },
         }
@@ -211,6 +212,7 @@ fn EmptyInput() -> Element {
                 id: ID.into(),
                 path: "shape.radius".to_string(),
                 label: None,
+                classes: Rc::new(Classes::default()),
                 errors: Vec::new(),
             },
         }
@@ -313,7 +315,7 @@ fn ScoreFormWithBadInput() -> Element {
     // exist yet, so there is no interaction to drive here.
     let _ = state.validate();
     let form = use_form(|| state);
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -394,8 +396,8 @@ fn two_copies_of_a_form_get_different_ids_and_the_same_names() {
         let first = use_form(|| empty_form(form! { OneString {} }));
         let second = use_form(|| empty_form(form! { OneString {} }));
         rsx! {
-            {first.render_fragment()}
-            {second.render_fragment()}
+            {first.render(using_fns! {})}
+            {second.render(using_fns! {})}
         }
     }
     let html = render_to_html(TwoCopies);
@@ -451,7 +453,7 @@ fn WithWidget() -> Element {
     let form = use_form(|| {
         empty_form(FormSpec::<OneString>::default().with_custom_widget("secret", widget))
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -493,7 +495,7 @@ fn a_numeric_field_still_renders_as_text() {
     #[component]
     fn NumberForm() -> Element {
         let form = use_form(|| empty_form(FormSpec::<OneNumber>::default()));
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render_to_html(NumberForm);
     expect_that!(html, contains_substring("type=\"text\""));
@@ -536,7 +538,7 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                 ),
             )
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render_to_html(FilledPassword);
     expect_that!(html, contains_substring("type=\"password\""));
@@ -587,6 +589,7 @@ fn PasswordWithEcho() -> Element {
                 id: ID.into(),
                 path: "secret".to_string(),
                 label: Some("Secret".to_string()),
+                classes: Rc::new(Classes::default()),
                 errors: Vec::new(),
             },
         }

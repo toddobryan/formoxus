@@ -166,7 +166,7 @@ fn an_untouched_optional_enum_validates_as_none() {
 #[component]
 fn UnchosenSketchForm() -> Element {
     let form = use_form(|| empty_form::<Sketch>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -194,7 +194,7 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
 #[component]
 fn UnchosenDrawingForm() -> Element {
     let form = use_form(|| empty_form::<Drawing>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -257,7 +257,7 @@ fn DocWithChosenOuter() -> Element {
             .expect("First is a variant of Outer2");
         state
     });
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 // ── The whole loop: a DOM event that rebuilds the schema ─────────────────
@@ -287,7 +287,7 @@ fn choosing_a_variant_in_the_select_reveals_its_fields() {
 #[component]
 fn UnchosenDocForm() -> Element {
     let form = use_form(|| empty_form::<Doc>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -627,7 +627,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
 #[component]
 fn PlotForm() -> Element {
     let form = use_form(|| empty_form::<Plot>(FormSpec::default()));
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 #[gtest]
@@ -887,7 +887,7 @@ fn DrawingWithABadRadius() -> Element {
     ]);
     let _ = state.validate();
     let form = use_form(|| state);
-    form.render_fragment()
+    form.render(using_fns! {})
 }
 
 /// **A bad field INSIDE the chosen variant does not mark the variant
@@ -944,7 +944,7 @@ fn an_authors_aria_labelledby_replaces_the_legend_reference() {
         let form = use_form(|| {
             empty_form(form! { Drawing { shape => { aria_labelledby: "my-heading" } } })
         });
-        form.render_fragment()
+        form.render(using_fns! {})
     }
     let html = render_to_html(App);
     expect_that!(html, contains_substring(r#"aria-labelledby="my-heading""#));

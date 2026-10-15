@@ -1141,14 +1141,170 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     against the spec's `BuiltinWidget::parts()`, `FixedKey` and
     `ButtonType`. Goldens (Claude): a misspelt widget, part, fixed key and
     button type; `+` on a malformed value; a duplicate entry.
-- [ ] **P3-6. Delivery (Todd)**, per P3-e.
-- [ ] **P3-7. Replace the literals (Todd)**, file by file, the snapshot
-  checked after each: the widgets (`input`, `textarea`, `select`,
-  `radio_group`, `variant_select`, `errors`, `row_buttons`), the members
-  (`field_set`, `list_set`, `variant_set`), and `form.rs`/`state.rs`.
-  `ButtonType::classes()` and `FieldProps::field_class`/`field_class_plus`
-  (12 users) go, replaced by slot lookups. `FieldAttrs::class(base)` already
-  takes the base, so it just receives the slot's.
+- [x] **P3-6. Delivery** (DONE 2026-10-14, Todd and Claude), per P3-e: every element that P3-7 will
+  class can REACH the form's resolved `Classes`. Nothing renders differently
+  after this step: the literals stay until P3-7, so the snapshot must not
+  move. Broken down 2026-10-14 (Claude), line numbers from `f36669f`.
+  **The rule (Todd, 2026-10-14):** a render FUNCTION takes `&RenderCtx`; a
+  COMPONENT takes props. A widget is a component and never sees a
+  `RenderCtx` (it carries `prefix`, `required`, `values`, `on_edit`, which a
+  leaf must not depend on, and a component's props need `PartialEq`, which
+  `RenderCtx` lacks), so a widget's classes reach it inside `FieldProps`, and
+  the helpers inside a widget take the `&Classes` from there.
+  - [x] **P3-6a. `RenderCtx` carries it.** DONE in part (Todd):
+    `classes: Rc<Classes>` ([members.rs:259](src/members.rs#L259)), and
+    `root` takes a `Classes` and wraps it itself, so callers never see the
+    `Rc` and cannot pass one shared with anything else; `nested` and
+    `optional` clone the `Rc` (a pointer copy). Those two list every field
+    by hand, so a new field means editing both; `Self { prefix: …,
+    ..self.clone() }` would not. Still to do: a doc comment on the field.
+    **`Rc`, not `Arc`, and only on the render side** (Todd, 2026-10-14).
+    Dioxus renders a `VirtualDom` on one thread (it is not `Send`, and
+    neither props nor `provide_context` ask for `Send`), so `Arc` would only
+    add an atomic count. The rule that matters: **never an `Rc` inside
+    `FormSpec` or `FormState`.** Both reach the server, where `Submission`
+    rebuilds a `FormState` with no renderer and a handler's future must be
+    `Send`; one `Rc` there would break that path. They hold `Classes` and
+    `ClassEdit`s by value (plain data, so `Send`); the `Rc` lives only in
+    `RenderCtx` and `FieldProps`, which exist only while rendering. Worth
+    saying in the doc comment on `RenderCtx::classes` too.
+  - [x] **P3-6b. One context, built at the top of `render`.** DONE in part
+    (Todd): a private `Form::root_ctx()` (id, store, callback,
+    `label_case()`, `classes()`). **`render` is now the ONLY public way to
+    draw a form** (Todd, 2026-10-14): `Form::render_fragment`,
+    `render_title`, `render_fields` and `render_errors` are DELETED, and
+    `FormState`'s pieces are `pub(crate)`. Unlike Django, whose template
+    owns the `<form>`, formoxus owns the `<form>`, its `onsubmit` and the
+    buttons, so a piece rendered alone could not be submitted; and adding a
+    public method later is not breaking, while removing one after publishing
+    is. The suite's ~99 `render_fragment()` calls became
+    `render(using_fns! {})`; one test of `render_fragment` itself and three
+    of the pieces' slicing were deleted, one rewritten through `render`.
+    So the context is built once, in `render`, which passes it on to
+    `render_buttons` and the free `render_problems` as `&RenderCtx`, for
+    the form wrapper, the button row, the buttons and the problems list.
+  - [x] **P3-6c. `FormState`'s pieces all take `&RenderCtx`.**
+    `render_title` and `render_errors` take none today; they join
+    `render_fields`, which does. All three are `pub(crate)`, called only
+    from `render`.
+  - [x] **P3-6d. The members** (`FieldSet`, `ListSet`, `VariantSet`)
+    already render from `&RenderCtx`, so their own fieldsets and legends
+    need nothing new. `AddRowButton`/`RemoveRowButton` (`list_set.rs:124`,
+    `:127`) are components, so `ListSet` passes them `ctx.classes.clone()`
+    as a new `classes: Rc<Classes>` prop (P3-6-C).
+  - [x] **P3-6e. The widgets, through `FieldProps`.** (Todd also dropped
+    every `let FieldProps { … }` for `props.x`; Claude added the doc
+    comments on both `classes` fields.) `FieldProps` gains
+    `classes: Rc<Classes>` ([types.rs](src/widgets/types.rs)). It is
+    already what every built-in widget receives, and what a custom widget
+    receives inside `WidgetProps`, so that one field is P3-b's "a custom
+    widget's class function receives the resolved `Classes`". Built in two
+    places (`fields.rs:529`, `variant_set.rs:220`), both from
+    `ctx.classes.clone()`; destructured by six `let FieldProps { … }`, each
+    gaining `classes`. A widget hands it on to `FieldErrors` (a component:
+    a `classes: Rc<Classes>` prop) and to `field_label`/`required_marker`
+    (functions inside a widget, with no context: a `&Classes` parameter).
+  - [x] **P3-6f. Tests (Claude; DONE 2026-10-14: the literals by Todd;
+    `a_custom_widget_receives_the_forms_resolved_classes` in
+    `tests/suite/classes.rs`, mutation-checked):** the three suite `FieldProps { … }`
+    literals (`tests/suite/widgets.rs:185`, `:210`, `:586`) gain
+    `classes: Rc::new(Classes::fx())`; the snapshot unchanged; a suite test
+    that a custom widget's `WidgetProps.props.classes` is the FORM's
+    resolved `Classes` (`classes_plus:` included), which is P3-b and the
+    only part of P3-6 observable before P3-7.
+
+  Decisions (Todd):
+  - **P3-6-A. `FieldProps` as the route to the widgets** (P3-6e), rather
+    than a separate `classes` prop on `ScalarWidget` and each widget.
+    DECIDED (Todd, 2026-10-14) as part of the rule above.
+  - **P3-6-B. `Rc<Classes>`'s `PartialEq` compares contents.** Dioxus
+    compares a component's props to decide whether to re-render, so every
+    widget compares ~80 slots each time. Proposed: accept it for now (a map
+    compare is cheap next to a re-render). The alternative is a newtype
+    whose `PartialEq` is `Rc::ptr_eq`, which is right only if a form never
+    rebuilds an equal `Classes` in a new `Rc`, and P3-6b does exactly that
+    on every render, so pointer equality would re-render every widget every
+    time.
+  - **P3-6-C. One rule for components: take `classes: Rc<Classes>` and look
+    up their own slots**, even where only one is needed (the row buttons).
+    Proposed, for uniformity; the alternative is passing a resolved
+    `class: Option<String>` to the one-element components.
+- [ ] **P3-7. Replace the literals** (Todd), file by file, running
+  `cargo test -p formoxus --test suite snapshot` after each: it must stay
+  green throughout, since `fx()` holds exactly today's literals. Broken down
+  2026-10-14 (Claude); 37 literals in 14 files, line numbers from the
+  working tree after P3-6.
+
+  **Decisions first (Todd), each with a proposal:**
+  - **P3-7-A. How a widget part asks for its class:**
+    `props.classes.part_class(WIDGET, "part", invalid)`, where `invalid` is
+    `!props.errors.is_empty()` (the field's own errors, what `fx-invalid`
+    and `aria-invalid` already follow). Each widget names its own
+    `BuiltinWidget`: `Input(input_type)` (so a checkbox is
+    `Input(Checkbox)` and a hidden input `Input(Hidden)`, whose `input` has
+    no slot and so no `class`), `Textarea`, `Select`, `RadioGroup`, and
+    `VariantSelect` borrows `Select`'s (P3-h). The radio group's per-choice
+    `div`, `input` and `label` pass the same `invalid`.
+  - **P3-7-B. `field_label` needs the widget.** It is shared, but the
+    `label` slot is per widget, and Foundation-style presets give the label
+    an invalid class. Proposed: `field_label(widget, id, text, marked,
+    invalid, classes)`, so it looks the slot up itself; the alternative is
+    each caller passing a resolved `class: Option<String>`.
+  - **P3-7-C. `FieldAttrs::class(base)` takes the slot.** Today
+    `class(&self, base: &str) -> String` ([fields.rs:136](src/fields.rs#L136)).
+    It becomes `class(&self, slot: Option<&Slot>, invalid: bool) ->
+    Option<String>`: an author's `class:` replaces the slot's BASE,
+    `class_plus:` appends to it, and either way the slot's INVALID class is
+    still added when `invalid` (P3-g); `None` when the result is empty, so a
+    `bare()` control renders no `class`. (`Slot::value` already does the
+    no-author-classes case.)
+  - **P3-7-D. `invalid` for slots that only exist when there ARE errors**
+    (`FixedKey::FieldErrors`/`FieldError`, `FormErrors`/`FormError`,
+    `ButtonProblems`/`ButtonProblem`): proposed `false`, so a preset styles
+    them with their base, and the invalid class stays the mark of an errored
+    FIELD. The groups (`FieldSet`, `ListSet`, `VariantSet` and legends) pass
+    `false` too: `fx()` gives them no invalid class, and only `VariantSet`
+    tracks errors of its own.
+
+  **One `rsx!` fact the whole step relies on:** `class: x` where `x:
+  Option<String>` omits the attribute on `None`. CONFIRMED 2026-10-14 by a
+  throwaway SSR probe: `div { class: None::<String> }` renders `<div>`, and
+  `Some("a b")` renders `class="a b"`. P3-8's `bare()` test pins it.
+
+  **The files, in an order where each builds on the last:**
+  - [ ] **P3-7a. `FieldAttrs::class`** to the P3-7-C signature; its five
+    callers (`input.rs:93`, `:130`, `textarea.rs:28`, `select.rs:38`,
+    `variant_select.rs:35`) pass `props.classes.part(WIDGET, "input" /
+    "textarea" / "select")` and `invalid`.
+  - [ ] **P3-7b. The wrapper `div`.** `FieldProps::field_class()` and
+    `field_class_plus()` ([types.rs:123](src/widgets/types.rs#L123), 7
+    callers) are deleted; each widget uses `part_class(WIDGET, "div",
+    invalid)`, and the radio group `part_class(RadioGroup, "fieldset",
+    invalid)` (today's `field_class_plus("fx-radio-group")`). The doc
+    comment on `field_class` explaining why it picks whole strings (rsx!
+    joins two `class:`es with a stray space) is worth keeping on
+    `Slot::value`, which now does that job.
+  - [ ] **P3-7c. `label.rs`:** `field_label` per P3-7-B (`label.rs:24`);
+    `required_marker` uses `fixed_class(RequiredMarker, false)`
+    (`label.rs:42`), its `_classes` parameter losing the underscore.
+  - [ ] **P3-7d. The radio group** (`radio_group.rs:64` `div`, `:66`
+    `input`, `:83` `label`, `:101` `legend`).
+  - [ ] **P3-7e. `FieldErrors`** (`errors.rs:47` list, `:50` item) from its
+    `classes` prop.
+  - [ ] **P3-7f. The members:** `field_set.rs:38`/`:40`,
+    `list_set.rs:111`/`:113`/`:122`, `variant_set.rs:203`/`:206`, each a
+    `ctx.classes.fixed_class(…, false)`; the row buttons
+    (`row_buttons.rs:25`, `:56`) from their `classes` prop.
+  - [ ] **P3-7g. The form:** `state.rs:277` (title), `:296`/`:299` (form
+    errors); `form.rs:351` (`fx-form`), `:423` (button row), the buttons
+    (`form.rs`'s `button_classes(b.ty)` call →
+    `fixed_class(Button(b.ty), false)`), `:644`/`:646` (problems). Then
+    `buttons::button_classes` (`buttons.rs:90–94`) is deleted.
+  - [ ] **P3-7h. Sweep:** `grep '"[^"]*fx-' formoxus/src` finds nothing
+    outside `classes.rs` (`fx()` itself) and comments; the snapshot is
+    unchanged; `just ci` and `just e2e` (the e2e selectors use these
+    classes) green.
+
 - [ ] **P3-8. Tests (Claude):** the snapshot is unchanged; a whole form under
   `bare()` contains no `class=` at all; a form-level `classes:` replaces the
   app's; `classes_plus:` changes only the slots it names, on top of an app's

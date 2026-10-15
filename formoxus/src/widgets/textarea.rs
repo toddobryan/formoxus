@@ -30,32 +30,25 @@ pub fn Textarea(
 
     let field_class = props.field_class();
 
-    let FieldProps {
-        id: field_id,
-        path,
-        label: label_text,
-        errors,
-    } = props;
-
-    let current = get_current(&path, values);
+    let current = get_current(&props.path, values);
 
     rsx! {
         div {
             class: field_class,
-            {field_label(&field_id, label_text, field_attrs.contains(Attr::Required))}
+            {field_label(&props.id, props.label, field_attrs.contains(Attr::Required), &props.classes)}
             textarea {
                 class: class,
-                id: &field_id,
-                name: "{path}",
+                id: &props.id,
+                name: "{props.path}",
                 value: "{current}",
                 oninput: move |e: FormEvent| {
                     let raw = e.value();
-                    write_value(&path, values, raw);
+                    write_value(&props.path, values, raw);
                 },
                 // TODO: delete pattern, since not allowed in HTML
                 ..attrs,
             }
-            FieldErrors { field_id: &field_id, errors }
+            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
     }
 }
