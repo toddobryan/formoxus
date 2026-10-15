@@ -42,6 +42,7 @@ pub fn TestForm(slug: String) -> Element {
         "textarea" => rsx! { TextareaForm {} },
         "enum" => rsx! { EnumForm {} },
         "buttons" => rsx! { Buttons {} },
+        "bare" => rsx! { Bare {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -428,4 +429,25 @@ fn Buttons() -> Element {
             }
         }
     }
+}
+
+// ── bare ─────────────────────────────────────────────────────────────────
+
+/// `Classes::bare()`: every class slot empty, so formoxus emits no `class`
+/// attribute at all. Validation OFF, so an empty submit reaches formoxus and
+/// the re-render that shows its error is one the browser performs, which the
+/// SSR suite's `bare()` test cannot reach.
+#[component]
+fn Bare() -> Element {
+    harness(
+        "bare",
+        "One required field under Classes::bare(), browser validation OFF. No element of the form should carry a class, before or after a submit.",
+        form! {
+            OneField {
+                classes: Classes::bare(),
+                browser_validation: off,
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
 }

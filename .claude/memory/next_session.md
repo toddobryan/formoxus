@@ -5,6 +5,12 @@ metadata:
   type: project
 ---
 
+**2026-10-15 (school), END: P3 DONE (P3-7, P3-8, P3-9), #10 CLOSED, ALL
+PUSHED.** P3-8: rendered cascade tests in `tests/suite/classes.rs`, `bare()`
+tests in `snapshot.rs`. P3-9: `/t/bare` + `e2e/tests/bare.rs`. **Next: Step 4
+in the plan (emit only valid attributes, the `Widget` trait), opening with
+decisions D0–D4; 4d now also carries the parked widget-boilerplate idea.**
+
 **2026-10-15 (school), LATER: P3-7 DONE AND COMMITTED (`2a7d82d`); the
 form title is now a `div` + `aria-labelledby` on the `<form>`, not an `<h2>`.
 Next: P3-8 (tests, Claude), then P3-9 (wrap-up). The widget-boilerplate

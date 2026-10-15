@@ -1,9 +1,23 @@
 ---
 name: css-class-vocabulary
-description: "The fx- CSS class vocabulary, DECIDED with Todd 2026-09-29 and swept in as MVP step 1. Records every name, the four gaps the old set had (controls, containers, legends, the checkbox), why 'fx-control' is a deliberate exception to the widget-never-control rule, and why <option> needs no classes at all"
+description: "The fx- CSS class vocabulary (since 2026-10-15 the DEFAULT, Classes::fx(), overridable), DECIDED with Todd 2026-09-29 and swept in as MVP step 1. Records every name, the four gaps the old set had (controls, containers, legends, the checkbox), why 'fx-control' is a deliberate exception to the widget-never-control rule, and why <option> needs no classes at all"
 metadata:
   type: project
 ---
+
+**UPDATE 2026-10-15: P3 DONE, issue #10 closed.** The vocabulary below is now
+the DEFAULT, `Classes::fx()` in `formoxus/src/classes.rs`, which is its source
+of truth; every element looks its class up there (P3-7), and nothing in
+`formoxus/src` spells an `fx-` class outside `fx()` itself. Overrides: an app's
+`Formoxus::with_classes`, a form's `classes:` (replace) and `classes_plus:`
+(edit named slots), a field's `class:`/`class_plus:`; `Classes::bare()` emits no
+`class` at all (pinned by a suite test and `/t/bare`'s e2e pair). Renaming a
+default is STILL breaking for anyone styling `fx()`, so the reasoning below
+still binds. Two markup changes rode along: the radio group's fieldset reads
+`fx-form-field fx-radio-group fx-invalid` (a slot is base-then-invalid), and
+the form title is a `div.fx-form-title` the `<form>` is `aria-labelledby`, not
+an `<h2>`. Stale below: "Each radio's wrapping `<label>` is now `fx-choice`" —
+since P1 a choice is `div.fx-choice > input.fx-radio + label.fx-choice-label`.
 
 **UPDATE 2026-10-10:** the override SYSTEM is now MVP (P3 in
 `formoxus/ATTRIBUTES_PLAN.md`; [[attribute-rules-design]]), and `fx-form-field`

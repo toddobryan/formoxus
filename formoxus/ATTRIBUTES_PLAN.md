@@ -23,7 +23,9 @@ order to do things in and where to do them. Claude keeps it current when asked.
 > **The macro side DONE the same day, and the runtime side: P2 IS DONE.**
 > Next: P3 (configurable classes), BROKEN DOWN 2026-10-13; it opens with
 > decisions P3-c to P3-h. **2026-10-14: P3-1 to P3-6 DONE. 2026-10-15:
-> P3-7-A..D DECIDED as proposed; P3-7a is next.**
+> P3-7-A..D DECIDED as proposed. Later that day P3-7, P3-8 and P3-9
+> DONE: P3 IS DONE, #10 closed. Before Step 4, all three are done; Step 4
+> is next, opening with decisions D0–D4.**
 >
 > Line numbers below are from `69a9225`. They drift as the code changes; ask for
 > a refresh rather than trusting an old one.
@@ -1329,7 +1331,9 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   apply in order; `class`/`class_plus` replace and append to a CONFIGURED base, not
   just `fx()`'s; P3-g's invalid class survives an author `class:`; a custom
   widget receives the resolved `Classes` (P3-b).
-- [ ] **P3-9. Wrap-up (Claude):** a `/t/` test form under `bare()` with its
+- [x] **P3-9. Wrap-up (Claude; DONE 2026-10-15: `/t/bare` + `e2e/tests/bare.rs`,
+  its no-class check proven by removing `bare()`; `main.css`'s list matched
+  `fx()` exactly, 36 classes, and now says they are the default):** a `/t/` test form under `bare()` with its
   e2e test (they come in pairs); `examples/assets/main.css`'s vocabulary
   comment checked against `fx()`; `css_class_vocabulary.md` updated; close
   #10.

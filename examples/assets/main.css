@@ -5,7 +5,12 @@
  * hooks — which is also the point of it: it is the worked example of how to
  * theme formoxus with whatever you already use, or with nothing at all.
  *
- * The complete vocabulary, all prefixed `fx-`:
+ * These are formoxus's DEFAULT classes, `Classes::fx()`, and nothing more
+ * fixed than that: an app swaps them all with `Formoxus::with_classes(...)`, a
+ * form with `classes:` or edits a few with `classes_plus:`, and
+ * `Classes::bare()` emits no class at all. This gallery keeps the defaults.
+ *
+ * The complete default vocabulary, all prefixed `fx-`:
  *   structure   .fx-form  .fx-form-title  .fx-form-row
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
