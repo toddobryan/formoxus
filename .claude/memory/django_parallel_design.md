@@ -215,6 +215,22 @@ counter won, for two reasons:
 - Aim: a blanket `impl<F: Field> Node for F`, so a dev writing a field
   never touches tree code (`distribute_values`, `apply_specs`).
 
+**Shape of the field trait (decided 2026-10-16 evening):** composition the
+INVERTED way, no forwarding, no macro. `trait Field` (what a dev
+implements) holds only the behavior that differs: `type Value` (an
+associated type, not `Field<T>`), `parse` (default: facet `parse_scalar`),
+`check`, `widget_attrs`, and the field BUILDS its widget (so a
+`ChoiceField` hands its choices to whichever chooser `form!` names; no
+choices slot in `WidgetProps`). The generic `FieldNode<F: Field>` holds
+the shared state (`name, label, optional, widget, wrapper, value: FieldValue<F::Value>,
+errors, field: F`) and is the one `impl<F: Field> Node for FieldNode<F>`.
+Today's struct `Field<T>` becomes `FieldNode<F>`; the trait takes the name.
+First four: `StringField` (not `TextField`: no clash with `TextInput` or
+`Textarea`), `NumberField<T>`, `BoolField` (stresses the trait: an unticked
+checkbox means `false`, probably `fn empty_value() -> Option<Value>`),
+`ChoiceField<T>` (typed). `build.rs`'s `dispatch!` maps each scalar to its
+field. Todd writes; I review.
+
 **Server-only validation: IN this refactor** (Todd: "I'm a masochist").
 Django never named the category because all its validation is
 server-side; formoxus also validates in wasm. Examples: username or email

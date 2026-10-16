@@ -11,7 +11,7 @@ use crate::buttons::ButtonSpec;
 use crate::classes::ClassEdit;
 use crate::classes::Classes;
 use crate::error::ValidationError;
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::label_case::LabelCase;
 use crate::widgets::{Choice, WidgetType};
 

@@ -2,7 +2,7 @@
 
 use crate::build::{FormMode, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::NodeContext;

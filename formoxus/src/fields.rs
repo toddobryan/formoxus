@@ -1,4 +1,4 @@
-//! Leaf nodes: a single input, its parsed value, and the two vtable-driven
+/*//! Leaf nodes: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 use crate::ErrorsByPath;
 use crate::classes::Slot;
@@ -24,7 +24,7 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
         error: ValidationMessage,
     },
 }
-
+/*
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
@@ -52,6 +52,7 @@ pub struct Field<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub value: FieldValue<T>,
     pub errors: Vec<ValidationMessage>,
 }
+*/
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldAttrs(IndexMap<AttrKey, AttrValue>);
@@ -260,6 +261,7 @@ fn int_bound(bound: Bound, which: &str) -> i128 {
     }
 }
 
+/*
 impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
@@ -680,6 +682,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
         self.errors.clear();
     }
 }
+*/
 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —
 /// the runtime equivalent of the `T: FromStr` bound the macro-based version
@@ -1664,3 +1667,4 @@ mod tests {
         );
     }
 }
+*/

@@ -5,6 +5,37 @@ metadata:
   type: project
 ---
 
+**2026-10-16 (school, ~5pm), END: WIP, BUILD BROKEN ON PURPOSE.** Committed
+with `--no-verify` (format hook). Todd is writing; I review. State:
+- `formoxus/src/field.rs` (new): `trait Field` with `type Value`,
+  `type Context`, `parse` (default `parse_scalar`, moved here), `check`,
+  `widget_attrs`, `default_widget(optional) -> Box<dyn Widget>`,
+  `async fn check_on_server`; a placeholder `trait Widget {}` (TODO: move).
+- `formoxus/src/field_attrs.rs` (new): ONLY the `FieldAttrs` struct so far.
+- `fields.rs` is ENTIRELY commented out (`/* … */`, including its tests);
+  the old `Field<T>` struct and impls are there for reference while
+  `FieldNode<F>` gets written.
+- The 10 errors are all one cause: `FieldAttrs`'s methods (`get`, `contains`,
+  `without`, `with_default`, `to_attributes`, `merge_with_attrs`, `class`,
+  `with_owned_attrs`, `From<[…; N]>`) and `populate`/`Field` are still inside
+  the commented-out `fields.rs`; importers point at `crate::fields::…`.
+**Review notes to raise with Todd (my first read, not yet discussed):**
+1. `async fn check_on_server` has no default, so every field must write
+   it; give it one returning no messages.
+2. `async fn` in a public trait: the future has no `Send` bound
+   (rustc's `async_fn_in_trait` lint), and server handlers need `Send`.
+   Likely `fn check_on_server(…) -> impl Future<Output = …> + Send`.
+3. `type Context` on `Field` is the big one: Context belongs to the FORM
+   (`FormDef::Context`), but a field like `ProgramSnippetField` is written
+   once and used in many forms, and one form mixes fields. Must a field's
+   `Context` equal its form's? Options: fields generic over the context
+   (`impl<C: HasDb> Field<C>`), a `FromRef`-style projection (axum), or
+   Context only reaches server checks through `FieldNode` by `&dyn Any`.
+4. Unused `value` in default `check` warns; `_value`.
+5. Next after the build: `FieldNode<F>` and `impl<F: Field> Node for FieldNode<F>`,
+   then `StringField`, `NumberField<T>`, `BoolField`, `ChoiceField<T>`,
+   then `build.rs`'s `dispatch!`.
+
 **2026-10-16 (school, end of day): FIELDS AND WIDGETS BOTH BECOME TRAITS.**
 Read "Decided, 2026-10-16 afternoon" in [[django-parallel-design]] first:
 `Widget` trait + Django-style widget types; `Field` trait + `NumberField<T>`,

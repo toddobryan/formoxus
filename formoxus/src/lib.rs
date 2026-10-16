@@ -71,6 +71,8 @@ pub mod error;
 // the consumer's crate. Not API.
 #[doc(hidden)]
 pub mod field_kind;
+pub mod field;
+pub mod field_attrs;
 pub mod fields;
 pub mod form;
 pub mod label_case;
