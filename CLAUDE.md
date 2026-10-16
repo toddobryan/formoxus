@@ -62,6 +62,15 @@ Anything that RENDERS a field is still a widget. A new Rust name containing
 "control" needs to pass the same test: does it name the bare element, not the
 thing around it? If not, it is the reversed rename creeping back.
 
+## Vocabulary: **dev** vs **user**
+
+A **dev** builds a Dioxus app with formoxus: writes `form!`, calls
+`use_form`, writes a custom widget. A **user** uses that app in a browser:
+types, submits, sees errors. Someone changing formoxus itself is a
+**Formoxus dev** (today only Todd). Older docs and memory say "user" or
+"consumer" for a dev; read them that way, and fix them only when editing
+the file anyway. See `.claude/memory/dev_vs_user_vocabulary.md`.
+
 ## Exports: the prelude is the one list
 
 `formoxus::prelude` holds what a consumer writing forms uses, and the crate

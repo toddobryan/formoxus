@@ -7,6 +7,7 @@
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
+- [Dev vs user](dev_vs_user_vocabulary.md) — "dev" builds an app with formoxus, "user" uses that app, "Formoxus dev" changes formoxus; correct Todd when he slips
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan
