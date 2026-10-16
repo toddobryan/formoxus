@@ -1,4 +1,4 @@
-//! `T -> String -> T` must be the identity for every scalar a `FormField` can
+//! `T -> String -> T` must be the identity for every scalar a `Field` can
 //! hold, because that is the trip a value takes through the DOM: `leaves()`
 //! formats it through facet's display vtable, the browser hands the string back,
 //! and `distribute_values` parses it through the parse vtable.
@@ -15,11 +15,11 @@
 //! for `f32`/`f64` emits the shortest decimal string that parses back to the
 //! identical value.
 //!
-//! `usize`/`isize` are absent because a `FormField` cannot hold them — see
+//! `usize`/`isize` are absent because a `Field` cannot hold them — see
 //! `scalar_node`, which excludes them for being target-dependent widths.
 //!
 //! **Custom scalars cannot be checked here.** A user-supplied type reaching a
-//! `FormField` must uphold the same property in its own `Facet` display/parse
+//! `Field` must uphold the same property in its own `Facet` display/parse
 //! vtables; nothing in the type system enforces it. [`round_trips`] is public to
 //! the test suite so such a type can be held to the same standard.
 

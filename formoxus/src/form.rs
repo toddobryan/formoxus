@@ -470,7 +470,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// **Cleared by the next [`validate`](Self::validate)**, same lifetime as
     /// `push_error` and for the same reason — inherited for free, not
-    /// special-cased here: `FormField::validate` already clears and rebuilds
+    /// special-cased here: `Field::validate` already clears and rebuilds
     /// every leaf's own `errors` on each call, so a stale server-pushed error
     /// cannot outlive the next submit.
     /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile

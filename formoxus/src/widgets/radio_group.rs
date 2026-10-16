@@ -12,7 +12,7 @@ use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 ///
 /// Reads its current value from `values` rather than taking it as a prop, for
 /// the reason [`Select`](super::Select) spells out: computing `checked` for a
-/// prop would mean reading the store in `FormField::render`, which has no scope
+/// prop would mean reading the store in `Field::render`, which has no scope
 /// of its own and so would subscribe the whole form.
 ///
 /// **Nothing is pre-selected, and there is no "none" radio.** A picked radio

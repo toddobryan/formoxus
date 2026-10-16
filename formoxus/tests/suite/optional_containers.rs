@@ -4,7 +4,7 @@
 //! the dispatch and no match is duplicated. The result is wrapped in an
 //! `OptionNode`, a decorator that owns the `begin_some`/`set_default` frame and
 //! intercepts `validate` — absent means don't validate the inner, which is what
-//! unwound `FormField::required`'s double duty.
+//! unwound `Field::required`'s double duty.
 //!
 //! These were the RED target for that work: before it, scalars and enums behind
 //! an `Option` worked but **structs and lists did not**, in either direction.
@@ -250,7 +250,7 @@ fn an_optional_list_of_structs_round_trips() {
 #[gtest]
 fn option_peels_one_layer_at_a_time() {
     // `Option<Vec<Option<String>>>` →
-    // `OptionNode(ListSet(rows of OptionNode(FormField)))`, each
+    // `OptionNode(ListSet(rows of OptionNode(Field)))`, each
     // layer contributing exactly one frame. Row 1 is empty, so it's `None`
     // by the same rule that makes the whole list present: some leaf under
     // `cells` is non-empty.
@@ -541,7 +541,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
 // So `Empty` keeps one meaning everywhere and the two CONSUMERS know about
 // checkboxes instead: `validate` doesn't call one required, and
 // `write_value_into` synthesises `false` at the last moment. Both go through
-// `FormField::is_unticked_checkbox`, so the rule is stated once.
+// `Field::is_unticked_checkbox`, so the rule is stated once.
 //
 // The two directions pull against each other, which is why both are pinned: the
 // first says a required `bool` must still SUBMIT, the second says that must not

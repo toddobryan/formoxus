@@ -64,6 +64,7 @@ pub mod textarea;
 pub mod types;
 pub mod values;
 pub mod variant_select;
+pub mod widget_props;
 
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.

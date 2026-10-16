@@ -1,4 +1,4 @@
-//! Author attributes (C6): written in `form!`, through `FormField::render` and
+//! Author attributes (C6): written in `form!`, through `Field::render` and
 //! `ScalarWidget`, onto the element each widget puts them on.
 //!
 //! These go through `form!`, the way an author writes them. A few stay on

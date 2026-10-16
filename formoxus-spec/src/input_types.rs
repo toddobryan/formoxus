@@ -55,7 +55,7 @@ impl InputType {
             Self::Password => "password",
             Self::Hidden => "hidden",
             // Selectable, but NOT the default for a numeric field — see
-            // `FormField::default_widget`. `type="number"` hands back `""` for
+            // `Field::default_widget`. `type="number"` hands back `""` for
             // anything the browser dislikes, so a half-typed value vanishes
             // mid-keystroke. A numeric renders as text and formoxus parses it.
             // Anyone who wants the spinner and the mobile keypad can ask.

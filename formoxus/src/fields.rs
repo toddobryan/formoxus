@@ -26,7 +26,7 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
+pub struct Field<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
@@ -36,14 +36,14 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     /// spec gave choices to — which is every field rendered as an `<input>`.
     pub choices: Option<Vec<Choice>>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
-    /// `FormField<String>` standing in for a `Markdown` field. `None` for an
+    /// `Field<String>` standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
     ///
     /// **The field carries the INNER type, not the newtype**, because a
     /// concrete `T` cannot be recovered from a runtime `&'static Shape`: the
-    /// shape walk only ever has a shape in hand, and `FormField<T>` needs a
+    /// shape walk only ever has a shape in hand, and `Field<T>` needs a
     /// type at compile time. So a `Markdown` field becomes a
-    /// `FormField<String>` that remembers what to re-wrap it in, and every
+    /// `Field<String>` that remembers what to re-wrap it in, and every
     /// string-facing operation — parsing, display, `check`, the widget —
     /// goes on working unchanged against the inner scalar.
     ///
@@ -260,7 +260,7 @@ fn int_bound(bound: Bound, which: &str) -> i128 {
     }
 }
 
-impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
+impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
     /// Derived from `T` on every read rather than stored, so it cannot go stale
@@ -272,11 +272,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// f64s. In the form! macro (where we have access to the actual type of the field),
     /// we check to make sure the constraints fit.
     fn field_type(&self) -> FieldType {
-        // `None` is unreachable: `scalar_node` only builds a `FormField` for
+        // `None` is unreachable: `scalar_node` only builds a `Field` for
         // the scalars it recognises, and `node_for_shape` panics on the rest.
         let scalar = T::SHAPE
             .scalar_type()
-            .expect("FormField is only constructed for scalar shapes");
+            .expect("Field is only constructed for scalar shapes");
 
         match scalar {
             ScalarType::String => FieldType::Text,
@@ -291,7 +291,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
             | ScalarType::U64 => FieldType::Int,
             ScalarType::F32 | ScalarType::F64 => FieldType::Float,
             other => panic!(
-                "scalar type {other:?} is not supported in FormField (field {})",
+                "scalar type {other:?} is not supported in Field (field {})",
                 self.name
             ),
         }
@@ -418,7 +418,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     ///
     /// `optional` is the one input here that `T` cannot supply: `Option` peeling
     /// wraps rather than parameterizes, so `bool` and `Option<bool>` both arrive
-    /// as `FormField<bool>`. A checkbox has two states and an `Option<bool>` has
+    /// as `Field<bool>`. A checkbox has two states and an `Option<bool>` has
     /// three, which is the whole reason that flag has to travel from the walk.
     fn default_widget(&self) -> WidgetType {
         WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
@@ -454,7 +454,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     }
 }
 
-impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for FormField<T> {
+impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<T> {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -741,7 +741,7 @@ mod tests {
     // ── Helpers ──────────────────────────────────────────────────────────
     //
     // A constraint test needs a field TYPE (which decides how `min`/`max`
-    // read the value) and the field's attributes. These build a `FormField`
+    // read the value) and the field's attributes. These build a `Field`
     // of the right type, holding nothing: `check` takes the raw value as an
     // argument, so the field's own value never matters here.
 
@@ -756,11 +756,11 @@ mod tests {
         )
     }
 
-    fn holding<X>(attrs: FieldAttrs) -> FormField<X>
+    fn holding<X>(attrs: FieldAttrs) -> Field<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        FormField {
+        Field {
             name: "f".to_string(),
             label: None,
             optional: false,
@@ -777,7 +777,7 @@ mod tests {
         min_length: Option<usize>,
         max_length: Option<usize>,
         pattern: Option<&'static str>,
-    ) -> FormField<String> {
+    ) -> Field<String> {
         let mut entries = Vec::new();
         entries.extend(min_length.map(|n| (Attr::MinLength, AttrValue::Int(n))));
         entries.extend(max_length.map(|n| (Attr::MaxLength, AttrValue::Int(n))));
@@ -792,15 +792,15 @@ mod tests {
         all(&entries)
     }
 
-    fn int(min: Option<i128>, max: Option<i128>) -> FormField<i64> {
+    fn int(min: Option<i128>, max: Option<i128>) -> Field<i64> {
         holding(bounds(min.map(Bound::Int), max.map(Bound::Int)))
     }
 
-    fn float(min: Option<f64>, max: Option<f64>) -> FormField<f64> {
+    fn float(min: Option<f64>, max: Option<f64>) -> Field<f64> {
         holding(bounds(min.map(Bound::Float), max.map(Bound::Float)))
     }
 
-    fn boolean(required_true: bool) -> FormField<bool> {
+    fn boolean(required_true: bool) -> Field<bool> {
         if required_true {
             holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
         } else {
@@ -808,14 +808,14 @@ mod tests {
         }
     }
 
-    fn messages<X>(field: &FormField<X>, raw: &str) -> Vec<String>
+    fn messages<X>(field: &Field<X>, raw: &str) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
         field.check(raw).into_iter().map(|e| e.0).collect()
     }
 
-    fn names<X>(field: &FormField<X>) -> Vec<&'static str>
+    fn names<X>(field: &Field<X>) -> Vec<&'static str>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -828,7 +828,7 @@ mod tests {
     }
 
     /// The value of the one emitted attribute called `name`.
-    fn emitted<X>(field: &FormField<X>, name: &str) -> AttributeValue
+    fn emitted<X>(field: &Field<X>, name: &str) -> AttributeValue
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -1213,11 +1213,11 @@ mod tests {
     // `validate` with a real value, so the field's own type and value are what
     // get checked, the way a submitted form is.
 
-    fn a_field<X>(value: X, attrs: FieldAttrs) -> FormField<X>
+    fn a_field<X>(value: X, attrs: FieldAttrs) -> Field<X>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        FormField {
+        Field {
             name: "f".to_string(),
             label: None,
             optional: false,
@@ -1324,8 +1324,8 @@ mod tests {
         value: FieldValue<bool>,
         widget: Option<WidgetType>,
         required_true: bool,
-    ) -> FormField<bool> {
-        FormField {
+    ) -> Field<bool> {
+        Field {
             name: "agreed".to_string(),
             label: None,
             optional: false,
@@ -1342,7 +1342,7 @@ mod tests {
         }
     }
 
-    fn validation_messages(mut field: FormField<bool>) -> Vec<String> {
+    fn validation_messages(mut field: Field<bool>) -> Vec<String> {
         field.validate();
         field.errors.into_iter().map(|e| e.0).collect()
     }

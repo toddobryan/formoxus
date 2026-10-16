@@ -1,9 +1,9 @@
-> Renames to read through in older entries: 2026-09-19 `formoxus::reflect::X` → `formoxus::X` ([derive-path removal](derive_path_removal.md)); 2026-09-29 `SelectChoice`→`Choice`, `ValuesByPath`→`ValuesStore`, `ButtonType::Button`→`Action`, all CSS classes `fx-`-prefixed ([CSS vocabulary](css_class_vocabulary.md)). 2026-10-10 crate `formoxus-attrs` → `formoxus-spec`. 2026-10-16 module `members` → `nodes`, `FormMember` → `Node`, `RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`, `*_member` builders → `*_node`.
+> Renames to read through in older entries: 2026-09-19 `formoxus::reflect::X` → `formoxus::X` ([derive-path removal](derive_path_removal.md)); 2026-09-29 `SelectChoice`→`Choice`, `ValuesByPath`→`ValuesStore`, `ButtonType::Button`→`Action`, all CSS classes `fx-`-prefixed ([CSS vocabulary](css_class_vocabulary.md)). 2026-10-10 crate `formoxus-attrs` → `formoxus-spec`. 2026-10-16 module `members` → `nodes`, `FormMember` → `Node`, `RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`, `*_member` builders → `*_node`, `FormField` → `Field`.
 
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-16 day: on `widget`; Django-parallel design talk, A–F answered; vocabulary now on `main`, Django notes held on `widget`; read django_parallel_design first
+- [**START HERE: next session**](next_session.md) — 2026-10-16 eve: on `widget`, refactor under way; Field AND Widget become traits; read django_parallel_design "Decided" first
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -21,7 +21,7 @@
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical
 
 ## Core design
-- [Django parallel design](django_parallel_design.md) — 2026-10-16 SPIT-BALLING, GOAL = FEWER CONCEPTS: Django mapped onto formoxus; name inventory; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
+- [Django parallel design](django_parallel_design.md) — 2026-10-16 GOAL = FEWER CONCEPTS; DECIDED: Field + Widget traits, typed ChoiceField, field registry, async server validation: Django mapped onto formoxus; name inventory; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it

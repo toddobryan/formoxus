@@ -5,6 +5,16 @@ metadata:
   type: project
 ---
 
+**2026-10-16 (school, end of day): FIELDS AND WIDGETS BOTH BECOME TRAITS.**
+Read "Decided, 2026-10-16 afternoon" in [[django-parallel-design]] first:
+`Widget` trait + Django-style widget types; `Field` trait + `NumberField<T>`,
+`TextField<T>`, typed `ChoiceField<T>`; `field:` in `form!` plus a type →
+field registry (subsumes the widget registry); async server-only validation
+IN scope. `FormField` → `Field` rename done (it is still the one generic
+struct; the trait will take the name, so the struct gets renamed or split).
+Todd's `WidgetProps` WIP is in `widgets/widget_props.rs`, not yet used.
+Todd is doing the code until he hands off.
+
 **2026-10-16 (school, later): THE REFACTOR HAS STARTED (uncommitted on
 `widget`).** Todd renamed `members` → `nodes`, `FormMember` → `Node`,
 `RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`; I swept the
@@ -19,7 +29,16 @@ style); fields write their own constraint attrs (so `FieldType` leaves the
 props); widget resolved once in `build.rs` (no `custom_widget: Option`);
 `ErrorsStore` IN SCOPE NOW (client projection, one writer, `FormState` stays
 the authority); variant picker = a choice widget that still fires
-`on_edit`. Split: Todd and I share it.
+`on_edit`. **Todd is doing ALL of it himself** (committed rename = `a8c3263`)
+until he hands off; stay out of library code unless asked. **Decided:**
+Django-style widget TYPES (`TextInput`, `HiddenInput`, `Textarea`, …)
+implementing a `Widget` trait with at least `render`, replacing the
+`WidgetType`/`BuiltinWidget` enum + `Custom` fn pointer. Raised to him:
+associated consts make a trait non-dyn (so likely a dyn `Widget` + a const
+`WidgetKind` for `form!`'s checks), `Send + Sync` + `clone_box` for
+`FormState`, class slots keyed by widget name, one type per input `type`,
+and that `formoxus-spec` must keep knowing built-ins for compile-time
+checks. Likely absorbs part of Step 4 (D0–D4).
 
 **2026-10-16 (school, day), DESIGN TALK, NO LIBRARY CODE.** Still on
 `widget`. The `Field<T>` sketch DOES build now (only an unused `FieldSpec`

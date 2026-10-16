@@ -3,11 +3,11 @@
 //! a shape can be.
 
 use facet::{
-    EnumType, Field, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind, StructType, Type,
-    UserType, Variant,
+    EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind,
+    StructType, Type, UserType, Variant,
 };
 
-use crate::fields::{FieldAttrs, FormField, populate};
+use crate::fields::{Field, FieldAttrs, populate};
 use crate::nodes::{
     FieldSet, ListSet, Node, OptionNode, VariantChoice, VariantSet, qualify, row_segment,
 };
@@ -179,7 +179,7 @@ fn fields_from_enum(
 /// The node for one declared *field* — the common case, where the name and
 /// shape both come from the field itself.
 fn node_for(
-    field: &'static Field,
+    field: &'static FacetField,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
@@ -206,7 +206,7 @@ pub(crate) fn node_for_shape(
         return option_node(option_def, name, peek, mode, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
         return scalar_node(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(
-            || panic!("scalar type {scalar:?} is not supported in FormField (field {name})"),
+            || panic!("scalar type {scalar:?} is not supported in Field (field {name})"),
         );
     } else if let Some(inner) = newtype_inner(shape) {
         // A newtype is ONE input, not a fieldset around a field called "0".
@@ -219,7 +219,9 @@ pub(crate) fn node_for_shape(
             .and_then(|p| p.into_struct().ok())
             .and_then(|s| s.field(0).ok());
         return scalar_node(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
-            panic!("newtype {shape} wraps {scalar:?}, which is not supported in FormField (field {name})")
+            panic!(
+                "newtype {shape} wraps {scalar:?}, which is not supported in Field (field {name})"
+            )
         });
     } else if let Ok(list_def) = shape.def.into_list() {
         // SEAM: `list_node(_list_def.t, name, inner_peek, variants, prefix)`,
@@ -309,14 +311,14 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 /// only thing the shape contributes here is *which concrete `T`* the field
 /// carries, and the only thing the walk contributes is `optional` — a
 /// structural fact (`Option` peeling) that no later reader can recover,
-/// because `bool` and `Option<bool>` both arrive as `FormField<bool>`.
+/// because `bool` and `Option<bool>` both arrive as `Field<bool>`.
 fn scalar_node(
     scalar: ScalarType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     optional: bool,
     // The newtype this scalar is wrapped in, if any. The field carries the
-    // INNER type (`FormField<String>` for a `Markdown`), because a concrete `T`
+    // INNER type (`Field<String>` for a `Markdown`), because a concrete `T`
     // cannot be recovered from a runtime `Shape` — so the wrapper is remembered
     // here and re-applied when the value is written back.
     wrapper: Option<&'static Shape>,
@@ -329,7 +331,7 @@ fn scalar_node(
         ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
                 $(
-                    ScalarType::$variant => Some(Box::new(FormField::<$ty> {
+                    ScalarType::$variant => Some(Box::new(Field::<$ty> {
                         name: name.to_string(),
                         label: None,
                         optional,

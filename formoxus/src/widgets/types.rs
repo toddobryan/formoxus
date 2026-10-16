@@ -63,7 +63,7 @@ impl From<BuiltinWidget> for WidgetType {
 ///
 /// Note this is the widget boundary the design notes fix — `(path, label,
 /// required, errors)` in `props`, plus the value store — and NOT a
-/// `FormField<T>`. A widget never sees the typed field: it reads and writes raw
+/// `Field<T>`. A widget never sees the typed field: it reads and writes raw
 /// strings through `values`, exactly as `Input` does.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WidgetProps {

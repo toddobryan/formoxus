@@ -440,7 +440,7 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 /// DOM: a constraint has no markup of its own yet, so validation is the only
 /// place its arrival shows.
 ///
-/// Every other constraint test sets constraints straight onto a `FormField`,
+/// Every other constraint test sets constraints straight onto a `Field`,
 /// which means this is the only one that would notice `apply_specs` dropping
 /// them on the floor.
 #[gtest]

@@ -9,7 +9,7 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::buttons::Fns;
-use formoxus::fields::{FieldAttrs, FieldValue, FormField};
+use formoxus::fields::{Field, FieldAttrs, FieldValue};
 use formoxus::label_case::LabelCase;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{FieldSet, Node};
@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
-    Box::new(FormField {
+    Box::new(Field {
         name: name.to_string(),
         label: None,
         optional: false,
@@ -350,7 +350,7 @@ fn empty_event_form_is_invalid() {
 #[gtest]
 fn location_form_round_trips_to_model() {
     // `Location` has no uncollected fields, so this exercises the core
-    // `FormField::write_into` -> `Partial::build` -> `materialize` path
+    // `Field::write_into` -> `Partial::build` -> `materialize` path
     // with nothing else in the way.
     let mut form: FormState<Location> = FormState {
         spec: FormSpec::default(),
@@ -471,7 +471,7 @@ struct Unsupported {
 }
 
 #[gtest]
-#[should_panic(expected = "scalar type USize is not supported in FormField")]
+#[should_panic(expected = "scalar type USize is not supported in Field")]
 fn an_unsupported_scalar_fails_loudly_at_construction() {
     // Loud rather than silent: the alternative to panicking is rendering the
     // field as something it isn't, and a form that quietly mis-handles a value

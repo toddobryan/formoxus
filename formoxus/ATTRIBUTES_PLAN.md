@@ -149,7 +149,7 @@ pass through, and the grammar change below has landed.
 > **Decided 2026-10-07** (Todd; reasoning in the design note, open question 2):
 >
 > - **Attributes become `Vec<Attribute>` inside the widget**, not in
->   `FormField::render`. Only the widget knows its own classes, and a spread
+>   `Field::render`. Only the widget knows its own classes, and a spread
 >   `class` is *duplicated*, not merged. Probed 2026-10-07: `class_plus:
 >   ["wide", "dark"]` rendered `<input class="fx-control fx-input" … class="wide dark"/>`.
 > - **No separate `TokenList`/`Declarations` values.** Both are
@@ -304,7 +304,7 @@ style: {
     step 7 deletes the literal. Something like
     `FieldAttrs::with_owned(required: bool, invalid: bool, rest: &FieldAttrs)`,
     inserting `Required` (`Flag`) and `AriaInvalid` (`String("true")`) FIRST,
-    then copying `rest`. Call it in `FormField::render` instead of
+    then copying `rest`. Call it in `Field::render` instead of
     `self.attrs.clone()`. Both are known only at render time (`ctx.required`,
     the errors), so the macro's map never holds them. First keeps `required`
     where the suite pins it (`choices.rs:318`, `enums.rs:208`).
@@ -377,7 +377,7 @@ style: {
        key off `!self.errors.is_empty()`. That removes the contradictory
        hand-built case (errors but no `aria_invalid`, or the reverse).
        `field_class_plus` follows for free.
-    3. **The two builders:** `FormField::render`
+    3. **The two builders:** `Field::render`
        ([fields.rs:506–508](../formoxus/src/fields.rs#L506)) and
        `VariantSet::render`
        ([variant_set.rs:200–202](../formoxus/src/nodes/variant_set.rs#L200)):
@@ -635,7 +635,7 @@ crates now keep in parallel live in one place. The components and
 | takes `choices` | `CHOOSERS` ([widget.rs:104](../formoxus-macros/src/form/widget.rs#L104)) |
 | refuses an optional field | the `refusal` match in `WidgetRef::checks` ([widget.rs:230](../formoxus-macros/src/form/widget.rs#L230)), mirrored by `field_kind::is_optional` and `ScalarWidget`'s `reject_if_not_required` |
 | not rendered yet | `Rule::NotYet`: `select_multiple`, `checkbox_multiple`, `file` |
-| default per field type | `FormField::default_widget` ([fields.rs:406](src/fields.rs#L406)) |
+| default per field type | `Field::default_widget` ([fields.rs:406](src/fields.rs#L406)) |
 | its parts | nowhere; read off P1's markup (below) |
 
 **Parts, from the markup P1 shipped:**
@@ -1414,7 +1414,7 @@ failure the compile-time checks exist to prevent.
   Option<FieldControl>`: `Text`/`Int`/`Float` give `Input(Text)`, `bool`
   gives `Input(Checkbox)`, `Option<bool>` gives `Select`, an enum gives
   `Select`; `Unknown` and `Other` give `None` (nothing to check). It MIRRORS
-  `FormField::default_widget` ([fields.rs:390](src/fields.rs#L390)), so it
+  `Field::default_widget` ([fields.rs:390](src/fields.rs#L390)), so it
   gets a "keep in step" note on both, like `renders` and `ScalarWidget`.
 - [ ] Unit tests (Claude) for `default_control`, one per row above, beside the
   `field_kind` tests.
@@ -1518,7 +1518,7 @@ failure the compile-time checks exist to prevent.
    `<input>` (decision 5), and `WidgetType::Checkbox` goes away.
 2. **Reshape `FieldProps`**: `required` and `aria_invalid` MOVED INTO 3d
    (2026-10-08). What is left here: leave room for a blur-validation callback.
-3. **`form!` is the only door** (decision 7): builders, `FormField`'s fields and
+3. **`form!` is the only door** (decision 7): builders, `Field`'s fields and
    `ScalarWidget` behind `#[doc(hidden)] __private`; about 210 suite call
    sites move to `form!` or `__private`. Last, because it touches the most.
 4. **Split `fields.rs`**, if the value-kind half is still large (it mostly

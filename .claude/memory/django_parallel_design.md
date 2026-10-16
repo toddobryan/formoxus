@@ -176,7 +176,60 @@ need it, widgets must not see `on_edit`/`prefix`); DO merge `FieldProps` +
 `WidgetProps` + `FieldAttrs` + `choices` into one `BoundField`, built by
 `FormField::render`. That is three names gone.
 
-## THE GOAL: simplify (Todd, 2026-10-16, last thing before bed)
+## Decided, 2026-10-16 afternoon (Todd)
+
+**Renames done:** `members` → `nodes`, `FormMember` → `Node`, `RenderCtx` →
+`NodeContext`, `OptionMember` → `OptionNode`, `FormField` → `Field`.
+`FieldProps` + `WidgetProps` + `FieldAttrs` + `ScalarWidget` props → ONE
+`WidgetProps` (Todd started it in `widgets/widget_props.rs`); widget
+resolved once in `build.rs`; `ErrorsStore` in scope now.
+
+**Widgets: Django-style TYPES behind a `Widget` trait** (`TextInput`,
+`HiddenInput`, `Textarea`, …), replacing the `WidgetType`/`BuiltinWidget`
+enum and the `Custom` fn pointer: built-in and custom widgets become one
+concept. Caveats raised: associated consts make a trait non-dyn (likely a
+dyn `Widget` + a const `WidgetKind` for `form!`'s checks); stored widgets
+need `Send + Sync` + `clone_box` (`FormState` reaches the server); class
+slots are keyed by widget name; `formoxus-spec` must still know built-ins.
+
+**Fields: also a TRAIT, with concrete built-ins** (`NumberField<T>`,
+`TextField<T>`, …; Todd wants it more granular than one `ScalarField<T>`).
+I first argued for one generic `Field<T>` ("`T` is the subclass"); Todd's
+counter won, for two reasons:
+- **Only fields that take choices should be ABLE to.** A generic
+  `Field<T>` has an `Option<Vec<Choice>>` slot even on a file field.
+- **A trait is the extension point.** His example: `ProgramSnippetField`
+  for a student typing a short program into a textarea, defined OUTSIDE
+  formoxus, that compiles the text. `Field<Program>` could only get
+  facet's parse plus validators.
+- **`ChoiceField<T>` is TYPED by default** (Django's `TypedChoiceField`);
+  a String-valued `ChoiceField` makes no sense in Rust. Choices live on the
+  FIELD (membership is checked server-side, where nothing renders), and the
+  field hands them to its widget, like constraint attrs (`widget_attrs()`).
+  Closes [[enum-as-a-value-choice]]: `ChoiceField<Color>`.
+- **Finding a custom field:** devs may declare `field:` for a path in
+  `form!`, like `widget:`; PLUS a registry mapping model type → field type
+  (for unnamed and nested fields the runtime walk meets with only a
+  `Shape`). Because each field declares its default widget (Django), the
+  field registry SUBSUMES [[widget-registry-idea]]: one registry, not two.
+- Aim: a blanket `impl<F: Field> Node for F`, so a dev writing a field
+  never touches tree code (`distribute_values`, `apply_specs`).
+
+**Server-only validation: IN this refactor** (Todd: "I'm a masochist").
+Django never named the category because all its validation is
+server-side; formoxus also validates in wasm. Examples: username or email
+taken, current password (apcsp-dioxus does it via `Submission`), join or
+invitation code, seat or slot left, promo code, may this user pick this
+choice, breach list or `zxcvbn`, file sniffing or virus scan. Two kinds:
+needs server-only data (sync) vs needs DB or network (async), so the hook
+must be `async`, roughly `async fn validate_on_server(&self, value: &T,
+ctx: &Self::Context) -> Option<ValidationMessage>`. `Context` does not
+DO the check, but supplies what it checks against (DB pool, current user).
+Never runs on the client; errors come back like `reject_field`'s. **Gallery
+example: "username not taken"** against a fixed server-side list
+(`["admin", "todd"]`), so examples need no database.
+
+ (Todd, 2026-10-16, last thing before bed)
 
 "This refactoring is mostly born out of a desire to simplify. We have an
 awful lot of similarly named concepts that do similar things." Look at each

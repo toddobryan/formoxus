@@ -1506,7 +1506,7 @@ mod tests {
     }
 
     /// `a)|(b` compiles once wrapped as `^(?:a)|(b)$`, and so would pass
-    /// `FormField::check`, but not alone. HTML compiles the bare pattern first
+    /// `Field::check`, but not alone. HTML compiles the bare pattern first
     /// and drops the constraint if that fails, so accepting it would leave the
     /// browser checking nothing while the server checks something.
     #[gtest]

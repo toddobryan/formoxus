@@ -271,7 +271,7 @@ impl BuiltinWidget {
     /// `Text`, `Int`, `Float` → `Input(Text)`, optional or not (not `Number`:
     /// `type="number"` hands back `""` for a half-typed value). `Bool` →
     /// `Input(Checkbox)`; an optional `Bool` → `Select`, whose blank option is
-    /// the third state. Replaces `FormField::default_widget`.
+    /// the third state. Replaces `Field::default_widget`.
     pub const fn default_for(field_type: FieldType, optional: bool) -> Self {
         match field_type {
             FieldType::Text | FieldType::Int | FieldType::Float => {
@@ -454,7 +454,7 @@ mod tests {
         }
     }
 
-    /// Pins the table `FormField::default_widget` held before it moved here.
+    /// Pins the table `Field::default_widget` held before it moved here.
     #[gtest]
     fn default_for_is_text_for_scalars_and_checkbox_or_select_for_bools() {
         for optional in [false, true] {

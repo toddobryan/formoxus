@@ -14,7 +14,7 @@ use crate::nodes::ValuesStore;
 ///
 /// Reads its current value from `values` like every other leaf input rather
 /// than taking it as a prop. That is not just consistency: computing `selected`
-/// for a prop would mean reading the store in `FormField::render`, a plain
+/// for a prop would mean reading the store in `Field::render`, a plain
 /// function with no scope of its own, which subscribes *the caller* — so one
 /// change here would re-render the whole form. [`VariantSelect`] takes its
 /// selection as a prop precisely because a variant choice is NOT a leaf and has
