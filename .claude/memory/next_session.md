@@ -15,6 +15,13 @@ typos, listed in that note), so the last commit went in with `--no-verify`;
 `cargo fmt --check` and the build fail until it is fixed or dropped. Also new:
 [[dev-vs-user-vocabulary]] ("dev" vs "user"; correct Todd when he slips),
 added to CLAUDE.md too.
+**MUST REACH `main` (Todd, 2026-10-16):** the dev/user vocabulary lives only
+on `widget` so far: the CLAUDE.md section "Vocabulary: **dev** vs **user**",
+`.claude/memory/dev_vs_user_vocabulary.md`, and its `MEMORY.md` line (all in
+`5eaf131`, which also carries the WIP sketch, so cherry-pick by FILE, not the
+whole commit). Same for `django_parallel_design.md`. Raise this whenever
+`widget` is merged, rebased or abandoned, or if `main` gets work first; the
+risk is throwing the branch away and losing them with it.
 
 **2026-10-15 (school), END: P3 DONE (P3-7, P3-8, P3-9), #10 CLOSED, ALL
 PUSHED.** P3-8: rendered cascade tests in `tests/suite/classes.rs`, `bare()`
