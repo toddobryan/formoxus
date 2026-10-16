@@ -5,6 +5,17 @@ metadata:
   type: project
 ---
 
+**2026-10-16 (home, late), END: DESIGN TALK ONLY, NO CODE.** Branch
+`widget` (not `main`), pushed. Todd is spit-balling a closer Django parallel;
+nothing is decided. **Read [[django-parallel-design]] first and be ready to
+remind Todd how Django's Form/Field/BoundField do and don't map onto
+formoxus; its "Open, for Todd" list A–F is where to start.** His WIP
+`Field<T>` sketch in `formoxus/src/widgets/widget.rs` does not parse (two
+typos, listed in that note), so the last commit went in with `--no-verify`;
+`cargo fmt --check` and the build fail until it is fixed or dropped. Also new:
+[[dev-vs-user-vocabulary]] ("dev" vs "user"; correct Todd when he slips),
+added to CLAUDE.md too.
+
 **2026-10-15 (school), END: P3 DONE (P3-7, P3-8, P3-9), #10 CLOSED, ALL
 PUSHED.** P3-8: rendered cascade tests in `tests/suite/classes.rs`, `bare()`
 tests in `snapshot.rs`. P3-9: `/t/bare` + `e2e/tests/bare.rs`. **Next: Step 4

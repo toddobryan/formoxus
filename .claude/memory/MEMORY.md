@@ -3,10 +3,11 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-12 pm: green, pushed; P2 `Element`, row sort, `RenderedInputType`, `Input` router done; next `BuiltinWidget`; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
+- [**START HERE: next session**](next_session.md) — 2026-10-16: on branch `widget`; design talk only (Django parallel), WIP sketch does not parse; read django_parallel_design first; how Todd works
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
+- [Dev vs user](dev_vs_user_vocabulary.md) — "dev" builds an app with formoxus, "user" uses that app, "Formoxus dev" changes formoxus; correct Todd when he slips
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan
@@ -19,6 +20,7 @@
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical
 
 ## Core design
+- [Django parallel design](django_parallel_design.md) — 2026-10-16 SPIT-BALLING: Django Form/Field/BoundField mapped onto formoxus; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
