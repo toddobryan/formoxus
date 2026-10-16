@@ -1,13 +1,13 @@
-//! An enum-typed member, locked to one variant chosen before the form existed.
+//! An enum-typed node, locked to one variant chosen before the form existed.
 
-use crate::build::{FormMode, variant_members};
+use crate::build::{FormMode, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::fields::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::members::RenderCtx;
-use crate::members::{
-    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+use crate::nodes::NodeContext;
+use crate::nodes::{
+    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
 use crate::widgets::label::required_marker;
@@ -23,7 +23,7 @@ use formoxus_spec::{Attr, AttrValue, FixedKey};
 /// optional field empty" indistinguishable from "pick the `None` variant."
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VariantChoice {
-    // May be valid if behind an OptionMember.
+    // May be valid if behind an OptionNode.
     Unchosen,
     /// This variant, by name.
     Named(String),
@@ -33,7 +33,7 @@ pub enum VariantChoice {
 /// design — variant choice is a construction parameter, not an editable field).
 /// For a [`VariantChoice::Named`] answer it's a `FieldSet` over that variant's
 /// fields, plus the name so `write_into` can replay the choice; for
-/// [`VariantChoice::Unchosen`] it holds no members at all and writes `None`.
+/// [`VariantChoice::Unchosen`] it holds no nodes at all and writes `None`.
 /// The choice itself is NOT a leaf — it never appears in a path or a submitted
 /// value.
 #[derive(Clone, Debug)]
@@ -45,12 +45,12 @@ pub struct VariantSet {
     pub enum_type: &'static EnumType,
     pub optional: bool,
     pub choice: VariantChoice,
-    pub members: Vec<Box<dyn FormMember>>,
+    pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
 }
 
 impl VariantSet {
-    /// Where this member's *children* live: its own path plus a `$Variant`
+    /// Where this node's *children* live: its own path plus a `$Variant`
     /// descriptor, so two variants that share a field name can't both claim
     /// `footprint.size`. `None` when unchosen — there are no children then.
     fn child_prefix(&self, prefix: &str) -> Option<String> {
@@ -74,7 +74,7 @@ impl VariantSet {
         // Paths are unique, so at most one child can own this one. Dispatching by
         // containment rather than trying each in turn is what lets a child's real
         // error reach the caller intact.
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             if owns(&qualify(&child_prefix, &m.name()), path) {
                 return m.edit(&child_prefix, edit);
             }
@@ -88,13 +88,13 @@ impl VariantSet {
             // The `--none--` option. Always structurally legal; `validate()` decides
             // whether leaving it unchosen is an error.
             self.choice = VariantChoice::Unchosen;
-            self.members = Vec::new();
+            self.nodes = Vec::new();
             self.errors.clear();
             return Ok(());
         };
         let chosen = self.lookup_variant(name, my_path)?;
         self.choice = VariantChoice::Named(chosen.name.to_string());
-        self.members = variant_members(
+        self.nodes = variant_nodes(
             chosen,
             None,
             FormMode::Blank,
@@ -105,7 +105,7 @@ impl VariantSet {
         Ok(())
     }
 
-    /// Look up a variant by name, recording the failure against this member *and*
+    /// Look up a variant by name, recording the failure against this node *and*
     /// returning it.
     ///
     /// Both, deliberately: a live `<select>` can send a stale name, and the useful
@@ -149,7 +149,7 @@ fn legend_id(field_id: &str) -> String {
     format!("{field_id}-legend")
 }
 
-impl FormMember for VariantSet {
+impl Node for VariantSet {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -160,21 +160,21 @@ impl FormMember for VariantSet {
             .or_else(|| default_label(&self.name, case))
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         // A `fieldset` so the picker and the fields it revealed read as one
         // thing — same treatment `FieldSet` gives a nested struct, and the
         // legend carries the label so the select doesn't repeat it.
         //
         // Both arms build the SAME rsx template: the select is unconditional
-        // and `members` is simply empty when unchosen. That is deliberate — a
+        // and `nodes` is simply empty when unchosen. That is deliberate — a
         // conditional wrapper would give the two arms different templates, and
         // dioxus would tear the `<select>` down and rebuild it on every change,
         // losing keyboard focus mid-interaction.
-        let members: Vec<Element> = match &self.choice {
+        let nodes: Vec<Element> = match &self.choice {
             VariantChoice::Unchosen => Vec::new(),
             VariantChoice::Named(variant) => {
                 let nested = ctx.nested(&self.name).nested(&variant_segment(variant));
-                self.members.iter().map(|m| m.render(&nested)).collect()
+                self.nodes.iter().map(|m| m.render(&nested)).collect()
             }
         };
 
@@ -230,7 +230,7 @@ impl FormMember for VariantSet {
                         errors: self.errors.clone(),
                     }
                 }
-                { members.into_iter() }
+                { nodes.into_iter() }
             }
         }
     }
@@ -242,13 +242,13 @@ impl FormMember for VariantSet {
                 "You must choose a variant for this field.".to_string(),
             ));
         }
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.validate();
         }
     }
 
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
-        // Two paths are in play, and they are NOT the same: this member sits at
+        // Two paths are in play, and they are NOT the same: this node sits at
         // `my_path`, where the `<select>` lives, but its children sit one segment
         // deeper under the chosen variant's descriptor. `forward_to_child` owns
         // that second one, via `child_prefix`.
@@ -266,17 +266,17 @@ impl FormMember for VariantSet {
 
     fn clear_errors(&mut self) {
         self.errors.clear();
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.clear_errors();
         }
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 
     fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || self.members.iter().any(|m| m.has_errors_within())
+        self.has_errors_here() || self.nodes.iter().any(|m| m.has_errors_within())
     }
 
     fn has_errors_here(&self) -> bool {
@@ -290,9 +290,9 @@ impl FormMember for VariantSet {
 
     fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let Some(nested) = self.child_prefix(prefix) else {
-            return; // unchosen: no members, so no leaves
+            return; // unchosen: no nodes, so no leaves
         };
-        for m in &self.members {
+        for m in &self.nodes {
             m.collect_values(&nested, out);
         }
     }
@@ -301,7 +301,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: nothing to apply into
         };
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.distribute_values(&nested, values);
         }
     }
@@ -313,7 +313,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // No variant was picked, so no errors to get
         };
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.distribute_errors(&nested, errors);
         }
     }
@@ -333,10 +333,10 @@ impl FormMember for VariantSet {
         // select), and `push_field_error` (a server verdict about the choice
         // itself). The first fires PRECISELY when there are no children to
         // recurse into, so an early return would drop the one error this
-        // member reliably produces.
+        // node reliably produces.
         //
         // Emitted before recursing so the collected order matches `render`,
-        // which puts `VariantSelect` above `members`.
+        // which puts `VariantSelect` above `nodes`.
         let my_path = qualify(prefix, &self.name);
         if !self.errors.is_empty() {
             out.insert(my_path, self.errors.clone());
@@ -344,7 +344,7 @@ impl FormMember for VariantSet {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen: no children, and my own errors are already out
         };
-        for m in &self.members {
+        for m in &self.nodes {
             m.collect_errors(&nested, out);
         }
     }
@@ -360,12 +360,12 @@ impl FormMember for VariantSet {
                 // variant before writing its fields, so `Partial::build`
                 // materializes the right one.
                 partial = partial.select_variant_named(variant)?;
-                for m in &self.members {
+                for m in &self.nodes {
                     partial = m.write_into(partial)?;
                 }
             }
             VariantChoice::Unchosen => {
-                unreachable!("A VariantChoice::Unchosen is handled by OptionMember")
+                unreachable!("A VariantChoice::Unchosen is handled by OptionNode")
             }
         }
         Ok(partial)
@@ -380,11 +380,11 @@ impl FormMember for VariantSet {
             self.custom_widget = spec.custom_widget.or(self.custom_widget.take());
             self.field_attrs = spec.attrs.clone();
         }
-        // Two paths again, exactly as in `edit`: this member sits at `my_path`,
+        // Two paths again, exactly as in `edit`: this node sits at `my_path`,
         // but its children sit one segment deeper under the chosen variant's
         // descriptor. `Unchosen` means there are none to visit.
         if let Some(child_prefix) = self.child_prefix(prefix) {
-            for m in &mut self.members {
+            for m in &mut self.nodes {
                 m.distribute_specs(&child_prefix, fields);
             }
         }

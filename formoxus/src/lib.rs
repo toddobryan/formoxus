@@ -74,7 +74,7 @@ pub mod field_kind;
 pub mod fields;
 pub mod form;
 pub mod label_case;
-pub mod members;
+pub mod nodes;
 pub mod path;
 pub mod submission;
 pub mod widgets;
@@ -125,7 +125,7 @@ pub use formoxus_macros::path;
 ///
 /// **The one list.** The crate root re-exports exactly this module and nothing
 /// else, so a name is either here — reachable as `formoxus::X` and through the
-/// glob — or only at its defining module (`formoxus::members::FormMember`,
+/// glob — or only at its defining module (`formoxus::nodes::Node`,
 /// `formoxus::buttons::ButtonSpec`). Two hand-kept lists drifted the first time
 /// an export changed, which is why there is no second one.
 ///

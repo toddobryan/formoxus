@@ -1,6 +1,6 @@
 //! A KNOWN LIMITATION, pinned so it stays visible.
 //!
-//! `notes.city` is a perfectly good *member* path at runtime — `OptionMember`
+//! `notes.city` is a perfectly good *node* path at runtime — `OptionNode`
 //! peels the `Option` and the `FieldSet` below it is addressed exactly that way.
 //! But there is no Rust access spelled `s.notes.city` for an `Option<Venue>`, so
 //! the witness cannot express it and this will not compile.

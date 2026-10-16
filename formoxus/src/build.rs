@@ -1,5 +1,5 @@
 //! The SHAPE walk: turn a `&'static Shape` (plus an optional value to populate
-//! from) into a tree of `FormMember`s. One `*_member` helper per kind of thing
+//! from) into a tree of `Node`s. One `*_node` helper per kind of thing
 //! a shape can be.
 
 use facet::{
@@ -8,15 +8,15 @@ use facet::{
 };
 
 use crate::fields::{FieldAttrs, FormField, populate};
-use crate::members::{
-    FieldSet, FormMember, ListSet, OptionMember, VariantChoice, VariantSet, qualify, row_segment,
+use crate::nodes::{
+    FieldSet, ListSet, Node, OptionNode, VariantChoice, VariantSet, qualify, row_segment,
 };
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
 ///
 /// **Never recompute this from a local peek.** It was a `seeding: bool` derived
-/// from `peek.is_some()`, which was tautological the moment `option_member`
+/// from `peek.is_some()`, which was tautological the moment `option_node`
 /// started peeling one `Option` layer per recursion: the peek it asked about was
 /// the very one it was meant to disambiguate.
 ///
@@ -36,15 +36,15 @@ pub(crate) enum FormMode {
     Populated,
 }
 
-/// One member per declared field of `shape`. `peek` is the value being populated
+/// One node per declared field of `shape`. `peek` is the value being populated
 /// from, if any — it must describe the same shape.
-pub(crate) fn members_for(
+pub(crate) fn nodes_for(
     shape: &'static Shape,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Vec<Box<dyn FormMember>> {
+) -> Vec<Box<dyn Node>> {
     match &shape.ty {
         Type::User(UserType::Struct(struct_type)) => {
             fields_from_struct(struct_type, peek, mode, prefix, optional)
@@ -62,7 +62,7 @@ fn fields_from_struct(
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Vec<Box<dyn FormMember>> {
+) -> Vec<Box<dyn Node>> {
     let peek_struct = peek.map(|p| {
         p.into_struct()
             .expect("shape said struct, so the value peeks as one")
@@ -76,7 +76,7 @@ fn fields_from_struct(
                 ps.field_by_name(field.name)
                     .expect("field came from this shape, so it exists on the value")
             });
-            member_for(
+            node_for(
                 field,
                 field_peek,
                 mode,
@@ -90,7 +90,7 @@ fn fields_from_struct(
 /// The variant to build for an enum shape. Edit mode reads it off the value
 /// (the value pins it); create mode takes it from the caller's chosen-variant
 /// map, keyed by this enum's qualified path. Shared by the top-level
-/// `fields_from_enum` and `member_for`'s enum-field arm (which also needs the
+/// `fields_from_enum` and `node_for`'s enum-field arm (which also needs the
 /// variant's *name*), so the selection logic lives in exactly one place.
 /// `None` means [`VariantChoice::Absent`] — an `Option<Enum>` with no value.
 ///
@@ -126,17 +126,17 @@ fn chosen_variant(
     }
 }
 
-/// One member per field of the chosen `variant`, populated from that variant's
+/// One node per field of the chosen `variant`, populated from that variant's
 /// fields on the value in edit mode. Paths accumulate under this enum's path
 /// just like a struct's fields — the variant name is NOT part of the path
 /// (it's locked; `write_into` replays it via `select_variant_named`).
-pub(crate) fn variant_members(
+pub(crate) fn variant_nodes(
     variant: &'static Variant,
     peek_enum: Option<PeekEnum<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Vec<Box<dyn FormMember>> {
+) -> Vec<Box<dyn Node>> {
     variant
         .data
         .fields
@@ -146,7 +146,7 @@ pub(crate) fn variant_members(
                 pe.field_by_name(field.name)
                     .expect("field belongs to the active variant, so access can't error")
             });
-            member_for(
+            node_for(
                 field,
                 field_peek,
                 mode,
@@ -157,55 +157,55 @@ pub(crate) fn variant_members(
         .collect()
 }
 
-/// Members for a top-level enum model (the whole `FormState<T>` is an enum). Enum
-/// *fields* don't come through here — `member_for` builds a `VariantSet` for
-/// those; this is only the `members_for` dispatch for a bare-enum `T`.
+/// Nodes for a top-level enum model (the whole `FormState<T>` is an enum). Enum
+/// *fields* don't come through here — `node_for` builds a `VariantSet` for
+/// those; this is only the `nodes_for` dispatch for a bare-enum `T`.
 fn fields_from_enum(
     enum_type: &EnumType,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Vec<Box<dyn FormMember>> {
+) -> Vec<Box<dyn Node>> {
     let peek_enum = peek.map(|p| {
         p.into_enum()
             .expect("shape said enum, so the value peeks as one")
     });
     let variant = chosen_variant(enum_type, peek_enum, mode, prefix)
         .expect("Variant should not be Unchosen here.");
-    variant_members(variant, peek_enum, mode, prefix, optional)
+    variant_nodes(variant, peek_enum, mode, prefix, optional)
 }
 
-/// The member for one declared *field* — the common case, where the name and
+/// The node for one declared *field* — the common case, where the name and
 /// shape both come from the field itself.
-fn member_for(
+fn node_for(
     field: &'static Field,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Box<dyn FormMember> {
-    member_for_shape(field.shape(), field.name, peek, mode, prefix, optional)
+) -> Box<dyn Node> {
+    node_for_shape(field.shape(), field.name, peek, mode, prefix, optional)
 }
 
-/// The member for a shape that is *named separately* from where it came from.
+/// The node for a shape that is *named separately* from where it came from.
 ///
-/// Split out of [`member_for`] because a list element has no [`Field`] and so no
+/// Split out of [`node_for`] because a list element has no [`Field`] and so no
 /// `field.name` — its name is its index (`"0"`, `"1"`, …), supplied by the
 /// enclosing `ListSet`. Everything below is shape-driven and never looked at the
 /// `Field` for anything but those two things, so the split is pure motion.
-pub(crate) fn member_for_shape(
+pub(crate) fn node_for_shape(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Box<dyn FormMember> {
+) -> Box<dyn Node> {
     if let Ok(option_def) = shape.def.into_option() {
-        return option_member(option_def, name, peek, mode, prefix);
+        return option_node(option_def, name, peek, mode, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_member(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(
+        return scalar_node(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(
             || panic!("scalar type {scalar:?} is not supported in FormField (field {name})"),
         );
     } else if let Some(inner) = newtype_inner(shape) {
@@ -218,38 +218,38 @@ pub(crate) fn member_for_shape(
         let inner_peek = peek
             .and_then(|p| p.into_struct().ok())
             .and_then(|s| s.field(0).ok());
-        return scalar_member(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
+        return scalar_node(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
             panic!("newtype {shape} wraps {scalar:?}, which is not supported in FormField (field {name})")
         });
     } else if let Ok(list_def) = shape.def.into_list() {
-        // SEAM: `list_member(_list_def.t, name, inner_peek, variants, prefix)`,
-        // building one row per element via `member_for_shape` with the index as
+        // SEAM: `list_node(_list_def.t, name, inner_peek, variants, prefix)`,
+        // building one row per element via `node_for_shape` with the index as
         // the row's name. See VEC_PLAN.md.
-        return list_member(list_def.t, name, peek, mode, prefix, optional);
+        return list_node(list_def.t, name, peek, mode, prefix, optional);
     }
 
     match &shape.ty {
-        Type::User(UserType::Struct(_)) => struct_member(shape, name, peek, mode, prefix, optional),
+        Type::User(UserType::Struct(_)) => struct_node(shape, name, peek, mode, prefix, optional),
         Type::User(UserType::Enum(enum_type)) => {
-            enum_member(enum_type, name, peek, mode, prefix, optional)
+            enum_node(enum_type, name, peek, mode, prefix, optional)
         }
         other => panic!("field {name} has unsupported type {other:?}"),
     }
 }
 
-fn option_member(
+fn option_node(
     option_def: OptionDef,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
-) -> Box<dyn FormMember> {
+) -> Box<dyn Node> {
     let inner_peek = peek.and_then(|p| {
         p.into_option()
             .expect("shape said Option, so the value should peek as one")
             .value()
     });
-    let inner = member_for_shape(
+    let inner = node_for_shape(
         option_def.t,
         name,
         inner_peek,
@@ -257,7 +257,7 @@ fn option_member(
         prefix,
         /* optional */ true,
     );
-    Box::new(OptionMember { inner })
+    Box::new(OptionNode { inner })
 }
 
 /// The inner shape of a newtype wrapper — `String` for `struct Markdown(String)`.
@@ -292,7 +292,7 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 }
 
 /// The closed set of scalar types with a built-in widget. Anything else needs
-/// a custom widget and returns `None` here, which `member_for_shape` turns into
+/// a custom widget and returns `None` here, which `node_for_shape` turns into
 /// a panic naming the type.
 ///
 /// **`usize` and `isize` are left out on purpose, not by oversight.** Their
@@ -310,7 +310,7 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 /// carries, and the only thing the walk contributes is `optional` — a
 /// structural fact (`Option` peeling) that no later reader can recover,
 /// because `bool` and `Option<bool>` both arrive as `FormField<bool>`.
-fn scalar_member(
+fn scalar_node(
     scalar: ScalarType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
@@ -320,7 +320,7 @@ fn scalar_member(
     // cannot be recovered from a runtime `Shape` — so the wrapper is remembered
     // here and re-applied when the value is written back.
     wrapper: Option<&'static Shape>,
-) -> Option<Box<dyn FormMember>> {
+) -> Option<Box<dyn Node>> {
     // The variant and the type can't be collapsed into one token: `ScalarType`
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
     // has no way to change an identifier's case. So each arm names both, and the
@@ -339,7 +339,7 @@ fn scalar_member(
                         wrapper,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
-                    }) as Box<dyn FormMember>),
+                    }) as Box<dyn Node>),
                 )*
                 _ => None
             }
@@ -367,21 +367,21 @@ fn scalar_member(
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
 /// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the
-/// `ListSet` keeps it: `Edit::AddRow` has to build a member for a row that has
+/// `ListSet` keeps it: `Edit::AddRow` has to build a node for a row that has
 /// no value to peek at, and this is the only thing that says what kind.
 ///
 /// Edit mode takes the row count from the value. Create mode has no value to
 /// count and so starts empty — which is now an answer rather than a gap, since
 /// `AddRow` is how a blank list gets its rows.
-fn list_member(
+fn list_node(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Box<dyn FormMember> {
-    let rows: Vec<Box<dyn FormMember>> = peek
+) -> Box<dyn Node> {
+    let rows: Vec<Box<dyn Node>> = peek
         .map(|p| {
             let list = p
                 .into_list()
@@ -392,12 +392,12 @@ fn list_member(
                     // A row's KEY is its name — not its index. At construction
                     // the two coincide, but they part company the moment a row
                     // is inserted or removed; see `row_segment`. And unlike
-                    // `struct_member`, which passes `prefix` straight through,
+                    // `struct_node`, which passes `prefix` straight through,
                     // nothing upstream has qualified this on yet, so do it here.
                     // Keeping this in step with `collect_values` is what keeps
                     // the leaf paths and the store keys the same strings.
                     let row = row_segment(i);
-                    member_for_shape(
+                    node_for_shape(
                         shape,
                         &row,
                         Some(element),
@@ -425,19 +425,19 @@ fn list_member(
 
 /// A struct-typed field: a [`FieldSet`] over that struct's own fields, whose
 /// paths accumulate under this field's name.
-fn struct_member(
+fn struct_node(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Box<dyn FormMember> {
+) -> Box<dyn Node> {
     Box::new(FieldSet {
         name: name.to_string(),
         optional,
         label: None,
-        members: members_for(shape, peek, mode, prefix, /* optional */ false),
+        nodes: nodes_for(shape, peek, mode, prefix, /* optional */ false),
         errors: Vec::new(),
     })
 }
@@ -446,14 +446,14 @@ fn struct_member(
 ///
 /// [`FormMode`] comes from the root, not from `peek` — see its docs for why
 /// deriving it here was the bug that made absent optional enums panic.
-fn enum_member(
+fn enum_node(
     enum_type: &'static EnumType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     mode: FormMode,
     prefix: &str,
     optional: bool,
-) -> Box<dyn FormMember> {
+) -> Box<dyn Node> {
     let peek_enum = peek.map(|p| {
         p.into_enum()
             .expect("shape said enum, so the value peeks as one")
@@ -472,8 +472,8 @@ fn enum_member(
             None => VariantChoice::Unchosen,
         },
         // No variant means no fields to build.
-        members: variant
-            .map(|v| variant_members(v, peek_enum, mode, prefix, /* optional */ false))
+        nodes: variant
+            .map(|v| variant_nodes(v, peek_enum, mode, prefix, /* optional */ false))
             .unwrap_or_default(),
         errors: Vec::new(),
     })

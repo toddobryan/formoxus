@@ -5,23 +5,40 @@ metadata:
   type: project
 ---
 
+**2026-10-16 (school, later): THE REFACTOR HAS STARTED (uncommitted on
+`widget`).** Todd renamed `members` → `nodes`, `FormMember` → `Node`,
+`RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`; I swept the
+`*_member` builders, comments, README, CLAUDE.md and `ATTRIBUTES_PLAN.md`
+(historical plans and memory left as is; renames line in `MEMORY.md`). He
+deleted the `Field<T>` sketch and `contact_info` stub ON PURPOSE. Builds
+clean. **Next, one radical change ([[feedback-radical-refactors-on-a-branch]]):**
+fold `FieldProps` + `WidgetProps` + `FieldAttrs` + `ScalarWidget` props into
+ONE `WidgetProps` (`id, path, label, attrs, extra_attrs, values, errors,
+classes`); choices move onto the widget value (`Select { choices }`, Django
+style); fields write their own constraint attrs (so `FieldType` leaves the
+props); widget resolved once in `build.rs` (no `custom_widget: Option`);
+`ErrorsStore` IN SCOPE NOW (client projection, one writer, `FormState` stays
+the authority); variant picker = a choice widget that still fires
+`on_edit`. Split: Todd and I share it.
+
+**2026-10-16 (school, day), DESIGN TALK, NO LIBRARY CODE.** Still on
+`widget`. The `Field<T>` sketch DOES build now (only an unused `FieldSpec`
+import warns); the "does not parse" claim below was stale. Todd answered
+A–F; see "Answers, 2026-10-16 day" in [[django-parallel-design]]. Open
+thread: whether to merge `FieldProps` + `WidgetProps` + `FieldAttrs` (+
+`choices`) into one `BoundField`, keeping `RenderCtx` as the tree-walk
+context. **Done:** the dev/user vocabulary is on `main` (`4d9db06`, pushed).
+**Still `widget`-only, ON PURPOSE (Todd: hold until the design settles):**
+`django_parallel_design.md` and its `MEMORY.md` line. Raise it if `widget`
+is merged, rebased or abandoned. An untracked 2-line stub
+`.claude/memory/django-parallel-design.md` (hyphens) appeared in the
+checkout; origin unknown, left alone; ask Todd before deleting.
+
 **2026-10-16 (home, late), END: DESIGN TALK ONLY, NO CODE.** Branch
 `widget` (not `main`), pushed. Todd is spit-balling a closer Django parallel;
-nothing is decided. **THE GOAL IS SIMPLIFICATION: fewer, combined concepts (see "THE GOAL" and the name inventory in that note).** **Read [[django-parallel-design]] first and be ready to
-remind Todd how Django's Form/Field/BoundField do and don't map onto
-formoxus; its "Open, for Todd" list A–F is where to start.** His WIP
-`Field<T>` sketch in `formoxus/src/widgets/widget.rs` does not parse (two
-typos, listed in that note), so the last commit went in with `--no-verify`;
-`cargo fmt --check` and the build fail until it is fixed or dropped. Also new:
-[[dev-vs-user-vocabulary]] ("dev" vs "user"; correct Todd when he slips),
-added to CLAUDE.md too.
-**MUST REACH `main` (Todd, 2026-10-16):** the dev/user vocabulary lives only
-on `widget` so far: the CLAUDE.md section "Vocabulary: **dev** vs **user**",
-`.claude/memory/dev_vs_user_vocabulary.md`, and its `MEMORY.md` line (all in
-`5eaf131`, which also carries the WIP sketch, so cherry-pick by FILE, not the
-whole commit). Same for `django_parallel_design.md`. Raise this whenever
-`widget` is merged, rebased or abandoned, or if `main` gets work first; the
-risk is throwing the branch away and losing them with it.
+nothing is decided. **THE GOAL IS SIMPLIFICATION: fewer, combined concepts
+(see "THE GOAL" and the name inventory in that note).** Read
+[[django-parallel-design]] first.
 
 **2026-10-15 (school), END: P3 DONE (P3-7, P3-8, P3-9), #10 CLOSED, ALL
 PUSHED.** P3-8: rendered cascade tests in `tests/suite/classes.rs`, `bare()`

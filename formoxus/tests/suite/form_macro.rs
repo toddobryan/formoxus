@@ -7,7 +7,7 @@
 
 use facet::Facet;
 use formoxus::form;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::ValuesByPath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
@@ -156,7 +156,7 @@ fn a_validator_fn_item_coerces_to_the_fn_pointer() {
 #[gtest]
 fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
     // The point of a *form* validator: every field passes on its own, so no
-    // member reports an error, and the only thing that can reject this model is
+    // node reports an error, and the only thing that can reject this model is
     // a check over the whole of it.
     let shouted = Article {
         headline: "TREES ARE GOOD".to_string(),

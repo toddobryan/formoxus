@@ -26,8 +26,8 @@ use super::models::{Mode, Shape};
 use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::members::ValuesByPath;
-use formoxus::members::{Edit, model_path};
+use formoxus::nodes::ValuesByPath;
+use formoxus::nodes::{Edit, model_path};
 use formoxus::prelude::*;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
@@ -145,7 +145,7 @@ fn a_blank_form_starts_every_enum_unchosen() {
 
 #[gtest]
 fn an_untouched_optional_enum_validates_as_none() {
-    // Unchosen behind an `Option` is a legal, complete answer — `OptionMember`
+    // Unchosen behind an `Option` is a legal, complete answer — `OptionNode`
     // suppresses the inner error exactly as it does for an empty scalar. This is
     // why two states suffice and `Absent` was not needed.
     let mut form = empty_form::<Sketch>(FormSpec::default());
@@ -337,7 +337,7 @@ fn a_nested_enum_dispatches_under_its_qualified_path() {
 #[gtest]
 fn picking_none_clears_an_optional_enums_subtree() {
     // The `--none--` round trip: `""` from the select becomes
-    // `ChooseVariant { variant: None }`, which puts the member back to
+    // `ChooseVariant { variant: None }`, which puts the node back to
     // `Unchosen` and drops its fields. The reverse of the test above, and the
     // reason `set_variant` takes an `Option<&str>` rather than a sentinel name.
     let mut app = Harness::mount(UnchosenSketchForm);
@@ -404,7 +404,7 @@ fn choosing_a_variant_reveals_its_fields() {
 
 #[gtest]
 fn choosing_a_variant_behind_an_option_builds_a_some() {
-    // The `begin_some` frame still has to happen, but `OptionMember` owns it now
+    // The `begin_some` frame still has to happen, but `OptionNode` owns it now
     // rather than `VariantSet` knowing it is optional.
     let mut form = empty_form::<Sketch>(FormSpec::default());
     form.choose_variant("shape", Some("Circle"))
@@ -480,7 +480,7 @@ fn switching_a_variant_replaces_the_subtree() {
 
 // ── Reaching the enum through other containers ──
 //
-// The tests above all reach a `VariantSet` that is either a direct member of the
+// The tests above all reach a `VariantSet` that is either a direct node of the
 // `FormState` or nested in another `VariantSet`. These cover the two remaining
 // dispatchers, which are otherwise never exercised.
 
@@ -638,7 +638,7 @@ fn switching_variants_keeps_each_ones_values_apart() {
     // what this reproduced before the fix.
     //
     // It also shows why switching is no longer destructive: the schema rebuild
-    // throws away the *members*, but the value store is keyed by path and
+    // throws away the *nodes*, but the value store is keyed by path and
     // survives it, so a value comes back when its variant does.
     let mut app = Harness::mount(PlotForm);
     app.fire("change", app.only_listener("change"), "Circle");
@@ -705,12 +705,12 @@ fn every_leaf_path_maps_back_onto_the_model() {
     expect_that!(model, contains(eq("shape.radius")));
 }
 
-// ── Edits aimed at the wrong kind of member ──────────────────────────────
+// ── Edits aimed at the wrong kind of node ──────────────────────────────
 
 #[gtest]
 fn a_row_edit_aimed_at_an_enum_is_rejected() {
     // New with `Edit`: previously `choose_variant` was the only edit, so
-    // "right path, wrong kind of member" couldn't be expressed at all.
+    // "right path, wrong kind of node" couldn't be expressed at all.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     let error = form
         .edit(&Edit::AddRow {
@@ -767,8 +767,8 @@ fn an_optional_enum_can_be_unset_after_being_chosen() {
 
 #[gtest]
 fn unsetting_drops_the_subtree_from_the_form() {
-    // The members go, so the enum contributes no leaves and `is_present` reads
-    // false — which is what lets `OptionMember` write a `None`.
+    // The nodes go, so the enum contributes no leaves and `is_present` reads
+    // false — which is what lets `OptionNode` write a `None`.
     let mut form = empty_form::<Sketch>(FormSpec::default());
     form.choose_variant("shape", Some("Circle"))
         .expect("Circle is a variant of Shape");
@@ -849,10 +849,10 @@ fn switching_variants_actually_edits_the_dom() {
     // So a correct VDOM paired with an empty or wrong edit list looks perfect to
     // every one of them and is broken on the page.
     //
-    // That is not hypothetical: before the select and its members shared one
+    // That is not hypothetical: before the select and its nodes shared one
     // `fieldset`, switching between two *fielded* variants produced a correct
     // VDOM and ZERO mutations, because the two arms of `render` were different
-    // templates and the diff never reached the members. This test is the guard
+    // templates and the diff never reached the nodes. This test is the guard
     // for that whole class, so it asserts on edit counts rather than markup.
     let mut app = Harness::mount(PlotForm);
     let select = app.only_listener("change");

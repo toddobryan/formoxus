@@ -148,7 +148,7 @@ fn a_form_that_says_nothing_stores_nothing() {
 /// The setting reaches the markup, not just the spec.
 ///
 /// Everything above would pass if `label_case` were stored and then ignored —
-/// this is the one that fails if the `RenderCtx` plumbing breaks.
+/// this is the one that fails if the `NodeContext` plumbing breaks.
 #[gtest]
 fn the_chosen_case_reaches_the_rendered_label() {
     #[derive(Facet, Clone, Debug, PartialEq)]

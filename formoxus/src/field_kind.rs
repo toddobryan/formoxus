@@ -18,7 +18,7 @@
 //! inside the item, and the projection closure is what lets the field's type be
 //! inferred rather than named.
 //!
-//! Classification mirrors `build::member_for_shape`, except that it compares
+//! Classification mirrors `build::node_for_shape`, except that it compares
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
@@ -229,7 +229,7 @@ enum Kind {
 
 const fn kind(shape: &Shape) -> Kind {
     // `OptionDef::t` is a plain `&'static Shape`, not a `ShapeRef`, so the
-    // `Option` layer can be peeled here exactly as `option_member` does.
+    // `Option` layer can be peeled here exactly as `option_node` does.
     if let Def::Option(option) = &shape.def {
         return kind(option.t);
     }
@@ -255,7 +255,7 @@ const fn kind(shape: &Shape) -> Kind {
     }
 }
 
-/// The scalars `build::scalar_member` supports, with their limits.
+/// The scalars `build::scalar_node` supports, with their limits.
 /// `usize`/`isize` are absent there on purpose, so they are absent here too.
 const fn primitive(name: &str) -> Kind {
     // `i128::from` is not const, and every one of these widens losslessly.
@@ -605,7 +605,7 @@ mod tests {
         expect_that!(required_is_not_optional(maybe), eq(true));
     }
 
-    /// Unsupported by `scalar_member`, so a constraint on one could only ever be
+    /// Unsupported by `scalar_node`, so a constraint on one could only ever be
     /// dropped or panic.
     #[gtest]
     fn unsupported_scalars_take_nothing() {

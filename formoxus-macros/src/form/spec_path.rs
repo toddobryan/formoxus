@@ -41,7 +41,7 @@ impl SpecPath {
             .map(|s| {
                 // `unraw`: an author writing `r#type` means the field `type`,
                 // which is the name facet reports and the name
-                // `FormMember::apply_specs` looks itself up by. Leaving the
+                // `Node::apply_specs` looks itself up by. Leaving the
                 // `r#` on would make the key match nothing.
                 if s.each {
                     format!("{}[]", s.ident.unraw())
@@ -197,7 +197,7 @@ mod tests {
     #[gtest]
     fn brackets_compose_with_a_field_below_them() {
         // The case that `[]` exists for: a row's own field. `venues.#0.city` is
-        // the real member path, which no author can write and which would pin one
+        // the real node path, which no author can write and which would pin one
         // row if they could.
         let spec = parse(quote! { Trip { venues[].city => { label: "City" } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("venues[].city"));

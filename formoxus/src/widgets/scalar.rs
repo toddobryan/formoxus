@@ -10,7 +10,7 @@ use super::select::Select;
 use super::textarea::Textarea;
 use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
 use crate::fields::FieldAttrs;
-use crate::members::ValuesStore;
+use crate::nodes::ValuesStore;
 
 /// Picks the widget for one leaf and hands it the pair every widget takes.
 ///

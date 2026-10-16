@@ -6,7 +6,7 @@
 //! which is the property that makes the whole approach work.
 
 use facet::Facet;
-use formoxus::{members::ValuesByPath, prelude::*};
+use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

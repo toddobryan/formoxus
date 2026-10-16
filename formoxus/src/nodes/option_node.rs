@@ -3,15 +3,15 @@ use dioxus::core::Element;
 use crate::ErrorsByPath;
 use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::members::{Edit, SpecsByPath, ValuesByPath};
-use crate::members::{FormMember, RenderCtx};
+use crate::nodes::{Edit, SpecsByPath, ValuesByPath};
+use crate::nodes::{Node, NodeContext};
 
 #[derive(Clone, Debug)]
-pub struct OptionMember {
-    pub inner: Box<dyn FormMember>,
+pub struct OptionNode {
+    pub inner: Box<dyn Node>,
 }
 
-impl FormMember for OptionMember {
+impl Node for OptionNode {
     fn name(&self) -> String {
         self.inner.name()
     }
@@ -20,7 +20,7 @@ impl FormMember for OptionMember {
         self.inner.label(case)
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         // The prefix passes through unchanged — this is a decorator, and
         // `name()` delegates inward, so qualifying here would double up. What
         // it *does* change is `required`: everything below is optional.
@@ -60,12 +60,12 @@ impl FormMember for OptionMember {
     }
 
     // Transparent, like `collect_errors` above: an absent-or-present wrapper
-    // has no errors of its own, so the inner member's are its own here.
+    // has no errors of its own, so the inner node's are its own here.
     fn has_errors_here(&self) -> bool {
         self.inner.has_errors_here()
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 

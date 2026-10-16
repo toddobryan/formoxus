@@ -16,7 +16,7 @@
 //! identical value.
 //!
 //! `usize`/`isize` are absent because a `FormField` cannot hold them — see
-//! `scalar_member`, which excludes them for being target-dependent widths.
+//! `scalar_node`, which excludes them for being target-dependent widths.
 //!
 //! **Custom scalars cannot be checked here.** A user-supplied type reaching a
 //! `FormField` must uphold the same property in its own `Facet` display/parse

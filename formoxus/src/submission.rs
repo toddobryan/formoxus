@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use facet::Facet;
 
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
-use crate::members::ValuesByPath;
+use crate::nodes::ValuesByPath;
 use crate::path::Path;
 use crate::wire::WireForm;
 
@@ -31,7 +31,7 @@ use crate::wire::WireForm;
 /// Nothing here is server-only — `FormState` is plain data with no Dioxus
 /// runtime behind it, which is what makes the whole approach possible. (A
 /// `FormState` still cannot CROSS a server fn boundary, since it holds
-/// `Box<dyn FormMember>`; building one on either side is a different thing.)
+/// `Box<dyn Node>`; building one on either side is a different thing.)
 // `Debug` for the same reason the rest of this path requires it: a failed
 // `expect`/matcher assertion has to be able to print what it got.
 #[derive(Debug)]

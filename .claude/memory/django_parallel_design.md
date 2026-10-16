@@ -8,10 +8,7 @@ metadata:
 Todd's question (2026-10-15, home): would following Django's design more
 closely make formoxus easier for devs to understand? **Still spit-balling; no
 design is decided.** His sketch is the WIP `Field<T>`/`Widget` in
-`formoxus/src/widgets/widget.rs` on the `widget` branch (it does not parse:
-`<T: Clone, Debug>` declares a second type param named `Debug`, and
-`Vec<fn(T) -> Option<ValidationMessage>,` is missing a `>`; left as is because
-it is his sketch). Django source read: 6.1.2, `django/forms/{forms,fields,
+`formoxus/src/widgets/widget.rs` on the `widget` branch (builds as of 2026-10-16 day; the two typos once noted here are fixed). Django source read: 6.1.2, `django/forms/{forms,fields,
 boundfield}.py`.
 
 ## Django's three classes, in one line each
@@ -145,6 +142,39 @@ D. Whether to rename toward Django: `FieldProps` → `BoundField`; a `Widget`
 E. Typed per-field `initial`/`validators`: via the projection closure, then
    erased in `FieldSpec`.
 F. Does this replace Step 4's plan (D0–D4) or sit before it?
+
+## Answers, 2026-10-16 day (Todd)
+
+A. Yes: `form! { XAlt for X { … } }` names the form; without `XAlt for`,
+   it is `XForm`.
+B. Asked for a reminder of what `Context` holds (see the section above).
+   Its name collides in feel with `RenderCtx`; a rename is likely.
+C. BOTH, item and expression, so `use_form(form! { … })` works inline.
+D. Depends on the `RenderCtx`/`FieldProps` question, below.
+E. Yes, if inference through the projection closure works.
+F. BEFORE Step 4, and may make parts of D0–D4 unnecessary.
+
+**The widget at runtime, outside `formoxus`:** Todd accepts that unmentioned
+fields get their widget at runtime, but wants the logic out of the main
+crate. It is mostly there already: `BuiltinWidget::default_for(FieldType,
+optional)` and `::renders` are `const fn`s in `formoxus-spec`. What stays
+in `formoxus` is only shape → `FieldType` (`field_kind::kind`; spec has no
+facet) and `FormField::{default_widget, widget}`, which resolve
+`custom_widget: Option<WidgetType>` on EVERY call. Proposed: `build.rs`
+resolves once, so `FormField` holds `widget: WidgetType`, never an `Option`.
+
+**`RenderCtx` vs `FieldProps` vs Django's `BoundField`:**
+`RenderCtx` = `form_id, prefix, values, required, on_edit, label_case,
+classes`; passed DOWN the tree to every member, containers included. It is
+the form side of `BoundField` (what Django reads through `self.form`).
+`FieldProps` = `id, path, label, classes, errors`, built per leaf from ctx +
+field. The rest of a `BoundField` is spread over `WidgetProps` (`values,
+props, attrs`), `ScalarWidget`'s own props (`field_type, field_attrs,
+widget, choices`) and `FieldAttrs` (required, aria-invalid, constraints).
+Recommendation: do NOT merge `RenderCtx` into the leaf view (containers
+need it, widgets must not see `on_edit`/`prefix`); DO merge `FieldProps` +
+`WidgetProps` + `FieldAttrs` + `choices` into one `BoundField`, built by
+`FormField::render`. That is three names gone.
 
 ## THE GOAL: simplify (Todd, 2026-10-16, last thing before bed)
 

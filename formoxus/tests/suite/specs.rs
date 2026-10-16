@@ -1,6 +1,6 @@
-//! `FormSpec` overrides reaching the built tree, via `FormMember::apply_specs`.
+//! `FormSpec` overrides reaching the built tree, via `Node::apply_specs`.
 //!
-//! These go through `render_to_html` rather than inspecting members, because the
+//! These go through `render_to_html` rather than inspecting nodes, because the
 //! question is whether an override *arrives* — and the DOM is the only place that
 //! answer is unambiguous. Nothing here constructs a spec through `form!`; the
 //! builder is the contract between the macro and the tree, so testing the builder
@@ -12,8 +12,8 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, RenderedInputType};
 use formoxus::fields::FieldAttrs;
-use formoxus::members::Edit;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::Edit;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::{BuiltinWidget, WidgetType};
 use googletest::prelude::*;
@@ -151,7 +151,7 @@ fn an_override_works_in_the_other_direction_too() {
 fn an_unmatched_path_is_a_no_op() {
     // The witness fn makes this unreachable through `form!`, but the builder is
     // public and `apply_specs` must not panic on a path it simply doesn't find —
-    // a spec is a set of statements about members, not an assertion that each
+    // a spec is a set of statements about nodes, not an assertion that each
     // exists.
     let form =
         empty_form(FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"));
@@ -358,7 +358,7 @@ fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     );
 }
 
-// ── Members that arrive AFTER the spec was applied ───────────────────────
+// ── Nodes that arrive AFTER the spec was applied ───────────────────────
 
 #[component]
 fn RowAddedAfterTheSpec() -> Element {

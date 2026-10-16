@@ -160,8 +160,8 @@ fn signals_are_populated_from_the_model() {
 
 // ── The store-bound widget boundary ──────────────────────────────────────
 //
-// These drive `ScalarWidget` directly rather than through `FormMember::render`,
-// so they stay meaningful regardless of how the members wire it up.
+// These drive `ScalarWidget` directly rather than through `Node::render`,
+// so they stay meaningful regardless of how the nodes wire it up.
 
 use formoxus::attrs::FieldType;
 use formoxus::widgets::{BuiltinWidget, FieldProps, ScalarWidget, WidgetType};
@@ -177,7 +177,7 @@ fn PopulatedInput() -> Element {
             // What a `String` field with no constraints hands down. Spelled
             // out because these drive `ScalarWidget` directly, so nothing
             // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
+            // boundary independently of how the nodes wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
             widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
@@ -203,7 +203,7 @@ fn EmptyInput() -> Element {
             // What a `String` field with no constraints hands down. Spelled
             // out because these drive `ScalarWidget` directly, so nothing
             // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
+            // boundary independently of how the nodes wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
             widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
@@ -580,7 +580,7 @@ fn PasswordWithEcho() -> Element {
             // What a `String` field with no constraints hands down. Spelled
             // out because these drive `ScalarWidget` directly, so nothing
             // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
+            // boundary independently of how the nodes wire it up.
             field_type: FieldType::Text,
             field_attrs: FieldAttrs::default(),
             widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),

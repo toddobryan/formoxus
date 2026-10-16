@@ -1,12 +1,11 @@
-//! A struct-typed member: its fields, nested under its own name.
+//! A struct-typed node: its fields, nested under its own name.
 
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::members::RenderCtx;
-use crate::members::{
-    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
-    qualify,
+use crate::nodes::NodeContext;
+use crate::nodes::{
+    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns, qualify,
 };
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
@@ -17,11 +16,11 @@ pub struct FieldSet {
     pub name: String,
     pub optional: bool,
     pub label: Option<String>,
-    pub members: Vec<Box<dyn FormMember>>,
+    pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
 }
 
-impl FormMember for FieldSet {
+impl Node for FieldSet {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -32,9 +31,9 @@ impl FormMember for FieldSet {
             .or_else(|| default_label(&self.name, case))
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
-        let members_rendered = self.members.iter().map(|m| m.render(&nested));
+        let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
         let fieldset_class = ctx.classes.fixed_class(FixedKey::FieldSet, false);
         let legend_class = ctx.classes.fixed_class(FixedKey::FieldSetLegend, false);
         rsx! {
@@ -42,24 +41,24 @@ impl FormMember for FieldSet {
                 if let Some(text) = self.label(ctx.label_case) {
                     legend { class: legend_class, "{text}" }
                 }
-                { members_rendered.into_iter() }
+                { nodes_rendered.into_iter() }
             }
         }
     }
 
     fn validate(&mut self) {
         self.errors.clear();
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.validate();
         }
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 
     fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || self.members.iter().any(|m| m.has_errors_within())
+        self.has_errors_here() || self.nodes.iter().any(|m| m.has_errors_within())
     }
 
     fn has_errors_here(&self) -> bool {
@@ -73,41 +72,41 @@ impl FormMember for FieldSet {
 
     fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
         let nested = qualify(prefix, &self.name);
-        for m in &self.members {
+        for m in &self.nodes {
             m.collect_values(&nested, out);
         }
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
-        for m in &self.members {
+        for m in &self.nodes {
             m.collect_errors(&nested, out);
         }
     }
 
     fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.distribute_values(&nested, values);
         }
     }
 
     fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.distribute_errors(&nested, errors);
         }
     }
 
     fn write_value_into<'p>(&self, mut partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
-        for m in &self.members {
+        for m in &self.nodes {
             partial = m.write_into(partial)?;
         }
         Ok(partial)
     }
 
     fn is_present(&self) -> bool {
-        self.members.iter().any(|fm| fm.is_present())
+        self.nodes.iter().any(|fm| fm.is_present())
     }
 
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
@@ -118,7 +117,7 @@ impl FormMember for FieldSet {
         // Paths are unique, so at most one child can own this one. Dispatching
         // by containment rather than trying each in turn is what lets a child's
         // real error ("no such variant") reach the caller intact.
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             if owns(&qualify(&nested, &m.name()), path) {
                 return m.edit(&nested, edit);
             }
@@ -128,7 +127,7 @@ impl FormMember for FieldSet {
 
     fn clear_errors(&mut self) {
         self.errors.clear();
-        for m in &mut self.members {
+        for m in &mut self.nodes {
             m.clear_errors();
         }
     }
@@ -137,7 +136,7 @@ impl FormMember for FieldSet {
         let my_path = qualify(prefix, &self.name);
         if let Some(spec) = fields.get(&my_path) {
             // Checked before anything is written, so a rejected spec leaves the
-            // member untouched — which matters the day this becomes a `Result`.
+            // node untouched — which matters the day this becomes a `Result`.
             assert!(
                 spec.custom_widget.is_none(),
                 "{my_path} is a field set, which has no single widget to \
@@ -146,10 +145,10 @@ impl FormMember for FieldSet {
             );
             self.label = spec.label.clone().or(self.label.take());
         }
-        // Unlike `edit`, which finds the one member owning a path and stops, a
+        // Unlike `edit`, which finds the one node owning a path and stops, a
         // spec may speak about any number of descendants — so every child is
-        // visited, with this member's path as their prefix.
-        for m in &mut self.members {
+        // visited, with this node's path as their prefix.
+        for m in &mut self.nodes {
             m.distribute_specs(&my_path, fields);
         }
     }

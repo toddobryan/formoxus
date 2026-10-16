@@ -62,7 +62,7 @@ compile time, so `emial` is a compile error rather than a runtime
 This is the part that's usually painful, so it's worth showing directly.
 
 A form does **not** cross a server-function boundary — `FormState` holds
-`Box<dyn FormMember>` and isn't serializable. What crosses is the leaves: plain
+`Box<dyn Node>` and isn't serializable. What crosses is the leaves: plain
 `(path, value)` string pairs. The server rebuilds the form from the *same*
 `FormSpec` and validates it there, so cross-field rules live in one place
 instead of being duplicated on both sides.

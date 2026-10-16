@@ -10,7 +10,7 @@ use formoxus_spec::BuiltinWidget;
 
 use crate::classes::Classes;
 use crate::error::ValidationMessage;
-use crate::members::ValuesStore;
+use crate::nodes::ValuesStore;
 
 #[derive(Clone, Copy)]
 pub enum WidgetType {
@@ -83,7 +83,7 @@ pub use formoxus_spec::InputType;
 pub struct FieldProps {
     /// The field's name in the PAGE: the control's `id`, what its `<label for>`
     /// and `aria-describedby` point at. `{form id}-{path}`, built by
-    /// `RenderCtx::id`, so it differs between two copies of one form on a page.
+    /// `NodeContext::id`, so it differs between two copies of one form on a page.
     pub id: String,
     /// The field's name in the DATA: its `name` attribute, its key in the value
     /// store, and what the server matches a submitted value to. The same for
@@ -94,7 +94,7 @@ pub struct FieldProps {
     /// The form's resolved classes, for the widget to look up its parts' slots
     /// (`classes.part_class(widget, "label", invalid)`). A custom widget gets
     /// them too, so it can borrow a built-in slot and follow the app's preset.
-    /// An `Rc` from `RenderCtx`; see the rule on `RenderCtx::classes`.
+    /// An `Rc` from `NodeContext`; see the rule on `NodeContext::classes`.
     pub classes: Rc<Classes>,
     pub errors: Vec<ValidationMessage>,
 }
@@ -108,7 +108,7 @@ impl FieldProps {
 /// One of the options in a selectable list (e.g., [`super::Select`],
 /// [`super::RadioGroup`]).
 /// This is a value choice representable as a String. Contrast with
-/// [`crate::members::VariantChoice`], which specifies the SHAPE of the data.
+/// [`crate::nodes::VariantChoice`], which specifies the SHAPE of the data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Choice {
     /// The raw string written into the value map, so it has to be exactly what

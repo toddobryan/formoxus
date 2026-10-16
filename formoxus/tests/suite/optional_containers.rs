@@ -1,8 +1,8 @@
-//! `Option` composes with every member kind — it is not a fifth kind of its own.
+//! `Option` composes with every node kind — it is not a fifth kind of its own.
 //!
-//! `member_for_shape` peels ONE `Option` layer and recurses, so the recursion IS
+//! `node_for_shape` peels ONE `Option` layer and recurses, so the recursion IS
 //! the dispatch and no match is duplicated. The result is wrapped in an
-//! `OptionMember`, a decorator that owns the `begin_some`/`set_default` frame and
+//! `OptionNode`, a decorator that owns the `begin_some`/`set_default` frame and
 //! intercepts `validate` — absent means don't validate the inner, which is what
 //! unwound `FormField::required`'s double duty.
 //!
@@ -16,7 +16,7 @@
 //!
 //! Optional *enums* stay covered by `enums` (`edit_mode_round_trips_an_optional_
 //! enum`, `create_mode_absent_builds_a_none`, …) — the guard for having retired
-//! `VariantSet::optional`, which `OptionMember` subsumes. `VariantChoice::Absent`
+//! `VariantSet::optional`, which `OptionNode` subsumes. `VariantChoice::Absent`
 //! deliberately survives: a chosen unit variant has no leaves, so presence there
 //! cannot be derived the way it is for structs and lists.
 
@@ -24,7 +24,7 @@ use super::Harness;
 use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
@@ -48,7 +48,7 @@ struct Tagged {
 /// `init_list` → `begin_list_item` → `begin_field`, one frame per layer.
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Roster {
-    members: Option<Vec<Location>>,
+    nodes: Option<Vec<Location>>,
 }
 
 /// `Option<Vec<Option<Scalar>>>` — two `Option`s at different depths, which is
@@ -239,7 +239,7 @@ fn an_optional_list_of_structs_round_trips() {
     // `begin_list_item` → `begin_field` — which is where a decorator that
     // forwards `write_into` instead of `write_value_into` comes apart.
     let value = Roster {
-        members: Some(vec![springfield()]),
+        nodes: Some(vec![springfield()]),
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
@@ -250,7 +250,7 @@ fn an_optional_list_of_structs_round_trips() {
 #[gtest]
 fn option_peels_one_layer_at_a_time() {
     // `Option<Vec<Option<String>>>` →
-    // `OptionalMember(ListSet(rows of OptionalMember(FormField)))`, each
+    // `OptionNode(ListSet(rows of OptionNode(FormField)))`, each
     // layer contributing exactly one frame. Row 1 is empty, so it's `None`
     // by the same rule that makes the whole list present: some leaf under
     // `cells` is non-empty.
@@ -266,11 +266,11 @@ fn option_peels_one_layer_at_a_time() {
 
 // ── Presence that the leaves cannot see ──
 //
-// Every other member kind answers `is_present` from something a leaf carries, so
+// Every other node kind answers `is_present` from something a leaf carries, so
 // a wrapper that scans leaves itself gets the same answer by accident. A chosen
 // FIELDLESS variant breaks that: it contributes no leaves at all, and only
 // `VariantSet` knows it was chosen. These are the tests that fail if
-// `OptionMember::is_present` inspects leaves instead of asking its inner member.
+// `OptionNode::is_present` inspects leaves instead of asking its inner node.
 
 /// `Option<Enum>` where the chosen variant carries no fields.
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -314,8 +314,8 @@ fn an_absent_optional_unit_variant_stays_absent() {
 
 #[gtest]
 fn a_chosen_unit_variant_survives_two_containers_deep() {
-    // `OptionMember` -> `ListSet` -> `VariantSet`, none of which has a leaf to
-    // its name. Presence has to be asked for, one member at a time, the whole
+    // `OptionNode` -> `ListSet` -> `VariantSet`, none of which has a leaf to
+    // its name. Presence has to be asked for, one node at a time, the whole
     // way down.
     let value = Schedule {
         modes: Some(vec![Mode::Fast, Mode::Slow]),
@@ -356,7 +356,7 @@ fn an_optional_structs_leaves_are_not_marked_required() {
     // `validate()` stays the authority; the partly-filled case is caught by
     // `a_partly_filled_optional_struct_is_an_error`, not by the browser.
     //
-    // This is what `RenderCtx::optional()` buys, and the only place a member
+    // This is what `NodeContext::optional()` buys, and the only place a node
     // changes the context instead of passing it along.
     let html = super::render_to_html(EmptyContactForm);
 
@@ -377,15 +377,15 @@ fn an_optional_structs_leaves_are_still_rendered() {
     }
 }
 
-// ── `optional` describes ONE member, not a subtree ───────────────────────
+// ── `optional` describes ONE node, not a subtree ───────────────────────
 //
 // Three flags now travel through the build walk and they behave differently on
 // purpose. `FormMode` is fixed at the root and threaded down unchanged.
-// `RenderCtx::required` is set once by `OptionMember` and INHERITED by every
+// `NodeContext::required` is set once by `OptionNode` and INHERITED by every
 // descendant — deliberately, because it is only a presentation hint and an
 // optional struct's leaves must not be individually marked required. The build
 // walk's `optional` is neither: it decides which *widget* a `bool` gets, so it
-// has to be consumed by the member it describes and reset for that member's
+// has to be consumed by the node it describes and reset for that node's
 // children.
 //
 // These two tests pin both directions, so a fix can't be "stop setting it".
@@ -534,7 +534,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
 // unticked and `false` is a complete answer. The obvious fix — read `""` as
 // `"false"` in `distribute_values` — was TRIED and reverted: it makes the field
 // permanently present, and since `FieldSet::is_present` is `any` over its
-// members, an `Option<Struct>` whose only field is a checkbox then builds
+// nodes, an `Option<Struct>` whose only field is a checkbox then builds
 // `Some(..)` for a section the user never opened. The second test below is that
 // bug, and it was red against exactly that version.
 //
@@ -589,7 +589,7 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     // `apply`, so `venue` reports itself absent and builds `None` — a user who
     // never opened the venue section doesn't silently create one. Synthesise
     // `false` any earlier than `write_value_into` and this goes red: `open`
-    // becomes present, `FieldSet::is_present` is `any` over its members, and out
+    // becomes present, `FieldSet::is_present` is `any` over its nodes, and out
     // comes `Some(Venue { open: false })`.
     //
     // `published` proves the same run still submits its top-level `bool`, so a

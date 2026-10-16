@@ -8,7 +8,7 @@ use super::label::field_label;
 use super::types::{Choice, FieldProps};
 use super::values::{get_current, write_value};
 use crate::fields::FieldAttrs;
-use crate::members::ValuesStore;
+use crate::nodes::ValuesStore;
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
 ///
@@ -100,7 +100,7 @@ pub fn Select(
 /// cosmetic one: the `<select>` carries no `name`, so nothing it holds is ever
 /// collected by `FormData::values()` and this text cannot come back as a value.
 /// That is what keeps it from reintroducing the sentinel problem
-/// [`VariantChoice`](crate::members::VariantChoice) exists to avoid — a model
+/// [`VariantChoice`](crate::nodes::VariantChoice) exists to avoid — a model
 /// with a genuine `None` variant would otherwise be indistinguishable from an
 /// unanswered optional field. What the select actually emits is `""`, which
 /// `VariantSelect` turns into `ChooseVariant { variant: None }`.

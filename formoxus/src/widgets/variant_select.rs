@@ -5,14 +5,14 @@ use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
 use crate::fields::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
-use crate::members::Edit;
+use crate::nodes::Edit;
 use crate::widgets::FieldProps;
 
 use super::errors::FieldErrors;
 use super::label::field_label;
 use super::select::ABSENT_DISPLAY;
 
-/// The `<select>` a [`VariantSet`](crate::members::VariantSet) renders to ask which
+/// The `<select>` a [`VariantSet`](crate::nodes::VariantSet) renders to ask which
 /// variant a value takes.
 ///
 /// A SHAPE choice, not a value choice — contrast [`Select`](super::Select),

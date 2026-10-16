@@ -1,11 +1,11 @@
-//! Leaf members: a single input, its parsed value, and the two vtable-driven
+//! Leaf nodes: a single input, its parsed value, and the two vtable-driven
 //! conversions that replace `FromStr`/`Display` bounds on the model.
 use crate::ErrorsByPath;
 use crate::classes::Slot;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::members::RenderCtx;
-use crate::members::{Edit, FormMember, SpecsByPath, ValuesByPath, default_label, qualify};
+use crate::nodes::NodeContext;
+use crate::nodes::{Edit, Node, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::errors::errors_id;
 use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
 use dioxus::prelude::*;
@@ -47,7 +47,7 @@ pub struct FormField<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
     /// string-facing operation — parsing, display, `check`, the widget —
     /// goes on working unchanged against the inner scalar.
     ///
-    /// Only [`write_value_into`](FormMember::write_value_into) consults it.
+    /// Only [`write_value_into`](Node::write_value_into) consults it.
     pub wrapper: Option<&'static facet::Shape>,
     pub value: FieldValue<T>,
     pub errors: Vec<ValidationMessage>,
@@ -272,8 +272,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     /// f64s. In the form! macro (where we have access to the actual type of the field),
     /// we check to make sure the constraints fit.
     fn field_type(&self) -> FieldType {
-        // `None` is unreachable: `scalar_member` only builds a `FormField` for
-        // the scalars it recognises, and `member_for_shape` panics on the rest.
+        // `None` is unreachable: `scalar_node` only builds a `FormField` for
+        // the scalars it recognises, and `node_for_shape` panics on the rest.
         let scalar = T::SHAPE
             .scalar_type()
             .expect("FormField is only constructed for scalar shapes");
@@ -438,7 +438,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     }
 
     /// The raw value `validate` checks: `"false"` for an unticked checkbox,
-    /// and [`FormMember::raw_value`] for everything else.
+    /// and [`Node::raw_value`] for everything else.
     ///
     /// An unticked checkbox stays `Empty`, so that `is_present` keeps one
     /// meaning. The places that CONSUME the value know it means `false` instead.
@@ -454,7 +454,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormField<T> {
     }
 }
 
-impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for FormField<T> {
+impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for FormField<T> {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -521,7 +521,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         out.insert(qualify(prefix, &self.name), self.errors.clone());
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         let widget = self.widget();
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
@@ -585,7 +585,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
         }
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 
@@ -664,7 +664,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> FormMember for 
             // Those three have something to preserve — `build` derives a label
             // from the field name and a widget from the shape, so the spec has
             // to mean "mine if I said anything, yours otherwise". Nothing
-            // derives an attribute: `scalar_member` always writes
+            // derives an attribute: `scalar_node` always writes
             // `FieldAttrs::default()`, so there has never been anything here
             // to keep, and one rule is easier to hold than two — `with_attrs`
             // already replaces wholesale on the spec side.
@@ -1500,7 +1500,7 @@ mod tests {
     // `form!`'s map never holds them. `with_owned_attrs` builds the map a
     // widget actually gets.
 
-    /// A field's element id, as `RenderCtx::id` builds it. `.into()` at each
+    /// A field's element id, as `NodeContext::id` builds it. `.into()` at each
     /// call, so these read the same whether the parameter is `String` or `&str`.
     const ID: &str = "aB3xY9kq-name";
 

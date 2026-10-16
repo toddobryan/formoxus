@@ -56,7 +56,7 @@ impl ButtonSpec {
     /// Takes the case rather than reading it, because `defaults()` is only the
     /// APP tier — a form stating its own `label_case` would be ignored. The
     /// whole cascade is resolved once by [`crate::Form::label_case`] and handed
-    /// down, exactly as `RenderCtx` carries it to a field label. It also keeps
+    /// down, exactly as `NodeContext` carries it to a field label. It also keeps
     /// `ButtonSpec` plain data: `defaults()` needs a live Dioxus runtime, and a
     /// `ButtonSpec` outlives any render.
     pub fn label(&self, case: LabelCase) -> String {

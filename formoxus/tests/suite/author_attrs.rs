@@ -17,7 +17,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue};
 use formoxus::fields::FieldAttrs;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::WidgetType;
 use googletest::prelude::*;

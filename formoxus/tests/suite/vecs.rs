@@ -4,8 +4,8 @@ use super::models::{Location, Shape};
 use super::{Harness, new_since};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::members::Edit;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::Edit;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use indexmap::IndexMap;
@@ -193,7 +193,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 
 #[gtest]
 fn create_mode_yields_no_rows_yet() {
-    // Characterization, not an endorsement: `list_member` has no length to
+    // Characterization, not an endorsement: `list_node` has no length to
     // work from without a value, so it builds an empty `ListSet` and
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
@@ -247,7 +247,7 @@ fn adding_a_row_appends_by_default() {
 #[gtest]
 fn a_new_row_is_blank_and_buildable() {
     // The row is built from the ELEMENT shape with no value to peek at, so it
-    // has to come out as a working member rather than a placeholder: fill it and
+    // has to come out as a working node rather than a placeholder: fill it and
     // the model builds.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddRow {
@@ -378,7 +378,7 @@ fn a_key_is_never_reused() {
 fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
     // A row built by `AddRow` has to be indistinguishable from one built at
     // construction — including being reachable by the containment walk, which
-    // means its prefix has to match what `list_member` would have produced.
+    // means its prefix has to match what `list_node` would have produced.
     let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
     form.edit(&Edit::AddRow {
         path: "shapes".to_string(),

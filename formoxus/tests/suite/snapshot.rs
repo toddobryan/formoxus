@@ -301,7 +301,7 @@ fn check(name: &str, html: &str) {
 /// every run, and a newline before every tag, so a change is a line diff.
 ///
 /// The id is read off the first `id="…"` that starts with one: 8 characters
-/// and a `-`, as `RenderCtx::id` builds them. Replacing that exact string,
+/// and a `-`, as `NodeContext::id` builds them. Replacing that exact string,
 /// rather than anything id-shaped, cannot touch a class or a value.
 fn normalized(html: &str) -> String {
     let form_id = html.split("id=\"").skip(1).find_map(|rest| {

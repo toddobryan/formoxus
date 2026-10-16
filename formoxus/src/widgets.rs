@@ -2,7 +2,7 @@
 //!
 //! One component per leaf, and that is the load-bearing part. A component is
 //! the unit of reactivity in Dioxus: a store read inside one subscribes *that*
-//! scope. `FormMember::render` is a plain function with no scope of its own, so
+//! scope. `Node::render` is a plain function with no scope of its own, so
 //! reading a value there would subscribe whoever called it — and a single
 //! keystroke would re-render the entire form. Spawning a component per leaf is
 //! what keeps a write to one path local to one widget.
@@ -64,7 +64,6 @@ pub mod textarea;
 pub mod types;
 pub mod values;
 pub mod variant_select;
-pub mod widget;
 
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
@@ -78,7 +77,7 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, FieldProps, InputType, WidgetProps, WidgetType};
 pub use values::{get_current, write_value};
-// Defined in `members`, re-exported here because a custom widget cannot be
+// Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without it — so `use formoxus::widgets::*` is the whole kit.
-pub use crate::members::ValuesStore;
+pub use crate::nodes::ValuesStore;
 pub use variant_select::VariantSelect;

@@ -1,16 +1,16 @@
-//! A list-typed member. Rows are members named by a `#`-prefixed KEY, which is
+//! A list-typed node. Rows are nodes named by a `#`-prefixed KEY, which is
 //! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
 //! nesting — and, because a key is an identity rather than a position, what lets
 //! a row be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `row_segment` for why renaming would be a data hazard.
 
-use crate::build::{FormMode, member_for_shape};
+use crate::build::{FormMode, node_for_shape};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::members::RenderCtx;
-use crate::members::{
-    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+use crate::nodes::NodeContext;
+use crate::nodes::{
+    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, row_segment,
 };
 use crate::widgets::{AddRowButton, RemoveRowButton};
@@ -24,7 +24,7 @@ pub struct ListSet {
     pub label: Option<String>,
     pub shape: &'static Shape,
     pub optional: bool,
-    pub rows: Vec<Box<dyn FormMember>>,
+    pub rows: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
     pub next_key: usize,
 }
@@ -34,7 +34,7 @@ impl ListSet {
     ///
     /// `None` peek and `FormMode::Blank`: a new row has no value to read, the
     /// same pair `VariantSet::set_variant` passes when it rebuilds a variant's
-    /// members. The row's prefix has to match what `list_member` produces at
+    /// nodes. The row's prefix has to match what `list_node` produces at
     /// construction, or the row would render fine and write to store keys
     /// nobody reads.
     fn add_row(
@@ -52,7 +52,7 @@ impl ListSet {
         }
         let name = row_segment(self.next_key);
         self.next_key += 1;
-        let row = member_for_shape(
+        let row = node_for_shape(
             self.shape,
             &name,
             None,
@@ -83,7 +83,7 @@ impl ListSet {
     }
 }
 
-impl FormMember for ListSet {
+impl Node for ListSet {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -94,7 +94,7 @@ impl FormMember for ListSet {
             .or_else(|| default_label(&self.name, case))
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
         // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on a row.
@@ -180,7 +180,7 @@ impl FormMember for ListSet {
         !self.errors.is_empty()
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 
@@ -216,7 +216,7 @@ impl FormMember for ListSet {
         // containment rather than trying each in turn is what lets a row's real
         // error reach the caller intact.
         // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
-        // member's own name, which the member qualifies on itself. Passing
+        // node's own name, which the node qualifies on itself. Passing
         // the row's full path double-qualifies it into `shapes.#1.#1` — the
         // same trap `FieldSet::choose_variant` fell into.
         for m in &mut self.rows {

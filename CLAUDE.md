@@ -75,7 +75,7 @@ the file anyway. See `.claude/memory/dev_vs_user_vocabulary.md`.
 
 `formoxus::prelude` holds what a consumer writing forms uses, and the crate
 root is only `pub use prelude::*;`. Everything else is reached through its
-defining module (`formoxus::members::FormMember`, `formoxus::buttons::ButtonSpec`);
+defining module (`formoxus::nodes::Node`, `formoxus::buttons::ButtonSpec`);
 `formoxus::widgets::*` is the separate glob for writing a custom widget.
 **Inside the crate, the macros and intra-doc links, always use the full module
 path** — never a name through the prelude — so trimming the prelude cannot

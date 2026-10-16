@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{
     ErrorsByPath, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form, form,
-    form_for, members::ValuesByPath, path, use_form, using_fns,
+    form_for, nodes::ValuesByPath, path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -117,7 +117,7 @@ fn applied_form_errors_reach_the_form_level_list() {
     );
 }
 
-/// A nested path is as good as a flat one — every member checks for its own
+/// A nested path is as good as a flat one — every node checks for its own
 /// qualified path, however deep it sits.
 #[gtest]
 fn an_applied_error_finds_a_nested_leaf() {
