@@ -7,7 +7,7 @@ metadata:
 
 **2026-10-16 (home, late), END: DESIGN TALK ONLY, NO CODE.** Branch
 `widget` (not `main`), pushed. Todd is spit-balling a closer Django parallel;
-nothing is decided. **Read [[django-parallel-design]] first and be ready to
+nothing is decided. **THE GOAL IS SIMPLIFICATION: fewer, combined concepts (see "THE GOAL" and the name inventory in that note).** **Read [[django-parallel-design]] first and be ready to
 remind Todd how Django's Form/Field/BoundField do and don't map onto
 formoxus; its "Open, for Todd" list A–F is where to start.** His WIP
 `Field<T>` sketch in `formoxus/src/widgets/widget.rs` does not parse (two

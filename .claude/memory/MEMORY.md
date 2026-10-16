@@ -20,7 +20,7 @@
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical
 
 ## Core design
-- [Django parallel design](django_parallel_design.md) — 2026-10-16 SPIT-BALLING: Django Form/Field/BoundField mapped onto formoxus; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
+- [Django parallel design](django_parallel_design.md) — 2026-10-16 SPIT-BALLING, GOAL = FEWER CONCEPTS: Django mapped onto formoxus; name inventory; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it

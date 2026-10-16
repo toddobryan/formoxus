@@ -145,3 +145,49 @@ D. Whether to rename toward Django: `FieldProps` → `BoundField`; a `Widget`
 E. Typed per-field `initial`/`validators`: via the projection closure, then
    erased in `FieldSpec`.
 F. Does this replace Step 4's plan (D0–D4) or sit before it?
+
+## THE GOAL: simplify (Todd, 2026-10-16, last thing before bed)
+
+"This refactoring is mostly born out of a desire to simplify. We have an
+awful lot of similarly named concepts that do similar things." Look at each
+one carefully: which are truly necessary, which can be combined. The Django
+parallel is a means; FEWER CONCEPTS is the end.
+
+His example: if `FieldSpec` carried THE widget (not
+`custom_widget: Option<WidgetType>`), fixed at compile time, much runtime
+work goes away and the complexity moves into `formoxus-spec` and
+`formoxus-macros`, "where God-fearing people don't need to look at it."
+
+**The catch to check first:** `form!` sees only the fields the dev MENTIONS.
+A field the dev never names (and every field inside a nested struct, a
+`Vec` row or an enum variant) is found only by the runtime shape walk, and
+const code cannot walk a struct's fields (crossing a `ShapeRef`; see
+[[const-shape-walk-blocked]]). So "the widget is always known at compile
+time" holds for mentioned fields (a `const` from `shape_of(|m| &m.x)`;
+`field_kind::renders` is already a `const fn`), not for the rest, unless the
+macro is given the field list some other way. Work out whether the runtime
+default-widget path can at least become one `const fn` over a shape shared
+by both sides.
+
+**Inventory to go through (2026-10-16 snapshot of public type names):**
+- Form layer: `Form`, `FormState`, `FormSpec`, `FieldSpec`, `SpecsByPath`,
+  `Formoxus` (app defaults), `Submission`, `WireForm`.
+- Members/fields: `FormMember`, `FormField`, `FieldValue`, `FieldAttrs`,
+  `FieldSet`, `ListSet`, `VariantSet`, `OptionMember`, `Edit`, `RenderCtx`,
+  plus the new sketch's `Field`.
+- Widgets: `WidgetType`, `BuiltinWidget`, `ScalarWidget`, `WidgetProps`,
+  `FieldProps`, the new sketch's `Widget`, `Part`.
+- Elements/types: `Element`, `FieldControl`, `InputType`,
+  `RenderedInputType`, `FieldType`, `FieldTypeWithOptional`.
+- Values: `ValuesByPath` vs `ValuesStore` (same map, two containers).
+- Errors: `ValidationError`, `ValidationMessage`, `FormErrors`,
+  `ErrorsByPath`, `FormError`, `FieldError`, `FormAccessError`.
+- Choices: `Choice` vs `VariantChoice`.
+- Attributes: `Attr`, `AttrKey`, `AttrType`, `AttrValue`, `FixedKey`,
+  `Owner`, `Bound`.
+- Buttons/slots: `ButtonSpec`, `ButtonType`, `ButtonFn`, `Fns`, `Handler`,
+  `UncheckedHandler`, `Provider`, `IntoSlot`, `Invocation`, `Slot`,
+  `SlotKey`, `Classes`, `ClassEdit`.
+- formoxus-macros has its OWN `FieldSpec` (plus `FormSpecInput`,
+  `FormSpecMeta`, `FieldBody`, `SpecPath`, `PathInput`, `WidgetRef`, …),
+  which collides in name with the runtime one.
