@@ -35,21 +35,6 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         !self.errors.is_empty() || self.nodes.iter().any(|m| m.has_errors_within())
     }
 
-    /// Lay the spec's per-field overrides onto the built tree.
-    ///
-    /// Every node is visited and asks the map about itself — unlike
-    /// [`edit`](Node::edit), which dispatches to the single node owning a
-    /// path. A spec is a set of statements, not an instruction.
-    ///
-    /// The prefix starts empty because each node qualifies its own name onto
-    /// whatever it is handed.
-    pub(crate) fn apply_specs(&mut self) {
-        let fields = &self.spec.fields;
-        for m in &mut self.nodes {
-            m.distribute_specs("", fields);
-        }
-    }
-
     /// What this form *stated* about label casing, if anything.
     ///
     /// `None` means "not stated", not "Title" — resolving it needs the
@@ -215,25 +200,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub fn edit(&mut self, edit: &Edit) -> Result<(), FormAccessError> {
         let path = edit.path();
-        // The owner is located before anything is mutated, so the spec can be
-        // re-applied afterwards without holding a borrow of `nodes`.
         let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
             return Err(no_such_path(path));
         };
-        self.nodes[idx].edit("", edit, &self.spec.fields)?;
-
-        // A structural edit can CREATE nodes that did not exist when the spec
-        // was first applied: `AddRow` builds a fresh row from the shape alone,
-        // and choosing a variant reveals that variant's fields. Without this, a
-        // row added after mount renders with derived labels and widgets while
-        // its siblings carry the spec's — visibly inconsistent, and only for the
-        // rows the user happened to add.
-        //
-        // Re-applying wholesale is safe because `apply_specs` is idempotent, and
-        // that is precisely why `Edit` is NOT a variant of the spec: an edit
-        // replayed twice would add two rows.
-        self.apply_specs();
-        Ok(())
+        // A structural edit can CREATE nodes: `AddRow` builds a fresh row and
+        // choosing a variant reveals that variant's fields. Handing the edit the
+        // spec is what builds them the way the walk built their siblings, so a
+        // row added after mount carries the spec's labels and widgets too.
+        self.nodes[idx].edit("", edit, &self.spec.fields)
     }
 
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
@@ -363,9 +337,8 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         None => FormMode::Blank,
     };
 
-    // SPIKE (S-b): the walk reads the spec as it goes, so a leaf the spec builds
-    // is built right the first time. `apply_specs` still runs afterwards for
-    // everything the spike has not moved (labels, attrs, widgets, choices).
+    // The walk applies the spec as it builds, so every node is right the first
+    // time; see `Walk`.
     let nodes = nodes_for(
         T::SHAPE,
         value.map(Peek::new),
@@ -376,12 +349,10 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         "",
         /* optional */ false,
     );
-    let mut state = FormState {
+    FormState {
         spec,
         nodes,
         errors: Vec::new(),
         _type: PhantomData,
-    };
-    state.apply_specs();
-    state
+    }
 }

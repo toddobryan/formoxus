@@ -136,25 +136,4 @@ impl Node for FieldSet {
             m.clear_errors();
         }
     }
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
-        let my_path = qualify(prefix, &self.name);
-        if let Some(spec) = fields.get(&my_path) {
-            // Checked before anything is written, so a rejected spec leaves the
-            // node untouched — which matters the day this becomes a `Result`.
-            assert!(
-                spec.custom_widget.is_none(),
-                "{my_path} is a field set, which has no single widget to \
-                 override (a composite widget for one isn't supported yet) — \
-                 did you mean `label`?"
-            );
-            self.label = spec.label.clone().or(self.label.take());
-        }
-        // Unlike `edit`, which finds the one node owning a path and stops, a
-        // spec may speak about any number of descendants — so every child is
-        // visited, with this node's path as their prefix.
-        for m in &mut self.nodes {
-            m.distribute_specs(&my_path, fields);
-        }
-    }
 }

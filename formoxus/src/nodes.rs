@@ -112,8 +112,6 @@ pub trait Node: Debug {
         edit: &Edit,
         specs: &SpecsByPath,
     ) -> Result<(), FormAccessError>;
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath);
 }
 
 impl Clone for Box<dyn Node> {

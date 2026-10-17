@@ -390,23 +390,4 @@ impl Node for VariantSet {
         }
         Ok(partial)
     }
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
-        if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
-            self.label = spec.label.clone().or(self.label.take());
-            // A variant chooser is the one container that DOES have a widget of
-            // its own — the `<select>` — so an override here is meaningful (a
-            // radio group), even though nothing renders one yet.
-            self.custom_widget = spec.custom_widget.or(self.custom_widget.take());
-            self.field_attrs = spec.attrs.clone();
-        }
-        // Two paths again, exactly as in `edit`: this node sits at `my_path`,
-        // but its children sit one segment deeper under the chosen variant's
-        // descriptor. `Unchosen` means there are none to visit.
-        if let Some(child_prefix) = self.child_prefix(prefix) {
-            for m in &mut self.nodes {
-                m.distribute_specs(&child_prefix, fields);
-            }
-        }
-    }
 }

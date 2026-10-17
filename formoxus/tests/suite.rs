@@ -55,10 +55,10 @@ mod optional_containers;
 mod roundtrip;
 #[path = "suite/snapshot.rs"]
 mod snapshot;
+#[path = "suite/spec_constructors.rs"]
+mod spec_constructors;
 #[path = "suite/specs.rs"]
 mod specs;
-#[path = "suite/spike_leaf_ctor.rs"]
-mod spike_leaf_ctor;
 #[path = "suite/submissions.rs"]
 mod submissions;
 #[path = "suite/vecs.rs"]

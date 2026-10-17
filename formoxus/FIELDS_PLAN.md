@@ -7,10 +7,11 @@ widgets become traits, with Django-style concrete types behind each.
 2026-10-17 notes); this file is the order to do things in and the decisions
 still open. Claude keeps it current when asked.
 
-> **Status, 2026-10-17.** Step 1 is DONE except the one error Step 2 fixes
-> (`dispatch!` at `build.rs:335` still builds the old `Field::<$ty> { … }`
-> literal). Step 2 is next. Line numbers are from `e56b73c` plus Todd's
-> uncommitted Step 1; ask for a refresh rather than trusting an old one.
+> **Status, 2026-10-17.** Steps 1–3 are DONE. `FieldNode<F>` is in
+> `field_node.rs` over the `ScalarField<T>` stand-in, `fields.rs` is deleted,
+> and the shape walk applies the spec as it builds (S-b), so `apply_specs` is
+> gone. **Next: Step 4, the four built-in fields.** Line numbers drift; ask
+> for a refresh rather than trusting an old one.
 
 **The goal is fewer concepts** (Todd, 2026-10-16): "We have an awful lot of
 similarly named concepts that do similar things." The Django parallel is the
@@ -45,12 +46,9 @@ updates tests, goldens and the e2e forms, and does mechanical fixes when asked.
 - [x] One `parse_scalar`, in `field.rs`; the suite imports
   `formoxus::field::parse_scalar`. The commented-out callers in `fields.rs`
   become `self.field.parse(…)` in Step 2.
-- **Not moved, on purpose:** the bound tests in `fields.rs`
-  (`int_bounds_are_inclusive`, `float_bounds_are_inclusive`, the NaN and
-  infinity ones). They test the field's range CHECK (`check_bounds`, still in
-  the commented-out `fields.rs`), not `FieldAttrs`; `field_attrs.rs` only
-  uses the bound fns to emit `min`/`max`. They come back in Step 2 and move
-  to `NumberField<T>` in Step 4, with `int_bound`/`float_bound`.
+- The bound tests (`int_bounds_are_inclusive` and the rest) test the range
+  CHECK, not `FieldAttrs`, so they went to `field_node.rs` in Step 2 and move
+  to `NumberField<T>` in Step 4.
 
 ## Step 2: `FieldNode<F>`, with no behaviour change
 
@@ -60,17 +58,15 @@ they are, and one stand-in field reproduces today's behaviour. The suite stays
 green through the whole step, so any failure in Step 4 is a real behaviour
 change, not plumbing.
 
-### Decisions first (Todd)
+### Decisions (all settled 2026-10-17)
 
-- **F-A. `default_widget` before `Widget` exists.** It has no default and
-  `Widget` is an empty placeholder, so the stand-in can only `todo!()`. Either
-  give it a `todo!()` default, or comment it out of the trait until Step 5.
-  Rendering keeps using `WidgetType` until then either way.
-- **F-B. `type Context` for now.** The stand-in uses `type Context = ();`.
-  The real question (review note C below) waits for Step 8. Fine?
-- **F-C. `check_on_server`'s default** (review notes A and B): a default that
-  returns no messages, and `-> impl Future<Output = …> + Send` instead of
-  `async fn`. Cheap to settle now, since every field type writes it otherwise.
+- **F-A. `default_widget` before `Widget` exists:** each impl `todo!()`s
+  under `#[expect(clippy::todo)]` until Step 5.
+- **F-B. `type Context`:** `()` on the stand-in; the real question (review
+  note C) waits for Step 8.
+- **F-C. `check_on_server`:** defaults to no messages, and returns
+  `impl Future<Output = Vec<ValidationMessage>> + Send` instead of being an
+  `async fn`. An implementor may still write `async fn` in its `impl`.
 
 ### Boxes
 
@@ -88,7 +84,7 @@ change, not plumbing.
 - [x] **Stand-in `ScalarField<T>(PhantomData<T>)`**: `Value = T`, default
   `parse`, no checks. Deleted in Step 4.
 - [x] **`dispatch!`** builds `FieldNode::<ScalarField<$ty>> { …, field:
-  ScalarField::default() }`.
+  ScalarField(PhantomData) }`.
 - [x] **The commented-out tests in `fields.rs`** come back (Claude,
   2026-10-17): the 20 on `FieldAttrs` inline in `field_attrs.rs`, the 32 on
   checks and `validate` inline in `field_node.rs`, against
@@ -99,12 +95,12 @@ change, not plumbing.
   pre-commit hook). F-A settled for now: `#[expect(clippy::todo)]` on each
   `default_widget` until Step 5.
 
-## Step 3: decide how `form!`'s settings reach a field
+## Step 3: decide how `form!`'s settings reach a field (DONE 2026-10-17)
 
 **This is the crux of Steps 4 and 6, and the biggest open question.** Today
 `build.rs` builds every leaf with defaults, and afterwards `apply_specs` walks
 the tree and MUTATES each node from its `FieldSpec` (`label`, `attrs`,
-`custom_widget`, `choices`; `distribute_specs` at `fields.rs:484`). That
+`custom_widget`, `choices`; `distribute_specs` at `field_node.rs:473`). That
 works because every leaf is one type. Once a leaf is `FieldNode<F>`:
 
 1. `min: 3` belongs on `NumberField<i32>`, but generic `FieldNode<F>` cannot
@@ -133,6 +129,52 @@ works because every leaf is one type. Once a leaf is `FieldNode<F>`:
 - Claude's lean: **S-b**, because it removes a mechanism instead of adding one,
   and it is the same shape as `field:`. Worth a spike on one nested `Vec` row
   before committing.
+
+### DONE 2026-10-17: S-b ADOPTED AND INTEGRATED
+
+Todd adopted S-b, including finding 1 below. The spike was merged into
+`widget` (PR #12) and then finished: the walk applies EVERY spec setting
+as it builds (`label`, `attrs`, `custom_widget`, `choices`, and the
+constructor), `LeafArgs::node` is the one place a leaf is assembled (both
+`dispatch!` and a constructor go through it), and `apply_specs`,
+`Node::distribute_specs` with its five impls, `ListSet`'s `[]` key rewriting
+and `FormState::edit`'s re-apply are deleted. The `specs.rs` suite passed
+unchanged; the spike's tests live on as `tests/suite/spec_constructors.rs`.
+
+### Spike result, 2026-10-17: S-b HOLDS (draft PR #12, `spike/s-b`)
+
+Branch `spike/s-b`, worktree `../formoxus-spike-sb`, uncommitted. `just ci`
+green there, plus 6 new tests in `tests/suite/spike_leaf_ctor.rs`: a
+`venues[].capacity` constructor reaches rows built by `form_for`, rows added
+by `AddRow`, and `shapes[].$Circle.radius` both chosen later and built from a
+value. What it took:
+
+1. **`Walk { mode, specs }`**, one `Copy` value threaded through `build.rs` in
+   place of `mode`, so no seventh parameter.
+2. **`spec_key(path)`** folds each `.#n` into `[]` (`venues.#3.city` →
+   `venues[].city`): one lookup, replacing `ListSet`'s key substitution.
+3. **`FieldSpec::node: Option<NodeCtor>`**, `NodeCtor` an
+   `Arc<dyn Fn(LeafArgs) -> Box<dyn Node> + Send + Sync>`; `scalar_node` uses
+   it before `dispatch!`. `LeafArgs::node(field)` builds the default
+   `FieldNode` around a field, so `populate` stays `pub(crate)`.
+4. **A real bug the walk never hit:** `enum_node` built a variant's fields
+   under `shape.radius`, not `shape.$Circle.radius`. Fixed; the
+   `form_for`-variant test fails without it.
+5. **`Node::edit` takes `&SpecsByPath`** (five impls) so `AddRow` and
+   `ChooseVariant` build with the spec; `FormState::edit` passes its own.
+
+Findings for the real implementation:
+
+- **The payoff is bigger than leaves.** The same lookup at construction can
+  apply `label`, `attrs`, `custom_widget` and `choices` to EVERY node, which
+  deletes `apply_specs`, all five `distribute_specs` impls, `ListSet`'s `[]`
+  substitution, and `FormState::edit`'s re-apply. The spike kept them only
+  to stay small.
+- **Nothing checks a constructor's type against the shape.** A `u32` field
+  on a `String` leaf fails only at `write_value_into`. Step 6's `const _`
+  checks must cover `field:`, including `[]` and `$Variant` paths.
+- **`FieldSpec` equality becomes identity** for a spec with a constructor
+  (`Arc::ptr_eq`): two separately built specs are never equal.
 
 ## Step 4: the four built-in fields
 
@@ -296,10 +338,7 @@ My reading, to confirm when Step 9 rewrites it:
 
 ## Review notes on the `Field` trait draft (2026-10-16)
 
-Raised in review, not yet discussed. Settled ones move into the step above.
-
-- **A.** `check_on_server` has no default → Step 2, F-C.
-- **B.** `async fn` in a public trait has no `Send` bound; server handlers
-  need one → Step 2, F-C.
-- **C.** `type Context` on `Field` vs the form's `Context` → Step 8.
-- **D.** The default `check`'s unused `value` warns; `_value`.
+- **A.** `check_on_server` had no default. SETTLED (F-C).
+- **B.** `async fn` in a public trait has no `Send` bound. SETTLED (F-C).
+- **C.** `type Context` on `Field` vs the form's `Context`. OPEN → Step 8.
+- **D.** The default `check`'s unused `value` warned. SETTLED: `_value`.

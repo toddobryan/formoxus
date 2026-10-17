@@ -62,7 +62,8 @@ pub struct FieldSpec {
     /// select for a radio group must not change what the value parses as. See
     /// `.claude/memory/choice_fields_design.md`.
     pub choices: Option<Vec<Choice>>,
-    /// SPIKE (S-b): builds this leaf during the walk, instead of `dispatch!`.
+    /// Builds this leaf during the shape walk, instead of the default field
+    /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
 }
 
@@ -125,8 +126,8 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    /// SPIKE (S-b): build the leaf at `path` (a `[]` row path is fine) with
-    /// `ctor` instead of the default for its type.
+    /// Build the leaf at `path` (a `[]` row path is fine) with `ctor` instead
+    /// of the default for its type.
     pub fn with_node(mut self, path: &str, ctor: crate::field_node::NodeCtor) -> Self {
         self.field(path).node = Some(ctor);
         self

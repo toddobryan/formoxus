@@ -99,8 +99,4 @@ impl Node for OptionNode {
     fn clear_errors(&mut self) {
         self.inner.clear_errors();
     }
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
-        self.inner.distribute_specs(prefix, fields);
-    }
 }

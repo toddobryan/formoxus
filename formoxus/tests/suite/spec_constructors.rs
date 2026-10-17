@@ -1,11 +1,13 @@
-//! SPIKE (S-b, `FIELDS_PLAN.md` Step 3): a spec builds a leaf DURING the walk.
+//! A spec that builds a leaf: `FormSpec::with_node`, what `field:` and a typed
+//! field's settings (`min: 3`) will expand to.
 //!
-//! Each test names a leaf inside a `Vec` row with `with_node`, gives it a field
-//! the default walk would never build (`CapField`, with a setting baked in, the
-//! way `min: 3` would be), and checks the field's own `check` runs. Three ways a
-//! row's leaves come to exist, so three routes the spec has to reach: built by
-//! `form_for` from a value, added by `AddRow`, and revealed by `ChooseVariant`
-//! inside a row.
+//! The shape walk builds the leaf from the constructor while it walks, so
+//! nothing is mutated afterwards. Each test names a leaf inside a `Vec` row,
+//! gives it a field the default walk would never build (`CapField`, with a
+//! setting baked in, the way `min: 3` would be), and checks the field's own
+//! `check` runs. A row's leaves come to exist three ways, so the spec has
+//! three routes to reach: built by `form_for` from a value, added by `AddRow`,
+//! and revealed by `ChooseVariant` inside a row.
 
 use facet::Facet;
 use formoxus::error::ValidationMessage;
@@ -129,8 +131,8 @@ fn a_constructor_reaches_a_row_built_from_the_value() {
     );
 }
 
-/// Route 2: a row added after the form exists. This is the case `apply_specs`
-/// re-runs for today; here the walk `AddRow` starts carries the spec itself.
+/// Route 2: a row added after the form exists, which `AddRow` builds through
+/// the same walk, spec and all.
 #[gtest]
 fn a_constructor_reaches_a_row_added_later() {
     let spec = FormSpec::default().with_node("venues[].capacity", cap_at_100());

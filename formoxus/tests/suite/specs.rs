@@ -1,4 +1,5 @@
-//! `FormSpec` overrides reaching the built tree, via `Node::apply_specs`.
+//! `FormSpec` overrides reaching the built tree, which the shape walk applies
+//! as it builds each node.
 //!
 //! These go through `render_to_html` rather than inspecting nodes, because the
 //! question is whether an override *arrives* — and the DOM is the only place that
@@ -77,7 +78,7 @@ fn RelabelledFieldSet() -> Element {
 #[gtest]
 fn a_field_sets_own_label_becomes_its_legend() {
     // A container is addressable in its own right, not just as a prefix — so
-    // `apply_specs` has to consult the map about itself before recursing.
+    // the walk has to look the container itself up, not only its leaves.
     let html = render_to_html(RelabelledFieldSet);
     expect_that!(
         html,
@@ -150,7 +151,7 @@ fn an_override_works_in_the_other_direction_too() {
 #[gtest]
 fn an_unmatched_path_is_a_no_op() {
     // The witness fn makes this unreachable through `form!`, but the builder is
-    // public and `apply_specs` must not panic on a path it simply doesn't find —
+    // public and the walk must not panic on a path it simply doesn't find —
     // a spec is a set of statements about nodes, not an assertion that each
     // exists.
     let form =
@@ -441,7 +442,7 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 /// place its arrival shows.
 ///
 /// Every other constraint test sets constraints straight onto a `Field`,
-/// which means this is the only one that would notice `apply_specs` dropping
+/// which means this is the only one that would notice the walk dropping
 /// them on the floor.
 #[gtest]
 fn a_constraint_from_the_spec_reaches_validation() {
@@ -463,7 +464,7 @@ fn a_constraint_from_the_spec_reaches_validation() {
     expect_that!(failing_paths(&errors), elements_are![eq("title")]);
 }
 
-/// `apply_specs` looks itself up by QUALIFIED path, so a constraint on a nested
+/// The walk looks a node up by its QUALIFIED path, so a constraint on a nested
 /// leaf has to survive `qualify(prefix, name)`. The flat case above would pass
 /// even if the prefix were being dropped.
 #[gtest]

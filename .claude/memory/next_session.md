@@ -5,6 +5,17 @@ metadata:
   type: project
 ---
 
+**2026-10-17, END: STEP 3 DONE, S-b INTEGRATED.** The walk applies the
+whole spec as it builds; `apply_specs`/`distribute_specs` deleted; PR #12
+merged, `spike/s-b` and its worktree deleted. **Next: Step 4** (the four
+fields; decisions A-1 and B-1 come up there).
+
+**2026-10-17, LATER STILL: S-b SPIKED, IT HOLDS.** Branch `spike/s-b` in
+worktree `../formoxus-spike-sb` (uncommitted; build dir `target-spike`).
+Results and findings under Step 3 in `formoxus/FIELDS_PLAN.md`. Plan page
+for Todd's tablet: https://claude.ai/artifact/Nj88w7AgabvyTygAvVUFtV
+(republish from the scratchpad copy, or rebuild it, when the plan changes).
+
 **2026-10-17 (home), LATER: STEP 2 DONE AND COMMITTED.** `FieldNode<F>`
 (`field_node.rs`) + the `ScalarField<T>` stand-in; `fields.rs` deleted;
 its 52 inline tests ported (20 → `field_attrs.rs`, 32 → `field_node.rs`);

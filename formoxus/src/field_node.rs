@@ -9,15 +9,17 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
 use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
 use crate::form::ErrorsByPath;
+use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
 
-/// SPIKE (S-b): everything the walk knows about a leaf when it builds one.
+/// Everything the walk knows about a leaf when it builds one.
 ///
-/// What a [`NodeCtor`] is handed instead of a fixed `dispatch!` arm. `path` is
-/// the leaf's real path (`venues.#3.capacity`), for messages; the spec was
-/// already matched on its `[]` form.
+/// What a [`NodeCtor`] is handed, and what `dispatch!` builds its default
+/// leaves from, so both go through [`LeafArgs::node`]. `path` is the leaf's
+/// real path (`venues.#3.capacity`), for messages; `spec` was matched on its
+/// `[]` form (`venues[].capacity`).
 #[derive(Debug)]
 pub struct LeafArgs<'a> {
     pub name: &'a str,
@@ -25,20 +27,27 @@ pub struct LeafArgs<'a> {
     pub peek: Option<Peek<'a, 'static>>,
     pub optional: bool,
     pub wrapper: Option<&'static Shape>,
+    /// The spec that names this leaf, if any.
+    pub spec: Option<&'a FieldSpec>,
 }
 
 impl LeafArgs<'_> {
-    /// A `FieldNode` over `field` with everything else at its defaults, the
-    /// same node `dispatch!` would build. This is what `form!` would emit for
-    /// `field: …` or a field-level setting like `min: 3`.
+    /// The leaf node over `field`, with the spec's `label`, `attrs`, widget
+    /// and `choices` applied.
+    ///
+    /// The one place a leaf is assembled, whether `dispatch!` picked the field
+    /// or a spec's constructor did, so a constructor cannot forget the rest of
+    /// what the spec says. `attrs` is taken whole: nothing derives one, so
+    /// there is nothing for the spec's to merge with.
     pub fn node<F: Field>(self, field: F) -> FieldNode<F> {
+        let spec = self.spec;
         FieldNode {
             name: self.name.to_string(),
-            label: None,
+            label: spec.and_then(|s| s.label.clone()),
             optional: self.optional,
-            attrs: FieldAttrs::default(),
-            custom_widget: None,
-            choices: None,
+            attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
+            custom_widget: spec.and_then(|s| s.custom_widget),
+            choices: spec.and_then(|s| s.choices.clone()),
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
             errors: Vec::new(),
@@ -47,7 +56,7 @@ impl LeafArgs<'_> {
     }
 }
 
-/// SPIKE (S-b): how a spec builds one leaf, replacing `dispatch!` for that path.
+/// How a spec builds one leaf, in place of the default for its type.
 ///
 /// An `Arc<dyn Fn>`, not a `fn` pointer: a `fn` pointer could bake in
 /// compile-time settings (`min: 3`), but not anything built at runtime, like
@@ -542,27 +551,6 @@ impl<F: Field> Node for FieldNode<F> {
         } else {
             FormAccessError(format!("{path} is a field, so edits cannot be applied"))
         })
-    }
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
-        if let Some(spec) = fields.get(&qualify(prefix, &self.name)) {
-            self.custom_widget = spec.custom_widget.or(self.custom_widget.take());
-            self.label = spec.label.clone().or(self.label.take());
-            self.choices = spec.choices.clone().or(self.choices.take());
-            // Replaced whole, not merged field by field like the three above.
-            // Those three have something to preserve — `build` derives a label
-            // from the field name and a widget from the shape, so the spec has
-            // to mean "mine if I said anything, yours otherwise". Nothing
-            // derives an attribute: `scalar_node` always writes
-            // `FieldAttrs::default()`, so there has never been anything here
-            // to keep, and one rule is easier to hold than two — `with_attrs`
-            // already replaces wholesale on the spec side.
-            //
-            // The day something does derive one (a newtype declaring its own
-            // range, say), this line starts silently discarding it and wants
-            // the per-field `.or()` treatment instead.
-            self.attrs = spec.attrs.clone();
-        }
     }
 }
 

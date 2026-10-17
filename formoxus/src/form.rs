@@ -10,8 +10,8 @@
 //! [`use_form`], defined here.
 //!
 //! [`FormSpec<T>`] is the author's declaration — title, per-field overrides,
-//! validator, buttons — that `form!` builds and `FormState::apply_specs`
-//! lays onto the tree. Lives in `spec`.
+//! validator, buttons — that `form!` builds and the shape walk applies as it
+//! builds the tree. Lives in `spec`.
 
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;

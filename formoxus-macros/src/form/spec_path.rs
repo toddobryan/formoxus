@@ -32,16 +32,17 @@ pub(crate) struct Segment {
 impl SpecPath {
     /// The map key: dotted, with `[]` kept as part of the segment it followed.
     ///
-    /// `[]` survives into the key deliberately — `ListSet::apply_specs` is what
-    /// resolves it, by substituting each row's actual segment. Stripping it here
-    /// would lose the distinction between the list and its rows.
+    /// `[]` survives into the key deliberately: the shape walk looks a row up by
+    /// folding its `.#n` segment into `[]` (`build::spec_key`), so `venues[]`
+    /// names every row. Stripping it here would lose the distinction between the
+    /// list and its rows.
     pub(crate) fn key(&self) -> String {
         self.segments
             .iter()
             .map(|s| {
                 // `unraw`: an author writing `r#type` means the field `type`,
-                // which is the name facet reports and the name
-                // `Node::apply_specs` looks itself up by. Leaving the
+                // which is the name facet reports and the name the shape
+                // walk looks a node up by. Leaving the
                 // `r#` on would make the key match nothing.
                 if s.each {
                     format!("{}[]", s.ident.unraw())
@@ -335,7 +336,7 @@ mod tests {
 
     /// `r#type` is a legal field name, so it has to be a legal path segment.
     /// The `r#` is a spelling, not part of the name: facet reports the field as
-    /// `type`, and that is the key `apply_specs` looks itself up by.
+    /// `type`, and that is the key the shape walk looks a node up by.
     #[gtest]
     fn a_raw_identifier_keys_on_the_bare_name() {
         let spec = parse(quote! { Model { r#type => { label: "Kind" } } }).expect("parses");

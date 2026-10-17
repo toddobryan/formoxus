@@ -9,10 +9,9 @@ use facet::{
 
 use std::marker::PhantomData;
 
-use crate::field::{ScalarField, populate};
-use crate::field_attrs::FieldAttrs;
-use crate::field_node::FieldNode;
+use crate::field::ScalarField;
 use crate::field_node::LeafArgs;
+use crate::form::FieldSpec;
 use crate::nodes::{
     FieldSet, ListSet, Node, OptionNode, ROW_SIGIL, SpecsByPath, VariantChoice, VariantSet,
     qualify, row_segment, variant_segment,
@@ -42,17 +41,30 @@ pub(crate) enum FormMode {
     Populated,
 }
 
-/// SPIKE (S-b): what the whole walk carries, fixed at the root.
+/// What the whole walk carries, fixed at the root.
 ///
 /// One value rather than another parameter on every function below: the mode
 /// and the spec are both decided once, by the caller, and threaded unchanged.
+///
+/// **The walk applies the spec as it builds.** Each node looks itself up by
+/// its path when it is constructed, so it is right the first time: there is
+/// no second pass that visits the tree and mutates it, and a structural edit
+/// (`AddRow`, `ChooseVariant`) builds its new nodes through this same walk, so
+/// they come out the same way as the rest.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Walk<'s> {
     pub(crate) mode: FormMode,
     pub(crate) specs: &'s SpecsByPath,
 }
 
-/// SPIKE (S-b): the spec key that names the leaf at `path`.
+impl<'s> Walk<'s> {
+    /// The spec that names the node at `path`, if any.
+    fn spec_for(&self, path: &str) -> Option<&'s FieldSpec> {
+        self.specs.get(&spec_key(path))
+    }
+}
+
+/// The spec key that names the node at `path`.
 ///
 /// Rows are keyed by identity (`venues.#3`), but a spec names every row at
 /// once (`venues[]`), so each `.#n` segment folds into a `[]` on the segment
@@ -376,43 +388,32 @@ fn scalar_node(
     // here and re-applied when the value is written back.
     wrapper: Option<&'static Shape>,
 ) -> Option<Box<dyn Node>> {
+    let args = LeafArgs {
+        name,
+        path,
+        peek,
+        optional,
+        wrapper,
+        spec: walk.spec_for(path),
+    };
+    // A spec that names this leaf with a constructor builds it, in place of the
+    // default for its type. That is how `min: 3` reaches a typed field, and how
+    // `field: X` changes the node's type, with nothing mutated afterwards.
+    if let Some(ctor) = args.spec.and_then(|s| s.node.as_ref()) {
+        return Some(ctor.build(args));
+    }
+
     // The variant and the type can't be collapsed into one token: `ScalarType`
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
     // has no way to change an identifier's case. So each arm names both, and the
     // pairing is the one thing to get right when adding a type.
-    // SPIKE (S-b): a spec that names this leaf builds it, in place of the
-    // default for its type. This is what lets `min: 3` reach a typed field, and
-    // `field: X` change the node's type, with nothing mutated afterwards.
-    if let Some(ctor) = walk
-        .specs
-        .get(&spec_key(path))
-        .and_then(|s| s.node.as_ref())
-    {
-        return Some(ctor.build(LeafArgs {
-            name,
-            path,
-            peek,
-            optional,
-            wrapper,
-        }));
-    }
-
     macro_rules! dispatch {
         ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
                 $(
-                    ScalarType::$variant => Some(Box::new(FieldNode::<ScalarField<$ty>> {
-                        name: name.to_string(),
-                        label: None,
-                        optional,
-                        attrs: FieldAttrs::default(),
-                        custom_widget: None,
-                        choices: None,
-                        wrapper,
-                        value: populate::<$ty>(peek),
-                        errors: Vec::new(),
-                        field: ScalarField(PhantomData)
-                    }) as Box<dyn Node>),
+                    ScalarType::$variant => Some(
+                        Box::new(args.node(ScalarField::<$ty>(PhantomData))) as Box<dyn Node>
+                    ),
                 )*
                 _ => None
             }
@@ -483,9 +484,17 @@ fn list_node(
         })
         .unwrap_or_default();
 
+    let spec = walk.spec_for(prefix);
+    if let Some(spec) = spec {
+        assert!(
+            spec.custom_widget.is_none(),
+            "{prefix} is a list, which has no single widget to override — \
+             write `{name}[]` to give every ROW a widget, or did you mean `label`?",
+        );
+    }
     Box::new(ListSet {
         name: name.to_string(),
-        label: None,
+        label: spec.and_then(|s| s.label.clone()),
         shape,
         optional,
         // The next key to hand out. Starts past the rows built here so a key is
@@ -506,10 +515,18 @@ fn struct_node(
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
+    let spec = walk.spec_for(prefix);
+    if let Some(spec) = spec {
+        assert!(
+            spec.custom_widget.is_none(),
+            "{prefix} is a field set, which has no single widget to override \
+             (a composite widget for one isn't supported yet) — did you mean `label`?"
+        );
+    }
     Box::new(FieldSet {
         name: name.to_string(),
         optional,
-        label: None,
+        label: spec.and_then(|s| s.label.clone()),
         nodes: nodes_for(shape, peek, walk, prefix, /* optional */ false),
         errors: Vec::new(),
     })
@@ -532,11 +549,15 @@ fn enum_node(
             .expect("shape said enum, so the value peeks as one")
     });
     let variant = chosen_variant(enum_type, peek_enum, walk, prefix);
+    let spec = walk.spec_for(prefix);
     Box::new(VariantSet {
-        field_attrs: FieldAttrs::default(),
+        field_attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         name: name.to_string(),
-        label: None,
-        custom_widget: None,
+        label: spec.and_then(|s| s.label.clone()),
+        // A variant chooser is the one container that DOES have a widget of its
+        // own — the `<select>` — so an override here is meaningful (a radio
+        // group), even though nothing renders one yet.
+        custom_widget: spec.and_then(|s| s.custom_widget),
         enum_type,
         optional,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it
@@ -546,10 +567,9 @@ fn enum_node(
         },
         // No variant means no fields to build.
         nodes: variant
-            // SPIKE (S-b): under the variant's own segment, as `set_variant` and
-            // `child_prefix` already have it. The walk never used leaf paths
-            // before, so building these at `shape.radius` instead of
-            // `shape.$Circle.radius` was harmless until now.
+            // Under the variant's own segment, the path these fields really live
+            // at (`shape.$Circle.radius`), as `set_variant` and `child_prefix`
+            // have it. The spec is looked up by that path.
             .map(|v| {
                 variant_nodes(
                     v,
