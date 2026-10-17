@@ -466,10 +466,17 @@ impl<F: Field> Node for FieldNode<F> {
             self.errors
                 .push(ValidationMessage("not one of the available choices".into()));
         }
-        // The field's own check, on the parsed value. An unticked checkbox has
-        // none, so it is skipped here; `BoolField` (Step 4) settles that.
+        // The field's own check, on the parsed value. An unticked checkbox is
+        // `Empty`, the only `Empty` that reaches here, and it means `false`: the
+        // same `raw` the attribute walk just checked, parsed the field's way.
         if let FieldValue::Valid(value) = &self.value {
             self.errors.extend(self.field.check(value));
+        } else {
+            let value = self
+                .field
+                .parse(&raw)
+                .expect("`Boolean` input kind is only ever derived from a `bool` shape");
+            self.errors.extend(self.field.check(&value));
         }
     }
 
@@ -560,7 +567,6 @@ mod tests {
     use std::marker::PhantomData;
 
     use super::*;
-    use crate::field::ScalarField;
     use formoxus_spec::Bound;
     use googletest::prelude::*;
 
@@ -581,7 +587,21 @@ mod tests {
             })
     }
 
-    fn node<X>(value: FieldValue<X>, attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
+    /// A field with no checks of its own: facet's `parse` and nothing else. So
+    /// these tests exercise the NODE (the attribute walk, `validate`'s order)
+    /// and no built-in field's `check`, which each field tests itself.
+    #[derive(Clone, Debug, PartialEq)]
+    struct AnyField<X>(PhantomData<X>);
+
+    impl<X> Field for AnyField<X>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        type Value = X;
+        type Context = ();
+    }
+
+    fn node<X>(value: FieldValue<X>, attrs: FieldAttrs) -> FieldNode<AnyField<X>>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -595,11 +615,11 @@ mod tests {
             wrapper: None,
             value,
             errors: Vec::new(),
-            field: ScalarField(PhantomData),
+            field: AnyField(PhantomData),
         }
     }
 
-    fn holding<X>(attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
+    fn holding<X>(attrs: FieldAttrs) -> FieldNode<AnyField<X>>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -610,7 +630,7 @@ mod tests {
         min_length: Option<usize>,
         max_length: Option<usize>,
         pattern: Option<&'static str>,
-    ) -> FieldNode<ScalarField<String>> {
+    ) -> FieldNode<AnyField<String>> {
         let mut entries = Vec::new();
         entries.extend(min_length.map(|n| (Attr::MinLength, AttrValue::Int(n))));
         entries.extend(max_length.map(|n| (Attr::MaxLength, AttrValue::Int(n))));
@@ -625,15 +645,15 @@ mod tests {
         all(&entries)
     }
 
-    fn int(min: Option<i128>, max: Option<i128>) -> FieldNode<ScalarField<i64>> {
+    fn int(min: Option<i128>, max: Option<i128>) -> FieldNode<AnyField<i64>> {
         holding(bounds(min.map(Bound::Int), max.map(Bound::Int)))
     }
 
-    fn float(min: Option<f64>, max: Option<f64>) -> FieldNode<ScalarField<f64>> {
+    fn float(min: Option<f64>, max: Option<f64>) -> FieldNode<AnyField<f64>> {
         holding(bounds(min.map(Bound::Float), max.map(Bound::Float)))
     }
 
-    fn boolean(required_true: bool) -> FieldNode<ScalarField<bool>> {
+    fn boolean(required_true: bool) -> FieldNode<AnyField<bool>> {
         if required_true {
             holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
         } else {
@@ -641,7 +661,7 @@ mod tests {
         }
     }
 
-    fn messages<X>(field: &FieldNode<ScalarField<X>>, raw: &str) -> Vec<String>
+    fn messages<X>(field: &FieldNode<AnyField<X>>, raw: &str) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -890,7 +910,7 @@ mod tests {
     // `validate` with a real value, so the field's own type and value are what
     // get checked, the way a submitted form is.
 
-    fn a_field<X>(value: X, attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
+    fn a_field<X>(value: X, attrs: FieldAttrs) -> FieldNode<AnyField<X>>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
@@ -991,7 +1011,7 @@ mod tests {
         value: FieldValue<bool>,
         widget: Option<WidgetType>,
         required_true: bool,
-    ) -> FieldNode<ScalarField<bool>> {
+    ) -> FieldNode<AnyField<bool>> {
         let attrs = if required_true {
             all(&[(Attr::RequiredTrue, AttrValue::Flag)])
         } else {
@@ -1004,7 +1024,7 @@ mod tests {
         }
     }
 
-    fn validation_messages(mut field: FieldNode<ScalarField<bool>>) -> Vec<String> {
+    fn validation_messages(mut field: FieldNode<AnyField<bool>>) -> Vec<String> {
         field.validate();
         field.errors.into_iter().map(|e| e.0).collect()
     }
@@ -1038,6 +1058,32 @@ mod tests {
     fn a_ticked_required_true_checkbox_passes() {
         let field = a_bool_field(FieldValue::Valid(true), None, true);
         expect_that!(validation_messages(field), is_empty());
+    }
+
+    /// An unticked box reaches the FIELD's `check` as `false`, not only the
+    /// attribute walk. No attribute is set here, so the one message can only
+    /// have come from `BoolField`.
+    #[gtest]
+    fn an_untouched_checkbox_reaches_the_fields_own_check_as_false() {
+        let mut field = FieldNode {
+            name: "agreed".to_string(),
+            label: None,
+            optional: false,
+            attrs: FieldAttrs::default(),
+            custom_widget: None,
+            choices: None,
+            wrapper: None,
+            value: FieldValue::Empty,
+            errors: Vec::new(),
+            field: crate::fields::BoolField {
+                required_true: true,
+            },
+        };
+        field.validate();
+        expect_that!(
+            field.errors.into_iter().map(|e| e.0).collect::<Vec<_>>(),
+            elements_are![eq("this value must be true")]
+        );
     }
 
     /// Without the rule, an unticked box is a complete answer: no "required"

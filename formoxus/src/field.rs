@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::fmt::Debug;
 
 use facet::{Facet, Partial, Peek};
 
@@ -30,53 +30,6 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         FieldAttrs::default()
     }
 
-    fn default_widget(&self, optional: bool) -> Box<dyn Widget>;
-
-    fn check_on_server(
-        &self,
-        _value: &Self::Value,
-        _ctx: &Self::Context,
-    ) -> impl Future<Output = Vec<ValidationMessage>> + Send {
-        async { Vec::new() }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StringField {
-    min_length: Option<usize>,
-    max_length: Option<usize>,
-    pattern: Option<&'static str>,
-}
-
-impl Field for StringField {
-    type Value = String;
-
-    type Context = ();
-
-    #[expect(
-        clippy::todo,
-        reason = "no `Widget` can be built until Step 5 of `FIELDS_PLAN.md`; \
-        rendering still goes through `WidgetType`"
-    )]
-    fn default_widget(&self, _optional: bool) -> Box<dyn Widget> {
-        todo!()
-    }
-}
-
-/// A stand-in that reproduces the old `Field<T>` exactly: facet's parse and
-/// no checks of its own, so `FieldNode` can land with no behaviour change.
-/// Deleted in Step 4 of `FIELDS_PLAN.md`, when `dispatch!` builds the real
-/// fields instead.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScalarField<T>(pub PhantomData<T>);
-
-impl<T> Field for ScalarField<T>
-where
-    T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-{
-    type Value = T;
-    type Context = ();
-
     #[expect(
         clippy::todo,
         reason = "no `Widget` can be built until Step 5 of `FIELDS_PLAN.md`; \
@@ -84,6 +37,14 @@ where
     )]
     fn default_widget(&self, _optional: bool) -> Box<dyn Widget> {
         todo!("Step 5: rendering still goes through `WidgetType`")
+    }
+
+    fn check_on_server(
+        &self,
+        _value: &Self::Value,
+        _ctx: &Self::Context,
+    ) -> impl Future<Output = Vec<ValidationMessage>> + Send {
+        async { Vec::new() }
     }
 }
 

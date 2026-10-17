@@ -10,7 +10,9 @@ still open. Claude keeps it current when asked.
 > **Status, 2026-10-17.** Steps 1–3 are DONE. `FieldNode<F>` is in
 > `field_node.rs` over the `ScalarField<T>` stand-in, `fields.rs` is deleted,
 > and the shape walk applies the spec as it builds (S-b), so `apply_specs` is
-> gone. **Next: Step 4, the four built-in fields.** Line numbers drift; ask
+> gone. **Step 4: the four fields exist and `dispatch!` builds them; next is
+> moving the constraints and `choices` onto them, with `form!` emitting a
+> constructor.** Line numbers drift; ask
 > for a refresh rather than trusting an old one.
 
 **The goal is fewer concepts** (Todd, 2026-10-16): "We have an awful lot of
@@ -178,19 +180,34 @@ Findings for the real implementation:
 
 ## Step 4: the four built-in fields
 
-- [ ] **`StringField`**: `min_length`, `max_length`, `pattern`.
-- [ ] **`NumberField<T>`**: `min`, `max`. `check_bounds` and its tests move
-  here, typed: no more reading a bound as `i128` or `f64`. `int_bound`/
-  `float_bound` also feed `FieldAttrs::to_attributes`, so they move only
-  once `widget_attrs()` emits `min`/`max` instead.
-- [ ] **`BoolField`**: an unticked checkbox means `false`. **Decision B-1
+- [x] **`StringField`** (2026-10-17, `fields/string_field.rs`, settings `pub`): `min_length`, `max_length`, `pattern`.
+- [x] **`NumberField<T: Number>`** (2026-10-17, `fields/number_fields.rs`; `check` done, typed): `min: Option<T>`, `max: Option<T>`.
+  `check_bounds` and its tests move here, typed: `T` compares to `T`, no more
+  reading a bound as `i128` or `f64`. `int_bound`/`float_bound` also feed
+  `FieldAttrs::to_attributes`, so they move only once `widget_attrs()` emits
+  `min`/`max` instead.
+  - **`Number`** (decided 2026-10-17): a SEALED trait for exactly i8–i64,
+    u8–u64, f32, f64 (no `usize`/`isize`, as in `build.rs`), with
+    `#[diagnostic::on_unimplemented]`, `const KIND: FieldType`, and
+    `fn is_nan(&self) -> bool` (default `false`, overridden for floats). The
+    bound goes on the struct. Keep its type list in step with `dispatch!`.
+  - **A whole float bound on an integer field is REFUSED** (Todd,
+    2026-10-17): `min: 2.0` on an `i32` is now a type error, not quietly
+    read as `2`. Flips `a_whole_float_bound_on_an_integer_field_is_used_as_an_integer`
+    and `a_fractional_bound_on_an_integer_field_is_a_caller_bug`
+    (`field_node.rs`). Typed bounds also retire `field_kind::bound_is_whole`,
+    `bound_is_exact` and probably `bound_in_range` with their goldens
+    (`form_fractional_bound_on_an_integer`, `form_integer_bound_too_big_for_f64`,
+    `form_bound_overflows_f32`); each gets checked for whether rustc's own
+    error now says it well enough, or whether a golden should pin the new one.
+- [x] **`BoolField`** (2026-10-17, `required_true` only; B-1 answered: `FieldNode` hands an unticked checkbox to `check` as `false`): an unticked checkbox means `false`. **Decision B-1
   (Todd, when we get here):** `fn empty_value(&self) -> Option<Self::Value>`
   on the trait, so `FieldNode` turns `Empty` into `false` itself, or
   `BoolField::parse` returns `Valid(false)`. Today's special cases
   (`is_unticked_checkbox`, `raw_value_to_validate`, the `"false"` in
   `write_value_into`, and `required: true` meaning "must be ticked") all
   collapse into whichever is chosen.
-- [ ] **`ChoiceField<T>`**, typed: owns `choices`; membership ("not one of the
+- [x] **`ChoiceField<T>`** (2026-10-17; `new` refuses a value that displays as `""`, `as_choices()` derives the widget's strings; NOT wired yet), typed: owns `choices`; membership ("not one of the
   available choices") moves into its `check`. Closes the gap in
   `.claude/memory/enum_as_a_value_choice.md` for a unit enum once Step 6 can
   name it.
@@ -201,8 +218,22 @@ Findings for the real implementation:
   quoted key) are presentation, not field config; they go on the widget
   (Step 5), or stay a `FieldAttrs` on the node until then?
 - [ ] **`choices` leaves `FieldNode`** and `FieldSpec`.
-- [ ] **`dispatch!`** maps each `ScalarType` to its field; `ScalarField` is
-  deleted.
+- [x] **`dispatch!`** maps each `ScalarType` to its field (DONE 2026-10-17; every field built with its settings off, so `check_attrs` still does the checking): every numeric one
+  to `NumberField<$ty>` (Todd, 2026-10-17), `String` to `StringField`, `Bool`
+  to `BoolField`. That makes `dispatch!`'s numeric arms and `Number`'s impls
+  one visible list. `ScalarField` is deleted.
+- [ ] **`form!` builds the field when a setting belongs to it** (sequencing,
+  found 2026-10-17). Once `min` lives on `NumberField` rather than in
+  `FieldAttrs`, `with_attrs` can no longer carry it: `form!` has to emit a
+  constructor (`with_node`, Step 3) that builds `NumberField::<T> { min, max }`.
+  `form!` sees no types, so `T` comes from the projection closure it already
+  emits for its checks (`field_kind::shape_of(|__m: &Model| &place)`, `[]`
+  rows included), via a typed helper such as `number_field_for(|__m| &place,
+  min, max) -> NodeCtor`. Open: an `Option<u32>` field projects to
+  `&Option<u32>`, so the helper needs to peel it (a small trait implemented
+  for `T` and `Option<T>`). Until this lands, a field built by `dispatch!` has
+  `min: None` and the bounds stay in `check_attrs`, so moving them is safe
+  only together with this box.
 - [ ] **Associated consts for the compile-time checks** (decided 2026-10-17:
   emitted `const _`, not spec tables): at least `const KIND: FieldType`.
   `Field` must never be used as `dyn` for this to work; `FieldNode<F>` is

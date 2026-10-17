@@ -7,10 +7,8 @@ use facet::{
     StructType, Type, UserType, Variant,
 };
 
-use std::marker::PhantomData;
-
-use crate::field::ScalarField;
 use crate::field_node::LeafArgs;
+use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
     FieldSet, ListSet, Node, OptionNode, ROW_SIGIL, SpecsByPath, VariantChoice, VariantSet,
@@ -407,12 +405,17 @@ fn scalar_node(
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
     // has no way to change an identifier's case. So each arm names both, and the
     // pairing is the one thing to get right when adding a type.
+    //
+    // The numeric arms are exactly `Number`'s impls (`fields/number_fields.rs`);
+    // keep the two lists in step.
     macro_rules! dispatch {
         ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
+                ScalarType::String => Some(Box::new(args.node(StringField::default())) as Box<dyn Node>),
+                ScalarType::Bool => Some(Box::new(args.node(BoolField::default())) as Box<dyn Node>),
                 $(
                     ScalarType::$variant => Some(
-                        Box::new(args.node(ScalarField::<$ty>(PhantomData))) as Box<dyn Node>
+                        Box::new(args.node(NumberField::<$ty>::default())) as Box<dyn Node>
                     ),
                 )*
                 _ => None
@@ -421,8 +424,6 @@ fn scalar_node(
     }
 
     dispatch! {
-        String => String,
-        Bool => bool,
         I8 => i8,
         I16 => i16,
         I32 => i32,
