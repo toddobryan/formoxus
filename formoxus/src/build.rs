@@ -7,7 +7,11 @@ use facet::{
     StructType, Type, UserType, Variant,
 };
 
-use crate::fields::{Field, FieldAttrs, populate};
+use std::marker::PhantomData;
+
+use crate::field::{ScalarField, populate};
+use crate::field_attrs::FieldAttrs;
+use crate::field_node::FieldNode;
 use crate::nodes::{
     FieldSet, ListSet, Node, OptionNode, VariantChoice, VariantSet, qualify, row_segment,
 };
@@ -331,7 +335,7 @@ fn scalar_node(
         ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
                 $(
-                    ScalarType::$variant => Some(Box::new(Field::<$ty> {
+                    ScalarType::$variant => Some(Box::new(FieldNode::<ScalarField<$ty>> {
                         name: name.to_string(),
                         label: None,
                         optional,
@@ -341,6 +345,7 @@ fn scalar_node(
                         wrapper,
                         value: populate::<$ty>(peek),
                         errors: Vec::new(),
+                        field: ScalarField(PhantomData)
                     }) as Box<dyn Node>),
                 )*
                 _ => None

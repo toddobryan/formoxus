@@ -3,7 +3,7 @@
 //! `Field::check` enforces every constraint server-side; these pin the
 //! other half, that the same constraint is handed to the browser so it can
 //! give instant feedback and block submit. The mapping itself is unit-tested
-//! beside `attrs` in `fields.rs`; this is the end-to-end view from `form!`.
+//! beside `FieldAttrs` in `field_attrs.rs`; this is the end-to-end view from `form!`.
 //!
 //! **Numeric attributes render UNQUOTED** (`maxlength=10`), because they are
 //! `AttributeValue::Int`. A `pattern` is text and does get quotes.

@@ -24,7 +24,7 @@
 //! the test suite so such a type can be held to the same standard.
 
 use facet::{Facet, Peek};
-use formoxus::fields::parse_scalar;
+use formoxus::field::parse_scalar;
 use googletest::prelude::*;
 use std::fmt::Debug;
 

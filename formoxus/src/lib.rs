@@ -69,11 +69,11 @@ pub mod defaults;
 pub mod error;
 // Support for `form!`'s compile-time constraint checks, which name it from
 // the consumer's crate. Not API.
-#[doc(hidden)]
-pub mod field_kind;
 pub mod field;
 pub mod field_attrs;
-pub mod fields;
+#[doc(hidden)]
+pub mod field_kind;
+pub mod field_node;
 pub mod form;
 pub mod label_case;
 pub mod nodes;

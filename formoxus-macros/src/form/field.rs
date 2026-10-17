@@ -186,7 +186,7 @@ impl FieldBody {
         if entries.is_empty() {
             return None;
         }
-        Some(quote! { ::formoxus::fields::FieldAttrs::from([ #(#entries), * ]) })
+        Some(quote! { ::formoxus::field_attrs::FieldAttrs::from([ #(#entries), * ]) })
     }
 }
 
@@ -1380,7 +1380,7 @@ mod tests {
         expect_that!(tokens.matches("with_attrs").count(), eq(1));
         expect_that!(
             tokens,
-            contains_substring(":: formoxus :: fields :: FieldAttrs :: from ([")
+            contains_substring(":: formoxus :: field_attrs :: FieldAttrs :: from ([")
         );
         expect_that!(
             tokens,

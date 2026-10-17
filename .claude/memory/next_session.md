@@ -5,6 +5,22 @@ metadata:
   type: project
 ---
 
+**2026-10-17 (home), LATER: STEP 2 DONE AND COMMITTED.** `FieldNode<F>`
+(`field_node.rs`) + the `ScalarField<T>` stand-in; `fields.rs` deleted;
+its 52 inline tests ported (20 → `field_attrs.rs`, 32 → `field_node.rs`);
+`#[expect(clippy::todo)]` on `default_widget` until Step 5. **Next: Step 3,
+decision S (S-a vs S-b; I lean S-b, spike a nested `Vec` row first).**
+Todd wants to read the plan from the mobile app.
+
+**2026-10-17 (home): THE REFACTOR HAS A PLAN FILE: `formoxus/FIELDS_PLAN.md`.**
+Read it first; it supersedes the step list below and gathers the decisions,
+the open questions (F-A..F-C, S, A-1, B-1, W-A..W-C, E-1, review note C)
+and what it replaces in `ATTRIBUTES_PLAN.md`'s Step 4. Todd finished Step 1
+(uncommitted); the one remaining error is `dispatch!`'s old struct literal,
+which Step 2 fixes. Also decided today: compile-time field checks are
+EMITTED `const _` (not spec tables); `raw` in `FieldValue::Invalid` kept
+for now, queued for deletion (both in [[django-parallel-design]]).
+
 **2026-10-16 (school, ~5pm), END: WIP, BUILD BROKEN ON PURPOSE.** Committed
 with `--no-verify` (format hook). Todd is writing; I review. State:
 - `formoxus/src/field.rs` (new): `trait Field` with `type Value`,

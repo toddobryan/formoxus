@@ -37,7 +37,7 @@ async fn a_value_matching_the_pattern_reaches_the_model() -> Result<()> {
 /// **The anchoring, end to end.** HTML wraps a `pattern` as `^(?:…)$` implicitly,
 /// and formoxus wraps it Rust-side to match — so a value with five digits
 /// EMBEDDED in it must be rejected by both. This is the browser half of
-/// `fields.rs`'s `a_pattern_must_match_the_entire_value`.
+/// `field_node.rs`'s `a_pattern_must_match_the_entire_value`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
 async fn the_browser_anchors_the_pattern_too() -> Result<()> {

@@ -1,284 +1,66 @@
-/*//! Leaf nodes: a single input, its parsed value, and the two vtable-driven
-//! conversions that replace `FromStr`/`Display` bounds on the model.
-use crate::ErrorsByPath;
-use crate::classes::Slot;
-use crate::error::{FormAccessError, ValidationMessage};
-use crate::label_case::LabelCase;
-use crate::nodes::NodeContext;
-use crate::nodes::{Edit, Node, SpecsByPath, ValuesByPath, default_label, qualify};
-use crate::widgets::errors::errors_id;
-use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
+//! The leaf node: one [`Field`] plus the tree state every field shares.
+
 use dioxus::prelude::*;
-use facet::{Facet, Partial, Peek, ReflectError, ScalarType};
-use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, BuiltinWidget, FieldType, RenderedInputType};
-use indexmap::IndexMap;
+use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
+use formoxus_spec::{Attr, AttrValue, BuiltinWidget, FieldType, RenderedInputType};
 use regress::Regex;
-use std::fmt::Debug;
+
+use crate::error::{FormAccessError, ValidationMessage};
+use crate::field::{Field, FieldValue};
+use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
+use crate::form::ErrorsByPath;
+use crate::label_case::LabelCase;
+use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
+use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum FieldValue<T: Clone + Debug + PartialEq> {
-    Empty,
-    Valid(T),
-    Invalid {
-        raw: String,
-        error: ValidationMessage,
-    },
-}
-/*
-#[derive(Clone, Debug, PartialEq)]
-pub struct Field<T: Clone + Debug + PartialEq + for<'f> Facet<'f>> {
+pub struct FieldNode<F: Field> {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
+    /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
+    /// Becomes `widget: Box<dyn Widget>` in Step 5.
     pub custom_widget: Option<WidgetType>,
     /// What a chooser offers, if the spec named a list. `None` for a field no
     /// spec gave choices to — which is every field rendered as an `<input>`.
+    /// Moves into `ChoiceField` in Step 4.
     pub choices: Option<Vec<Choice>>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
-    /// `Field<String>` standing in for a `Markdown` field. `None` for an
+    /// `String` field standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
     ///
     /// **The field carries the INNER type, not the newtype**, because a
-    /// concrete `T` cannot be recovered from a runtime `&'static Shape`: the
-    /// shape walk only ever has a shape in hand, and `Field<T>` needs a
-    /// type at compile time. So a `Markdown` field becomes a
-    /// `Field<String>` that remembers what to re-wrap it in, and every
-    /// string-facing operation — parsing, display, `check`, the widget —
-    /// goes on working unchanged against the inner scalar.
+    /// concrete type cannot be recovered from a runtime `&'static Shape`: the
+    /// shape walk only ever has a shape in hand, and `F::Value` is fixed at
+    /// compile time. So a `Markdown` field becomes a `String` field that
+    /// remembers what to re-wrap it in, and every string-facing operation —
+    /// parsing, display, `check`, the widget — goes on working unchanged
+    /// against the inner scalar.
     ///
     /// Only [`write_value_into`](Node::write_value_into) consults it.
-    pub wrapper: Option<&'static facet::Shape>,
-    pub value: FieldValue<T>,
+    pub wrapper: Option<&'static Shape>,
+    pub value: FieldValue<F::Value>,
     pub errors: Vec<ValidationMessage>,
-}
-*/
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct FieldAttrs(IndexMap<AttrKey, AttrValue>);
-
-impl FieldAttrs {
-    pub fn get(&self, attr: Attr) -> Option<&AttrValue> {
-        self.0.get(&AttrKey::Std(attr))
-    }
-
-    pub fn contains(&self, attr: Attr) -> bool {
-        self.0.contains_key(&AttrKey::Std(attr))
-    }
-
-    /// A copy without `attr`, for a widget that puts it somewhere other than
-    /// where its spread lands (`RadioGroup`'s `required`). `shift_remove`, so
-    /// the rest keep their order.
-    pub fn without(&self, attr: Attr) -> FieldAttrs {
-        let mut map = self.0.clone();
-        map.shift_remove(&AttrKey::Std(attr));
-        FieldAttrs(map)
-    }
-
-    /// A copy with `attr` set to `value` unless the author already set it, for
-    /// a value formoxus supplies but an author may replace (`VariantSet`'s
-    /// `aria-labelledby`). The author's entry wins and keeps its position, so
-    /// the attribute is never emitted twice.
-    pub fn with_default(&self, attr: Attr, value: AttrValue) -> FieldAttrs {
-        let mut map = self.0.clone();
-        map.entry(AttrKey::Std(attr)).or_insert(value);
-        FieldAttrs(map)
-    }
-
-    fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
-        let mut out = Vec::new();
-        for (attr_key, attr_value) in &self.0 {
-            if matches!(attr_key, AttrKey::Std(Attr::Class | Attr::ClassPlus)) {
-                continue;
-            }
-            let name = match attr_key {
-                AttrKey::Std(attr) => attr.name(),
-                AttrKey::NonStd(name) => name,
-            };
-            let attribute = match attr_value {
-                AttrValue::Int(n) => Attribute::new(name, *n, None, false),
-                AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
-                AttrValue::Flag => Attribute::new(name, true, None, false),
-                AttrValue::Bound(b) => match field_type {
-                    FieldType::Int => Attribute::new(name, int_bound(*b, name), None, false),
-                    _ => Attribute::new(name, float_bound(*b), None, false),
-                },
-                AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
-                AttrValue::List(vs) => {
-                    assert!(matches!(
-                        attr_key,
-                        AttrKey::Std(Attr::Style | Attr::StylePlus)
-                    ));
-                    Attribute::new(name, vs.join("; "), None, false)
-                }
-            };
-            out.push(attribute);
-        }
-        out
-    }
-
-    pub fn merge_with_attrs(
-        &self,
-        field_type: FieldType,
-        extras: Vec<Attribute>,
-    ) -> Vec<Attribute> {
-        let mut mapped_attrs: IndexMap<&'static str, Attribute> = self
-            .to_attributes(field_type)
-            .into_iter()
-            .map(|a| (a.name, a))
-            .collect();
-
-        for attr in extras {
-            mapped_attrs.insert(attr.name, attr);
-        }
-
-        mapped_attrs.into_values().collect()
-    }
-
-    pub fn class(&self, slot: Option<&Slot>, invalid: bool) -> Option<String> {
-        let empty = Slot::new("");
-        let slot = slot.unwrap_or(&empty);
-        let base = if let Some(AttrValue::List(classes)) = self.get(Attr::Class) {
-            classes.join(" ")
-        } else if let Some(AttrValue::List(classes)) = self.get(Attr::ClassPlus) {
-            [&*slot.base, &classes.join(" ")]
-                .into_iter()
-                .filter(|c| !c.is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")
-        } else {
-            return slot.value(invalid);
-        };
-        Slot {
-            base: base.into(),
-            invalid: slot.invalid.clone(),
-        }
-        .value(invalid)
-    }
-
-    /// The map a widget actually gets: formoxus's own attributes, which only
-    /// exist at render, FIRST, then the field's.
-    ///
-    /// - `Required` (a flag) when `required`, except on a `Checkbox`.
-    ///   formoxus's `required` means PRESENCE, and an unticked box is a
-    ///   complete `false`; HTML `required` on a checkbox means "must be
-    ///   ticked", which is `required_true`'s job.
-    /// - `AriaInvalid` = `"true"` when `invalid`, and otherwise ABSENT, never
-    ///   `"false"`: per ARIA, `"false"` asserts "checked, and passed", so an
-    ///   untouched form would claim every field had been validated, a screen
-    ///   reader would say so, and a stylesheet painting a validated-and-clean
-    ///   state would paint it. Telling those apart is issue #7.
-    ///
-    /// First, so `required` keeps the position the suite's exact-markup tests
-    /// expect.
-    pub fn with_owned_attrs(
-        field_id: &str,
-        widget: &WidgetType,
-        required: bool,
-        invalid: bool,
-        attrs: &FieldAttrs,
-    ) -> FieldAttrs {
-        let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
-        if required
-            && !matches!(
-                widget,
-                WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox))
-            )
-        {
-            map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
-        }
-        if invalid {
-            map.insert(
-                AttrKey::Std(Attr::AriaInvalid),
-                AttrValue::String("true".to_string()),
-            );
-            map.insert(
-                AttrKey::Std(Attr::AriaDescribedby),
-                AttrValue::String(errors_id(field_id)),
-            );
-        }
-        map.extend(attrs.0.clone());
-        FieldAttrs(map)
-    }
+    pub field: F,
 }
 
-impl<const N: usize> From<[(AttrKey, AttrValue); N]> for FieldAttrs {
-    fn from(arr: [(AttrKey, AttrValue); N]) -> Self {
-        Self(IndexMap::from(arr))
-    }
-}
-
-/// A bound on a float field, as an `f64`.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "a bound above 2^53 does not survive this widening; form! rejects \
-    one at compile time (`field_kind::bound_is_exact`), so only a hand-built \
-    spec can still reach here with one"
-)]
-fn float_bound(bound: Bound) -> f64 {
-    match bound {
-        Bound::Int(n) => n as f64,
-        Bound::Float(x) => x,
-    }
-}
-
-/// The message for a value outside its bounds, or `None` when it is inside.
-/// One message covers both ends when the field has both, which is why `min`
-/// and `max` are checked together.
-fn range_message<N: std::fmt::Display>(
-    min: Option<N>,
-    max: Option<N>,
-    below: bool,
-    above: bool,
-) -> Option<ValidationMessage> {
-    let message = match (min, max) {
-        (Some(min), Some(max)) if below || above => {
-            format!("number must be in the range {min} up to (and including) {max}")
-        }
-        (Some(min), None) if below => format!("number must be at least {min}"),
-        (None, Some(max)) if above => format!("number must be at most {max}"),
-        _ => return None,
-    };
-    Some(ValidationMessage(message))
-}
-
-/// A bound on an integer field, as the `i128` it is compared as.
-///
-/// A whole float bound is accepted, because `min: 2.0` means what it says
-/// and `form!` cannot reject it: it cannot tell `2.0` from `2` when the
-/// bound is a named const. A fractional one still panics. `form!` rejects
-/// that at compile time (`field_kind::bound_is_whole`), so only a hand-built
-/// spec can reach the panic.
-fn int_bound(bound: Bound, which: &str) -> i128 {
-    match bound {
-        Bound::Int(n) => n,
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "only reached once `fract() == 0.0` says nothing is truncated"
-        )]
-        Bound::Float(x) if x.is_finite() && x.fract() == 0.0 => x as i128,
-        Bound::Float(x) => panic!("Integer field does not support the fractional {which} {x}"),
-    }
-}
-
-/*
-impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
+impl<F: Field> FieldNode<F> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
-    /// Derived from `T` on every read rather than stored, so it cannot go stale
-    /// and nothing about presentation is committed during the SHAPE walk. Constraint
-    /// fields are added by the form! macro based on the field's path.
+    /// Derived from `F::Value` on every read rather than stored, so it cannot go
+    /// stale and nothing about presentation is committed during the SHAPE walk.
     ///
     /// Bounds on integers are i128, since that's the only type that can represent
     /// the max and min values on all other int types. Similarly, bounds on floats are
     /// f64s. In the form! macro (where we have access to the actual type of the field),
     /// we check to make sure the constraints fit.
     fn field_type(&self) -> FieldType {
-        // `None` is unreachable: `scalar_node` only builds a `Field` for
+        // `None` is unreachable: `scalar_node` only builds a `FieldNode` for
         // the scalars it recognises, and `node_for_shape` panics on the rest.
-        let scalar = T::SHAPE
+        let scalar = <F::Value as Facet<'static>>::SHAPE
             .scalar_type()
-            .expect("Field is only constructed for scalar shapes");
+            .expect("FieldNode is only constructed for scalar shapes");
 
         match scalar {
             ScalarType::String => FieldType::Text,
@@ -293,22 +75,25 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
             | ScalarType::U64 => FieldType::Int,
             ScalarType::F32 | ScalarType::F64 => FieldType::Float,
             other => panic!(
-                "scalar type {other:?} is not supported in Field (field {})",
+                "scalar type {other:?} is not supported in FieldNode (field {})",
                 self.name
             ),
         }
     }
 
     /// Formoxus's own check of a value against this field's validated
-    /// attributes. `raw_value` has already parsed as `T`; `validate` returns
-    /// before reaching here on an empty or unparseable value.
+    /// attributes. `raw_value` has already parsed as `F::Value`; `validate`
+    /// returns before reaching here on an empty or unparseable value.
+    ///
+    /// Not [`Field::check`], which checks the parsed value and runs after this.
+    /// This one goes away in Step 4, when the attributes move into the fields.
     ///
     /// Walks [`Attr::ALL`], not the map, so the messages come out in the
     /// table's order (lengths, then pattern, then bounds) whatever order
     /// `form!` inserted the attributes in. The field type is an INPUT here, not
     /// the dispatch: it only matters to `min`/`max`, which read the value as an
     /// `i128` or an `f64`.
-    fn check(&self, raw_value: &str) -> Vec<ValidationMessage> {
+    fn check_attrs(&self, raw_value: &str) -> Vec<ValidationMessage> {
         let field_type = self.field_type();
         let mut errors = Vec::new();
         // TODO: the Max and Min handling assumes an ordering for Attr::ALL.
@@ -418,10 +203,11 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
 
     /// What this field renders as absent any override.
     ///
-    /// `optional` is the one input here that `T` cannot supply: `Option` peeling
-    /// wraps rather than parameterizes, so `bool` and `Option<bool>` both arrive
-    /// as `Field<bool>`. A checkbox has two states and an `Option<bool>` has
-    /// three, which is the whole reason that flag has to travel from the walk.
+    /// `optional` is the one input here that `F::Value` cannot supply: `Option`
+    /// peeling wraps rather than parameterizes, so `bool` and `Option<bool>`
+    /// both arrive as a `bool` field. A checkbox has two states and an
+    /// `Option<bool>` has three, which is the whole reason that flag has to
+    /// travel from the walk.
     fn default_widget(&self) -> WidgetType {
         WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
     }
@@ -456,7 +242,27 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Field<T> {
     }
 }
 
-impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<T> {
+/// The message for a value outside its bounds, or `None` when it is inside.
+/// One message covers both ends when the field has both, which is why `min`
+/// and `max` are checked together.
+fn range_message<N: std::fmt::Display>(
+    min: Option<N>,
+    max: Option<N>,
+    below: bool,
+    above: bool,
+) -> Option<ValidationMessage> {
+    let message = match (min, max) {
+        (Some(min), Some(max)) if below || above => {
+            format!("number must be in the range {min} up to (and including) {max}")
+        }
+        (Some(min), None) if below => format!("number must be at least {min}"),
+        (None, Some(max)) if above => format!("number must be at most {max}"),
+        _ => return None,
+    };
+    Some(ValidationMessage(message))
+}
+
+impl<F: Field> Node for FieldNode<F> {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -471,8 +277,8 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
         match &self.value {
             FieldValue::Empty => String::new(),
             // Formatted through facet's display vtable rather than a `Display`
-            // bound on `T` — the exact mirror of `parse_scalar` going the other
-            // way. `{t:?}` would be wrong here: `Debug` quotes strings, and
+            // bound on the value — the exact mirror of `parse_scalar` going the
+            // other way. `{t:?}` would be wrong here: `Debug` quotes strings, and
             // `parse_scalar` faithfully parses those quotes back into the value.
             FieldValue::Valid(t) => Peek::new(t).to_string(),
             FieldValue::Invalid { raw, .. } => raw.clone(),
@@ -495,10 +301,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
             return;
         }
 
-        // No `FromStr` bound on `T`: facet's own parse vtable does this from
-        // the shape, so a custom type only has to derive `Facet`, not
-        // implement `FromStr` the way the macro-based version required.
-        self.value = match parse_scalar::<T>(raw) {
+        self.value = match self.field.parse(raw) {
             Ok(t) => FieldValue::Valid(t),
             Err(error) => FieldValue::Invalid {
                 raw: raw.clone(),
@@ -513,7 +316,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
         }
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut crate::form::ErrorsByPath) {
+    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         // Clean fields contribute nothing — see the trait's contract. Inserting
         // `(path, [])` here would make `FormErrors.fields` non-empty for a form
         // that passed, so a caller could not read "did it pass?" off the shape.
@@ -578,12 +381,17 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
         // checkbox is the only `Empty` the match above lets through, and its
         // constraints are checked against `"false"`.
         let raw = self.raw_value_to_validate();
-        self.errors.extend(self.check(&raw));
+        self.errors.extend(self.check_attrs(&raw));
         if let Some(choices) = &self.choices
             && !choices.iter().any(|c| c.value == raw)
         {
             self.errors
                 .push(ValidationMessage("not one of the available choices".into()));
+        }
+        // The field's own check, on the parsed value. An unticked checkbox has
+        // none, so it is skipped here; `BoolField` (Step 4) settles that.
+        if let FieldValue::Valid(value) = &self.value {
+            self.errors.extend(self.field.check(value));
         }
     }
 
@@ -604,7 +412,7 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
         // NEWTYPE's, so a bare `set` of the inner scalar would be a type error;
         // descending into field 0, setting there, and coming back up builds the
         // wrapper around it. `None` is the ordinary case and stays a plain set.
-        let set = |p: Partial<'p>, t: T| -> Result<Partial<'p>, ReflectError> {
+        let set = |p: Partial<'p>, t: F::Value| -> Result<Partial<'p>, ReflectError> {
             match self.wrapper {
                 None => p.set(t),
                 Some(_) => p.begin_nth_field(0)?.set(t)?.end(),
@@ -615,13 +423,14 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
             // An unticked checkbox is `Empty` like any other unfilled input, and
             // stays that way so `is_present` keeps one meaning. `false` is
             // synthesised here instead, at the last possible moment. Going
-            // through `parse_scalar` rather than `partial.set(false)` is what
-            // keeps this generic: nothing in scope can prove `T == bool`, but
-            // the parse vtable resolves the real shape at runtime and doesn't
-            // need to be told.
+            // through the field's `parse` rather than `partial.set(false)` is
+            // what keeps this generic: nothing in scope can prove
+            // `F::Value == bool`, but the parse resolves the real shape at
+            // runtime and doesn't need to be told.
             FieldValue::Empty if self.is_unticked_checkbox() => set(
                 partial,
-                parse_scalar::<T>("false")
+                self.field
+                    .parse("false")
                     .expect("`Boolean` input kind is only ever derived from a `bool` shape"),
             )?,
             // Required-vs-optional was decided from the Model's own shape at
@@ -638,6 +447,10 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
 
     fn is_present(&self) -> bool {
         self.value != FieldValue::Empty
+    }
+
+    fn clear_errors(&mut self) {
+        self.errors.clear();
     }
 
     fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
@@ -677,93 +490,40 @@ impl<T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static> Node for Field<
             self.attrs = spec.attrs.clone();
         }
     }
-
-    fn clear_errors(&mut self) {
-        self.errors.clear();
-    }
-}
-*/
-
-/// Parse a raw input string into `X` using `X`'s own facet parse vtable —
-/// the runtime equivalent of the `T: FromStr` bound the macro-based version
-/// leaned on.
-///
-/// **`pub` only so the test suite can reach it from `tests/`, and `doc(hidden)`
-/// because that is the whole reason.** It is an implementation detail of how a
-/// leaf converts, not a service this crate offers; treat its signature as
-/// unstable.
-#[doc(hidden)]
-pub fn parse_scalar<X>(raw: &str) -> Result<X, ValidationMessage>
-where
-    X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-{
-    let partial = Partial::alloc::<X>().map_err(|e| ValidationMessage(e.to_string()))?;
-    let partial = partial
-        .parse_from_str(raw)
-        .map_err(|_| ValidationMessage(format!("{raw:?} isn't a valid {}", X::SHAPE)))?;
-    partial
-        .build()
-        .map_err(|e| ValidationMessage(e.to_string()))?
-        .materialize::<X>()
-        .map_err(|e| ValidationMessage(e.to_string()))
-}
-
-pub(crate) fn populate<X>(peek: Option<Peek<'_, 'static>>) -> FieldValue<X>
-where
-    X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-{
-    match peek {
-        None => FieldValue::Empty,
-        // `""` IS absence, and that has to hold at BOTH boundaries. `distribute_values`
-        // already collapses an empty input to `Empty`; without the same collapse
-        // here, populating kept `Some("")` alive and `leaves() -> apply()` silently
-        // stopped being an identity — the very invariant the uncontrolled design
-        // rests on. Comparing the *display* string is what makes the two agree
-        // exactly, since that's the string `raw_value` would have emitted.
-        //
-        // Only `String` can actually reach this: `true`/`0`/`0.0` are never empty.
-        // The cost is that a required `String` holding `""` can't round-trip — but
-        // that's HTML5's rule, not ours (an empty required input is `valueMissing`),
-        // so no browser form could round-trip it either. Failing the same way on
-        // both paths beats depending on which path the value arrived through.
-        Some(p) if p.to_string().is_empty() => FieldValue::Empty,
-        Some(p) => FieldValue::Valid(
-            p.get::<X>()
-                .expect("scalar_type matched, so this get should be the right type")
-                .clone(),
-        ),
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+    use std::marker::PhantomData;
+
     use super::*;
-    use dioxus::core::AttributeValue;
+    use crate::field::ScalarField;
+    use formoxus_spec::Bound;
     use googletest::prelude::*;
 
     // ── Helpers ──────────────────────────────────────────────────────────
     //
     // A constraint test needs a field TYPE (which decides how `min`/`max`
-    // read the value) and the field's attributes. These build a `Field`
-    // of the right type, holding nothing: `check` takes the raw value as an
-    // argument, so the field's own value never matters here.
+    // read the value) and the field's attributes. These build a `FieldNode`
+    // of the right type, holding nothing: `check_attrs` takes the raw value
+    // as an argument, so the field's own value never matters here.
 
-    /// Table attributes only, which is all a constraint test needs; the
-    /// author-attribute tests at the bottom build `NonStd` keys themselves.
+    /// Built through `with_default`, which appends in order, because the
+    /// map inside `FieldAttrs` is private to `field_attrs`.
     fn all(entries: &[(Attr, AttrValue)]) -> FieldAttrs {
-        FieldAttrs(
-            entries
-                .iter()
-                .map(|(attr, value)| (AttrKey::Std(*attr), value.clone()))
-                .collect(),
-        )
+        entries
+            .iter()
+            .fold(FieldAttrs::default(), |attrs, (attr, value)| {
+                attrs.with_default(*attr, value.clone())
+            })
     }
 
-    fn holding<X>(attrs: FieldAttrs) -> Field<X>
+    fn node<X>(value: FieldValue<X>, attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        Field {
+        FieldNode {
             name: "f".to_string(),
             label: None,
             optional: false,
@@ -771,16 +531,24 @@ mod tests {
             custom_widget: None,
             choices: None,
             wrapper: None,
-            value: FieldValue::Empty,
+            value,
             errors: Vec::new(),
+            field: ScalarField(PhantomData),
         }
+    }
+
+    fn holding<X>(attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
+    where
+        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
+    {
+        node(FieldValue::Empty, attrs)
     }
 
     fn text(
         min_length: Option<usize>,
         max_length: Option<usize>,
         pattern: Option<&'static str>,
-    ) -> Field<String> {
+    ) -> FieldNode<ScalarField<String>> {
         let mut entries = Vec::new();
         entries.extend(min_length.map(|n| (Attr::MinLength, AttrValue::Int(n))));
         entries.extend(max_length.map(|n| (Attr::MaxLength, AttrValue::Int(n))));
@@ -795,15 +563,15 @@ mod tests {
         all(&entries)
     }
 
-    fn int(min: Option<i128>, max: Option<i128>) -> Field<i64> {
+    fn int(min: Option<i128>, max: Option<i128>) -> FieldNode<ScalarField<i64>> {
         holding(bounds(min.map(Bound::Int), max.map(Bound::Int)))
     }
 
-    fn float(min: Option<f64>, max: Option<f64>) -> Field<f64> {
+    fn float(min: Option<f64>, max: Option<f64>) -> FieldNode<ScalarField<f64>> {
         holding(bounds(min.map(Bound::Float), max.map(Bound::Float)))
     }
 
-    fn boolean(required_true: bool) -> Field<bool> {
+    fn boolean(required_true: bool) -> FieldNode<ScalarField<bool>> {
         if required_true {
             holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
         } else {
@@ -811,167 +579,11 @@ mod tests {
         }
     }
 
-    fn messages<X>(field: &Field<X>, raw: &str) -> Vec<String>
+    fn messages<X>(field: &FieldNode<ScalarField<X>>, raw: &str) -> Vec<String>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        field.check(raw).into_iter().map(|e| e.0).collect()
-    }
-
-    fn names<X>(field: &Field<X>) -> Vec<&'static str>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        field
-            .attrs
-            .to_attributes(field.field_type())
-            .iter()
-            .map(|a| a.name)
-            .collect()
-    }
-
-    /// The value of the one emitted attribute called `name`.
-    fn emitted<X>(field: &Field<X>, name: &str) -> AttributeValue
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        let attrs = field.attrs.to_attributes(field.field_type());
-        let found: Vec<&Attribute> = attrs.iter().filter(|a| a.name == name).collect();
-        assert!(
-            found.len() == 1,
-            "expected one `{name}`, got {}",
-            found.len()
-        );
-        found[0].value.clone()
-    }
-
-    // ── Constraint attributes ────────────────────────────────────────────
-    //
-    // `html_attributes` is the render-side half of a constraint: the
-    // same `min_length` that `check` enforces in Rust also has to reach the
-    // browser, or the two disagree about what the field allows. These pin the
-    // mapping. That an attribute then lands on the right element is a widget
-    // question, tested from outside in `tests/suite/`.
-
-    /// Constructing an `Attribute` needs no Dioxus runtime, which is why this
-    /// mapping is a plain function and lives here rather than in a widget.
-    #[gtest]
-    fn a_field_with_no_constraints_gets_no_attributes() {
-        expect_that!(names(&text(None, None, None)), is_empty());
-        expect_that!(names(&boolean(false)), is_empty());
-    }
-
-    /// HTML `required` on a checkbox means "must be ticked", which is exactly
-    /// `required_true` on a bool and nothing else. A plain bool must NOT get
-    /// it (above), because unticked is a complete answer there.
-    #[gtest]
-    fn a_required_true_bool_becomes_the_required_attribute() {
-        expect_that!(names(&boolean(true)), elements_are![eq(&"required")]);
-        expect_that!(
-            emitted(&boolean(true), "required"),
-            eq(&AttributeValue::Bool(true))
-        );
-    }
-
-    /// In the order the attributes were given, NOT `Attr::ALL` order: the
-    /// map is an `IndexMap`, so the markup follows what the author wrote.
-    /// Given here in neither table order nor its reverse, so a walk of
-    /// `Attr::ALL` either way would fail it.
-    #[gtest]
-    fn each_text_constraint_becomes_its_html_attribute_in_the_order_given() {
-        let field = holding::<String>(all(&[
-            (Attr::MinLength, AttrValue::Int(3)),
-            (Attr::Pattern, AttrValue::Regex(r"\d{5}")),
-            (Attr::MaxLength, AttrValue::Int(10)),
-        ]));
-        expect_that!(
-            names(&field),
-            elements_are![eq(&"minlength"), eq(&"pattern"), eq(&"maxlength")]
-        );
-    }
-
-    /// One `max_length` means ONE `maxlength`, because the attributes are
-    /// keyed by `AttrKey`: HTML takes the first of a duplicated attribute, so a
-    /// second entry would be silently dropped rather than loudly wrong.
-    #[gtest]
-    fn a_repeated_attribute_replaces_rather_than_duplicating() {
-        let mut map = IndexMap::new();
-        map.insert(AttrKey::Std(Attr::MaxLength), AttrValue::Int(5));
-        map.insert(AttrKey::Std(Attr::MaxLength), AttrValue::Int(99));
-        let field = holding::<String>(FieldAttrs(map));
-        expect_that!(names(&field), elements_are![eq(&"maxlength")]);
-        expect_that!(
-            emitted(&field, "maxlength"),
-            eq(&AttributeValue::Int(99)),
-            "the later insert should win"
-        );
-    }
-
-    /// Every emitted name is a name the table knows, so the HTML name can
-    /// never drift from the attribute it came from.
-    #[gtest]
-    fn every_emitted_name_is_the_tables_name() {
-        let emitted_names = [
-            names(&text(Some(1), Some(2), Some("x"))),
-            names(&int(Some(1), Some(2))),
-            names(&float(Some(1.0), Some(2.0))),
-            names(&boolean(true)),
-        ]
-        .concat();
-        for name in emitted_names {
-            expect_that!(Attr::from_name(name), some(anything()), "{name}");
-        }
-    }
-
-    /// A length is a NUMBER, not a stringified one. It matters beyond tidiness:
-    /// a numeric `AttributeValue` renders unquoted (`maxlength=10`), so a test
-    /// asserting `maxlength="10"` against the markup would not match.
-    #[gtest]
-    fn a_length_is_a_number_not_a_string() {
-        expect_that!(
-            emitted(&text(None, Some(10), None), "maxlength"),
-            eq(&AttributeValue::Int(10))
-        );
-    }
-
-    /// **The pattern reaches the DOM UNANCHORED.** `check` wraps it as
-    /// `^(?:…)$` because HTML does the same implicitly — so handing the browser
-    /// an already-wrapped pattern would anchor it twice. The raw pattern is what
-    /// keeps the two in agreement, which is the reason `regress` was chosen over
-    /// `regex` in the first place.
-    #[gtest]
-    fn a_pattern_reaches_the_attribute_unanchored() {
-        expect_that!(
-            emitted(&text(None, None, Some(r"\d{5}")), "pattern"),
-            eq(&AttributeValue::Text(r"\d{5}".to_string()))
-        );
-    }
-
-    /// A bound is emitted as the FIELD's kind, not the bound's: an int field
-    /// emits ints and a float field floats, after the same widening `check`
-    /// uses, rather than both widening to text. `Float` is also why no `step`
-    /// is emitted — see the note on `constraint_attributes`.
-    #[gtest]
-    fn a_numeric_bound_keeps_its_fields_kind() {
-        let ints = int(Some(1), Some(9));
-        expect_that!(emitted(&ints, "min"), eq(&AttributeValue::Int(1)));
-        expect_that!(emitted(&ints, "max"), eq(&AttributeValue::Int(9)));
-
-        let floats = float(Some(1.5), None);
-        expect_that!(emitted(&floats, "min"), eq(&AttributeValue::Float(1.5)));
-        expect_that!(names(&floats).len(), eq(1), "an absent bound emits nothing");
-
-        // Written as the other kind, widened to the field's.
-        let int_bound_on_float = holding::<f64>(bounds(Some(Bound::Int(0)), None));
-        expect_that!(
-            emitted(&int_bound_on_float, "min"),
-            eq(&AttributeValue::Float(0.0))
-        );
-        let whole_float_on_int = holding::<i64>(bounds(Some(Bound::Float(2.0)), None));
-        expect_that!(
-            emitted(&whole_float_on_int, "min"),
-            eq(&AttributeValue::Int(2))
-        );
+        field.check_attrs(raw).into_iter().map(|e| e.0).collect()
     }
 
     // ── Text: lengths ────────────────────────────────────────────────────
@@ -1199,7 +811,7 @@ mod tests {
 
     // ── The caller's contract ────────────────────────────────────────────
 
-    /// `check` runs only on a `FieldValue::Valid`, so the raw string is always
+    /// `check_attrs` runs only on a `FieldValue::Valid`, so the raw string is always
     /// this type's own canonical display and always re-parses. Pinning the panic
     /// documents that: a caller reaching here with unparsed input has skipped
     /// the guard in `validate`, and a silent `unwrap_or` would turn that bug
@@ -1207,33 +819,23 @@ mod tests {
     #[gtest]
     #[should_panic(expected = "should have already successfully parsed")]
     fn checking_an_unparsed_int_is_a_caller_bug() {
-        let _ = int(Some(0), None).check("not a number");
+        let _ = int(Some(0), None).check_attrs("not a number");
     }
 
     // ── Constraints reach the field ──────────────────────────────────────
     //
-    // Everything above calls `check` with a raw string. These go in through
+    // Everything above calls `check_attrs` with a raw string. These go in through
     // `validate` with a real value, so the field's own type and value are what
     // get checked, the way a submitted form is.
 
-    fn a_field<X>(value: X, attrs: FieldAttrs) -> Field<X>
+    fn a_field<X>(value: X, attrs: FieldAttrs) -> FieldNode<ScalarField<X>>
     where
         X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
     {
-        Field {
-            name: "f".to_string(),
-            label: None,
-            optional: false,
-            attrs,
-            custom_widget: None,
-            choices: None,
-            wrapper: None,
-            // `Valid`, never `Empty` — `validated` asserts this rather than
-            // trusting it, since the early return in `validate` would make a
-            // test look satisfied when nothing was checked.
-            value: FieldValue::Valid(value),
-            errors: Vec::new(),
-        }
+        // `Valid`, never `Empty` — `validated` asserts this rather than
+        // trusting it, since the early return in `validate` would make a
+        // test look satisfied when nothing was checked.
+        node(FieldValue::Valid(value), attrs)
     }
 
     fn validated<X>(value: X, attrs: FieldAttrs) -> Vec<String>
@@ -1243,7 +845,7 @@ mod tests {
         let mut field = a_field(value, attrs);
 
         // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
-        // reaches `check` at all. A test that tripped that early return
+        // reaches `check_attrs` at all. A test that tripped that early return
         // would come back with no errors and read exactly like a constraint
         // that was checked and satisfied — so the precondition is asserted
         // here instead of trusted.
@@ -1317,7 +919,7 @@ mod tests {
 
     // ── `required_true` on a bool, through `validate` ───────────────────
     //
-    // `check` is covered above. These go through `validate`, because that is
+    // `check_attrs` is covered above. These go through `validate`, because that is
     // where an unticked checkbox could slip past: it is `Empty`, and `Empty`
     // returns early for every other field.
 
@@ -1327,32 +929,27 @@ mod tests {
         value: FieldValue<bool>,
         widget: Option<WidgetType>,
         required_true: bool,
-    ) -> Field<bool> {
-        Field {
+    ) -> FieldNode<ScalarField<bool>> {
+        let attrs = if required_true {
+            all(&[(Attr::RequiredTrue, AttrValue::Flag)])
+        } else {
+            FieldAttrs::default()
+        };
+        FieldNode {
             name: "agreed".to_string(),
-            label: None,
-            optional: false,
-            attrs: if required_true {
-                all(&[(Attr::RequiredTrue, AttrValue::Flag)])
-            } else {
-                FieldAttrs::default()
-            },
             custom_widget: widget,
-            choices: None,
-            wrapper: None,
-            value,
-            errors: Vec::new(),
+            ..node(value, attrs)
         }
     }
 
-    fn validation_messages(mut field: Field<bool>) -> Vec<String> {
+    fn validation_messages(mut field: FieldNode<ScalarField<bool>>) -> Vec<String> {
         field.validate();
         field.errors.into_iter().map(|e| e.0).collect()
     }
 
     /// The case issue #6 is about. A box nobody touched is `Empty`, and so is
     /// every unticked box that reaches the server, since an unticked checkbox
-    /// is left out of the form data. A rule that only `check` knew about would
+    /// is left out of the form data. A rule that only `check_attrs` knew about would
     /// never see it.
     #[gtest]
     fn an_untouched_required_true_checkbox_is_rejected() {
@@ -1416,255 +1013,4 @@ mod tests {
             elements_are![eq("this value must be true")]
         );
     }
-
-    // ── Author attributes ────────────────────────────────────────────────
-    //
-    // A quoted `form!` key is a `NonStd` entry holding an `AttrValue::String`.
-    // It never reaches `check`, which walks `Attr::ALL`, so it cannot change
-    // what a value parses as or what `check` allows. These pin the conversion
-    // `render` relies on. That the attributes then land on the right element
-    // is a widget question, tested from outside in `tests/suite/`.
-
-    fn author(pairs: &[(&'static str, &str)]) -> Vec<Attribute> {
-        FieldAttrs(
-            pairs
-                .iter()
-                .map(|(name, value)| {
-                    (
-                        AttrKey::NonStd(name),
-                        AttrValue::String((*value).to_string()),
-                    )
-                })
-                .collect(),
-        )
-        .to_attributes(FieldType::Text)
-    }
-
-    #[gtest]
-    fn no_author_attributes_means_no_attributes() {
-        expect_that!(author(&[]), is_empty());
-    }
-
-    /// Order is kept because the map is an `IndexMap`, so the rendered markup
-    /// follows the order the author wrote them in.
-    #[gtest]
-    fn author_attributes_keep_their_names_and_order() {
-        let attrs = author(&[("hx-get", "/x"), ("data-id", "7")]);
-        expect_that!(
-            attrs.iter().map(|a| a.name).collect::<Vec<_>>(),
-            elements_are![eq(&"hx-get"), eq(&"data-id")]
-        );
-    }
-
-    /// A table attribute and a quoted one share the map, so their relative
-    /// order is the author's too: the reason for one map rather than two.
-    #[gtest]
-    fn table_and_quoted_attributes_interleave_in_the_order_given() {
-        let field = holding::<String>(FieldAttrs(IndexMap::from([
-            (
-                AttrKey::NonStd("hx-get"),
-                AttrValue::String("/x".to_string()),
-            ),
-            (AttrKey::Std(Attr::MaxLength), AttrValue::Int(5)),
-            (
-                AttrKey::NonStd("data-id"),
-                AttrValue::String("7".to_string()),
-            ),
-        ])));
-        expect_that!(
-            names(&field),
-            elements_are![eq(&"hx-get"), eq(&"maxlength"), eq(&"data-id")]
-        );
-    }
-
-    /// A string attribute is always TEXT, even when it looks like a number:
-    /// `"data-rows": "4"` renders `data-rows="4"`. That is unlike `max_length`,
-    /// whose `maxlength` is an `AttributeValue::Int` and renders unquoted. Both
-    /// are valid HTML, but a test matching the markup has to know which it is.
-    #[gtest]
-    fn an_author_attribute_is_text_even_when_numeric() {
-        let attrs = author(&[("data-rows", "4")]);
-        expect_that!(attrs[0].value, eq(&AttributeValue::Text("4".to_string())));
-    }
-
-    /// Plain attributes, the same as a table attribute gets: no namespace
-    /// (that is only for `style`) and not volatile.
-    #[gtest]
-    fn an_author_attribute_has_no_namespace_and_is_not_volatile() {
-        let attrs = author(&[("hx-get", "/x")]);
-        expect_that!(attrs[0].namespace, none());
-        expect_that!(attrs[0].volatile, eq(false));
-    }
-
-    // ── Owned attributes, added at render ────────────────────────────────
-    //
-    // `required`, `aria-invalid` and `aria-describedby` depend on
-    // `ctx.required` and the field's errors, which only exist at render, so
-    // `form!`'s map never holds them. `with_owned_attrs` builds the map a
-    // widget actually gets.
-
-    /// A field's element id, as `NodeContext::id` builds it. `.into()` at each
-    /// call, so these read the same whether the parameter is `String` or `&str`.
-    const ID: &str = "aB3xY9kq-name";
-
-    fn keys(attrs: &FieldAttrs) -> Vec<AttrKey> {
-        attrs.0.keys().copied().collect()
-    }
-
-    fn just_max_length() -> FieldAttrs {
-        all(&[(Attr::MaxLength, AttrValue::Int(10))])
-    }
-
-    /// **Owned attributes come FIRST**, `required`, then `aria-invalid` and
-    /// `aria-describedby`, then the field's own in their order. First is what
-    /// keeps `required` where the suite's exact-markup tests already expect it.
-    #[gtest]
-    fn owned_attributes_come_first_then_the_fields_own() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            true,
-            true,
-            &just_max_length(),
-        );
-        expect_that!(
-            keys(&attrs),
-            elements_are![
-                eq(&AttrKey::Std(Attr::Required)),
-                eq(&AttrKey::Std(Attr::AriaInvalid)),
-                eq(&AttrKey::Std(Attr::AriaDescribedby)),
-                eq(&AttrKey::Std(Attr::MaxLength)),
-            ]
-        );
-        expect_that!(attrs.get(Attr::Required), some(eq(&AttrValue::Flag)));
-        expect_that!(
-            attrs.get(Attr::AriaInvalid),
-            some(eq(&AttrValue::String("true".to_string())))
-        );
-    }
-
-    /// **`aria-describedby` names the error list's id**, `{field id}-errors`,
-    /// which is what `FieldErrors` puts on its `<ul>`. Spelled out as a literal
-    /// rather than through `errors_id`, so a change to the format has to change
-    /// this test too, on purpose.
-    #[gtest]
-    fn aria_describedby_names_the_error_list() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            false,
-            true,
-            &FieldAttrs::default(),
-        );
-        expect_that!(
-            attrs.get(Attr::AriaDescribedby),
-            some(eq(&AttrValue::String("aB3xY9kq-name-errors".to_string())))
-        );
-    }
-
-    /// Each is added on its own condition, not both or neither. `aria-invalid`
-    /// and `aria-describedby` share one: there is an error list to point at
-    /// exactly when the field is invalid, and pointing at a list that is not
-    /// rendered is itself a defect.
-    #[gtest]
-    fn required_and_invalid_are_independent() {
-        let input = WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text));
-        let only_required =
-            FieldAttrs::with_owned_attrs(ID, &input, true, false, &just_max_length());
-        expect_that!(
-            keys(&only_required),
-            elements_are![
-                eq(&AttrKey::Std(Attr::Required)),
-                eq(&AttrKey::Std(Attr::MaxLength)),
-            ]
-        );
-        let only_invalid =
-            FieldAttrs::with_owned_attrs(ID, &input, false, true, &just_max_length());
-        expect_that!(
-            keys(&only_invalid),
-            elements_are![
-                eq(&AttrKey::Std(Attr::AriaInvalid)),
-                eq(&AttrKey::Std(Attr::AriaDescribedby)),
-                eq(&AttrKey::Std(Attr::MaxLength)),
-            ]
-        );
-    }
-
-    /// Neither applying leaves the field's own attributes exactly as they were.
-    #[gtest]
-    fn without_either_the_fields_attributes_pass_through_unchanged() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            false,
-            false,
-            &just_max_length(),
-        );
-        expect_that!(attrs, eq(&just_max_length()));
-    }
-
-    /// `without` drops exactly the one attribute and keeps the rest in order,
-    /// which is what lets `RadioGroup` move `required` off its fieldset without
-    /// reordering what is left there.
-    #[gtest]
-    fn without_drops_one_attribute_and_keeps_the_order() {
-        let attrs = all(&[
-            (Attr::MaxLength, AttrValue::Int(10)),
-            (Attr::Required, AttrValue::Flag),
-            (Attr::MinLength, AttrValue::Int(2)),
-        ]);
-        expect_that!(
-            keys(&attrs.without(Attr::Required)),
-            elements_are![
-                eq(&AttrKey::Std(Attr::MaxLength)),
-                eq(&AttrKey::Std(Attr::MinLength)),
-            ]
-        );
-    }
-
-    /// `with_default` adds a value the author has not set, at the end, and
-    /// leaves one the author HAS set alone, value and position both.
-    #[gtest]
-    fn with_default_never_overrides_the_author() {
-        let added = just_max_length()
-            .with_default(Attr::AriaLabelledby, AttrValue::String("x-legend".into()));
-        expect_that!(
-            keys(&added),
-            elements_are![
-                eq(&AttrKey::Std(Attr::MaxLength)),
-                eq(&AttrKey::Std(Attr::AriaLabelledby)),
-            ]
-        );
-        let authored = all(&[
-            (Attr::AriaLabelledby, AttrValue::String("mine".into())),
-            (Attr::MaxLength, AttrValue::Int(10)),
-        ]);
-        expect_that!(
-            authored.with_default(Attr::AriaLabelledby, AttrValue::String("x-legend".into())),
-            eq(&authored)
-        );
-    }
-
-    /// **A checkbox never gets `required`.** On a checkbox, HTML `required`
-    /// means "must be ticked", which is `required_true`'s job; formoxus's
-    /// `required` means PRESENCE, and an unticked box is still a present
-    /// `false`. `aria-invalid` and `aria-describedby` are unaffected.
-    #[gtest]
-    fn a_checkbox_never_gets_required() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-            true,
-            true,
-            &FieldAttrs::default(),
-        );
-        expect_that!(
-            keys(&attrs),
-            elements_are![
-                eq(&AttrKey::Std(Attr::AriaInvalid)),
-                eq(&AttrKey::Std(Attr::AriaDescribedby)),
-            ]
-        );
-    }
 }
-*/

@@ -373,7 +373,7 @@ struct Bio {
 }
 
 /// A `<textarea>`, which is also where a multi-line value round-trips — the
-/// newline semantics `fields.rs` tests in Rust, seen from the browser.
+/// newline semantics `field_node.rs` tests in Rust, seen from the browser.
 #[component]
 fn TextareaForm() -> Element {
     harness(

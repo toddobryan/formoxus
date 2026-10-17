@@ -5,7 +5,7 @@
 //! `FormSpec::with_attrs`, each saying why: what `form!` refuses (a quoted key
 //! the table knows) or cannot yet express (`custom(…)` drops attributes), and
 //! the `From` impl that only a hand-built spec uses. The conversion itself is
-//! unit-tested beside `FieldAttrs::to_attributes` in `fields.rs`. Which element
+//! unit-tested beside `FieldAttrs::to_attributes` in `field_attrs.rs`. Which element
 //! is valid for which attribute is in
 //! `.claude/memory/html_attributes_reference.md`.
 //!
@@ -16,7 +16,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue};
-use formoxus::fields::FieldAttrs;
+use formoxus::field_attrs::FieldAttrs;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::WidgetType;

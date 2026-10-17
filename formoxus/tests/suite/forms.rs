@@ -9,7 +9,9 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::buttons::Fns;
-use formoxus::fields::{Field, FieldAttrs, FieldValue};
+use formoxus::field::{FieldValue, ScalarField};
+use formoxus::field_attrs::FieldAttrs;
+use formoxus::field_node::FieldNode;
 use formoxus::label_case::LabelCase;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{FieldSet, Node};
@@ -20,7 +22,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
-    Box::new(Field {
+    Box::new(FieldNode {
         name: name.to_string(),
         label: None,
         optional: false,
@@ -30,6 +32,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         wrapper: None,
         value,
         errors: Vec::new(),
+        field: ScalarField(PhantomData),
     })
 }
 

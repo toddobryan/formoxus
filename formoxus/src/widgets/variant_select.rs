@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::Edit;
 use crate::widgets::FieldProps;

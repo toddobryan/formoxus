@@ -7,7 +7,7 @@ use super::errors::FieldErrors;
 use super::label::field_label;
 use super::types::{Choice, FieldProps};
 use super::values::{get_current, write_value};
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.

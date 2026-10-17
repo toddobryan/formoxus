@@ -58,6 +58,15 @@ Points that came out of it:
 3. `FieldValue::{Empty, Valid, Invalid}` is a PARSE outcome, not bound vs
    unbound: `form_for` gives `Valid` leaves unbound, a submitted `""` gives
    `Empty` bound. Only `Invalid` implies bound. Nothing records boundness.
+   **QUEUED (Todd, 2026-10-17): drop `raw` from `Invalid` later, if we
+   can** (kept for now). Its one reader is `raw_value()` → `collect_values()`.
+   A live form reads values from the store (`ordered_values`), and a server
+   `Submission` only exists once validation passed, so neither sees it. It
+   matters only when a state with bad text distributed into it SEEDS a new
+   store (`use_form(|| state)`; a no-JS POST re-rendered): without `raw` the
+   input comes back blank, though the parse message still quotes the text.
+   Pinned by `an_unparseable_value_renders_its_error` (`value="abc"`). Fix
+   then: seed that store from the submitted values, not a copy in the tree.
 4. A typed `Field<T>` cannot sit in `IndexMap<String, Field<T>>` (one `T`).
    Type erasure solves it (`Box<dyn FormMember>`), not `FormSpec`.
 5. Three moments: macro expansion sees only tokens (no types, no shape);
@@ -230,6 +239,21 @@ First four: `StringField` (not `TextField`: no clash with `TextInput` or
 checkbox means `false`, probably `fn empty_value() -> Option<Value>`),
 `ChoiceField<T>` (typed). `build.rs`'s `dispatch!` maps each scalar to its
 field. Todd writes; I review.
+
+**Compile-time checks on fields: EMITTED `const _`, not tables in
+`formoxus-spec` (decided 2026-10-17, Todd).** A proc macro sees tokens, so
+`form!` can never call a `Field`'s methods or see an `impl`; moving the
+traits into `formoxus-spec` buys the macros nothing (and spec takes no
+dependencies). Todd wants the checks to cover a dev's OWN fields, not just
+the built-ins, which rules out a spec table keyed by type name (that also
+breaks on `use NumberField as N`). So `Field` carries associated consts
+(e.g. `const KIND: FieldType`) and `form!` emits `const _` assertions
+against `<F as Field>::…` for the fields it names (see
+[[const-shape-walk-blocked]]). Associated consts make a trait non-`dyn`:
+fine for `Field` (`FieldNode<F>` is generic; `Node` is the `dyn` one), NOT
+for `Widget` (`Box<dyn Widget>`), whose compile-time facts need a separate
+non-`dyn` trait or a const `WidgetKind`. Spec keeps only DATA the macro
+reads while expanding (attribute table, `Element`, built-in widget parts).
 
 **Server-only validation: IN this refactor** (Todd: "I'm a masochist").
 Django never named the category because all its validation is

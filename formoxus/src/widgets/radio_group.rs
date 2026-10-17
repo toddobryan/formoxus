@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
 use crate::widgets::label::required_marker;
 use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};

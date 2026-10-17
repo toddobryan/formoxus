@@ -11,7 +11,7 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::attrs::RenderedInputType;
-use formoxus::fields::FieldAttrs;
+use formoxus::field_attrs::FieldAttrs;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::any::Any;

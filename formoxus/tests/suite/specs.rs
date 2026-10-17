@@ -11,7 +11,7 @@ use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, RenderedInputType};
-use formoxus::fields::FieldAttrs;
+use formoxus::field_attrs::FieldAttrs;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;

@@ -108,7 +108,7 @@ async fn an_unanswered_radio_group_is_blocked() -> Result<()> {
 
 // ── textarea ─────────────────────────────────────────────────────────────
 
-/// A multi-line value, which is the case `fields.rs`'s JavaScript-newline tests
+/// A multi-line value, which is the case `field_node.rs`'s JavaScript-newline tests
 /// were written for — seen from the browser rather than from Rust.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
