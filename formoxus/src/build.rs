@@ -12,8 +12,10 @@ use std::marker::PhantomData;
 use crate::field::{ScalarField, populate};
 use crate::field_attrs::FieldAttrs;
 use crate::field_node::FieldNode;
+use crate::field_node::LeafArgs;
 use crate::nodes::{
-    FieldSet, ListSet, Node, OptionNode, VariantChoice, VariantSet, qualify, row_segment,
+    FieldSet, ListSet, Node, OptionNode, ROW_SIGIL, SpecsByPath, VariantChoice, VariantSet,
+    qualify, row_segment, variant_segment,
 };
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
@@ -40,21 +42,52 @@ pub(crate) enum FormMode {
     Populated,
 }
 
+/// SPIKE (S-b): what the whole walk carries, fixed at the root.
+///
+/// One value rather than another parameter on every function below: the mode
+/// and the spec are both decided once, by the caller, and threaded unchanged.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Walk<'s> {
+    pub(crate) mode: FormMode,
+    pub(crate) specs: &'s SpecsByPath,
+}
+
+/// SPIKE (S-b): the spec key that names the leaf at `path`.
+///
+/// Rows are keyed by identity (`venues.#3`), but a spec names every row at
+/// once (`venues[]`), so each `.#n` segment folds into a `[]` on the segment
+/// before it: `venues.#3.city` is `venues[].city`, and `answers.#0` is
+/// `answers[]`. Variant segments (`$Circle`) are spelled the same in both.
+pub(crate) fn spec_key(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for segment in path.split('.') {
+        if segment.starts_with(ROW_SIGIL) {
+            out.push_str("[]");
+        } else {
+            if !out.is_empty() {
+                out.push('.');
+            }
+            out.push_str(segment);
+        }
+    }
+    out
+}
+
 /// One node per declared field of `shape`. `peek` is the value being populated
 /// from, if any — it must describe the same shape.
 pub(crate) fn nodes_for(
     shape: &'static Shape,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
     match &shape.ty {
         Type::User(UserType::Struct(struct_type)) => {
-            fields_from_struct(struct_type, peek, mode, prefix, optional)
+            fields_from_struct(struct_type, peek, walk, prefix, optional)
         }
         Type::User(UserType::Enum(enum_type)) => {
-            fields_from_enum(enum_type, peek, mode, prefix, optional)
+            fields_from_enum(enum_type, peek, walk, prefix, optional)
         }
         _ => panic!("form_for only handles structs and enums, got {shape}"),
     }
@@ -63,7 +96,7 @@ pub(crate) fn nodes_for(
 fn fields_from_struct(
     struct_type: &StructType,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
@@ -83,7 +116,7 @@ fn fields_from_struct(
             node_for(
                 field,
                 field_peek,
-                mode,
+                walk,
                 &qualify(prefix, field.name),
                 optional,
             )
@@ -105,10 +138,10 @@ fn fields_from_struct(
 fn chosen_variant(
     enum_type: &EnumType,
     peek_enum: Option<PeekEnum<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     _prefix: &str,
 ) -> Option<&'static Variant> {
-    if mode == FormMode::Populated {
+    if walk.mode == FormMode::Populated {
         // `?` is the `None` case: populating from a value whose optional enum
         // is itself `None`, so there is no active variant to read.
         let variant_name = peek_enum?
@@ -137,7 +170,7 @@ fn chosen_variant(
 pub(crate) fn variant_nodes(
     variant: &'static Variant,
     peek_enum: Option<PeekEnum<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
@@ -153,7 +186,7 @@ pub(crate) fn variant_nodes(
             node_for(
                 field,
                 field_peek,
-                mode,
+                walk,
                 &qualify(prefix, field.name),
                 optional,
             )
@@ -167,7 +200,7 @@ pub(crate) fn variant_nodes(
 fn fields_from_enum(
     enum_type: &EnumType,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
@@ -175,9 +208,9 @@ fn fields_from_enum(
         p.into_enum()
             .expect("shape said enum, so the value peeks as one")
     });
-    let variant = chosen_variant(enum_type, peek_enum, mode, prefix)
+    let variant = chosen_variant(enum_type, peek_enum, walk, prefix)
         .expect("Variant should not be Unchosen here.");
-    variant_nodes(variant, peek_enum, mode, prefix, optional)
+    variant_nodes(variant, peek_enum, walk, prefix, optional)
 }
 
 /// The node for one declared *field* — the common case, where the name and
@@ -185,11 +218,11 @@ fn fields_from_enum(
 fn node_for(
     field: &'static FacetField,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
-    node_for_shape(field.shape(), field.name, peek, mode, prefix, optional)
+    node_for_shape(field.shape(), field.name, peek, walk, prefix, optional)
 }
 
 /// The node for a shape that is *named separately* from where it came from.
@@ -202,16 +235,19 @@ pub(crate) fn node_for_shape(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
     if let Ok(option_def) = shape.def.into_option() {
-        return option_node(option_def, name, peek, mode, prefix);
+        return option_node(option_def, name, peek, walk, prefix);
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_node(scalar, name, peek, optional, /* wrapper */ None).unwrap_or_else(
-            || panic!("scalar type {scalar:?} is not supported in Field (field {name})"),
-        );
+        return scalar_node(
+            scalar, name, peek, walk, prefix, optional, /* wrapper */ None,
+        )
+        .unwrap_or_else(|| {
+            panic!("scalar type {scalar:?} is not supported in Field (field {name})")
+        });
     } else if let Some(inner) = newtype_inner(shape) {
         // A newtype is ONE input, not a fieldset around a field called "0".
         // The peek descends with it: the field holds the inner scalar, so
@@ -222,7 +258,16 @@ pub(crate) fn node_for_shape(
         let inner_peek = peek
             .and_then(|p| p.into_struct().ok())
             .and_then(|s| s.field(0).ok());
-        return scalar_node(scalar, name, inner_peek, optional, Some(shape)).unwrap_or_else(|| {
+        return scalar_node(
+            scalar,
+            name,
+            inner_peek,
+            walk,
+            prefix,
+            optional,
+            Some(shape),
+        )
+        .unwrap_or_else(|| {
             panic!(
                 "newtype {shape} wraps {scalar:?}, which is not supported in Field (field {name})"
             )
@@ -231,13 +276,13 @@ pub(crate) fn node_for_shape(
         // SEAM: `list_node(_list_def.t, name, inner_peek, variants, prefix)`,
         // building one row per element via `node_for_shape` with the index as
         // the row's name. See VEC_PLAN.md.
-        return list_node(list_def.t, name, peek, mode, prefix, optional);
+        return list_node(list_def.t, name, peek, walk, prefix, optional);
     }
 
     match &shape.ty {
-        Type::User(UserType::Struct(_)) => struct_node(shape, name, peek, mode, prefix, optional),
+        Type::User(UserType::Struct(_)) => struct_node(shape, name, peek, walk, prefix, optional),
         Type::User(UserType::Enum(enum_type)) => {
-            enum_node(enum_type, name, peek, mode, prefix, optional)
+            enum_node(enum_type, name, peek, walk, prefix, optional)
         }
         other => panic!("field {name} has unsupported type {other:?}"),
     }
@@ -247,7 +292,7 @@ fn option_node(
     option_def: OptionDef,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
 ) -> Box<dyn Node> {
     let inner_peek = peek.and_then(|p| {
@@ -259,7 +304,7 @@ fn option_node(
         option_def.t,
         name,
         inner_peek,
-        mode,
+        walk,
         prefix,
         /* optional */ true,
     );
@@ -320,6 +365,10 @@ fn scalar_node(
     scalar: ScalarType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
+    walk: Walk<'_>,
+    // This leaf's own full path: `node_for_shape`'s `prefix` already has the
+    // name qualified on.
+    path: &str,
     optional: bool,
     // The newtype this scalar is wrapped in, if any. The field carries the
     // INNER type (`Field<String>` for a `Markdown`), because a concrete `T`
@@ -331,6 +380,23 @@ fn scalar_node(
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
     // has no way to change an identifier's case. So each arm names both, and the
     // pairing is the one thing to get right when adding a type.
+    // SPIKE (S-b): a spec that names this leaf builds it, in place of the
+    // default for its type. This is what lets `min: 3` reach a typed field, and
+    // `field: X` change the node's type, with nothing mutated afterwards.
+    if let Some(ctor) = walk
+        .specs
+        .get(&spec_key(path))
+        .and_then(|s| s.node.as_ref())
+    {
+        return Some(ctor.build(LeafArgs {
+            name,
+            path,
+            peek,
+            optional,
+            wrapper,
+        }));
+    }
+
     macro_rules! dispatch {
         ($( $variant:ident => $ty:ty ),* $(,)?) => {
             match scalar {
@@ -384,7 +450,7 @@ fn list_node(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
@@ -408,7 +474,7 @@ fn list_node(
                         shape,
                         &row,
                         Some(element),
-                        mode,
+                        walk,
                         &qualify(prefix, &row),
                         /* optional */ false,
                     )
@@ -436,7 +502,7 @@ fn struct_node(
     shape: &'static Shape,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
@@ -444,7 +510,7 @@ fn struct_node(
         name: name.to_string(),
         optional,
         label: None,
-        nodes: nodes_for(shape, peek, mode, prefix, /* optional */ false),
+        nodes: nodes_for(shape, peek, walk, prefix, /* optional */ false),
         errors: Vec::new(),
     })
 }
@@ -457,7 +523,7 @@ fn enum_node(
     enum_type: &'static EnumType,
     name: &str,
     peek: Option<Peek<'_, 'static>>,
-    mode: FormMode,
+    walk: Walk<'_>,
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
@@ -465,7 +531,7 @@ fn enum_node(
         p.into_enum()
             .expect("shape said enum, so the value peeks as one")
     });
-    let variant = chosen_variant(enum_type, peek_enum, mode, prefix);
+    let variant = chosen_variant(enum_type, peek_enum, walk, prefix);
     Box::new(VariantSet {
         field_attrs: FieldAttrs::default(),
         name: name.to_string(),
@@ -480,7 +546,19 @@ fn enum_node(
         },
         // No variant means no fields to build.
         nodes: variant
-            .map(|v| variant_nodes(v, peek_enum, mode, prefix, /* optional */ false))
+            // SPIKE (S-b): under the variant's own segment, as `set_variant` and
+            // `child_prefix` already have it. The walk never used leaf paths
+            // before, so building these at `shape.radius` instead of
+            // `shape.$Circle.radius` was harmless until now.
+            .map(|v| {
+                variant_nodes(
+                    v,
+                    peek_enum,
+                    walk,
+                    &qualify(prefix, &variant_segment(v.name)),
+                    /* optional */ false,
+                )
+            })
             .unwrap_or_default(),
         errors: Vec::new(),
     })

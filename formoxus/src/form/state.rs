@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
 use formoxus_spec::FixedKey;
 
-use crate::build::{FormMode, nodes_for};
+use crate::build::{FormMode, Walk, nodes_for};
 use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
@@ -220,7 +220,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
             return Err(no_such_path(path));
         };
-        self.nodes[idx].edit("", edit)?;
+        self.nodes[idx].edit("", edit, &self.spec.fields)?;
 
         // A structural edit can CREATE nodes that did not exist when the spec
         // was first applied: `AddRow` builds a fresh row from the shape alone,
@@ -363,22 +363,25 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         None => FormMode::Blank,
     };
 
+    // SPIKE (S-b): the walk reads the spec as it goes, so a leaf the spec builds
+    // is built right the first time. `apply_specs` still runs afterwards for
+    // everything the spike has not moved (labels, attrs, widgets, choices).
+    let nodes = nodes_for(
+        T::SHAPE,
+        value.map(Peek::new),
+        Walk {
+            mode,
+            specs: &spec.fields,
+        },
+        "",
+        /* optional */ false,
+    );
     let mut state = FormState {
         spec,
-        nodes: nodes_for(
-            T::SHAPE,
-            value.map(Peek::new),
-            mode,
-            "",
-            /* optional */ false,
-        ),
+        nodes,
         errors: Vec::new(),
         _type: PhantomData,
     };
-    // The walk builds the tree from the SHAPE alone; the spec's per-field
-    // overrides are laid on afterwards. Separating the two is what lets one spec
-    // serve both constructors, and what keeps the walk from taking a seventh
-    // parameter.
     state.apply_specs();
     state
 }

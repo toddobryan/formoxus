@@ -1,6 +1,6 @@
 //! An enum-typed node, locked to one variant chosen before the form existed.
 
-use crate::build::{FormMode, variant_nodes};
+use crate::build::{FormMode, Walk, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
@@ -66,7 +66,12 @@ impl VariantSet {
     /// Not me, but mine: an enum nested inside my chosen variant's fields. This is
     /// what the iterative disclosure loop used to arrange in advance — `outer.inner`
     /// simply becomes reachable once `outer` is answered.
-    fn forward_to_child(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn forward_to_child(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         let path = edit.path();
         let Some(child_prefix) = self.child_prefix(prefix) else {
             return Err(no_such_path(path)); // unchosen: no children to be inside
@@ -76,14 +81,19 @@ impl VariantSet {
         // error reach the caller intact.
         for m in &mut self.nodes {
             if owns(&qualify(&child_prefix, &m.name()), path) {
-                return m.edit(&child_prefix, edit);
+                return m.edit(&child_prefix, edit, specs);
             }
         }
         Err(no_such_path(path))
     }
 
     /// Swap to `variant`, or clear back to `Unchosen` with `None`.
-    fn set_variant(&mut self, my_path: &str, variant: Option<&str>) -> Result<(), FormAccessError> {
+    fn set_variant(
+        &mut self,
+        my_path: &str,
+        variant: Option<&str>,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         let Some(name) = variant else {
             // The `--none--` option. Always structurally legal; `validate()` decides
             // whether leaving it unchosen is an error.
@@ -97,7 +107,10 @@ impl VariantSet {
         self.nodes = variant_nodes(
             chosen,
             None,
-            FormMode::Blank,
+            Walk {
+                mode: FormMode::Blank,
+                specs,
+            },
             &qualify(my_path, &variant_segment(chosen.name)),
             self.optional,
         );
@@ -247,7 +260,12 @@ impl Node for VariantSet {
         }
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         // Two paths are in play, and they are NOT the same: this node sits at
         // `my_path`, where the `<select>` lives, but its children sit one segment
         // deeper under the chosen variant's descriptor. `forward_to_child` owns
@@ -256,10 +274,12 @@ impl Node for VariantSet {
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path != my_path {
-            return self.forward_to_child(prefix, edit);
+            return self.forward_to_child(prefix, edit, specs);
         }
         match edit {
-            Edit::ChooseVariant { variant, .. } => self.set_variant(&my_path, variant.as_deref()),
+            Edit::ChooseVariant { variant, .. } => {
+                self.set_variant(&my_path, variant.as_deref(), specs)
+            }
             _ => Err(FormAccessError(format!("{my_path} is an enum, not a list"))),
         }
     }

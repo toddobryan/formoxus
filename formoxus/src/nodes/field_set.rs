@@ -109,7 +109,12 @@ impl Node for FieldSet {
         self.nodes.iter().any(|fm| fm.is_present())
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         let nested = qualify(prefix, &self.name);
         let path = edit.path();
         ensure_owned(&nested, path)?;
@@ -119,7 +124,7 @@ impl Node for FieldSet {
         // real error ("no such variant") reach the caller intact.
         for m in &mut self.nodes {
             if owns(&qualify(&nested, &m.name()), path) {
-                return m.edit(&nested, edit);
+                return m.edit(&nested, edit, specs);
             }
         }
         Err(no_such_path(path))

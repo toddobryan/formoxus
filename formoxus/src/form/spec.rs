@@ -62,6 +62,8 @@ pub struct FieldSpec {
     /// select for a radio group must not change what the value parses as. See
     /// `.claude/memory/choice_fields_design.md`.
     pub choices: Option<Vec<Choice>>,
+    /// SPIKE (S-b): builds this leaf during the walk, instead of `dispatch!`.
+    pub node: Option<crate::field_node::NodeCtor>,
 }
 
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
@@ -120,6 +122,13 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         choices: impl IntoIterator<Item = impl Into<Choice>>,
     ) -> Self {
         self.field(path).choices = Some(choices.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// SPIKE (S-b): build the leaf at `path` (a `[]` row path is fine) with
+    /// `ctor` instead of the default for its type.
+    pub fn with_node(mut self, path: &str, ctor: crate::field_node::NodeCtor) -> Self {
+        self.field(path).node = Some(ctor);
         self
     }
 

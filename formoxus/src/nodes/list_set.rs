@@ -4,7 +4,7 @@
 //! a row be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `row_segment` for why renaming would be a data hazard.
 
-use crate::build::{FormMode, node_for_shape};
+use crate::build::{FormMode, Walk, node_for_shape};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
@@ -42,6 +42,7 @@ impl ListSet {
         my_path: &str,
         before: Option<usize>,
         optional: bool,
+        specs: &SpecsByPath,
     ) -> Result<(), FormAccessError> {
         let at = before.unwrap_or(self.rows.len());
         if at > self.rows.len() {
@@ -56,7 +57,10 @@ impl ListSet {
             self.shape,
             &name,
             None,
-            FormMode::Blank,
+            Walk {
+                mode: FormMode::Blank,
+                specs,
+            },
             &qualify(my_path, &name),
             optional,
         );
@@ -198,13 +202,20 @@ impl Node for ListSet {
         !self.rows.is_empty() && self.rows.iter().any(|fm| fm.is_present())
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         let path = edit.path();
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path == my_path {
             return match edit {
-                Edit::AddRow { before, .. } => self.add_row(&my_path, *before, self.optional),
+                Edit::AddRow { before, .. } => {
+                    self.add_row(&my_path, *before, self.optional, specs)
+                }
                 Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a list, not an enum")))
@@ -221,7 +232,7 @@ impl Node for ListSet {
         // same trap `FieldSet::choose_variant` fell into.
         for m in &mut self.rows {
             if owns(&qualify(&my_path, &m.name()), path) {
-                return m.edit(&my_path, edit);
+                return m.edit(&my_path, edit, specs);
             }
         }
 

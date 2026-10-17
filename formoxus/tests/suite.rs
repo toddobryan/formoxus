@@ -57,6 +57,8 @@ mod roundtrip;
 mod snapshot;
 #[path = "suite/specs.rs"]
 mod specs;
+#[path = "suite/spike_leaf_ctor.rs"]
+mod spike_leaf_ctor;
 #[path = "suite/submissions.rs"]
 mod submissions;
 #[path = "suite/vecs.rs"]

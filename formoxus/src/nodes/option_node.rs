@@ -84,11 +84,16 @@ impl Node for OptionNode {
         self.inner.is_present()
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         // `name()` delegates to the inner, so the inner derives the same
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
-        self.inner.edit(prefix, edit)
+        self.inner.edit(prefix, edit, specs)
     }
 
     fn clear_errors(&mut self) {

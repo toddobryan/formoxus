@@ -6,12 +6,81 @@ use formoxus_spec::{Attr, AttrValue, BuiltinWidget, FieldType, RenderedInputType
 use regress::Regex;
 
 use crate::error::{FormAccessError, ValidationMessage};
-use crate::field::{Field, FieldValue};
+use crate::field::{Field, FieldValue, populate};
 use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
+
+/// SPIKE (S-b): everything the walk knows about a leaf when it builds one.
+///
+/// What a [`NodeCtor`] is handed instead of a fixed `dispatch!` arm. `path` is
+/// the leaf's real path (`venues.#3.capacity`), for messages; the spec was
+/// already matched on its `[]` form.
+#[derive(Debug)]
+pub struct LeafArgs<'a> {
+    pub name: &'a str,
+    pub path: &'a str,
+    pub peek: Option<Peek<'a, 'static>>,
+    pub optional: bool,
+    pub wrapper: Option<&'static Shape>,
+}
+
+impl LeafArgs<'_> {
+    /// A `FieldNode` over `field` with everything else at its defaults, the
+    /// same node `dispatch!` would build. This is what `form!` would emit for
+    /// `field: …` or a field-level setting like `min: 3`.
+    pub fn node<F: Field>(self, field: F) -> FieldNode<F> {
+        FieldNode {
+            name: self.name.to_string(),
+            label: None,
+            optional: self.optional,
+            attrs: FieldAttrs::default(),
+            custom_widget: None,
+            choices: None,
+            wrapper: self.wrapper,
+            value: populate::<F::Value>(self.peek),
+            errors: Vec::new(),
+            field,
+        }
+    }
+}
+
+/// SPIKE (S-b): how a spec builds one leaf, replacing `dispatch!` for that path.
+///
+/// An `Arc<dyn Fn>`, not a `fn` pointer: a `fn` pointer could bake in
+/// compile-time settings (`min: 3`), but not anything built at runtime, like
+/// Step 8's `choices: |ctx| …`.
+#[derive(Clone)]
+pub struct NodeCtor(
+    #[allow(clippy::type_complexity)]
+    pub  std::sync::Arc<dyn for<'a> Fn(LeafArgs<'a>) -> Box<dyn Node> + Send + Sync>,
+);
+
+impl NodeCtor {
+    pub fn new(f: impl for<'a> Fn(LeafArgs<'a>) -> Box<dyn Node> + Send + Sync + 'static) -> Self {
+        Self(std::sync::Arc::new(f))
+    }
+
+    pub(crate) fn build(&self, args: LeafArgs<'_>) -> Box<dyn Node> {
+        (self.0)(args)
+    }
+}
+
+impl std::fmt::Debug for NodeCtor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("NodeCtor(..)")
+    }
+}
+
+/// Two constructors are equal only when they are the same `Arc`; a closure has
+/// no other identity worth comparing.
+impl PartialEq for NodeCtor {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldNode<F: Field> {
@@ -453,7 +522,12 @@ impl<F: Field> Node for FieldNode<F> {
         self.errors.clear();
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        _specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         // A leaf can only ever be the wrong answer, but which wrong answer is
         // worth saying: hitting a real field means the caller's path was right
         // and its *expectation* was wrong.

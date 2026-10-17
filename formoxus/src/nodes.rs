@@ -106,7 +106,12 @@ pub trait Node: Debug {
     /// each container performs is identical regardless of the edit; only the
     /// node that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError>;
 
     fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath);
 }
