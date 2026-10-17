@@ -222,6 +222,42 @@ Findings for the real implementation:
   to `NumberField<$ty>` (Todd, 2026-10-17), `String` to `StringField`, `Bool`
   to `BoolField`. That makes `dispatch!`'s numeric arms and `Number`'s impls
   one visible list. `ScalarField` is deleted.
+- [ ] **THE CONSTRAINT MOVE, designed 2026-10-17 (Todd + Claude).** The model
+  field's TYPE picks the field, through a trait rustc resolves:
+  ```rust
+  // formoxus::field_kind (doc-hidden)
+  pub trait DefaultField { type Field: Field + Default + Send + Sync; }
+  // String → StringField, bool → BoolField, each Number → NumberField<T>
+  impl<T: DefaultField> DefaultField for Option<T> { type Field = T::Field; }
+  pub fn field_for<M, P: DefaultField>(
+      _: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor
+  ```
+  and `form!` emits only the settings, never a type name:
+  `.with_node("age", field_for(|__m: &Person| &__m.age, |f| { f.min = Some(13); f.max = Some(120); }))`.
+  `[]` rows already project to the element (`field_kind::row`). A setting the
+  field lacks (`f.min_length` on a `NumberField`) does not compile; the
+  `applies` checks stay for their better message. `DefaultField` is the
+  compile-time half of Step 6's type → field registry. Decided with it:
+  - **A.** A bound has the field's declared type: `min: MIN_AGE` must be a
+    `u8` on a `u8` field. Retires `bound_in_range`/`bound_is_whole`/
+    `bound_is_exact` and their goldens; rustc's errors replace them.
+  - **B.** Attributes stop validating. `with_attrs` PANICS on a validated key
+    and points to `with_node`; suite tests using it convert.
+  - **C.** `choices:` moves in a SEPARATE, later change (typed choices break
+    today's string tables).
+  - **D.** No `DefaultField` for newtypes. A validated setting on a newtype
+    field does not compile; custom field types will declare their own
+    settings when that comes up.
+  - **E.** (Todd) Retire the runtime newtype unwrapping too (`wrapper` in
+    `build.rs`/`FieldNode`, `newtype_inner`): "now that we can declare both
+    field and widget, we shouldn't guess about exotic types. We should make
+    devs specify them." Needs `field:` (Step 6) first, so a `Markdown(String)`
+    field has a way to be declared; until then it stays.
+  Runtime side: `Number` gains a `T` → `Bound` conversion so `widget_attrs()`
+  emits `min`/`max`; `StringField` emits `minlength`/`maxlength`/`pattern`;
+  `BoolField` emits `required` for `required_true`; `render` merges
+  `widget_attrs()`; `check_attrs`, `check_bounds` and `FieldNode`'s
+  `range_message` are deleted.
 - [ ] **`form!` builds the field when a setting belongs to it** (sequencing,
   found 2026-10-17). Once `min` lives on `NumberField` rather than in
   `FieldAttrs`, `with_attrs` can no longer carry it: `form!` has to emit a
