@@ -30,11 +30,8 @@ where
     /// If a value displays as `""`. An empty input IS absence in formoxus, so
     /// a choice that submits `""` could never be told apart from no answer.
     /// The "no value" entry belongs to the widget, not to the list.
-    pub fn new(choices: impl IntoIterator<Item = (T, impl Into<String>)>) -> Self {
-        let choices: Vec<(T, String)> = choices
-            .into_iter()
-            .map(|(value, label)| (value, label.into()))
-            .collect();
+    pub fn new(choices: impl IntoIterator<Item = impl IntoChoice<T>>) -> Self {
+        let choices: Vec<(T, String)> = choices.into_iter().map(IntoChoice::into_choice).collect();
         for (value, label) in &choices {
             assert!(
                 !raw(value).is_empty(),
@@ -51,6 +48,48 @@ where
             .iter()
             .map(|(value, label)| Choice::new(raw(value), label.clone()))
             .collect()
+    }
+}
+
+/// A value that converts to a choice field's `T`: `T` itself, or a `&str`
+/// for a `String` field, so a `const` table of `(&str, &str)` pairs works.
+///
+/// A trait of its own rather than `Into<T>`, because `Into` is implemented
+/// for too much: with it, the bare `1` in `(1, "Small")` falls back to `i32`
+/// and has no conversion to a `u8` field. Here the only integer that converts
+/// to `u8` is `u8`, so rustc infers the literal as the field's type, and
+/// `(300, "Huge")` is its out-of-range error.
+pub trait ChoiceValue<T> {
+    fn into_value(self) -> T;
+}
+
+impl<T> ChoiceValue<T> for T {
+    fn into_value(self) -> T {
+        self
+    }
+}
+
+impl ChoiceValue<String> for &str {
+    fn into_value(self) -> String {
+        self.to_string()
+    }
+}
+
+/// One entry of a choice list, as written: a `(value, label)` pair, or a
+/// reference to one, since iterating a `const` slice yields references.
+pub trait IntoChoice<T> {
+    fn into_choice(self) -> (T, String);
+}
+
+impl<T, V: ChoiceValue<T>, L: Into<String>> IntoChoice<T> for (V, L) {
+    fn into_choice(self) -> (T, String) {
+        (self.0.into_value(), self.1.into())
+    }
+}
+
+impl<T, V: ChoiceValue<T> + Clone, L: Into<String> + Clone> IntoChoice<T> for &(V, L) {
+    fn into_choice(self) -> (T, String) {
+        (self.0.clone().into_value(), self.1.clone().into())
     }
 }
 
@@ -78,6 +117,10 @@ where
                 "not one of the available choices".to_string(),
             )]
         }
+    }
+
+    fn choices(&self) -> Option<Vec<Choice>> {
+        Some(self.as_choices())
     }
 }
 
@@ -127,6 +170,17 @@ mod tests {
         for (choice, (value, _)) in answers.as_choices().iter().zip(&answers.choices) {
             expect_that!(parse_scalar::<bool>(&choice.value), ok(eq(value)));
         }
+    }
+
+    /// The bare integers in `sizes()` are inferred as the field's `u8`; a
+    /// `const` table of `&str` pairs works for a `String` field, iterated by
+    /// reference as a slice is.
+    #[gtest]
+    fn a_const_str_table_makes_a_string_field() {
+        const STATES: &[(&str, &str)] = &[("AL", "Alabama"), ("AK", "Alaska")];
+        let states = ChoiceField::<String>::new(STATES);
+        expect_that!(Field::check(&states, &"AK".to_string()), is_empty());
+        expect_that!(Field::check(&states, &"TX".to_string()), len(eq(1)));
     }
 
     #[gtest]

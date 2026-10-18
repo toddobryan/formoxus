@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use facet::{Facet, Partial, Peek};
 
-use crate::{ValidationMessage, field_attrs::FieldAttrs};
+use crate::{ValidationMessage, field_attrs::FieldAttrs, widgets::Choice};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -45,6 +45,10 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         _ctx: &Self::Context,
     ) -> impl Future<Output = Vec<ValidationMessage>> + Send {
         async { Vec::new() }
+    }
+
+    fn choices(&self) -> Option<Vec<Choice>> {
+        None
     }
 }
 

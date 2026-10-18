@@ -116,7 +116,7 @@ fn author_attributes_reach_the_checkbox() {
 fn author_attributes_reach_the_select() {
     let html = render!(form! {
         Person {
-            name => { widget: select { choices: STATES }, autocomplete: "address-level1" },
+            name => { widget: select, choices: STATES, autocomplete: "address-level1" },
         }
     });
     expect_that!(
@@ -131,7 +131,7 @@ fn author_attributes_reach_the_select() {
 #[gtest]
 fn on_a_radio_group_author_attributes_land_on_the_fieldset() {
     let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, "data-group": "states" } }
+        Person { name => { widget: radio_group, choices: STATES, "data-group": "states" } }
     });
     expect_that!(
         tag(&html, "fieldset"),
@@ -265,7 +265,7 @@ fn class_and_class_plus_on_the_checkbox() {
 #[gtest]
 fn class_and_class_plus_on_the_select() {
     let replaced = render!(form! {
-        Person { name => { widget: select { choices: STATES }, class: [wide] } }
+        Person { name => { widget: select, choices: STATES, class: [wide] } }
     });
     expect_that!(
         classes_of(tag(&replaced, "select")),
@@ -273,7 +273,7 @@ fn class_and_class_plus_on_the_select() {
     );
 
     let appended = render!(form! {
-        Person { name => { widget: select { choices: STATES }, class_plus: [wide] } }
+        Person { name => { widget: select, choices: STATES, class_plus: [wide] } }
     });
     expect_that!(
         classes_of(tag(&appended, "select")),
@@ -316,7 +316,7 @@ fn a_quoted_attribute_on_an_enum_field_reaches_the_variant_select() {
 #[gtest]
 fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
     let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, class: [wide] } }
+        Person { name => { widget: radio_group, choices: STATES, class: [wide] } }
     });
     expect_that!(html, not(contains_substring("wide")));
 }
@@ -374,7 +374,7 @@ fn style_plus_renders_like_style_while_formoxus_has_none() {
 #[gtest]
 fn on_a_radio_group_style_lands_on_the_fieldset() {
     let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, style: { gap: 4px } } }
+        Person { name => { widget: radio_group, choices: STATES, style: { gap: 4px } } }
     });
     expect_that!(
         tag(&html, "fieldset"),

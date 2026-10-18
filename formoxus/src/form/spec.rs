@@ -14,7 +14,7 @@ use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
 use crate::label_case::LabelCase;
-use crate::widgets::{Choice, WidgetType};
+use crate::widgets::WidgetType;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 
@@ -51,18 +51,6 @@ pub struct FieldSpec {
     pub label: Option<String>,
     pub attrs: FieldAttrs,
     pub custom_widget: Option<WidgetType>,
-    /// What a `<select>` (or another chooser) offers.
-    ///
-    /// **On the field, not on [`WidgetType`].** A widget type is the dispatch
-    /// discriminant and is compared for equality all over the tree; two selects
-    /// offering different lists are still the same *kind* of widget. Keeping the
-    /// list here also means `ScalarWidget`'s match arms do not have to bind or
-    /// ignore a payload that dispatch never reads.
-    ///
-    /// **Not in the field's constraints either** — choices are presentation, so swapping a
-    /// select for a radio group must not change what the value parses as. See
-    /// `.claude/memory/choice_fields_design.md`.
-    pub choices: Option<Vec<Choice>>,
     /// Builds this leaf during the shape walk, instead of the default field
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
@@ -100,30 +88,6 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_custom_widget(mut self, path: &str, c: WidgetType) -> Self {
         self.field(path).custom_widget = Some(c);
-        self
-    }
-
-    /// Offer `path` a fixed set of choices.
-    ///
-    /// Takes anything iterable of anything convertible, so a `const` table of
-    /// pairs is as good as a built `Vec`:
-    ///
-    /// ```ignore
-    /// const STATES: &[(&str, &str)] = &[("AL", "Alabama"), ("AK", "Alaska")];
-    /// spec.with_choices("state", STATES)
-    /// ```
-    ///
-    /// A choice's `value` is written into the value map verbatim, so it has to
-    /// be exactly what this field's type parses from — and it may never be
-    /// `""`, which IS absence. The "no value" entry is `Select`'s own, and
-    /// offering a second one would make an answered field indistinguishable
-    /// from an unanswered one.
-    pub fn with_choices(
-        mut self,
-        path: &str,
-        choices: impl IntoIterator<Item = impl Into<Choice>>,
-    ) -> Self {
-        self.field(path).choices = Some(choices.into_iter().map(Into::into).collect());
         self
     }
 

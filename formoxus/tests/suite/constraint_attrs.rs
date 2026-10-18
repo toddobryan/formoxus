@@ -158,37 +158,10 @@ fn a_textarea_gets_pattern_although_html_has_no_such_attribute() {
     expect_that!(html, contains_substring(r#"pattern="\w+""#));
 }
 
-/// A chooser is not an `<input>` at all, and `Select`/`RadioGroup` both accept
-/// a `Text` value kind — so a constrained `String` carries its attributes onto
-/// a `<select>` or a `<fieldset>`. Which is why issue #4 cannot be fixed by
-/// gating on `InputType` alone.
-#[gtest]
-fn a_chooser_carries_them_onto_a_select_or_fieldset() {
-    const STATES: &[(&str, &str)] = &[("AL", "Alabama")];
-
-    #[component]
-    fn AsSelect() -> Element {
-        let form = use_form(|| {
-            empty_form(form! {
-                Zip { code => { max_length: 10, widget: select { choices: STATES } } }
-            })
-        });
-        form.render(using_fns! {})
-    }
-    #[component]
-    fn AsRadios() -> Element {
-        let form = use_form(|| {
-            empty_form(form! {
-                Zip { code => { max_length: 10, widget: radio_group { choices: STATES } } }
-            })
-        });
-        form.render(using_fns! {})
-    }
-    expect_that!(render(AsSelect), contains_substring("<select"));
-    expect_that!(render(AsSelect), contains_substring("maxlength=10"));
-    expect_that!(render(AsRadios), contains_substring("<fieldset"));
-    expect_that!(render(AsRadios), contains_substring("maxlength=10"));
-}
+// A constraint beside `choices` used to be tested here, rendering `maxlength`
+// onto a `<select>` and a `<fieldset>`. `form!` now refuses the pair (the
+// choices fix the values, so the dev makes each one meet the constraint), so
+// the case lives in `tests/ui/form_choices_with_a_constraint.rs`.
 
 // ── The map's invariant, end to end ──────────────────────────────────────
 

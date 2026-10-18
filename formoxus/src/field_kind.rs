@@ -24,8 +24,9 @@
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
 use formoxus_spec::{Attr, BuiltinWidget, Element, FieldControl, FieldType};
 
+use crate::field::Field;
 use crate::field_node::NodeCtor;
-use crate::fields::DefaultField;
+use crate::fields::{ChoiceField, DefaultField, IntoChoice};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -45,6 +46,28 @@ pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::F
     set(&mut field);
     NodeCtor::new(move |args| Box::new(args.node(field.clone())))
 }
+
+/// The leaf constructor for a field `form!` gives `choices:`: a
+/// [`ChoiceField`] over the model field's own type, so `(1, "Small")` is a
+/// `u8` on a `u8` field and an `Option<u8>` field chooses among `u8`s.
+///
+/// Not a setting on the default field, as `min` is, because choices change
+/// WHICH field it is: a `String` with choices is a `ChoiceField<String>`, not
+/// a `StringField`. `form!` refuses `choices` beside a validated key, so the
+/// two constructors never meet on one field.
+pub fn choice_field_for<M, P, C>(_: fn(&M) -> &P, choices: impl IntoIterator<Item = C>) -> NodeCtor
+where
+    P: DefaultField,
+    C: IntoChoice<ValueOf<P>>,
+    ValueOf<P>: Send + Sync,
+{
+    let field = ChoiceField::<ValueOf<P>>::new(choices);
+    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+}
+
+/// The value type of a model field's default field: `u8` for a `u8` or an
+/// `Option<u8>`. What a choice field over that model field chooses among.
+type ValueOf<P> = <<P as DefaultField>::Field as Field>::Value;
 
 /// One row of a list, for a `[]` path segment in a projection.
 ///

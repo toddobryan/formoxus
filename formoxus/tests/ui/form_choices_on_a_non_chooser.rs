@@ -14,7 +14,7 @@ const STATES: &[(&str, &str)] = &[("AL", "Alabama")];
 fn main() {
     let _ = empty_form::<Address>(form! {
         Address {
-            state => { widget: text { choices: STATES } },
+            state => { widget: text, choices: STATES },
         }
     });
 }

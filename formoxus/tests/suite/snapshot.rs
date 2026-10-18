@@ -106,8 +106,8 @@ fn spec() -> FormSpec<Everything> {
             week => { widget: week },
             agreed => { required_true },
             bio => { widget: textarea },
-            state => { widget: select { choices: STATES } },
-            size => { widget: radio_group { choices: SIZES } },
+            state => { widget: select, choices: STATES },
+            size => { widget: radio_group, choices: SIZES },
             flag => { widget: radio_group },
             yes => { widget: select },
             buttons: {

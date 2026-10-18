@@ -499,14 +499,6 @@ impl FieldSpec {
             let c = c.path();
             quote! { .with_custom_widget(#key, #c) }
         });
-        let choices = self
-            .body
-            .widget
-            .as_ref()
-            .and_then(|w| w.args.choices.as_ref())
-            .map(|c| {
-                quote! { .with_choices(#key, #c) }
-            });
         let place = project(&self.path.segments);
         // Spanned onto the field's path, so a field with no default
         // field (a struct, an enum, a newtype) is reported at
@@ -516,17 +508,24 @@ impl FieldSpec {
             .segments
             .last()
             .map_or_else(Span::call_site, |s| s.ident.span());
-        let settings = self.body.settings_tokens(span).map(|set| {
-            let ctor = quote_spanned! { span=>
-                ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set)
-            };
-            quote! { .with_node(#key, #ctor) }
-        });
+        // At most one constructor: `FieldBody::parse` refuses `choices` beside a
+        // validated key, so a field never needs both.
+        let node = match &self.body.choices {
+            Some((_, choices)) => Some(quote_spanned! { span=>
+                ::formoxus::field_kind::choice_field_for(|__m: &#model| &#place, #choices)
+            }),
+            None => self.body.settings_tokens(span).map(|set| {
+                quote_spanned! { span=>
+                    ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set)
+                }
+            }),
+        }
+        .map(|ctor| quote! { .with_node(#key, #ctor) });
         let attrs = self
             .body
             .attrs_tokens()
             .map(|c| quote! { .with_attrs(#key, #c) });
-        quote! { #label #widget #choices #settings #attrs }
+        quote! { #label #widget #node #attrs }
     }
 }
 

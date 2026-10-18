@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_spec::{Attr, AttrType, Element, FieldControl, FieldType, Owner};
+use formoxus_spec::{Attr, AttrType, BuiltinWidget, Element, FieldControl, FieldType, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -14,6 +14,8 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
 };
+
+use crate::form::widget::WidgetKind;
 
 use super::{SpecPath, WidgetRef, suggest::edit_distance};
 
@@ -27,6 +29,7 @@ pub(crate) struct FieldSpec {
 pub(crate) struct FieldBody {
     pub(crate) widget: Option<WidgetRef>,
     pub(crate) label: Option<Expr>,
+    pub(crate) choices: Option<(Ident, Expr)>,
     pub(crate) attrs: ParsedAttrs,
 }
 
@@ -187,6 +190,27 @@ pub(crate) enum AttrSource {
     List(Vec<LitStr>),
 }
 
+/// Whether formoxus validates this attribute, which makes it a setting of the
+/// field rather than an attribute to render.
+fn is_validated(attr_id: &AttrId) -> bool {
+    matches!(attr_id, AttrId::Std(attr) if attr.validated())
+}
+
+/// Lints the `min <= max` check allows, whatever type the bounds are.
+///
+/// It compares both as `f64`, so that one check serves every number type, and
+/// it carries the author's span, so a lint on it lands in THEIR crate: an
+/// `f64` bound `as f64` is a trivial cast, a literal `as f64` an unnecessary
+/// one, a `u32` a lossless one, and a `u64` a cast that may lose precision.
+fn cast_lints() -> TokenStream2 {
+    quote! {
+        trivial_numeric_casts,
+        clippy::unnecessary_cast,
+        clippy::cast_precision_loss,
+        clippy::cast_lossless
+    }
+}
+
 impl FieldBody {
     /// The `FieldAttrs` this body declares, or `None` when it declares
     /// none — in which case no `.with_attrs` call is emitted at all and a
@@ -210,15 +234,7 @@ impl FieldBody {
         }
         Some(quote! { ::formoxus::field_attrs::FieldAttrs::from([ #(#entries), * ]) })
     }
-}
 
-/// Whether formoxus validates this attribute, which makes it a setting of the
-/// field rather than an attribute to render.
-fn is_validated(attr_id: &AttrId) -> bool {
-    matches!(attr_id, AttrId::Std(attr) if attr.validated())
-}
-
-impl FieldBody {
     /// The field's settings, as the closure `field_kind::field_for` runs on
     /// the field the model's type picks: `|__f| { __f.min = Some(13); }`.
     /// `None` when the body has no validated attribute, so no `with_node` is
@@ -238,32 +254,13 @@ impl FieldBody {
             .collect();
         (!sets.is_empty()).then(|| quote_spanned! { span=> |__f| { #(#sets)* } })
     }
-}
 
-/// Lints the bound checks allow, whatever type the author wrote the bound in.
-///
-/// They matter because each check carries the author's span, so a lint on it
-/// lands in THEIR crate: `max: 100` as f64 is an `unnecessary_cast` of a
-/// literal, an `f64` bound `as f64` a trivial cast, a `u64` `as i128` a
-/// lossless one, a float `as i128` a truncation.
-fn cast_lints() -> TokenStream2 {
-    quote! {
-        trivial_numeric_casts,
-        clippy::unnecessary_cast,
-        clippy::cast_precision_loss,
-        clippy::cast_lossless,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss
-    }
-}
-
-impl FieldBody {
     /// Free `const _` assertions that the field at `place` can take what this
-    /// body declares: one per table attribute (two for `required_true`), the
-    /// bound checks, `min <= max`
-    /// and `min_length <= max_length`, and whether the widget can render it
-    /// (see `WidgetRef::checks`).
+    /// body declares: one per table attribute (two for `required_true`),
+    /// `min <= max` and `min_length <= max_length`, and whether the widget can
+    /// render it (see `WidgetRef::checks`). Whether a bound fits the field's
+    /// type is rustc's question, since `settings_tokens` assigns it to the
+    /// field's own setting.
     ///
     /// Free const items rather than anything in `__paths_exist`, because only
     /// a free const item is evaluated by `cargo check` or when nothing calls
@@ -354,7 +351,7 @@ impl FieldBody {
             });
         }
         if let Some(widget) = &self.widget {
-            checks.push(widget.checks(&shape));
+            checks.push(widget.checks(&shape, self.choices.is_some()));
         }
         quote! { #(#checks)* }
     }
@@ -377,9 +374,26 @@ impl Parse for FieldBody {
 
         // Asks "were there any keys?" directly, which cannot go stale when a
         // key is added.
-        if fb.widget.is_none() && fb.label.is_none() && fb.attrs.0.is_empty() {
+        if fb.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
+        if fb.choices.is_some()
+            && let Some((AttrId::Std(attr), parsed)) =
+                fb.attrs.0.iter().find(|(attr_id, _)| is_validated(attr_id))
+        {
+            return Err(syn::Error::new(
+                parsed.key_span,
+                format!(
+                    "`choices` cannot be combined with other constraints (like `{}`), \
+                    so you must make sure each choice meets these constraints yourself",
+                    attr.variant_name().to_snake_case()
+                ),
+            ));
+        }
+        if let (Some((key, _)), Some(widget)) = (&fb.choices, &fb.widget) {
+            reject_choices_unless_chooser(key, &widget.kind)?;
+        }
+
         Ok(fb)
     }
 }
@@ -402,7 +416,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" => {
+            "widget" | "label" | "choices" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -411,11 +425,17 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.widget = Some(body.parse()?);
-                } else {
+                } else if name == "label" {
                     if self.label.is_some() {
                         return Err(given_twice());
                     }
                     self.label = Some(body.parse()?);
+                } else {
+                    assert!(name == "choices", "did you add another name to the match?");
+                    if self.choices.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.choices = Some((key.clone(), body.parse()?));
                 }
                 Ok(())
             }
@@ -425,6 +445,13 @@ impl FieldBody {
                 self.attrs.insert(AttrId::Std(attr), key.span(), source)
             }
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.widget.is_none()
+            && self.label.is_none()
+            && self.attrs.0.is_empty()
+            && self.choices.is_none()
     }
 }
 
@@ -469,12 +496,12 @@ fn quoted_key(key: &LitStr) -> Result<String> {
 /// pattern, nothing at all for a flag, or a bracketed list of strings.
 ///
 /// **Why `Expr` for most and `LitStr` for a pattern.** A bound may be any
-/// expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), and holding it as an
-/// `Expr` is also what lets the literal's own type pick the `Bound` variant
-/// once it reaches `.into()`. A pattern cannot: the macro has to hand the
-/// string to `regress` to check it compiles, and only a literal is readable at
-/// macro time. It also lands in `AttrValue::Regex`, which holds a
-/// `&'static str`.
+/// expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), passed through as
+/// written: `settings_tokens` assigns it to the field's setting, so the
+/// field's own type types it. A pattern cannot be an expression: the macro
+/// has to hand the string to `regress` to check it compiles, and only a
+/// literal is readable at macro time. It also lands in
+/// `StringField::pattern`, which holds a `&'static str`.
 fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSource> {
     if attr.attr_type() == AttrType::Flag {
         if body.peek(Token![:]) {
@@ -829,15 +856,19 @@ fn owned(attr: Attr) -> String {
 /// Every identifier key a field body accepts: `widget`, `label`, then each
 /// table attribute an author may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
-    ["widget".to_string(), "label".to_string()]
-        .into_iter()
-        .chain(
-            Attr::ALL
-                .iter()
-                .filter(|attr| attr.owner() != Owner::Formoxus)
-                .map(|attr| attr.variant_name().to_snake_case()),
-        )
-        .collect()
+    [
+        "widget".to_string(),
+        "label".to_string(),
+        "choices".to_string(),
+    ]
+    .into_iter()
+    .chain(
+        Attr::ALL
+            .iter()
+            .filter(|attr| attr.owner() != Owner::Formoxus)
+            .map(|attr| attr.variant_name().to_snake_case()),
+    )
+    .collect()
 }
 
 /// The message for an identifier key that is not one: the HTML spelling of a
@@ -923,6 +954,30 @@ fn conflicting(attr: Attr) -> Option<Attr> {
     }
 }
 
+fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<()> {
+    match kind {
+        WidgetKind::Named { widget, .. } if widget.takes_choices() => Ok(()),
+        WidgetKind::Named { name, .. } => Err(syn::Error::new_spanned(
+            key,
+            format!(
+                "`{name}` takes no `choices` — they apply to {}",
+                BuiltinWidget::ALL
+                    .iter()
+                    .filter(|w| w.takes_choices() && w.is_rendered())
+                    .map(|w| format!("`{}`", w.form_name()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )),
+        // A custom widget receives `(values, props)` and nothing else, so a list
+        // handed to it here would go nowhere. Its own choices are its business.
+        WidgetKind::Custom(_) => Err(syn::Error::new_spanned(
+            key,
+            "a custom widget supplies its own choices",
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AttrSource, legal_keys, parse_value};
@@ -999,6 +1054,7 @@ mod tests {
             let entry = match key.as_str() {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
+                "choices" => quote!(#ident: STATES),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()

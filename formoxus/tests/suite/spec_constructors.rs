@@ -12,6 +12,7 @@
 use facet::Facet;
 use formoxus::error::ValidationMessage;
 use formoxus::field::{Field, Widget};
+use formoxus::field_kind::choice_field_for;
 use formoxus::field_node::NodeCtor;
 use formoxus::nodes::Edit;
 use formoxus::prelude::*;
@@ -213,5 +214,124 @@ fn a_constructor_for_one_variant_leaves_the_other_alone() {
             "shapes.#0.$Square.side",
         ),
         is_empty()
+    );
+}
+
+// ── Choices: `choice_field_for` ──────────────────────────────────────────
+//
+// What `form!` emits for `choices:`. The model field's type picks what the
+// field chooses among, and the field's own `check` enforces the list.
+
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct Order {
+    size: u8,
+    gift_wrap: Option<u8>,
+    state: String,
+}
+
+const STATES: &[(&str, &str)] = &[("AL", "Alabama"), ("AK", "Alaska")];
+
+fn order() -> Order {
+    Order {
+        size: 1,
+        gift_wrap: None,
+        state: "AL".into(),
+    }
+}
+
+fn order_values<'a>(size: &'a str, state: &'a str) -> [(&'a str, &'a str); 3] {
+    [("size", size), ("gift_wrap", ""), ("state", state)]
+}
+
+/// `(1, "Small")` is a `u8` here, inferred from the model field.
+#[gtest]
+fn choices_over_a_number_field_are_that_number() {
+    let spec = || {
+        FormSpec::default().with_node(
+            "size",
+            choice_field_for(|m: &Order| &m.size, [(1, "Small"), (2, "Large")]),
+        )
+    };
+    expect_that!(
+        errors_at(form_for(&order(), spec()), &order_values("2", "AL"), "size"),
+        is_empty()
+    );
+    expect_that!(
+        errors_at(form_for(&order(), spec()), &order_values("3", "AL"), "size"),
+        elements_are![eq("not one of the available choices")]
+    );
+}
+
+/// An `Option<u8>` chooses among `u8`s; leaving it empty is still allowed.
+#[gtest]
+fn an_optional_field_chooses_among_what_it_holds() {
+    let spec = || {
+        FormSpec::default().with_node(
+            "gift_wrap",
+            choice_field_for(|m: &Order| &m.gift_wrap, [(1, "Paper"), (2, "Box")]),
+        )
+    };
+    let with_wrap = [("size", "1"), ("gift_wrap", "9"), ("state", "AL")];
+    expect_that!(
+        errors_at(form_for(&order(), spec()), &with_wrap, "gift_wrap"),
+        elements_are![eq("not one of the available choices")]
+    );
+    expect_that!(
+        errors_at(
+            form_for(&order(), spec()),
+            &order_values("1", "AL"),
+            "gift_wrap"
+        ),
+        is_empty()
+    );
+}
+
+/// A `const` table of `&str` pairs, the way choices are usually written,
+/// works for a `String` field.
+#[gtest]
+fn a_const_str_table_serves_a_string_field() {
+    let spec =
+        || FormSpec::default().with_node("state", choice_field_for(|m: &Order| &m.state, STATES));
+    expect_that!(
+        errors_at(
+            form_for(&order(), spec()),
+            &order_values("1", "AK"),
+            "state"
+        ),
+        is_empty()
+    );
+    expect_that!(
+        errors_at(
+            form_for(&order(), spec()),
+            &order_values("1", "TX"),
+            "state"
+        ),
+        elements_are![eq("not one of the available choices")]
+    );
+}
+
+/// Through a `[]` row, as `form!` projects one.
+#[gtest]
+fn choices_reach_a_row() {
+    let trip = Trip {
+        venues: vec![Venue {
+            city: "Paris".into(),
+            capacity: 5,
+        }],
+    };
+    let spec = FormSpec::default().with_node(
+        "venues[].city",
+        choice_field_for(
+            |m: &Trip| &formoxus::field_kind::row(m.venues.iter()).city,
+            [("Paris", "Paris"), ("Rome", "Rome")],
+        ),
+    );
+    expect_that!(
+        errors_at(
+            form_for(&trip, spec),
+            &[("venues.#0.city", "Oslo"), ("venues.#0.capacity", "5")],
+            "venues.#0.city",
+        ),
+        elements_are![eq("not one of the available choices")]
     );
 }

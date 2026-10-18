@@ -207,7 +207,7 @@ Findings for the real implementation:
   (`is_unticked_checkbox`, `raw_value_to_validate`, the `"false"` in
   `write_value_into`, and `required: true` meaning "must be ticked") all
   collapse into whichever is chosen.
-- [x] **`ChoiceField<T>`** (2026-10-17; `new` refuses a value that displays as `""`, `as_choices()` derives the widget's strings; NOT wired yet), typed: owns `choices`; membership ("not one of the
+- [x] **`ChoiceField<T>`** (built 2026-10-17, WIRED 2026-10-18: `choices:` is a FIELD-level key, `choice_field_for` builds it, `ChoiceValue` lets `(true, "Yes")` and `&str` tables type; widget args deleted; choices exclude validated keys), typed: owns `choices`; membership ("not one of the
   available choices") moves into its `check`. Closes the gap in
   `.claude/memory/enum_as_a_value_choice.md` for a unit enum once Step 6 can
   name it.
@@ -217,7 +217,7 @@ Findings for the real implementation:
   NON-validated author attributes (`placeholder`, `autocomplete`, `class`, a
   quoted key) are presentation, not field config; they go on the widget
   (Step 5), or stay a `FieldAttrs` on the node until then?
-- [ ] **`choices` leaves `FieldNode`** and `FieldSpec`.
+- [x] **`choices` leaves `FieldNode`** and `FieldSpec` (2026-10-18; the widget reads `Field::choices()` until Step 5, and a choice field defaults to a select).
 - [x] **`dispatch!`** maps each `ScalarType` to its field (DONE 2026-10-17; every field built with its settings off, so `check_attrs` still does the checking): every numeric one
   to `NumberField<$ty>` (Todd, 2026-10-17), `String` to `StringField`, `Bool`
   to `BoolField`. That makes `dispatch!`'s numeric arms and `Number`'s impls
@@ -282,9 +282,13 @@ Findings for the real implementation:
 - [ ] **Associated consts for the compile-time checks** (decided 2026-10-17:
   emitted `const _`, not spec tables): at least `const KIND: FieldType`.
   `Field` must never be used as `dyn` for this to work; `FieldNode<F>` is
-  generic and `Node` is the `dyn` one.
-- [ ] Tests (Claude): each field's `parse`/`check` inline; the suite's
-  constraint tests should pass unchanged, which is the point.
+  generic and `Node` is the `dyn` one. **Deferred to Step 6 (2026-10-18):**
+  `DefaultField` + `field_for` already make rustc check a setting against the
+  model's type, which was most of the point; a `KIND` const earns its keep
+  when `field:` names a dev's own field.
+- [x] Tests (Claude): each field's `parse`/`check` inline; the suite's
+  constraint tests should pass unchanged, which is the point. (Done 2026-10-18;
+  they did.)
 
 ## Step 5: the `Widget` trait and one `WidgetProps`
 

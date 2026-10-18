@@ -311,7 +311,7 @@ fn SelectForm() -> Element {
         "A required value choice as a select. The value is the code, the display is the name.",
         form! {
             Pick {
-                state => { widget: select { choices: STATES } },
+                state => { choices: STATES },
                 buttons: { save: { type: submit } }
             }
         },
@@ -328,7 +328,7 @@ fn RadioGroupForm() -> Element {
         "The same choices as radios. Nothing is pre-selected.",
         form! {
             Pick {
-                state => { widget: radio_group { choices: STATES } },
+                state => { widget: radio_group, choices: STATES },
                 buttons: { save: { type: submit } }
             }
         },

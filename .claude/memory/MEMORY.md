@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-17: `widget`; read `formoxus/FIELDS_PLAN.md` first; Steps 1–3 DONE (S-b integrated); Step 4 (the four fields) next
+- [**START HERE: next session**](next_session.md) — 2026-10-18: `widget`; read `formoxus/FIELDS_PLAN.md` first; Step 4 constraint move DONE; wiring `ChoiceField` next
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -37,7 +37,7 @@
 
 ## Widgets, choices, attributes
 - [Widget table & what a Choice is](widget_table_and_choice.md) — unrenderable (kind, widget) pairs are compile errors; shape choice vs value choice
-- [Choice fields design](choice_fields_design.md) — tier 1 (`select { choices: EXPR }`) BUILT; tiers 2–3 (dynamic) open; `raw_value` may never be `""`
+- [Choice fields design](choice_fields_design.md) — tier 1 now FIELD-level `choices:` → typed `ChoiceField<T>` (2026-10-18); tiers 2–3 open (runtime = Step 8 `Context`); `""` never a value
 - [Chooser ideas](chooser_ideas.md) — QUEUED: select-vs-radio by choice count, per-choice hint text
 - [Enum as a value choice](enum_as_a_value_choice.md) — GAP: a unit enum can't take a widget (no radio group over an enum)
 - [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; no `step`

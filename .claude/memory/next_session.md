@@ -5,6 +5,13 @@ metadata:
   type: project
 ---
 
+**2026-10-18: STEP 4's CONSTRAINT MOVE DONE (`a40278b`, 3 ahead of origin, not
+pushed).** Four fields in `fields/`; `form!` emits `with_node(…, field_for(proj,
+|__f| { … }))`; `DefaultField` maps model type → field; `check_attrs` gone;
+`with_attrs` refuses validated keys. Todd is leaning on me more (tired, NOT
+stopping): I now write library code he hands me. **Next in Step 4: wire
+`ChoiceField` (typed `choices:`, separate change, decision C).**
+
 **2026-10-17, END: STEP 3 DONE, S-b INTEGRATED.** The walk applies the
 whole spec as it builds; `apply_specs`/`distribute_specs` deleted; PR #12
 merged, `spike/s-b` and its worktree deleted. **Next: Step 4** (the four

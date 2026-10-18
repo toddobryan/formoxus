@@ -11,7 +11,7 @@ use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
-use crate::widgets::{Choice, FieldProps, ScalarWidget, WidgetType};
+use crate::widgets::{FieldProps, ScalarWidget, WidgetType};
 
 /// Everything the walk knows about a leaf when it builds one.
 ///
@@ -46,7 +46,6 @@ impl LeafArgs<'_> {
             optional: self.optional,
             attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
             custom_widget: spec.and_then(|s| s.custom_widget),
-            choices: spec.and_then(|s| s.choices.clone()),
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
             errors: Vec::new(),
@@ -99,10 +98,6 @@ pub struct FieldNode<F: Field> {
     pub attrs: FieldAttrs,
     /// Becomes `widget: Box<dyn Widget>` in Step 5.
     pub custom_widget: Option<WidgetType>,
-    /// What a chooser offers, if the spec named a list. `None` for a field no
-    /// spec gave choices to — which is every field rendered as an `<input>`.
-    /// Moves into `ChoiceField` in Step 4.
-    pub choices: Option<Vec<Choice>>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `String` field standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
@@ -166,7 +161,11 @@ impl<F: Field> FieldNode<F> {
     /// `Option<bool>` has three, which is the whole reason that flag has to
     /// travel from the walk.
     fn default_widget(&self) -> WidgetType {
-        WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
+        if self.field.choices().is_some() {
+            WidgetType::Builtin(BuiltinWidget::Select)
+        } else {
+            WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
+        }
     }
 
     /// The widget to render: an override if one was set, else the derived default.
@@ -280,7 +279,7 @@ impl<F: Field> Node for FieldNode<F> {
                 field_type: self.field_type(),
                 field_attrs: field_attrs,
                 widget: widget,
-                choices: self.choices.clone(),
+                choices: self.field.choices(),
                 values: ctx.values,
                 props: FieldProps {
                     id: ctx.id(&self.name),
@@ -328,12 +327,6 @@ impl<F: Field> Node for FieldNode<F> {
                 .parse(&raw)
                 .expect("`Boolean` input kind is only ever derived from a `bool` shape");
             self.errors.extend(self.field.check(&value));
-        }
-        if let Some(choices) = &self.choices
-            && !choices.iter().any(|c| c.value == raw)
-        {
-            self.errors
-                .push(ValidationMessage("not one of the available choices".into()));
         }
     }
 
@@ -435,7 +428,6 @@ mod tests {
             optional: false,
             attrs: FieldAttrs::default(),
             custom_widget: None,
-            choices: None,
             wrapper: None,
             value,
             errors: Vec::new(),
