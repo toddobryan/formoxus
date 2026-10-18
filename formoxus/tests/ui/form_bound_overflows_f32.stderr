@@ -1,5 +1,8 @@
-error[E0080]: evaluation panicked: `max` is outside the range of the field's type
+error: literal out of range for `f32`
   --> tests/ui/form_bound_overflows_f32.rs:15:29
    |
 15 |             level => { max: 1e50 },
-   |                             ^^^^ evaluation of `main::_` failed here
+   |                             ^^^^
+   |
+   = note: the literal `1e50` does not fit into the type `f32` and will be converted to `f32::INFINITY`
+   = note: `#[deny(overflowing_literals)]` on by default

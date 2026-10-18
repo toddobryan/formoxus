@@ -5,6 +5,7 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use facet::Facet;
+use heck::ToSnakeCase;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
@@ -168,7 +169,24 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self.fields.entry(path.to_string()).or_default()
     }
 
+    /// Attributes to render on the field at `path`. They only render: what
+    /// formoxus validates (`min`, `max_length`, `pattern`, `required_true`, …)
+    /// is a setting of the field, given with [`with_node`](Self::with_node).
+    ///
+    /// # Panics
+    ///
+    /// If `attrs` holds an attribute formoxus validates. It would render and
+    /// never be checked, so the browser and the server would disagree.
     pub fn with_attrs(mut self, path: &str, attrs: FieldAttrs) -> Self {
+        if let Some(attr) = attrs.first_validated() {
+            // `form!`'s spelling (`max_length`), not the HTML name (`maxlength`):
+            // the one the dev wrote, and the field's setting is named the same.
+            panic!(
+                "{path}: `{}` is validated, so it is a setting of the field, not an \
+                 attribute; give it with `with_node`",
+                attr.variant_name().to_snake_case()
+            );
+        }
         self.field(path).attrs = attrs;
         self
     }

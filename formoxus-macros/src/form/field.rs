@@ -121,6 +121,27 @@ impl ParsedAttr {
         }
     }
 
+    /// The assignment a validated attribute contributes to the field's
+    /// settings closure: `__f.min = Some(13);`, `__f.required_true = true;`.
+    ///
+    /// The setting's name is the key's, so `min_length` sets `min_length`. A
+    /// field without that setting is rustc's "no field" error at the key; a
+    /// value of the wrong type is its type error at the value.
+    fn setting_tokens(&self, attr: Attr) -> TokenStream2 {
+        let name = Ident::new(&attr.variant_name().to_snake_case(), self.key_span);
+        let span = self.value_span();
+        match &self.source {
+            AttrSource::Flag => quote_spanned! { span=> __f.#name = true; },
+            AttrSource::Expr(e) => {
+                quote_spanned! { span=> __f.#name = ::core::option::Option::Some(#e); }
+            }
+            AttrSource::Regex(s) => {
+                quote_spanned! { span=> __f.#name = ::core::option::Option::Some(#s); }
+            }
+            AttrSource::List(_) => unreachable!("`{attr:?}` is validated but parsed as a list"),
+        }
+    }
+
     fn entry_tokens(&self, attr_id: &AttrId) -> TokenStream2 {
         let attrs = quote! { ::formoxus::attrs };
         let (key, attr_type) = match attr_id {
@@ -180,6 +201,7 @@ impl FieldBody {
             .attrs
             .0
             .iter()
+            .filter(|(attr_id, _)| !is_validated(attr_id))
             .map(|(attr_id, parsed_attr)| parsed_attr.entry_tokens(attr_id))
             .collect();
 
@@ -187,6 +209,34 @@ impl FieldBody {
             return None;
         }
         Some(quote! { ::formoxus::field_attrs::FieldAttrs::from([ #(#entries), * ]) })
+    }
+}
+
+/// Whether formoxus validates this attribute, which makes it a setting of the
+/// field rather than an attribute to render.
+fn is_validated(attr_id: &AttrId) -> bool {
+    matches!(attr_id, AttrId::Std(attr) if attr.validated())
+}
+
+impl FieldBody {
+    /// The field's settings, as the closure `field_kind::field_for` runs on
+    /// the field the model's type picks: `|__f| { __f.min = Some(13); }`.
+    /// `None` when the body has no validated attribute, so no `with_node` is
+    /// emitted and the field keeps the default `dispatch!` builds.
+    ///
+    /// `span` is the field's path: the closure's own tokens carry it, so an
+    /// error about the closure as a whole lands on the path.
+    pub(crate) fn settings_tokens(&self, span: Span) -> Option<TokenStream2> {
+        let sets: Vec<TokenStream2> = self
+            .attrs
+            .0
+            .iter()
+            .filter_map(|(attr_id, parsed_attr)| match attr_id {
+                AttrId::Std(attr) if attr.validated() => Some(parsed_attr.setting_tokens(*attr)),
+                _ => None,
+            })
+            .collect();
+        (!sets.is_empty()).then(|| quote_spanned! { span=> |__f| { #(#sets)* } })
     }
 }
 
@@ -277,35 +327,9 @@ impl FieldBody {
                 ));
             }
         }
-        // Does each bound fit the field's type? The bound goes in cast both
-        // ways, since a const fn cannot be generic over "some number";
-        // `field_kind` explains what each pair of casts answers.
-        for (key, attr) in [("min", Attr::Min), ("max", Attr::Max)] {
-            let Some(e) = self.attrs.expr(attr) else {
-                continue;
-            };
-            for (test, problem) in [
-                ("bound_in_range", "is outside the range of the field's type"),
-                (
-                    "bound_is_whole",
-                    "must be a whole number, because the field is an integer",
-                ),
-                (
-                    "bound_is_exact",
-                    "is an integer too large to hold exactly as an f64",
-                ),
-            ] {
-                let test = Ident::new(test, Span::call_site());
-                let message = format!("`{key}` {problem}");
-                checks.push(quote_spanned! { e.span()=>
-                    #[allow(#cast_lints)]
-                    const _: () = ::core::assert!(
-                        ::formoxus::field_kind::#test(#shape, (#e) as f64, (#e) as i128),
-                        #message
-                    );
-                });
-            }
-        }
+        // Whether each bound fits the field's type is rustc's question now:
+        // the settings closure types it as the field's own `T`, so `min: 300`
+        // on a `u8` is its out-of-range error and `min: 2.5` its type error.
         // `as f64` on both sides is what lets `min: 3, max: 120.5` compare at
         // all.
         if let (Some(min), Some(max)) = (self.attrs.expr(Attr::Min), self.attrs.expr(Attr::Max)) {
@@ -1368,53 +1392,66 @@ mod tests {
 
     // ── Constraints reach the expansion ──────────────────────────────────
 
+    /// The validated keys become the field's settings: ONE `with_node`, whose
+    /// closure assigns each, in the order written. None of them is an
+    /// attribute any more, so no `with_attrs` call is emitted.
     #[gtest]
-    fn attribute_keys_become_one_with_attrs_call() {
+    fn validated_keys_become_one_with_node_call() {
         let spec = parse(quote! {
             Source { notes => { min_length: 3, max_length: 500, pattern: "\\w+" } }
         })
         .unwrap();
         let tokens = spec.expand().to_string();
 
-        // ONE call, holding a struct literal — not one call per key.
-        expect_that!(tokens.matches("with_attrs").count(), eq(1));
+        expect_that!(tokens.matches("with_node").count(), eq(1));
+        expect_that!(tokens.matches("with_attrs").count(), eq(0));
         expect_that!(
             tokens,
-            contains_substring(":: formoxus :: field_attrs :: FieldAttrs :: from ([")
+            contains_substring(":: formoxus :: field_kind :: field_for")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: MinLength) , :: formoxus :: attrs :: AttrValue :: Int (3))"
-            )
+            contains_substring("__f . min_length = :: core :: option :: Option :: Some (3) ;")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: MaxLength) , :: formoxus :: attrs :: AttrValue :: Int (500))"
-            )
+            contains_substring("__f . max_length = :: core :: option :: Option :: Some (500) ;")
         );
-        expect_that!(tokens, contains_substring("AttrValue :: Regex"));
+        expect_that!(tokens, contains_substring("__f . pattern ="));
     }
 
-    /// A bound goes through `.into()`, which is what lets the literal's own
-    /// type decide between `Bound::Int` and `Bound::Float` — the macro never
-    /// inspects the token to choose.
+    /// A field with both kinds splits: its settings go to `with_node`, and the
+    /// attributes that only render go to `with_attrs`, without the settings.
     #[gtest]
-    fn a_bound_is_converted_rather_than_classified() {
+    fn settings_and_render_only_attributes_split() {
+        let spec = parse(quote! {
+            Source { zip => { pattern: "[0-9]+", placeholder: "12345" } }
+        })
+        .unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens.matches("with_node").count(), eq(1));
+        expect_that!(tokens.matches("with_attrs").count(), eq(1));
+        // `Attr :: Pattern` also appears in the `applies` const checks, so only
+        // the `with_attrs` call, which comes last, is searched.
+        let attrs_call = &tokens[tokens.find("with_attrs").expect("one `with_attrs`")..];
+        expect_that!(attrs_call, contains_substring("Attr :: Placeholder"));
+        expect_that!(attrs_call, not(contains_substring("Attr :: Pattern")));
+    }
+
+    /// A bound is assigned as written. The field the model's type picks gives
+    /// it its type, so `13` is a `u8` on a `u8` field and `120.5` refuses one;
+    /// the macro never inspects the token.
+    #[gtest]
+    fn a_bound_is_assigned_as_written() {
         let spec = parse(quote! { Source { age => { min: 13, max: 120.5 } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(
             tokens,
-            contains_substring(
-                "Attr :: Min) , :: formoxus :: attrs :: AttrValue :: Bound ((13) . into ())"
-            )
+            contains_substring("__f . min = :: core :: option :: Option :: Some (13) ;")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "Attr :: Max) , :: formoxus :: attrs :: AttrValue :: Bound ((120.5) . into ())"
-            )
+            contains_substring("__f . max = :: core :: option :: Option :: Some (120.5) ;")
         );
     }
 
@@ -1427,19 +1464,13 @@ mod tests {
         expect_that!(tokens, contains_substring("2 * LIMIT"));
     }
 
-    /// `required_true` lands in the same `FieldAttrs` as the other keys, as
-    /// `Attr::RequiredTrue`, so it reaches `check` by the same route.
+    /// `required_true` is a flag, so its setting is a plain `true`.
     #[gtest]
-    fn required_true_becomes_a_constraint() {
+    fn required_true_becomes_a_setting() {
         let spec = parse(quote! { Source { agreed => { required_true } } }).unwrap();
         let tokens = spec.expand().to_string();
-        expect_that!(tokens.matches("with_attrs").count(), eq(1));
-        expect_that!(
-            tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: RequiredTrue) , :: formoxus :: attrs :: AttrValue :: Flag)"
-            )
-        );
+        expect_that!(tokens.matches("with_attrs").count(), eq(0));
+        expect_that!(tokens, contains_substring("__f . required_true = true ;"));
     }
 
     /// A flag is written bare. Its presence is the whole value, so there is

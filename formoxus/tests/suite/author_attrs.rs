@@ -15,8 +15,9 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue};
+use formoxus::attrs::{AttrKey, AttrValue};
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::WidgetType;
@@ -173,15 +174,16 @@ fn a_custom_widget_receives_the_fields_attributes() {
     let html = render!(
         FormSpec::<Person>::new()
             .with_custom_widget("name", spreading_widget())
+            .with_node(
+                "name",
+                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+            )
             .with_attrs(
                 "name",
-                FieldAttrs::from([
-                    (AttrKey::Std(Attr::MaxLength), AttrValue::Int(10)),
-                    (
-                        AttrKey::NonStd("data-x"),
-                        AttrValue::String("1".to_string())
-                    ),
-                ])
+                FieldAttrs::from([(
+                    AttrKey::NonStd("data-x"),
+                    AttrValue::String("1".to_string())
+                )])
             )
     );
     let input = tag(&html, "input");
@@ -391,19 +393,24 @@ fn on_a_radio_group_style_lands_on_the_fieldset() {
 ///
 /// This pins the hazard rather than endorsing it. `form!` refuses a quoted
 /// key the table knows ("write `max_length:`"), and this is what that refusal
-/// prevents. Only a hand-built `FormSpec` can still reach it.
+/// prevents. Only a hand-built `FormSpec` can still reach it. The field's own
+/// attributes render first and the author's after, so the author's wins.
 #[gtest]
 fn an_author_attribute_overrides_a_constraint_attribute() {
-    let html = render!(FormSpec::<Person>::new().with_attrs(
-        "name",
-        FieldAttrs::from([
-            (AttrKey::Std(Attr::MaxLength), AttrValue::Int(10)),
-            (
-                AttrKey::NonStd("maxlength"),
-                AttrValue::String("99".to_string())
-            ),
-        ])
-    ));
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_node(
+                "name",
+                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+            )
+            .with_attrs(
+                "name",
+                FieldAttrs::from([(
+                    AttrKey::NonStd("maxlength"),
+                    AttrValue::String("99".to_string())
+                )])
+            )
+    );
     let input = tag(&html, "input");
     expect_that!(input, contains_substring(r#"maxlength="99""#));
     expect_that!(input, not(contains_substring("maxlength=10")));

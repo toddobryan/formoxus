@@ -2,12 +2,11 @@
 
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
-use formoxus_spec::{Attr, AttrValue, BuiltinWidget, FieldType, RenderedInputType};
-use regress::Regex;
+use formoxus_spec::{BuiltinWidget, FieldType, RenderedInputType};
 
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
-use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
+use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
@@ -159,126 +158,6 @@ impl<F: Field> FieldNode<F> {
         }
     }
 
-    /// Formoxus's own check of a value against this field's validated
-    /// attributes. `raw_value` has already parsed as `F::Value`; `validate`
-    /// returns before reaching here on an empty or unparseable value.
-    ///
-    /// Not [`Field::check`], which checks the parsed value and runs after this.
-    /// This one goes away in Step 4, when the attributes move into the fields.
-    ///
-    /// Walks [`Attr::ALL`], not the map, so the messages come out in the
-    /// table's order (lengths, then pattern, then bounds) whatever order
-    /// `form!` inserted the attributes in. The field type is an INPUT here, not
-    /// the dispatch: it only matters to `min`/`max`, which read the value as an
-    /// `i128` or an `f64`.
-    fn check_attrs(&self, raw_value: &str) -> Vec<ValidationMessage> {
-        let field_type = self.field_type();
-        let mut errors = Vec::new();
-        // TODO: the Max and Min handling assumes an ordering for Attr::ALL.
-        //       We should avoid that.
-        for &attr in Attr::ALL {
-            let Some(value) = self.attrs.get(attr) else {
-                continue;
-            };
-            // `form!` refuses an attribute that does not apply to the field's
-            // type at compile time, so only a hand-built spec reaches this.
-            // Skipping keeps what such a spec always got: silently ignored.
-            if !attr.validated() || !attr.applies_to(field_type) {
-                continue;
-            }
-            match (attr, value) {
-                (Attr::MinLength, AttrValue::Int(min)) => {
-                    if raw_value.chars().count() < *min {
-                        errors.push(ValidationMessage(format!("length must be at least {min}")));
-                    }
-                }
-                (Attr::MaxLength, AttrValue::Int(max)) => {
-                    if raw_value.chars().count() > *max {
-                        errors.push(ValidationMessage(format!("length must be at most {max}")));
-                    }
-                }
-                (Attr::Pattern, AttrValue::Regex(patt)) => {
-                    let re = Regex::with_flags(&format!("^(?:{patt})$"), "v")
-                        .expect("this regex should have parsed at compile time");
-                    if re.find(raw_value).is_none() {
-                        errors.push(ValidationMessage(format!(
-                            "input should match the regular expression {patt}"
-                        )));
-                    }
-                }
-                // One message for the pair ("in the range X up to Y"), so it
-                // is produced once, on `Min`, and `Max` stands aside when
-                // `Min` is there to cover both.
-                (Attr::Min | Attr::Max, AttrValue::Bound(_)) => {
-                    if attr == Attr::Max && self.attrs.contains(Attr::Min) {
-                        continue;
-                    }
-                    errors.extend(self.check_bounds(field_type, raw_value));
-                }
-                (Attr::RequiredTrue, AttrValue::Flag) => {
-                    let is_true: bool = raw_value
-                        .parse()
-                        .expect("this bool should have already successfully parsed");
-                    if !is_true {
-                        errors.push(ValidationMessage("this value must be true".to_string()));
-                    }
-                }
-                // Presence: decided in `validate`, before a value reaches here.
-                (Attr::Required, _) => {}
-                (attr, value) => panic!(
-                    "field {}: {attr:?} cannot hold the value {value:?}",
-                    self.name
-                ),
-            }
-        }
-        errors
-    }
-
-    /// The `min`/`max` check, for whichever of the two the field has.
-    ///
-    /// An integer field compares as `i128` (every supported integer fits), a
-    /// float field as `f64`. A bound written as the other kind is widened to
-    /// match: `int_bound` for an integer field, a cast for a float field.
-    fn check_bounds(&self, field_type: FieldType, raw_value: &str) -> Option<ValidationMessage> {
-        let bound = |attr: Attr| match self.attrs.get(attr) {
-            Some(AttrValue::Bound(b)) => Some(*b),
-            _ => None,
-        };
-        let (min, max) = (bound(Attr::Min), bound(Attr::Max));
-        match field_type {
-            FieldType::Int => {
-                let n: i128 = raw_value
-                    .parse()
-                    .expect("this int should have already successfully parsed");
-                let min = min.map(|b| int_bound(b, "min"));
-                let max = max.map(|b| int_bound(b, "max"));
-                range_message(
-                    min,
-                    max,
-                    min.is_some_and(|m| n < m),
-                    max.is_some_and(|m| n > m),
-                )
-            }
-            FieldType::Float => {
-                let n: f64 = raw_value
-                    .parse()
-                    .expect("this float should have already successfully parsed");
-                let min = min.map(float_bound);
-                let max = max.map(float_bound);
-                // NaN compares false to everything, so it would slip past both
-                // bounds; a bounded float field rejects it outright.
-                range_message(
-                    min,
-                    max,
-                    min.is_some_and(|m| n < m || n.is_nan()),
-                    max.is_some_and(|m| n > m || n.is_nan()),
-                )
-            }
-            // `applies_to` lets only number fields through to here.
-            FieldType::Text | FieldType::Bool => None,
-        }
-    }
-
     /// What this field renders as absent any override.
     ///
     /// `optional` is the one input here that `F::Value` cannot supply: `Option`
@@ -318,26 +197,6 @@ impl<F: Field> FieldNode<F> {
             self.raw_value()
         }
     }
-}
-
-/// The message for a value outside its bounds, or `None` when it is inside.
-/// One message covers both ends when the field has both, which is why `min`
-/// and `max` are checked together.
-fn range_message<N: std::fmt::Display>(
-    min: Option<N>,
-    max: Option<N>,
-    below: bool,
-    above: bool,
-) -> Option<ValidationMessage> {
-    let message = match (min, max) {
-        (Some(min), Some(max)) if below || above => {
-            format!("number must be in the range {min} up to (and including) {max}")
-        }
-        (Some(min), None) if below => format!("number must be at least {min}"),
-        (None, Some(max)) if above => format!("number must be at most {max}"),
-        _ => return None,
-    };
-    Some(ValidationMessage(message))
 }
 
 impl<F: Field> Node for FieldNode<F> {
@@ -406,12 +265,14 @@ impl<F: Field> Node for FieldNode<F> {
 
     fn render(&self, ctx: &NodeContext) -> Element {
         let widget = self.widget();
+        // The field's own attributes (`min`, `pattern`, …), so the browser
+        // checks what `check` does, then the author's, which only render.
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
             &widget,
             ctx.required,
             self.has_errors_here(),
-            &self.attrs,
+            &self.field.widget_attrs().then(&self.attrs),
         );
 
         rsx! {
@@ -455,20 +316,10 @@ impl<F: Field> Node for FieldNode<F> {
             self.errors.push(error);
             return;
         }
-        // What is left is a `Valid` value or an unticked checkbox. An unticked
-        // checkbox is the only `Empty` the match above lets through, and its
-        // constraints are checked against `"false"`.
+        // What is left is a `Valid` value or an unticked checkbox, the only
+        // `Empty` the match above lets through. An unticked checkbox means
+        // `false`, so the field checks it as `false`, parsed the field's way.
         let raw = self.raw_value_to_validate();
-        self.errors.extend(self.check_attrs(&raw));
-        if let Some(choices) = &self.choices
-            && !choices.iter().any(|c| c.value == raw)
-        {
-            self.errors
-                .push(ValidationMessage("not one of the available choices".into()));
-        }
-        // The field's own check, on the parsed value. An unticked checkbox is
-        // `Empty`, the only `Empty` that reaches here, and it means `false`: the
-        // same `raw` the attribute walk just checked, parsed the field's way.
         if let FieldValue::Valid(value) = &self.value {
             self.errors.extend(self.field.check(value));
         } else {
@@ -477,6 +328,12 @@ impl<F: Field> Node for FieldNode<F> {
                 .parse(&raw)
                 .expect("`Boolean` input kind is only ever derived from a `bool` shape");
             self.errors.extend(self.field.check(&value));
+        }
+        if let Some(choices) = &self.choices
+            && !choices.iter().any(|c| c.value == raw)
+        {
+            self.errors
+                .push(ValidationMessage("not one of the available choices".into()));
         }
     }
 
@@ -563,447 +420,76 @@ impl<F: Field> Node for FieldNode<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Debug;
-    use std::marker::PhantomData;
-
     use super::*;
-    use formoxus_spec::Bound;
+    use crate::fields::{BoolField, NumberField, StringField};
     use googletest::prelude::*;
 
-    // ── Helpers ──────────────────────────────────────────────────────────
-    //
-    // A constraint test needs a field TYPE (which decides how `min`/`max`
-    // read the value) and the field's attributes. These build a `FieldNode`
-    // of the right type, holding nothing: `check_attrs` takes the raw value
-    // as an argument, so the field's own value never matters here.
+    // What each field's `check` allows is tested beside the field. These test
+    // the NODE: that `validate` hands the field its value, and the cases only
+    // the node can decide, like what an empty bool means.
 
-    /// Built through `with_default`, which appends in order, because the
-    /// map inside `FieldAttrs` is private to `field_attrs`.
-    fn all(entries: &[(Attr, AttrValue)]) -> FieldAttrs {
-        entries
-            .iter()
-            .fold(FieldAttrs::default(), |attrs, (attr, value)| {
-                attrs.with_default(*attr, value.clone())
-            })
-    }
-
-    /// A field with no checks of its own: facet's `parse` and nothing else. So
-    /// these tests exercise the NODE (the attribute walk, `validate`'s order)
-    /// and no built-in field's `check`, which each field tests itself.
-    #[derive(Clone, Debug, PartialEq)]
-    struct AnyField<X>(PhantomData<X>);
-
-    impl<X> Field for AnyField<X>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        type Value = X;
-        type Context = ();
-    }
-
-    fn node<X>(value: FieldValue<X>, attrs: FieldAttrs) -> FieldNode<AnyField<X>>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
+    fn node<F: Field>(value: FieldValue<F::Value>, field: F) -> FieldNode<F> {
         FieldNode {
             name: "f".to_string(),
             label: None,
             optional: false,
-            attrs,
+            attrs: FieldAttrs::default(),
             custom_widget: None,
             choices: None,
             wrapper: None,
             value,
             errors: Vec::new(),
-            field: AnyField(PhantomData),
+            field,
         }
     }
 
-    fn holding<X>(attrs: FieldAttrs) -> FieldNode<AnyField<X>>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        node(FieldValue::Empty, attrs)
+    fn validation_messages<F: Field>(mut node: FieldNode<F>) -> Vec<String> {
+        node.validate();
+        node.errors.into_iter().map(|e| e.0).collect()
     }
 
-    fn text(
-        min_length: Option<usize>,
-        max_length: Option<usize>,
-        pattern: Option<&'static str>,
-    ) -> FieldNode<AnyField<String>> {
-        let mut entries = Vec::new();
-        entries.extend(min_length.map(|n| (Attr::MinLength, AttrValue::Int(n))));
-        entries.extend(max_length.map(|n| (Attr::MaxLength, AttrValue::Int(n))));
-        entries.extend(pattern.map(|p| (Attr::Pattern, AttrValue::Regex(p))));
-        holding(all(&entries))
-    }
+    // ── Settings reach the check ─────────────────────────────────────────
 
-    fn bounds(min: Option<Bound>, max: Option<Bound>) -> FieldAttrs {
-        let mut entries = Vec::new();
-        entries.extend(min.map(|b| (Attr::Min, AttrValue::Bound(b))));
-        entries.extend(max.map(|b| (Attr::Max, AttrValue::Bound(b))));
-        all(&entries)
-    }
-
-    fn int(min: Option<i128>, max: Option<i128>) -> FieldNode<AnyField<i64>> {
-        holding(bounds(min.map(Bound::Int), max.map(Bound::Int)))
-    }
-
-    fn float(min: Option<f64>, max: Option<f64>) -> FieldNode<AnyField<f64>> {
-        holding(bounds(min.map(Bound::Float), max.map(Bound::Float)))
-    }
-
-    fn boolean(required_true: bool) -> FieldNode<AnyField<bool>> {
-        if required_true {
-            holding(all(&[(Attr::RequiredTrue, AttrValue::Flag)]))
-        } else {
-            holding(FieldAttrs::default())
-        }
-    }
-
-    fn messages<X>(field: &FieldNode<AnyField<X>>, raw: &str) -> Vec<String>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        field.check_attrs(raw).into_iter().map(|e| e.0).collect()
-    }
-
-    // ── Text: lengths ────────────────────────────────────────────────────
-
-    #[gtest]
-    fn a_text_field_with_no_constraints_never_complains() {
-        expect_that!(messages(&text(None, None, None), ""), is_empty());
-        expect_that!(
-            messages(&text(None, None, None), "anything at all"),
-            is_empty()
-        );
-    }
-
-    #[gtest]
-    fn min_length_is_inclusive() {
-        let kind = text(Some(3), None, None);
-        expect_that!(messages(&kind, "ab"), len(eq(1)));
-        expect_that!(messages(&kind, "abc"), is_empty());
-        expect_that!(messages(&kind, "abcd"), is_empty());
-    }
-
-    #[gtest]
-    fn max_length_is_inclusive() {
-        let kind = text(None, Some(3), None);
-        expect_that!(messages(&kind, "abc"), is_empty());
-        expect_that!(messages(&kind, "abcd"), len(eq(1)));
-    }
-
-    /// **Characters, not bytes.** `José` is four characters and five bytes, so a
-    /// `len()` here would reject a name that fits.
-    #[gtest]
-    fn length_counts_characters_not_bytes() {
-        expect_that!(messages(&text(None, Some(4), None), "José"), is_empty());
-        expect_that!(messages(&text(Some(4), None, None), "José"), is_empty());
-        // The same string is 5 bytes, which a byte count would have rejected.
-        expect_that!("José".len(), eq(5));
-    }
-
-    /// Astral-plane characters are one `char` each, so an emoji costs one, not
-    /// four. HTML counts UTF-16 code units and would say two — a divergence
-    /// worth knowing about rather than a bug to fix, since the server's count is
-    /// the one that decides.
-    #[gtest]
-    fn an_emoji_counts_as_one_character() {
-        expect_that!(messages(&text(None, Some(1), None), "🦀"), is_empty());
-    }
-
-    #[gtest]
-    fn both_length_bounds_can_fail_independently() {
-        let kind = text(Some(2), Some(4), None);
-        expect_that!(messages(&kind, "a"), len(eq(1)));
-        expect_that!(messages(&kind, "abc"), is_empty());
-        expect_that!(messages(&kind, "abcde"), len(eq(1)));
-    }
-
-    // ── Text: pattern ────────────────────────────────────────────────────
-
-    #[gtest]
-    fn a_pattern_accepts_what_it_describes() {
-        expect_that!(
-            messages(&text(None, None, Some(r"\d{5}")), "90210"),
-            is_empty()
-        );
-    }
-
-    /// **The anchoring is the whole point.** HTML implicitly wraps a `pattern` as
-    /// `^(?:…)$`, while a bare regex search finds a substring — so without the
-    /// wrap the server would accept values the browser rejects, which is the
-    /// worst direction for the two to disagree.
-    #[gtest]
-    fn a_pattern_must_match_the_entire_value() {
-        let kind = text(None, None, Some(r"\d{5}"));
-        expect_that!(messages(&kind, "abc12345xyz"), len(eq(1)));
-        expect_that!(messages(&kind, "90210-1234"), len(eq(1)));
-    }
-
-    /// The `(?:…)` in the wrap is load-bearing, not decoration: `^a|b$` parses
-    /// as "starts with a" OR "ends with b", so an un-grouped alternation would
-    /// silently accept both halves of the wrong thing.
-    #[gtest]
-    fn an_alternation_is_grouped_before_it_is_anchored() {
-        let kind = text(None, None, Some("cat|dog"));
-        expect_that!(messages(&kind, "cat"), is_empty());
-        expect_that!(messages(&kind, "dog"), is_empty());
-        expect_that!(messages(&kind, "catfish"), len(eq(1)));
-        expect_that!(messages(&kind, "hotdog"), len(eq(1)));
-    }
-
-    #[gtest]
-    fn a_length_and_a_pattern_both_report() {
-        let kind = text(Some(10), None, Some(r"\d+"));
-        expect_that!(messages(&kind, "abc"), len(eq(2)));
-    }
-
-    /// `regress` gives ECMAScript semantics, which is the point of choosing it
-    /// over `regex`: these four all match what a browser does, so the server
-    /// cannot disagree with the client about what a `pattern` means.
+    /// Through `validate` with a real value, the way a submitted form is.
     ///
-    /// Anchors are NOT multiline — `\d{5}` rejects `"12345\n67890"` — and `$`
-    /// does not match before a trailing newline the way Perl's does. Both
-    /// matter for `pattern` on a `<textarea>`, where a value legitimately
-    /// contains newlines.
-    #[gtest]
-    fn anchors_and_dot_follow_javascript_not_perl() {
-        let five = text(None, None, Some(r"\d{5}"));
-        expect_that!(messages(&five, "12345\n67890"), len(eq(1)));
-        expect_that!(messages(&five, "12345\n"), len(eq(1)));
-
-        // `.` excludes newline (no `s` flag), so spanning lines has to be asked
-        // for explicitly.
-        expect_that!(messages(&text(None, None, Some(r".+")), "a\nb"), len(eq(1)));
-        expect_that!(
-            messages(&text(None, None, Some(r"(.|\n)+")), "a\nb"),
-            is_empty()
-        );
-    }
-
-    /// HTML compiles `pattern` with the `v` flag, so this must too. Without
-    /// it, `\p{L}` is an escaped `p` followed by a literal `{L}`, and the
-    /// server would reject a value every browser accepts.
-    #[gtest]
-    fn a_pattern_is_compiled_with_the_v_flag() {
-        let letters = text(None, None, Some(r"\p{L}+"));
-        expect_that!(messages(&letters, "héllo"), is_empty());
-        expect_that!(messages(&letters, "p{L}"), len(eq(1)));
-    }
-
-    // ── Int ──────────────────────────────────────────────────────────────
-
-    #[gtest]
-    fn an_int_with_no_bounds_never_complains() {
-        let kind = int(None, None);
-        expect_that!(messages(&kind, "0"), is_empty());
-        expect_that!(
-            messages(&kind, "-170141183460469231731687303715884105728"),
-            is_empty()
-        );
-    }
-
-    #[gtest]
-    fn int_bounds_are_inclusive() {
-        let kind = int(Some(1), Some(10));
-        expect_that!(messages(&kind, "0"), len(eq(1)));
-        expect_that!(messages(&kind, "1"), is_empty());
-        expect_that!(messages(&kind, "10"), is_empty());
-        expect_that!(messages(&kind, "11"), len(eq(1)));
-    }
-
-    #[gtest]
-    fn a_one_sided_int_bound_says_which_side() {
-        let low = int(Some(0), None);
-        expect_that!(
-            messages(&low, "-1"),
-            elements_are![contains_substring("at least 0")]
-        );
-
-        let high = int(None, Some(100));
-        expect_that!(
-            messages(&high, "101"),
-            elements_are![contains_substring("at most 100")]
-        );
-    }
-
-    // ── Float ────────────────────────────────────────────────────────────
-
-    #[gtest]
-    fn float_bounds_are_inclusive() {
-        let kind = float(Some(0.0), Some(1.0));
-        expect_that!(messages(&kind, "-0.1"), len(eq(1)));
-        expect_that!(messages(&kind, "0"), is_empty());
-        expect_that!(messages(&kind, "1"), is_empty());
-        expect_that!(messages(&kind, "1.1"), len(eq(1)));
-    }
-
-    /// **NaN is rejected only when a bound exists**, which is Todd's rule and the
-    /// only coherent one: every comparison against NaN is false, so an unguarded
-    /// range check would let it through silently. With no range stated there is
-    /// nothing for it to be outside of, and a float field is entitled to hold it.
-    #[gtest]
-    fn nan_passes_an_unbounded_float_and_fails_a_bounded_one() {
-        let free = float(None, None);
-        expect_that!(messages(&free, "nan"), is_empty());
-        expect_that!(messages(&free, "NaN"), is_empty());
-
-        expect_that!(messages(&float(Some(0.0), Some(1.0)), "nan"), len(eq(1)));
-        expect_that!(messages(&float(Some(0.0), None), "nan"), len(eq(1)));
-        expect_that!(messages(&float(None, Some(1.0)), "nan"), len(eq(1)));
-    }
-
-    /// Infinity is an ordinary float: allowed when unbounded, and compared
-    /// normally when not. Parsing saturates rather than failing, so `1e400`
-    /// arrives here as `inf` and a stated maximum is what catches it.
-    #[gtest]
-    fn infinity_is_allowed_unbounded_and_compared_when_bounded() {
-        let free = float(None, None);
-        expect_that!(messages(&free, "inf"), is_empty());
-        expect_that!(messages(&free, "1e400"), is_empty());
-
-        let capped = float(None, Some(100.0));
-        expect_that!(messages(&capped, "1e400"), len(eq(1)));
-        expect_that!(messages(&capped, "-inf"), is_empty());
-    }
-
-    // ── Bool ─────────────────────────────────────────────────────────────
-
-    /// Without `required_true`, `false` is a complete answer, so a bool has
-    /// nothing to check.
-    #[gtest]
-    fn a_plain_bool_accepts_either_value() {
-        let plain = boolean(false);
-        expect_that!(messages(&plain, "true"), is_empty());
-        expect_that!(messages(&plain, "false"), is_empty());
-    }
-
-    /// "I agree to the terms" (issue #6).
-    #[gtest]
-    fn a_required_true_bool_rejects_false() {
-        let must_agree = boolean(true);
-        expect_that!(messages(&must_agree, "true"), is_empty());
-        expect_that!(
-            messages(&must_agree, "false"),
-            elements_are![eq("this value must be true")]
-        );
-    }
-
-    // ── The caller's contract ────────────────────────────────────────────
-
-    /// `check_attrs` runs only on a `FieldValue::Valid`, so the raw string is always
-    /// this type's own canonical display and always re-parses. Pinning the panic
-    /// documents that: a caller reaching here with unparsed input has skipped
-    /// the guard in `validate`, and a silent `unwrap_or` would turn that bug
-    /// into a field that quietly passes every bound.
-    #[gtest]
-    #[should_panic(expected = "should have already successfully parsed")]
-    fn checking_an_unparsed_int_is_a_caller_bug() {
-        let _ = int(Some(0), None).check_attrs("not a number");
-    }
-
-    // ── Constraints reach the field ──────────────────────────────────────
-    //
-    // Everything above calls `check_attrs` with a raw string. These go in through
-    // `validate` with a real value, so the field's own type and value are what
-    // get checked, the way a submitted form is.
-
-    fn a_field<X>(value: X, attrs: FieldAttrs) -> FieldNode<AnyField<X>>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        // `Valid`, never `Empty` — `validated` asserts this rather than
-        // trusting it, since the early return in `validate` would make a
-        // test look satisfied when nothing was checked.
-        node(FieldValue::Valid(value), attrs)
-    }
-
-    fn validated<X>(value: X, attrs: FieldAttrs) -> Vec<String>
-    where
-        X: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-    {
-        let mut field = a_field(value, attrs);
-
-        // `validate` returns early on an `Empty` or `Invalid` value, BEFORE it
-        // reaches `check_attrs` at all. A test that tripped that early return
-        // would come back with no errors and read exactly like a constraint
-        // that was checked and satisfied — so the precondition is asserted
-        // here instead of trusted.
+    /// `Valid`, never `Empty`: `validate` returns early on an `Empty` or
+    /// `Invalid` value, before the field's `check`, and a test that tripped
+    /// that early return would read exactly like a setting that was checked
+    /// and satisfied. So the precondition is asserted, not trusted.
+    fn validated<F: Field>(value: F::Value, field: F) -> Vec<String> {
+        let node = node(FieldValue::Valid(value), field);
         assert!(
-            matches!(field.value, FieldValue::Valid(_)),
-            "a constraint test needs a Valid value, or validate checks nothing"
+            !node.raw_value().is_empty(),
+            "an empty raw value is absence, which validate handles before the check"
         );
-        // `\"\"` IS absence, and `populate` collapses an empty display to
-        // `Empty`. So a `Valid` value that renders as `\"\"` is a state the
-        // real system cannot produce, and a constraint verdict on it would not
-        // mean anything either.
-        assert!(
-            !field.raw_value().is_empty(),
-            "an empty raw value is absence, which validate handles before constraints"
-        );
-
-        field.validate();
-        field.errors.into_iter().map(|e| e.0).collect()
+        validation_messages(node)
     }
 
     #[gtest]
-    fn a_length_constraint_on_the_field_reaches_the_check() {
-        let short = all(&[(Attr::MaxLength, AttrValue::Int(3))]);
+    fn a_length_setting_reaches_the_check() {
+        let short = StringField {
+            max_length: Some(3),
+            ..StringField::default()
+        };
         expect_that!(validated("abc".to_string(), short.clone()), is_empty());
         expect_that!(validated("hello".to_string(), short), len(eq(1)));
     }
 
     #[gtest]
-    fn integer_bounds_on_the_field_reach_the_check() {
-        let between = bounds(Some(Bound::Int(1)), Some(Bound::Int(10)));
-        expect_that!(validated(0_i32, between.clone()), len(eq(1)));
-        expect_that!(validated(5_i32, between.clone()), is_empty());
-        expect_that!(validated(11_i32, between), len(eq(1)));
-    }
-
-    /// The cross-flavour case, and the one that matters most in practice:
-    /// `min: 0` on a float field is what people actually write, and an
-    /// unsuffixed `0` is an `i32`, so it arrives as `Bound::Int`. Widening it
-    /// is what keeps that from silently meaning "no minimum".
-    #[gtest]
-    fn an_integer_bound_on_a_float_field_is_widened_not_dropped() {
-        let non_negative = bounds(Some(Bound::Int(0)), None);
-        expect_that!(validated(-1.5_f64, non_negative.clone()), len(eq(1)));
-        expect_that!(validated(0.5_f64, non_negative), is_empty());
-    }
-
-    /// The other direction, when the float is whole: `min: 2.0` means 2, so
-    /// it is used as 2. `form!` cannot reject it, because it cannot tell `2.0`
-    /// from `2` when the bound is a named const.
-    #[gtest]
-    fn a_whole_float_bound_on_an_integer_field_is_used_as_an_integer() {
-        let at_least_two = bounds(Some(Bound::Float(2.0)), None);
-        expect_that!(validated(1_i32, at_least_two.clone()), len(eq(1)));
-        expect_that!(validated(2_i32, at_least_two), is_empty());
-    }
-
-    /// A FRACTIONAL float bound on an integer field has no sensible answer, so
-    /// it is a panic rather than a silent drop. Rounding would invent a bound
-    /// the author did not write, and the correct direction differs by end: a
-    /// `min` would ceil where a `max` would floor.
-    ///
-    /// Only a hand-built `FormSpec` can reach this, since `form!` rejects it at
-    /// compile time. That is why the message is for a caller and not for the
-    /// person filling in the form.
-    #[gtest]
-    #[should_panic(expected = "does not support the fractional min")]
-    fn a_fractional_bound_on_an_integer_field_is_a_caller_bug() {
-        let fractional = bounds(Some(Bound::Float(1.5)), None);
-        let _ = validated(3_i32, fractional);
+    fn bounds_reach_the_check() {
+        let between = NumberField {
+            min: Some(1_i32),
+            max: Some(10),
+        };
+        expect_that!(validated(0, between.clone()), len(eq(1)));
+        expect_that!(validated(5, between.clone()), is_empty());
+        expect_that!(validated(11, between), len(eq(1)));
     }
 
     // ── `required_true` on a bool, through `validate` ───────────────────
     //
-    // `check_attrs` is covered above. These go through `validate`, because that is
-    // where an unticked checkbox could slip past: it is `Empty`, and `Empty`
-    // returns early for every other field.
+    // An unticked checkbox is `Empty`, and `Empty` returns early for every
+    // other field, so this is where one could slip past `BoolField`.
 
     /// A non-optional bool field, holding `value`, rendered by `widget` (`None`
     /// means the default, a checkbox).
@@ -1011,28 +497,17 @@ mod tests {
         value: FieldValue<bool>,
         widget: Option<WidgetType>,
         required_true: bool,
-    ) -> FieldNode<AnyField<bool>> {
-        let attrs = if required_true {
-            all(&[(Attr::RequiredTrue, AttrValue::Flag)])
-        } else {
-            FieldAttrs::default()
-        };
+    ) -> FieldNode<BoolField> {
         FieldNode {
             name: "agreed".to_string(),
             custom_widget: widget,
-            ..node(value, attrs)
+            ..node(value, BoolField { required_true })
         }
-    }
-
-    fn validation_messages(mut field: FieldNode<AnyField<bool>>) -> Vec<String> {
-        field.validate();
-        field.errors.into_iter().map(|e| e.0).collect()
     }
 
     /// The case issue #6 is about. A box nobody touched is `Empty`, and so is
     /// every unticked box that reaches the server, since an unticked checkbox
-    /// is left out of the form data. A rule that only `check_attrs` knew about would
-    /// never see it.
+    /// is left out of the form data. The node hands it to the field as `false`.
     #[gtest]
     fn an_untouched_required_true_checkbox_is_rejected() {
         let field = a_bool_field(FieldValue::Empty, None, true);
@@ -1060,34 +535,8 @@ mod tests {
         expect_that!(validation_messages(field), is_empty());
     }
 
-    /// An unticked box reaches the FIELD's `check` as `false`, not only the
-    /// attribute walk. No attribute is set here, so the one message can only
-    /// have come from `BoolField`.
-    #[gtest]
-    fn an_untouched_checkbox_reaches_the_fields_own_check_as_false() {
-        let mut field = FieldNode {
-            name: "agreed".to_string(),
-            label: None,
-            optional: false,
-            attrs: FieldAttrs::default(),
-            custom_widget: None,
-            choices: None,
-            wrapper: None,
-            value: FieldValue::Empty,
-            errors: Vec::new(),
-            field: crate::fields::BoolField {
-                required_true: true,
-            },
-        };
-        field.validate();
-        expect_that!(
-            field.errors.into_iter().map(|e| e.0).collect::<Vec<_>>(),
-            elements_are![eq("this value must be true")]
-        );
-    }
-
     /// Without the rule, an unticked box is a complete answer: no "required"
-    /// error and no constraint error either.
+    /// error and no other either.
     #[gtest]
     fn an_untouched_plain_checkbox_passes() {
         let field = a_bool_field(FieldValue::Empty, None, false);

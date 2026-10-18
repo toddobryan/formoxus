@@ -18,8 +18,8 @@ pub(crate) use widget::WidgetRef;
 
 use std::collections::HashSet;
 
-use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::{quote, quote_spanned};
 use syn::{
     Expr, Ident, Path, Result, Token, braced,
     ext::IdentExt,
@@ -158,31 +158,7 @@ impl FormSpecInput {
         let fields: Vec<TokenStream2> = fsm
             .field_specs
             .iter()
-            .map(|f| {
-                let key = f.path.key();
-                let label = f
-                    .body
-                    .label
-                    .as_ref()
-                    .map(|l| quote! { .with_label(#key, &#l) });
-                let widget = f.body.widget.as_ref().map(|c| {
-                    let c = c.path();
-                    quote! { .with_custom_widget(#key, #c) }
-                });
-                let choices = f
-                    .body
-                    .widget
-                    .as_ref()
-                    .and_then(|w| w.args.choices.as_ref())
-                    .map(|c| {
-                        quote! { .with_choices(#key, #c) }
-                    });
-                let constraints = f
-                    .body
-                    .attrs_tokens()
-                    .map(|c| quote! { .with_attrs(#key, #c) });
-                quote! { #label #widget #choices #constraints }
-            })
+            .map(|f| f.builder_calls(&model_type))
             .collect();
         let witnesses: Vec<TokenStream2> = fsm
             .field_specs
@@ -505,6 +481,53 @@ where
     K::Token: syn::token::Token,
 {
     input.peek(kw) && input.peek2(Token![:])
+}
+
+impl FieldSpec {
+    /// The `FormSpec` builder calls one field body contributes, in order:
+    /// label, widget, choices, the field's settings (`with_node`), and the
+    /// attributes that only render (`with_attrs`). Each is omitted when the
+    /// body says nothing about it.
+    fn builder_calls(&self, model: &Path) -> TokenStream2 {
+        let key = self.path.key();
+        let label = self
+            .body
+            .label
+            .as_ref()
+            .map(|l| quote! { .with_label(#key, &#l) });
+        let widget = self.body.widget.as_ref().map(|c| {
+            let c = c.path();
+            quote! { .with_custom_widget(#key, #c) }
+        });
+        let choices = self
+            .body
+            .widget
+            .as_ref()
+            .and_then(|w| w.args.choices.as_ref())
+            .map(|c| {
+                quote! { .with_choices(#key, #c) }
+            });
+        let place = project(&self.path.segments);
+        // Spanned onto the field's path, so a field with no default
+        // field (a struct, an enum, a newtype) is reported at
+        // `address`, not across the whole `form!`.
+        let span = self
+            .path
+            .segments
+            .last()
+            .map_or_else(Span::call_site, |s| s.ident.span());
+        let settings = self.body.settings_tokens(span).map(|set| {
+            let ctor = quote_spanned! { span=>
+                ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set)
+            };
+            quote! { .with_node(#key, #ctor) }
+        });
+        let attrs = self
+            .body
+            .attrs_tokens()
+            .map(|c| quote! { .with_attrs(#key, #c) });
+        quote! { #label #widget #choices #settings #attrs }
+    }
 }
 
 #[cfg(test)]

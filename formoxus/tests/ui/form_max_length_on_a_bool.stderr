@@ -1,3 +1,11 @@
+error[E0609]: no field `max_length` on type `&mut BoolField`
+  --> tests/ui/form_max_length_on_a_bool.rs:14:29
+   |
+14 |             subscribed => { max_length: 10 },
+   |                             ^^^^^^^^^^ unknown field
+   |
+   = note: available field is: `required_true`
+
 error[E0080]: evaluation panicked: `max_length` applies only to a String field
   --> tests/ui/form_max_length_on_a_bool.rs:14:41
    |

@@ -44,6 +44,26 @@ impl FieldAttrs {
         FieldAttrs(map)
     }
 
+    /// This map's entries, then `later`'s, in their orders. For the field's
+    /// own attributes followed by the author's. A key in both takes `later`'s
+    /// value and keeps its first position, though the two never share a
+    /// validated key, since `with_attrs` refuses one.
+    pub fn then(&self, later: &FieldAttrs) -> FieldAttrs {
+        let mut map = self.0.clone();
+        map.extend(later.0.iter().map(|(k, v)| (*k, v.clone())));
+        FieldAttrs(map)
+    }
+
+    /// The first attribute here that formoxus validates, if any: what
+    /// `FormSpec::with_attrs` refuses, because a field's settings validate
+    /// now and attributes only render.
+    pub(crate) fn first_validated(&self) -> Option<Attr> {
+        self.0.keys().find_map(|key| match key {
+            AttrKey::Std(attr) if attr.validated() => Some(*attr),
+            _ => None,
+        })
+    }
+
     fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
         let mut out = Vec::new();
         for (attr_key, attr_value) in &self.0 {

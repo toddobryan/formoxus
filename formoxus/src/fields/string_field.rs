@@ -1,6 +1,7 @@
+use formoxus_spec::{Attr, AttrValue};
 use regress::Regex;
 
-use crate::{ValidationMessage, field::Field};
+use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StringField {
@@ -16,6 +17,22 @@ impl Field for StringField {
     type Value = String;
 
     type Context = ();
+
+    /// `minlength`, `maxlength` and `pattern`, so the browser checks what
+    /// `check` does. The pattern goes out unanchored: a browser anchors it.
+    fn widget_attrs(&self) -> FieldAttrs {
+        let mut attrs = FieldAttrs::default();
+        if let Some(min) = self.min_length {
+            attrs = attrs.with_default(Attr::MinLength, AttrValue::Int(min));
+        }
+        if let Some(max) = self.max_length {
+            attrs = attrs.with_default(Attr::MaxLength, AttrValue::Int(max));
+        }
+        if let Some(patt) = self.pattern {
+            attrs = attrs.with_default(Attr::Pattern, AttrValue::Regex(patt));
+        }
+        attrs
+    }
 
     fn check(&self, value: &Self::Value) -> Vec<ValidationMessage> {
         let mut errors = Vec::new();
@@ -111,6 +128,20 @@ mod tests {
         let pets = pattern("cat|dog");
         expect_that!(messages(&pets, "dog"), is_empty());
         expect_that!(messages(&pets, "catfish"), len(eq(1)));
+    }
+
+    /// `regress` gives ECMAScript semantics, which is the point of choosing it
+    /// over `regex`: the server cannot disagree with a browser about what a
+    /// `pattern` means. Anchors are NOT multiline, `$` does not match before a
+    /// trailing newline the way Perl's does, and `.` excludes a newline. All
+    /// three matter on a `<textarea>`, whose value legitimately has newlines.
+    #[gtest]
+    fn anchors_and_dot_follow_javascript_not_perl() {
+        let five = pattern(r"\d{5}");
+        expect_that!(messages(&five, "12345\n67890"), len(eq(1)));
+        expect_that!(messages(&five, "12345\n"), len(eq(1)));
+        expect_that!(messages(&pattern(r".+"), "a\nb"), len(eq(1)));
+        expect_that!(messages(&pattern(r"(.|\n)+"), "a\nb"), is_empty());
     }
 
     /// The `v` flag, as a browser compiles `pattern`: `\p{L}` is a letter class.

@@ -211,7 +211,7 @@ Findings for the real implementation:
   available choices") moves into its `check`. Closes the gap in
   `.claude/memory/enum_as_a_value_choice.md` for a unit enum once Step 6 can
   name it.
-- [ ] **The constraints leave `FieldNode`.** `attrs`' validated keys move into
+- [x] **The constraints leave `FieldNode`** (done by the constraint move; A-1 answered: render-only attributes stay a `FieldAttrs` on the node). `attrs`' validated keys move into
   the fields above; `check(&Value)` replaces the attribute walk over the raw
   string; `widget_attrs()` emits them. **Decision A-1 (Todd):** the
   NON-validated author attributes (`placeholder`, `autocomplete`, `class`, a
@@ -222,7 +222,7 @@ Findings for the real implementation:
   to `NumberField<$ty>` (Todd, 2026-10-17), `String` to `StringField`, `Bool`
   to `BoolField`. That makes `dispatch!`'s numeric arms and `Number`'s impls
   one visible list. `ScalarField` is deleted.
-- [ ] **THE CONSTRAINT MOVE, designed 2026-10-17 (Todd + Claude).** The model
+- [x] **THE CONSTRAINT MOVE, designed 2026-10-17 (Todd + Claude); DONE the same day, `just ci` and `just e2e` green.** The model
   field's TYPE picks the field, through a trait rustc resolves:
   ```rust
   // formoxus::field_kind (doc-hidden)
@@ -253,12 +253,21 @@ Findings for the real implementation:
     field and widget, we shouldn't guess about exotic types. We should make
     devs specify them." Needs `field:` (Step 6) first, so a `Markdown(String)`
     field has a way to be declared; until then it stays.
+  - **Two errors for a wrong-kind setting, accepted for now** (Todd,
+    2026-10-18): `min` on a `String` gets rustc's "no field `min` on
+    `StringField`" AND the `applies` message; a struct or enum gets "has no
+    field that takes settings" (its main span is the whole `form!`) AND the
+    `applies` message. Revisit with `field:` in Step 6.
+  - **Not checked: a float bound too precise for its type.** rustc rounds
+    `9_007_199_254_740_993.0` silently. A literal could be checked at
+    expansion; a named const cannot (its digits are gone). Left to clippy's
+    `excessive_precision`.
   Runtime side: `Number` gains a `T` → `Bound` conversion so `widget_attrs()`
   emits `min`/`max`; `StringField` emits `minlength`/`maxlength`/`pattern`;
   `BoolField` emits `required` for `required_true`; `render` merges
   `widget_attrs()`; `check_attrs`, `check_bounds` and `FieldNode`'s
   `range_message` are deleted.
-- [ ] **`form!` builds the field when a setting belongs to it** (sequencing,
+- [x] **`form!` builds the field when a setting belongs to it** (done by the constraint move; sequencing,
   found 2026-10-17). Once `min` lives on `NumberField` rather than in
   `FieldAttrs`, `with_attrs` can no longer carry it: `form!` has to emit a
   constructor (`with_node`, Step 3) that builds `NumberField::<T> { min, max }`.

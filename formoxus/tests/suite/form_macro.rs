@@ -840,9 +840,10 @@ struct Listing {
 
 /// Every place a constraint may legitimately sit, so the `const _` checks
 /// `form!` emits must let each through: an `Option` is judged by what it
-/// holds, a nested field and a `[]` row by the leaf's own type, and a newtype
-/// is let through because its inside is out of reach at compile time. The
-/// rejections are trybuild goldens in `tests/ui/`, since they cannot compile.
+/// holds, and a nested field and a `[]` row by the leaf's own type. A newtype
+/// is NOT among them: it has no default field, so a setting on one does not
+/// compile (`tests/ui/form_setting_on_a_newtype`). The rejections are trybuild
+/// goldens in `tests/ui/`, since they cannot compile.
 #[gtest]
 fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
     let spec = || {
@@ -852,8 +853,7 @@ fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
                 hall.city => { min_length: 1 },
                 hall.seats => { min: 1, max: 500 },
                 tags[] => { pattern: "[a-z]+" },
-                rows[].price => { min: 0, max: 99.5 },
-                bio => { max_length: 280 },
+                rows[].price => { min: 0.0, max: 99.5 },
             }
         }
     };
@@ -877,14 +877,13 @@ struct Gauge {
 }
 
 /// A bound AT the limit of the field's type is ordinary (`min: 0` on a `u32`
-/// most of all), so the range check is inclusive. And `min: 2.0` on an integer
-/// field is whole, so it is used as 2 rather than rejected.
+/// most of all), so the range check is inclusive.
 #[gtest]
 fn bounds_at_the_limits_of_the_type_are_accepted() {
     let spec = || {
         form! {
             Gauge {
-                count => { min: 2.0, max: u32::MAX },
+                count => { min: 2, max: u32::MAX },
                 small => { min: 0, max: u8::MAX },
                 wide => { min: i64::MIN, max: i64::MAX },
                 level => { min: -f32::MAX, max: f32::MAX },
@@ -901,6 +900,6 @@ fn bounds_at_the_limits_of_the_type_are_accepted() {
         ])
     };
     expect_that!(Submission::accept(spec(), &fields("2")).is_ok(), eq(true));
-    let errors = Submission::accept(spec(), &fields("1")).expect_err("1 is below `min: 2.0`");
+    let errors = Submission::accept(spec(), &fields("1")).expect_err("1 is below `min: 2`");
     expect_that!(failing_paths(&errors), elements_are![eq("count")]);
 }

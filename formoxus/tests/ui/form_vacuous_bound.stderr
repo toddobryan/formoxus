@@ -1,5 +1,9 @@
-error[E0080]: evaluation panicked: `min` is outside the range of the field's type
-  --> tests/ui/form_vacuous_bound.rs:16:30
+error: literal out of range for `i8`
+  --> tests/ui/form_vacuous_bound.rs:15:30
    |
-16 |             offset => { min: LOWEST },
-   |                              ^^^^^^ evaluation of `main::_` failed here
+15 |             offset => { min: -1000 },
+   |                              ^^^^^
+   |
+   = note: the literal `-1000` does not fit into the type `i8` whose range is `-128..=127`
+   = help: consider using the type `i16` instead
+   = note: `#[deny(overflowing_literals)]` on by default

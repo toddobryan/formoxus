@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use facet::Facet;
-use formoxus_spec::FieldType;
+use formoxus_spec::{Attr, AttrValue, Bound, FieldType};
 
-use crate::{ValidationMessage, field::Field};
+use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 mod sealed {
     /// Public in a private module: nameable as a supertrait, implementable by
@@ -27,6 +27,10 @@ pub trait Number:
     + 'static
 {
     const KIND: FieldType; // Int or Float
+
+    /// This value as the untyped bound `min`/`max` are emitted from.
+    fn to_bound(self) -> Bound;
+
     fn is_nan(&self) -> bool {
         false
     }
@@ -35,7 +39,12 @@ pub trait Number:
 macro_rules! numbers {
     ($kind:ident: $($t:ty),*) => {$(
         impl sealed::Sealed for $t {}
-        impl Number for $t { const KIND: FieldType = FieldType::$kind; }
+        impl Number for $t {
+            const KIND: FieldType = FieldType::$kind;
+            fn to_bound(self) -> Bound {
+                Bound::Int(i128::from(self))
+            }
+        }
     )*};
 }
 numbers!(Int: i8, i16, i32, i64, u8, u16, u32, u64);
@@ -44,6 +53,9 @@ impl sealed::Sealed for f32 {}
 
 impl Number for f32 {
     const KIND: FieldType = FieldType::Float;
+    fn to_bound(self) -> Bound {
+        Bound::Float(f64::from(self))
+    }
     fn is_nan(&self) -> bool {
         f32::is_nan(*self)
     }
@@ -53,6 +65,9 @@ impl sealed::Sealed for f64 {}
 
 impl Number for f64 {
     const KIND: FieldType = FieldType::Float;
+    fn to_bound(self) -> Bound {
+        Bound::Float(self)
+    }
     fn is_nan(&self) -> bool {
         f64::is_nan(*self)
     }
@@ -81,6 +96,18 @@ impl<T: Number> Field for NumberField<T> {
     type Value = T;
 
     type Context = ();
+
+    /// `min` and `max`, so the browser checks what `check` does.
+    fn widget_attrs(&self) -> FieldAttrs {
+        let mut attrs = FieldAttrs::default();
+        if let Some(min) = self.min {
+            attrs = attrs.with_default(Attr::Min, AttrValue::Bound(min.to_bound()));
+        }
+        if let Some(max) = self.max {
+            attrs = attrs.with_default(Attr::Max, AttrValue::Bound(max.to_bound()));
+        }
+        attrs
+    }
 
     fn check(&self, value: &Self::Value) -> Vec<ValidationMessage> {
         // NaN compares false to everything, so it would slip past both bounds;

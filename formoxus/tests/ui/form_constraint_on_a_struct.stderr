@@ -1,3 +1,37 @@
+error[E0277]: `Address` has no field that takes settings like `min` or `max_length`
+  --> tests/ui/form_constraint_on_a_struct.rs:17:33
+   |
+17 |       let _ = empty_form::<Order>(form! {
+   |  _________________________________^
+18 | |         Order {
+19 | |             address => { max_length: 100 },
+   | |             ------- required by a bound introduced by this call
+20 | |         }
+21 | |     });
+   | |_____^ settings need a field formoxus knows
+   |
+help: the trait `DefaultField` is not implemented for `Address`
+  --> tests/ui/form_constraint_on_a_struct.rs:7:1
+   |
+ 7 | struct Address {
+   | ^^^^^^^^^^^^^^
+   = note: a struct, list or enum takes none; a newtype or another type of your own needs a field declared for it (`field:` in `form!`, not built yet)
+   = help: the following other types implement trait `DefaultField`:
+             bool
+             f32
+             f64
+             i16
+             i32
+             i64
+             i8
+             std::option::Option<T>
+           and $N others
+note: required by a bound in `formoxus::field_kind::field_for`
+  --> src/field_kind.rs
+   |
+   | pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor {
+   |                        ^^^^^^^^^^^^ required by this bound in `field_for`
+
 error[E0080]: evaluation panicked: `max_length` applies only to a String field
   --> tests/ui/form_constraint_on_a_struct.rs:19:38
    |

@@ -1,5 +1,24 @@
-error[E0080]: evaluation panicked: `min` is an integer too large to hold exactly as an f64
+error[E0308]: mismatched types
   --> tests/ui/form_integer_bound_too_big_for_f64.rs:15:31
    |
 15 |             balance => { min: 9_007_199_254_740_993_i64 },
-   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                               |
+   |                               expected `f64`, found `i64`
+   |                               arguments to this enum variant are incorrect
+   |
+help: the type constructed contains `i64` due to the type of the argument passed
+  --> tests/ui/form_integer_bound_too_big_for_f64.rs:15:31
+   |
+15 |             balance => { min: 9_007_199_254_740_993_i64 },
+   |                               ^^^^^^^^^^^^^^^^^^^^^^^^^ this argument influences the type of `Some`
+note: tuple variant defined here
+  --> $RUST/core/src/option.rs
+   |
+   |     Some(#[stable(feature = "rust1", since = "1.0.0")] T),
+   |     ^^^^
+help: change the type of the numeric literal from `i64` to `f64`
+   |
+15 -             balance => { min: 9_007_199_254_740_993_i64 },
+15 +             balance => { min: 9_007_199_254_740_993_f64 },
+   |

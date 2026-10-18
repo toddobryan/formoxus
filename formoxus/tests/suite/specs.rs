@@ -11,8 +11,8 @@ use super::models::{EventForCreate, Location};
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue, RenderedInputType};
-use formoxus::field_attrs::FieldAttrs;
+use formoxus::attrs::RenderedInputType;
+use formoxus::field_kind::field_for;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
@@ -441,15 +441,16 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 /// DOM: a constraint has no markup of its own yet, so validation is the only
 /// place its arrival shows.
 ///
-/// Every other constraint test sets constraints straight onto a `Field`,
-/// which means this is the only one that would notice the walk dropping
-/// them on the floor.
+/// Every other constraint test sets constraints straight onto a field, which
+/// means this is the only one that would notice the walk dropping a spec's
+/// settings on the floor. A validated setting is the field's, so it goes
+/// through `with_node`, as `form!` emits it.
 #[gtest]
 fn a_constraint_from_the_spec_reaches_validation() {
     let spec = || {
-        FormSpec::<EventForCreate>::default().with_attrs(
+        FormSpec::<EventForCreate>::default().with_node(
             "title",
-            FieldAttrs::from([(AttrKey::Std(Attr::MaxLength), AttrValue::Int(5))]),
+            field_for(|m: &EventForCreate| &m.title, |f| f.max_length = Some(5)),
         )
     };
 
@@ -469,9 +470,14 @@ fn a_constraint_from_the_spec_reaches_validation() {
 /// even if the prefix were being dropped.
 #[gtest]
 fn a_constraint_reaches_a_nested_leaf() {
-    let spec = FormSpec::<EventForCreate>::default().with_attrs(
+    let spec = FormSpec::<EventForCreate>::default().with_node(
         "location.zip",
-        FieldAttrs::from([(AttrKey::Std(Attr::Pattern), AttrValue::Regex(r"\d{5}"))]),
+        field_for(
+            |m: &EventForCreate| &m.location.zip,
+            |f| {
+                f.pattern = Some(r"\d{5}");
+            },
+        ),
     );
 
     let mut values = full_event("Fine");
@@ -479,4 +485,21 @@ fn a_constraint_reaches_a_nested_leaf() {
 
     let errors = Submission::accept(spec, &values).expect_err("NW1 is not five digits");
     expect_that!(failing_paths(&errors), elements_are![eq("location.zip")]);
+}
+
+/// A validated key in `with_attrs` would render and never be checked, so the
+/// browser and the server would disagree; it is refused instead. The message
+/// names the key as `form!` spells it (`max_length`), not as HTML does
+/// (`maxlength`), since that is what the dev wrote and what the setting is
+/// called.
+#[gtest]
+#[should_panic(expected = "title: `max_length` is validated, so it is a setting of the field")]
+fn a_validated_key_in_with_attrs_is_refused_by_its_form_name() {
+    let _ = FormSpec::<EventForCreate>::default().with_attrs(
+        "title",
+        formoxus::field_attrs::FieldAttrs::from([(
+            formoxus::attrs::AttrKey::Std(formoxus::attrs::Attr::MaxLength),
+            formoxus::attrs::AttrValue::Int(5),
+        )]),
+    );
 }

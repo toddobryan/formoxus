@@ -1,4 +1,6 @@
-use crate::{ValidationMessage, field::Field};
+use formoxus_spec::{Attr, AttrValue};
+
+use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 /// A `bool`, parsed from `"true"`/`"false"` by facet's default `parse`.
 ///
@@ -17,6 +19,18 @@ impl Field for BoolField {
     type Value = bool;
 
     type Context = ();
+
+    /// `required_true` as HTML `required`, which on a checkbox means "must be
+    /// ticked". On a select or radio group it means something else, and the
+    /// attribute table keeps it off those (`true_and_on`).
+    fn widget_attrs(&self) -> FieldAttrs {
+        let attrs = FieldAttrs::default();
+        if self.required_true {
+            attrs.with_default(Attr::RequiredTrue, AttrValue::Flag)
+        } else {
+            attrs
+        }
+    }
 
     fn check(&self, value: &bool) -> Vec<ValidationMessage> {
         if self.required_true && !value {
