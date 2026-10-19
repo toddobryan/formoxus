@@ -5,11 +5,22 @@ metadata:
   type: project
 ---
 
+**2026-10-18, LATER: STEP 4 DONE (`38ea185`, 4 ahead of origin, not pushed);
+STEP 5's W-A DECIDED, written into `formoxus/FIELDS_PLAN.md`.** A widget is a
+struct of PROPS like a Dioxus component (`pub` fields, set in the widget's
+braces in `form!`, checked by rustc), `const EXTENDS: AttrSet` for pass-through
+HTML attributes, `#[derive(Widget)]` with `render` by hand (shape 1), a hidden
+`DynWidget` + `AnyWidget` newtype. Parts shrink to CLASS SLOTS; per-part
+attribute addressing (D0 3–5) dropped. Step 5 = single-control widgets only;
+multi-control (`ContactInfoWidget` set, `DateWidget` split) is new Step 10.
+Step 6 gained `Field::format` and "a named field wins over any shape".
+**Next: W-B and W-C.** Tablet page not yet republished with this.
+
 **2026-10-18: STEP 4's CONSTRAINT MOVE DONE (`a40278b`, 3 ahead of origin, not
 pushed).** Four fields in `fields/`; `form!` emits `with_node(…, field_for(proj,
 |__f| { … }))`; `DefaultField` maps model type → field; `check_attrs` gone;
-`with_attrs` refuses validated keys. Todd is leaning on me more (tired, NOT
-stopping): I now write library code he hands me. **Next in Step 4: wire
+`with_attrs` refuses validated keys. Todd leans on me more, but I write library
+code ONLY when he asks for a specific piece (Todd, 2026-10-18: "Don't assume."). **Next in Step 4: wire
 `ChoiceField` (typed `choices:`, separate change, decision C).**
 
 **2026-10-17, END: STEP 3 DONE, S-b INTEGRATED.** The walk applies the

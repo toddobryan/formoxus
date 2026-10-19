@@ -298,11 +298,54 @@ widgets become ONE concept.
 
 ### Decisions first (Todd)
 
-- **W-A. Where a widget's compile-time facts live.** `Box<dyn Widget>`
-  rules out associated consts on `Widget`, so the facts `form!` checks (which
-  attributes it takes, its parts, its default classes) need either a companion
-  non-`dyn` trait (`WidgetKind`, implemented next to `Widget`) or a const
-  value the macro can name.
+- **W-A. DECIDED 2026-10-18 (Todd): a widget is a struct of PROPS, like a
+  Dioxus component.** Worked out in conversation; the reasoning:
+  - **Props are `pub` fields on the widget's type**, the same move as a
+    field's settings, so rustc checks names and types and `form!` keeps no
+    list. They go in the widget's braces, `widget: MarkdownWidget { preview:
+    true }`, emitted as a struct expression with `..Default::default()`, each
+    key keeping its span. Field-level keys stay field settings and HTML
+    attributes, so a prop can never collide with an attribute's name.
+  - **`EXTENDS: AttrSet`**, Dioxus's `#[props(extends = textarea)]`: the HTML
+    attributes the widget passes through and spreads where it likes. A const
+    bitset over `Attr`; `AttrSet::valid_on(element)` reads the table, plus
+    `.with`, `.without`, `ANY`; owned attributes are never in one. It is the
+    only compile-time fact left, since props need none.
+  - **Validated keys never need to be in `EXTENDS`.** `min_length` and the
+    rest are the FIELD's settings: always server-checked, reaching the widget
+    through `Field::widget_attrs()`, and emitted only where it can carry them.
+    So a custom widget over a `StringField` lists nothing to compile.
+  - **Parts shrink to CLASS SLOTS.** Per-part attribute addressing (D0's
+    points 3–5 in `ATTRIBUTES_PLAN.md`) was never built and is dropped; the
+    widget decides where every attribute goes. `Classes` stays keyed by
+    (widget, slot), and a prop overrides one slot for one field: `RadioGroup`
+    gets `group_class`/`input_class` props, settling that hold.
+  - **One dev-facing trait, the `dyn` one hidden.** Consts make a trait
+    non-`dyn`, so the dev implements `Widget` (Sized, with the consts and
+    `render`) and formoxus has a `#[doc(hidden)] DynWidget` with a blanket
+    impl, held as a newtype `AnyWidget(Box<dyn DynWidget>)` with hand-written
+    `Clone`/`PartialEq` (deriving `PartialEq` over `Box<dyn …>` hits a rustc
+    bug). Spiked in a standalone file: compiles, and a `const _` assert reads
+    "evaluation panicked: `rows` goes on a `textarea`, and `MarkdownWidget`
+    has none".
+  - **Shape 1: `#[derive(Widget)]`** writes the facts (`#[widget(extends =
+    textarea)]`, per-prop `#[widget(default = …)]`, so `Default`); the dev
+    writes `render` by hand. Chosen over an attribute on a fn (`#[component]`
+    style) because a type keeps room for associated functions. The attribute
+    is `#[widget(…)]`, not `#[props(…)]`, which is Dioxus's. A derive is fine
+    here despite CLAUDE.md's "never derives": a widget is the dev's own type,
+    in the dev's own crate. The plain trait comes first; the derive is a
+    later box.
+  - **Multi-control widgets, both kinds, are wanted** (Todd): a SET widget
+    laying out a struct's leaves as one control (`ContactInfoWidget`; names,
+    parsing and errors already work through the `FieldSet`), and a SPLIT
+    widget putting one scalar over several controls (`DateWidget`; needs
+    sub-paths and Django's `decompress`/`value_from_datadict` pair).
+    **Step 5 builds SINGLE-CONTROL widgets only** (Todd, 2026-10-18), and must
+    not rule the others out (its acceptance box); they are Step 10.
+  - Still open, small: are prop values plain expressions (so `label_class:
+    "big bold"`, not the `[big, bold]` class grammar)? Plain assignment or
+    `.into()` (which breaks integer literals, as it did for choices)?
 - **W-B. What stays in `formoxus-spec`.** Today `BuiltinWidget` there is how
   `form!` knows `widget: textarea`. With widget types, `widget: textarea` can
   name `::formoxus::widgets::Textarea` and check through W-A's consts, which
@@ -315,14 +358,23 @@ widgets become ONE concept.
 
 ### Boxes
 
-- [ ] **`trait Widget`**: at least `render(&self, props: WidgetProps) ->
-  Element`; `Send + Sync`, `Debug`, and a `clone_box` (a `FormState` crosses
-  to the server). Moves out of `field.rs` (its `// TODO: move`).
+- [ ] **`trait Widget`**, per W-A: `Clone + Debug + PartialEq + Default + Send
+  + Sync + 'static`, `const EXTENDS: AttrSet`, `render(&self, props:
+  WidgetProps) -> Element`, and a `default_classes` fn for its class slots.
+  Moves out of `field.rs` (its `// TODO: move`).
+- [ ] **`AttrSet`** in `formoxus-spec`: a const bitset over `Attr`,
+  `valid_on(element)`, `with`, `without`, `ANY`, never an owned attribute.
+- [ ] **The hidden `DynWidget`** with a blanket impl, and **`AnyWidget`**, the
+  newtype every holder stores (hand-written `Clone`/`PartialEq`).
+- [ ] **`form!`: props in the widget's braces**, a struct expression with
+  `..Default::default()` (today's "a widget takes no arguments" error goes);
+  a `const _` assert per field-level HTML attribute against `EXTENDS`,
+  skipping validated keys.
 - [ ] **The built-in widget types**, per W-C, each wrapping today's component.
 - [ ] **`Field::default_widget`** returns one; `ChoiceField` builds its chooser
   with its choices inside it (Django style: `Select { choices }`).
 - [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
-  Box<dyn Widget>`, never an `Option`.
+  AnyWidget`, never an `Option`.
 - [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
   errors, classes`) replaces `FieldProps`, the old `WidgetProps`, and
   `ScalarWidget`'s props. `ScalarWidget` itself goes: `FieldNode::render`
@@ -333,8 +385,16 @@ widgets become ONE concept.
 - [ ] **Delete** `WidgetType`, the `Custom` fn pointer, `FieldSpec::custom_widget`.
 - [ ] **The variant picker** (`VariantSelect`) becomes a chooser widget that
   still fires `on_edit` (decided 2026-10-16).
+- [ ] **`#[derive(Widget)]`** with `#[widget(extends = …)]` and per-prop
+  `#[widget(default = …)]`, once the built-ins show what it should write.
+  `CLAUDE.md`'s "never derives" gains its exception.
 - [ ] Tests (Claude): `widget_matrix` and the custom-widget tests move to the
-  new trait; goldens for a key a widget does not take.
+  new trait; goldens for a key a widget does not take, a misspelled prop, and
+  a prop of the wrong type.
+- [ ] **Acceptance: nothing rules out Step 10.** `render` gets the whole
+  `ValuesStore` and its path, not one value string; `AnyWidget` does not
+  depend on `FieldNode`, so a `FieldSet` can hold one later; and the trait
+  leaves room for split hooks (`sub_names`, `combine`) as default methods.
 
 ## Step 6: `field:` in `form!`, and the type → field registry
 
@@ -342,6 +402,17 @@ widgets become ONE concept.
   through Step 3's mechanism.
 - [ ] **`form!` emits `const _` checks** against `<F as Field>::KIND` (and
   the widget's facts, W-A) for every field it names.
+- [ ] **A named field wins over any shape.** Today a constructor is consulted
+  only in `scalar_node` (`build.rs`, "A spec that names this leaf with a
+  constructor builds it"), and `node_for_shape` sends a struct to
+  `struct_node` and a list to `list_node` before that. So `field: X` on a
+  struct-valued path would build a fieldset and never `X`. The check moves to
+  the top of `node_for_shape`. (Found 2026-10-18.)
+- [ ] **`Field::format(&self, value: &Self::Value) -> String`**, the reverse
+  of `parse` (Django's `prepare_value`), defaulting to facet's display as
+  `FieldNode::raw_value` does today. A struct value has no display, so
+  without it an existing value cannot refill its input; `populate`'s
+  `""`-is-absence check goes through it too. (Found 2026-10-18.)
 - [ ] **A registry from model type to field type**, for fields the runtime
   walk meets with only a `Shape` (unnamed, nested, in a row or variant).
   Subsumes `.claude/memory/widget_registry_idea.md`: each field declares its
@@ -395,6 +466,25 @@ for Address { … } }` names it, item and expression both, `Form<Address>` kept.
   …) collides in name with the runtime one; rename whichever survives.
 - [ ] **Rewrite `ATTRIBUTES_PLAN.md`'s Step 4** for what is left (below).
 - [ ] Docs: README, the prelude, `CLAUDE.md`'s vocabulary sections.
+
+## Step 10: multi-control widgets
+
+Added 2026-10-18 (Todd: both kinds are wanted). Numbered last only so the
+step numbers other notes cite stay put; it can start any time after Step 6.
+Each kind is built for ONE real widget first, not as a framework (agreed
+2026-10-15).
+
+- [ ] **Set widgets: `ContactInfoWidget`.** A widget on a `FieldSet` that lays
+  out its struct's leaves as one control. Names, parsing, validation and
+  per-leaf errors already work, so this is layout only: the set holds an
+  optional `AnyWidget` and hands it its children's props.
+- [ ] **Split widgets: `DateWidget`.** One scalar over several controls
+  (day/month/year). Needs sub-paths (`when.day`), Django's
+  `decompress`/`value_from_datadict` pair as `Widget` default methods, and
+  changes to `ValuesStore`, `distribute_values` and the server's matching of
+  a submitted name to its path.
+- [ ] Tests (Claude): each in the suite, an e2e form for each, and the
+  gallery.
 
 ---
 

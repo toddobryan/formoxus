@@ -171,6 +171,13 @@ widgets this is derived from the element facts.
 
 ## DECIDED 2026-10-10 (Todd): widgets have PARTS, named by their elements
 
+> **SUPERSEDED IN PART 2026-10-18 (Todd, FIELDS_PLAN.md W-A).** Parts survive
+> only as CLASS SLOTS (`Classes` keyed by widget and slot). Addressing
+> attributes to a part (decisions 3–5 below, and open point A) is DROPPED,
+> never having been built: a widget is a struct of props with `EXTENDS:
+> AttrSet`, and its `render` decides where every attribute goes. Per-element
+> classes per field become props (`RadioGroup`'s `group_class`/`input_class`).
+
 Todd floated it 2026-10-09: treat `RadioGroup` as the first multi-element
 widget (cf. Django's `MultiWidget`). Claude wrote it up 2026-10-10; Todd
 ADOPTED it the same day, with three decisions of his own (below). Points still
