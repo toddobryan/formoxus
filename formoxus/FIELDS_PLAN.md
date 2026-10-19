@@ -343,18 +343,38 @@ widgets become ONE concept.
     sub-paths and Django's `decompress`/`value_from_datadict` pair).
     **Step 5 builds SINGLE-CONTROL widgets only** (Todd, 2026-10-18), and must
     not rule the others out (its acceptance box); they are Step 10.
-  - Still open, small: are prop values plain expressions (so `label_class:
-    "big bold"`, not the `[big, bold]` class grammar)? Plain assignment or
-    `.into()` (which breaks integer literals, as it did for choices)?
-- **W-B. What stays in `formoxus-spec`.** Today `BuiltinWidget` there is how
-  `form!` knows `widget: textarea`. With widget types, `widget: textarea` can
-  name `::formoxus::widgets::Textarea` and check through W-A's consts, which
-  would let `BuiltinWidget` shrink to the data spec genuinely needs (parts,
-  elements). Keep it whole, shrink it, or retire it?
-- **W-C. The widget type list.** Django's names (`TextInput`, `NumberInput`,
-  `EmailInput`, …, `Textarea`, `CheckboxInput`, `Select`, `RadioSelect`,
-  `HiddenInput`) or one type per `RenderedInputType`. Raised before: one type
-  per input `type`.
+  - **Prop values are plain expressions, emitted with `.into()`** (Todd,
+    2026-10-19). So `label_class: "big bold"`, never the `[big, bold]` class
+    grammar: `form!` cannot know which keys a widget wants converted, since
+    the dev names them. `.into()` on everything EXCEPT a bare number
+    literal (Todd, 2026-10-19): `rows: 5.into()` into a `u32` does not
+    compile, since the literal falls back to `i32` and there is no `i32 →
+    u32` `From`, the failure `choices` hit. So `form!` emits a number literal
+    as written and wraps every other value in `.into()`.
+- **W-B. DECIDED 2026-10-19 (Todd): `BuiltinWidget` is retired.** Its three
+  jobs all move: naming a widget goes to a type path, attribute checking to
+  `Widget::EXTENDS`, and class-slot keys to something every widget has (a
+  `const NAME` on the trait), since a custom widget has slots too and an enum
+  of the built-ins cannot key them. `parts()` goes; slots are names a widget
+  declares. `formoxus-spec` keeps `Element`, `FieldControl`, the attribute
+  table and the new `AttrSet`. **Lowercase names stay as the built-ins'
+  spelling** (`widget: textarea` → `::formoxus::widgets::Textarea`), and a
+  custom widget is written as a path (`widget: crate::MarkdownWidget { … }`),
+  as discussed earlier. The macro keeps a small name → path table for the
+  lowercase names.
+- **W-C. DECIDED 2026-10-19 (Todd): Django's names, extended.** The input
+  type must be in the Rust type, since `EXTENDS` is a const and attributes
+  differ by type (`step` on `number`, not `text`), so it is one type per
+  input type either way; the question was naming. `TextInput`,
+  `NumberInput`, `EmailInput`, `PasswordInput`, `HiddenInput`,
+  `CheckboxInput`, `Textarea`, `Select`, and HTML's name + `Input` where
+  Django has none (`TelInput`, `SearchInput`, `UrlInput`, `ColorInput`,
+  `DateInput`, `TimeInput`, `DatetimeLocalInput`, `MonthInput`,
+  `WeekInput`). One `macro_rules!` generates the text-like ones over a shared
+  render. Rejected: a generic `Input<Email>`, noisier in `form!` and with no
+  home for a one-type prop (Django's `PasswordInput { render_value }`).
+  The radio widget stays `RadioGroup`, not Django's `RadioSelect` (Todd,
+  2026-10-19).
 
 ### Boxes
 
@@ -382,7 +402,10 @@ widgets become ONE concept.
 - [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
   wrapper, label and errors around the form control a widget builds; the radio
   group keeps its own shape. Snapshot-guarded.
-- [ ] **Delete** `WidgetType`, the `Custom` fn pointer, `FieldSpec::custom_widget`.
+- [ ] **Delete** `WidgetType`, the `Custom` fn pointer, `FieldSpec::custom_widget`,
+  and (W-B) `BuiltinWidget`, `RenderedInputType` if nothing else needs it,
+  `SlotKey::Part`'s enum key and the macro's "unknown widget" table beyond
+  the lowercase built-in names.
 - [ ] **The variant picker** (`VariantSelect`) becomes a chooser widget that
   still fires `on_edit` (decided 2026-10-16).
 - [ ] **`#[derive(Widget)]`** with `#[widget(extends = …)]` and per-prop

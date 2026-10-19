@@ -5,6 +5,15 @@ metadata:
   type: project
 ---
 
+**2026-10-19: W-B, W-C AND W-A's PROP QUESTION DECIDED** (in
+`formoxus/FIELDS_PLAN.md` Step 5). `BuiltinWidget` is retired; class slots key
+on a per-widget `const NAME`; lowercase `widget: textarea` stays as the
+built-ins' spelling, custom widgets are paths. Widget types use Django's names
+extended (`TextInput`, `TelInput`, …). Props are plain expressions, `.into()`.
+`.into()` on all but a bare number literal (emitted as written).
+The radio widget stays `RadioGroup`. Step 5's decisions are all made. **Next: Step 5's boxes, code only on Todd's say-so per piece.**
+Tablet page: republish when Todd says he is heading to the tablet.
+
 **2026-10-18, LATER: STEP 4 DONE (`38ea185`, 4 ahead of origin, not pushed);
 STEP 5's W-A DECIDED, written into `formoxus/FIELDS_PLAN.md`.** A widget is a
 struct of PROPS like a Dioxus component (`pub` fields, set in the widget's
