@@ -378,14 +378,107 @@ widgets become ONE concept.
 
 ### Boxes
 
-- [ ] **`trait Widget`**, per W-A: `Clone + Debug + PartialEq + Default + Send
-  + Sync + 'static`, `const EXTENDS: AttrSet`, `render(&self, props:
-  WidgetProps) -> Element`, and a `default_classes` fn for its class slots.
-  Moves out of `field.rs` (its `// TODO: move`).
 - [x] **`AttrSet`** in `formoxus-spec`: a const bitset over `Attr`,
   `valid_on(element)`, `with`, `without`, `ANY`, never an owned attribute.
-- [ ] **The hidden `DynWidget`** with a blanket impl, and **`AnyWidget`**, the
-  newtype every holder stores (hand-written `Clone`/`PartialEq`).
+- [x] **`trait Widget`, `DynWidget` and `AnyWidget`, one change** (Todd,
+  2026-10-19: together, because `Field::default_widget` returns `Box<dyn
+  Widget>` today and a trait with consts cannot be `dyn`). In a new
+  `formoxus/src/widgets/widget.rs`; `widgets.rs` gains `pub mod widget;` and
+  `pub use widget::{AnyWidget, Widget};`. The stub and its `// TODO: move`
+  leave `field.rs`. Shape proven in the W-A spike (2026-10-18), which had
+  `PARTS` where this has `NAME`/`EXTENDS`/`default_classes`:
+
+  ```rust
+  use std::{any::Any, fmt::Debug};
+  use dioxus::prelude::Element;                    // NOT formoxus_spec::Element
+  use formoxus_spec::AttrSet;
+  use crate::{classes::Slot, widgets::widget_props::WidgetProps};
+
+  pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
+      /// Keys this widget's class slots in `Classes` (W-B). Unique per widget.
+      const NAME: &'static str;
+      /// The HTML attributes this widget passes through (W-A).
+      const EXTENDS: AttrSet;
+      fn render(&self, props: WidgetProps) -> Element;
+      /// Each class slot this widget has, with its default (`fx`) classes.
+      fn default_classes() -> Vec<(&'static str, Slot)>;
+  }
+
+  pub(crate) trait DynWidget: Debug + Send + Sync {
+      fn render(&self, props: WidgetProps) -> Element;
+      fn name(&self) -> &'static str;
+      fn default_classes(&self) -> Vec<(&'static str, Slot)>;
+      fn clone_box(&self) -> Box<dyn DynWidget>;
+      fn as_any(&self) -> &dyn Any;
+      fn eq_dyn(&self, other: &dyn DynWidget) -> bool;
+  }
+
+  impl<W: Widget> DynWidget for W {
+      fn render(&self, props: WidgetProps) -> Element { Widget::render(self, props) }
+      fn name(&self) -> &'static str { W::NAME }
+      fn default_classes(&self) -> Vec<(&'static str, Slot)> { W::default_classes() }
+      fn clone_box(&self) -> Box<dyn DynWidget> { Box::new(self.clone()) }
+      fn as_any(&self) -> &dyn Any { self }
+      fn eq_dyn(&self, other: &dyn DynWidget) -> bool {
+          other.as_any().downcast_ref::<W>() == Some(self)
+      }
+  }
+
+  #[derive(Debug)]
+  pub struct AnyWidget(Box<dyn DynWidget>);         // field private
+  impl AnyWidget {
+      pub fn new(widget: impl Widget) -> Self { Self(Box::new(widget)) }
+      pub fn render(&self, props: WidgetProps) -> Element { self.0.render(props) }
+      pub fn name(&self) -> &'static str { self.0.name() }
+      pub fn default_classes(&self) -> Vec<(&'static str, Slot)> { self.0.default_classes() }
+  }
+  impl<W: Widget> From<W> for AnyWidget { fn from(w: W) -> Self { Self::new(w) } }
+  impl Clone for AnyWidget { fn clone(&self) -> Self { Self(self.0.clone_box()) } }
+  impl PartialEq for AnyWidget { fn eq(&self, o: &Self) -> bool { self.0.eq_dyn(&*o.0) } }
+  ```
+
+  Why each piece:
+  1. **Every bound on `Widget` has a job.** `Clone`/`PartialEq` let
+     `FieldNode`, and so `FormSpec`, keep deriving theirs; `Debug` likewise;
+     `Default` is what `form!`'s `..Default::default()` needs (later box);
+     `Send + Sync` keep `AnyWidget` storable wherever a spec goes; `'static`
+     is what `as_any` needs.
+  2. **`EXTENDS` is not on `DynWidget`**: only `form!`'s `const _` asserts
+     read it, through the concrete type, never at run time.
+  3. **`default_classes` is a fn, not a `const SLOTS`** (Todd): `Slot`'s
+     `with_invalid` takes `impl Into<Cow>`, so it cannot be const, and every
+     built-in's wrapper slot has an invalid class. No `&self` on the trait's
+     version, since the slots are the type's, not one value's.
+  4. **`render` takes `props` by value** (Todd): `FieldNode` builds a fresh
+     one each render, and the widget moves strings out of it into `rsx!`.
+  5. **`render` is a plain method, NOT a component**, so it must not call
+     hooks itself: `FieldNode::render` calls it inside its own component, and
+     a hook there would join that component's hook list. A widget that needs
+     state renders a `#[component]` of its own from `render`, which is what
+     the built-ins will do with today's `Input`, `Textarea` and the rest.
+  6. **`DynWidget` is `pub(crate)`, not `#[doc(hidden)] pub`.** `AnyWidget`'s
+     field is private and its methods forward, so no dev ever names it, and
+     private-in-public never comes up. (W-A said `doc(hidden)`; this is
+     tighter.)
+  7. **`Clone` and `PartialEq` are written by hand.** Deriving `PartialEq`
+     over a `Box<dyn …>` trips a rustc bug (it tries to move out of the box),
+     and `Clone` needs `clone_box`. `eq_dyn` downcasts, so two widgets of
+     different types are unequal and two of one type compare their props.
+     `Debug` can be derived, since `dyn DynWidget: Debug`.
+  8. **`From<W>`** so a holder can take `impl Into<AnyWidget>`, and
+     `default_widget` can end in `.into()`.
+
+  `Field::default_widget` returns `AnyWidget` and keeps its `todo!()`; nothing
+  constructs one until the built-in types exist. One test file names the old
+  stub: `tests/suite/spec_constructors.rs`'s `CapField` overrides
+  `default_widget`, so it imports `formoxus::widgets::AnyWidget` and returns
+  that. The sketch above, dropped in with those edits, passed workspace
+  clippy (`-D warnings`) and the suite, 2026-10-19. Name clash to expect at
+  that box (not this one): W-C's `Textarea`, `Select` and `RadioGroup`
+  widget types share names with today's components in `formoxus::widgets`.
+  Tests (Claude), inline in `widget.rs` with two toy widgets: `eq` across
+  equal props, different props and different types; a clone is equal; `name`
+  and `default_classes` reach through `AnyWidget`.
 - [ ] **`form!`: props in the widget's braces**, a struct expression with
   `..Default::default()` (today's "a widget takes no arguments" error goes);
   a `const _` assert per field-level HTML attribute against `EXTENDS`,

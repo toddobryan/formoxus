@@ -96,7 +96,7 @@ pub struct FieldNode<F: Field> {
     pub optional: bool,
     /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
-    /// Becomes `widget: Box<dyn Widget>` in Step 5.
+    /// Becomes `widget: AnyWidget` in Step 5, resolved once by `build.rs`.
     pub custom_widget: Option<WidgetType>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `String` field standing in for a `Markdown` field. `None` for an

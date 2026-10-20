@@ -2,7 +2,11 @@ use std::fmt::Debug;
 
 use facet::{Facet, Partial, Peek};
 
-use crate::{ValidationMessage, field_attrs::FieldAttrs, widgets::Choice};
+use crate::{
+    ValidationMessage,
+    field_attrs::FieldAttrs,
+    widgets::{AnyWidget, Choice},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -35,7 +39,7 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         reason = "no `Widget` can be built until Step 5 of `FIELDS_PLAN.md`; \
         rendering still goes through `WidgetType`"
     )]
-    fn default_widget(&self, _optional: bool) -> Box<dyn Widget> {
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
         todo!("Step 5: rendering still goes through `WidgetType`")
     }
 
@@ -51,9 +55,6 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         None
     }
 }
-
-// TODO: move
-pub trait Widget: Debug {}
 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —
 /// the runtime equivalent of the `T: FromStr` bound the macro-based version

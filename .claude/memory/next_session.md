@@ -5,6 +5,15 @@ metadata:
   type: project
 ---
 
+**2026-10-20: STEP 5's `Widget` BOX DONE (pushed).** Todd wrote `trait
+Widget` (`NAME`, `EXTENDS`, `render(&self, props: WidgetProps)`,
+`default_classes()`), the `pub(crate) DynWidget` and `AnyWidget` in
+`formoxus/src/widgets/widget.rs`, from the fleshed-out box in
+`FIELDS_PLAN.md`; I wrote the inline tests and the docs (the no-hooks rule on
+`render`). `default_widget` returns `AnyWidget`, still `todo!()`. **Next:
+`form!` takes props in the widget's braces, plus the `EXTENDS` asserts.**
+Todd continues from his school computer.
+
 **2026-10-19, EVENING: STEP 5's `AttrSet` BOX DONE, plus `step`
 (two commits, `8183d4f` AttrSet then `step`; not pushed).** Todd wrote `AttrSet` (`EMPTY`, `ANY`, `valid_on(element)`,
 `with`/`without`/`contains`, all const) in `formoxus-spec`; I wrote its tests.

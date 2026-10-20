@@ -64,6 +64,7 @@ pub mod textarea;
 pub mod types;
 pub mod values;
 pub mod variant_select;
+pub mod widget;
 pub mod widget_props;
 
 // Flat, like the crate root: a caller reaching for `Choice` should not
@@ -82,3 +83,4 @@ pub use values::{get_current, write_value};
 // written without it — so `use formoxus::widgets::*` is the whole kit.
 pub use crate::nodes::ValuesStore;
 pub use variant_select::VariantSelect;
+pub use widget::{AnyWidget, Widget};
