@@ -382,7 +382,7 @@ widgets become ONE concept.
   + Sync + 'static`, `const EXTENDS: AttrSet`, `render(&self, props:
   WidgetProps) -> Element`, and a `default_classes` fn for its class slots.
   Moves out of `field.rs` (its `// TODO: move`).
-- [ ] **`AttrSet`** in `formoxus-spec`: a const bitset over `Attr`,
+- [x] **`AttrSet`** in `formoxus-spec`: a const bitset over `Attr`,
   `valid_on(element)`, `with`, `without`, `ANY`, never an owned attribute.
 - [ ] **The hidden `DynWidget`** with a blanket impl, and **`AnyWidget`**, the
   newtype every holder stores (hand-written `Clone`/`PartialEq`).

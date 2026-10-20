@@ -28,7 +28,9 @@ mod input_types;
 mod slot_key;
 mod widgets;
 
-pub use attrs::{Attr, AttrKey, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
+pub use attrs::{
+    Attr, AttrKey, AttrSet, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner,
+};
 pub use bound::Bound;
 pub use buttons::{ButtonType, Invocation};
 pub use elements::{Element, FieldControl};

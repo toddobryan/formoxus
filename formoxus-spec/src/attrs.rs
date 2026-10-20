@@ -107,6 +107,10 @@ macro_rules! attributes {
         impl Attr {
             pub const ALL: &[Attr] = &[ $( Self::$variant ),+ ];
 
+            pub(crate) const fn bit(self) -> u128 {
+                1 << (self as u32)
+            }
+
             pub const fn name(self) -> &'static str {
                 match self {
                     $( Self::$variant => $name, )+
@@ -195,6 +199,63 @@ macro_rules! attributes {
                 None
             }
         }
+
+
+        const _: () = assert!(
+            Attr::ALL.len() <= 128,
+            "`AttrSet` is a u128: one bit per `Attr`, and the table has outgrown it",
+        );
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct AttrSet(u128);
+
+impl AttrSet {
+    pub const EMPTY: Self = Self(0);
+
+    pub const ANY: Self = {
+        let mut set = Self::EMPTY;
+        let mut i = 0;
+        while i < Attr::ALL.len() {
+            let attr = Attr::ALL[i];
+            if !matches!(attr.owner(), Owner::Formoxus) {
+                set.0 |= attr.bit();
+            }
+            i += 1;
+        }
+        set
+    };
+
+    pub const fn valid_on(element: Element) -> Self {
+        let mut set = Self::EMPTY;
+        let mut i = 0;
+        while i < Attr::ALL.len() {
+            let attr = Attr::ALL[i];
+            if !matches!(attr.owner(), Owner::Formoxus) && attr.is_valid_on(element) {
+                set.0 |= attr.bit();
+            }
+            i += 1;
+        }
+        set
+    }
+
+    pub const fn with(mut self, attr: Attr) -> Self {
+        assert!(
+            !matches!(attr.owner(), Owner::Formoxus),
+            "`with` cannot be used with owned attributes"
+        );
+        self.0 |= attr.bit();
+        self
+    }
+
+    pub const fn without(mut self, attr: Attr) -> Self {
+        self.0 &= !attr.bit();
+        self
+    }
+
+    pub const fn contains(self, attr: Attr) -> bool {
+        self.0 & attr.bit() != 0
     }
 }
 
@@ -1047,9 +1108,10 @@ pub(crate) const fn str_eq(a: &str, b: &str) -> bool {
     }
     true
 }
+
 #[cfg(test)]
 mod tests {
-    use super::{Attr, AttrType, FieldType, Owner};
+    use super::{Attr, AttrSet, AttrType, FieldType, Owner};
     use crate::{Element, FieldControl, InputType};
     use googletest::prelude::*;
 
@@ -1543,5 +1605,95 @@ mod tests {
     #[gtest]
     fn looking_up_required_by_name_finds_the_presence_row() {
         expect_that!(Attr::from_name("required"), some(eq(Attr::Required)));
+    }
+
+    // ── `AttrSet` ────────────────────────────────────────────────────────
+
+    /// Every element a widget part can be: each `<input>` type, then the rest.
+    fn every_element() -> Vec<Element> {
+        INPUT_TYPES
+            .iter()
+            .map(|&t| Element::Control(FieldControl::Input(t)))
+            .chain(every_other_element())
+            .collect()
+    }
+
+    fn is_owned(attr: Attr) -> bool {
+        attr.owner() == Owner::Formoxus
+    }
+
+    #[gtest]
+    fn valid_on_a_textarea_takes_rows_but_not_min() {
+        let set = AttrSet::valid_on(TEXTAREA);
+        expect_that!(set.contains(Attr::Rows), eq(true));
+        expect_that!(set.contains(Attr::Min), eq(false));
+    }
+
+    /// `valid_on` restates the table's `on:` column as a set, minus the owned
+    /// rows, for every element; so it is also always a subset of `ANY`.
+    #[gtest]
+    fn valid_on_holds_exactly_the_unowned_rows_valid_on_that_element() {
+        for element in every_element() {
+            let set = AttrSet::valid_on(element);
+            for &attr in Attr::ALL {
+                let expected = !is_owned(attr) && attr.is_valid_on(element);
+                expect_that!(set.contains(attr), eq(expected), "{attr:?} on {element:?}");
+            }
+        }
+    }
+
+    #[gtest]
+    fn any_holds_every_unowned_row_and_no_owned_one() {
+        for &attr in Attr::ALL {
+            expect_that!(AttrSet::ANY.contains(attr), eq(!is_owned(attr)), "{attr:?}");
+        }
+    }
+
+    #[gtest]
+    fn empty_holds_nothing() {
+        for &attr in Attr::ALL {
+            expect_that!(AttrSet::EMPTY.contains(attr), eq(false), "{attr:?}");
+        }
+    }
+
+    #[gtest]
+    fn with_and_without_undo_each_other() {
+        expect_that!(
+            AttrSet::EMPTY.with(Attr::Rows).contains(Attr::Rows),
+            eq(true)
+        );
+        expect_that!(
+            AttrSet::EMPTY.with(Attr::Rows).without(Attr::Rows),
+            eq(AttrSet::EMPTY)
+        );
+        expect_that!(
+            AttrSet::ANY.without(Attr::Rows).contains(Attr::Rows),
+            eq(false)
+        );
+        expect_that!(
+            AttrSet::ANY.without(Attr::Rows).with(Attr::Rows),
+            eq(AttrSet::ANY)
+        );
+    }
+
+    /// Each touches its own attribute's bit and no other.
+    #[gtest]
+    fn with_and_without_leave_the_other_attributes_alone() {
+        let set = AttrSet::EMPTY.with(Attr::Rows).with(Attr::Cols);
+        expect_that!(set.without(Attr::Rows).contains(Attr::Cols), eq(true));
+        expect_that!(set.with(Attr::Min).contains(Attr::Rows), eq(true));
+    }
+
+    /// Nothing can put an owned row in a set, so taking one out of any set
+    /// changes nothing.
+    #[gtest]
+    fn without_an_owned_attribute_changes_nothing() {
+        expect_that!(AttrSet::ANY.without(Attr::Id), eq(AttrSet::ANY));
+    }
+
+    #[gtest]
+    #[should_panic(expected = "`with` cannot be used with owned attributes")]
+    fn with_an_owned_attribute_panics() {
+        let _ = AttrSet::EMPTY.with(Attr::Id);
     }
 }
