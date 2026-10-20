@@ -88,6 +88,28 @@ pub fn render_to_html(app: fn() -> Element) -> String {
     dioxus_ssr::render(&dom)
 }
 
+/// `html` with its form's random id replaced by `FORMID`, so two renders of
+/// one form compare equal.
+///
+/// The id is read off the first `id="…"` that starts with one: 8 characters
+/// and a `-`, as `NodeContext::id` builds them. Replacing that exact string,
+/// rather than anything id-shaped, cannot touch a class or a value.
+pub fn without_form_id(html: &str) -> String {
+    let form_id = html.split("id=\"").skip(1).find_map(|rest| {
+        let candidate = rest.get(..9)?;
+        let (id, dash) = candidate.split_at(8);
+        let mut chars = id.chars();
+        let looks_like_one = dash == "-"
+            && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric());
+        looks_like_one.then(|| id.to_string())
+    });
+    match form_id {
+        Some(id) => html.replace(&id, "FORMID"),
+        None => html.to_string(),
+    }
+}
+
 // ── Driving a real interaction ───────────────────────────────────────────
 //
 // Rendering to HTML proves what a form *looks* like. These prove what it

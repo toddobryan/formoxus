@@ -14,9 +14,21 @@ use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
 use crate::label_case::LabelCase;
+use crate::widgets::AnyWidget;
 use crate::widgets::WidgetType;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FieldSpec {
+    pub label: Option<String>,
+    pub attrs: FieldAttrs,
+    pub widget: Option<AnyWidget>,
+    pub custom_widget: Option<WidgetType>,
+    /// Builds this leaf during the shape walk, instead of the default field
+    /// for its type. What `field:` and a typed field's settings expand to.
+    pub node: Option<crate::field_node::NodeCtor>,
+}
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
@@ -46,16 +58,6 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct FieldSpec {
-    pub label: Option<String>,
-    pub attrs: FieldAttrs,
-    pub custom_widget: Option<WidgetType>,
-    /// Builds this leaf during the shape walk, instead of the default field
-    /// for its type. What `field:` and a typed field's settings expand to.
-    pub node: Option<crate::field_node::NodeCtor>,
-}
-
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     pub fn new() -> Self {
         Self {
@@ -83,6 +85,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_title(mut self, title: &str) -> Self {
         self.title = Some(title.to_string());
+        self
+    }
+
+    pub fn with_widget(mut self, path: &str, widget: impl Into<AnyWidget>) -> Self {
+        self.field(path).widget = Some(widget.into());
         self
     }
 

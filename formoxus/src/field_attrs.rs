@@ -1,13 +1,8 @@
 use dioxus::core::Attribute;
-use formoxus_spec::{
-    Attr, AttrKey, AttrValue, Bound, BuiltinWidget, FieldType, RenderedInputType, Step,
-};
+use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType, Step};
 use indexmap::IndexMap;
 
-use crate::{
-    classes::Slot,
-    widgets::{WidgetType, errors::errors_id},
-};
+use crate::{classes::Slot, widgets::errors::errors_id};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldAttrs(IndexMap<AttrKey, AttrValue>);
@@ -160,18 +155,13 @@ impl FieldAttrs {
     /// expect.
     pub fn with_owned_attrs(
         field_id: &str,
-        widget: &WidgetType,
+        is_checkbox: bool,
         required: bool,
         invalid: bool,
         attrs: &FieldAttrs,
     ) -> FieldAttrs {
         let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
-        if required
-            && !matches!(
-                widget,
-                WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox))
-            )
-        {
+        if required && !is_checkbox {
             map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
         }
         if invalid {
@@ -598,13 +588,7 @@ mod tests {
     /// keeps `required` where the suite's exact-markup tests already expect it.
     #[gtest]
     fn owned_attributes_come_first_then_the_fields_own() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            true,
-            true,
-            &just_max_length(),
-        );
+        let attrs = FieldAttrs::with_owned_attrs(ID, false, true, true, &just_max_length());
         expect_that!(
             keys(&attrs),
             elements_are![
@@ -627,13 +611,7 @@ mod tests {
     /// this test too, on purpose.
     #[gtest]
     fn aria_describedby_names_the_error_list() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            false,
-            true,
-            &FieldAttrs::default(),
-        );
+        let attrs = FieldAttrs::with_owned_attrs(ID, false, false, true, &FieldAttrs::default());
         expect_that!(
             attrs.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("aB3xY9kq-name-errors".to_string())))
@@ -646,9 +624,9 @@ mod tests {
     /// rendered is itself a defect.
     #[gtest]
     fn required_and_invalid_are_independent() {
-        let input = WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text));
+        let is_checkbox = false;
         let only_required =
-            FieldAttrs::with_owned_attrs(ID, &input, true, false, &just_max_length());
+            FieldAttrs::with_owned_attrs(ID, is_checkbox, true, false, &just_max_length());
         expect_that!(
             keys(&only_required),
             elements_are![
@@ -657,7 +635,7 @@ mod tests {
             ]
         );
         let only_invalid =
-            FieldAttrs::with_owned_attrs(ID, &input, false, true, &just_max_length());
+            FieldAttrs::with_owned_attrs(ID, is_checkbox, false, true, &just_max_length());
         expect_that!(
             keys(&only_invalid),
             elements_are![
@@ -671,13 +649,7 @@ mod tests {
     /// Neither applying leaves the field's own attributes exactly as they were.
     #[gtest]
     fn without_either_the_fields_attributes_pass_through_unchanged() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            false,
-            false,
-            &just_max_length(),
-        );
+        let attrs = FieldAttrs::with_owned_attrs(ID, false, false, false, &just_max_length());
         expect_that!(attrs, eq(&just_max_length()));
     }
 
@@ -729,13 +701,7 @@ mod tests {
     /// `false`. `aria-invalid` and `aria-describedby` are unaffected.
     #[gtest]
     fn a_checkbox_never_gets_required() {
-        let attrs = FieldAttrs::with_owned_attrs(
-            ID,
-            &WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-            true,
-            true,
-            &FieldAttrs::default(),
-        );
+        let attrs = FieldAttrs::with_owned_attrs(ID, true, true, true, &FieldAttrs::default());
         expect_that!(
             keys(&attrs),
             elements_are![

@@ -28,6 +28,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         label: None,
         optional: false,
         attrs: FieldAttrs::default(),
+        widget: None,
         custom_widget: None,
         wrapper: None,
         value,

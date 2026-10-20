@@ -488,7 +488,7 @@ fn list_node(
     let spec = walk.spec_for(prefix);
     if let Some(spec) = spec {
         assert!(
-            spec.custom_widget.is_none(),
+            spec.custom_widget.is_none() && spec.widget.is_none(),
             "{prefix} is a list, which has no single widget to override — \
              write `{name}[]` to give every ROW a widget, or did you mean `label`?",
         );
@@ -519,7 +519,7 @@ fn struct_node(
     let spec = walk.spec_for(prefix);
     if let Some(spec) = spec {
         assert!(
-            spec.custom_widget.is_none(),
+            spec.custom_widget.is_none() && spec.widget.is_none(),
             "{prefix} is a field set, which has no single widget to override \
              (a composite widget for one isn't supported yet) — did you mean `label`?"
         );

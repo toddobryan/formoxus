@@ -8,7 +8,7 @@
 //! keeps these honest about which half is being exercised.
 
 use super::models::{EventForCreate, Location};
-use super::render_to_html;
+use super::{render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::RenderedInputType;
@@ -16,7 +16,7 @@ use formoxus::field_kind::field_for;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::{BuiltinWidget, WidgetType};
+use formoxus::widgets::{BuiltinWidget, CheckboxInput, Select, TextInput, Textarea, WidgetType};
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -144,6 +144,145 @@ fn an_override_works_in_the_other_direction_too() {
     let html = render_to_html(BoolForcedToSelect);
     expect_that!(html.matches("<select").count(), eq(2));
     expect_that!(html.matches(r#"type="checkbox""#).count(), eq(0));
+}
+
+// ── `with_widget`: the Step 5 bridge ────────────────────────────────────
+//
+// A widget TYPE set through `with_widget` renders itself through
+// `Widget::render`, while every other field still goes through
+// `ScalarWidget`. Each pair below renders a field both ways and expects the
+// same markup, so the bridge is shown to change the route and nothing else.
+
+/// Each render mints its own form id, so the comparisons ignore it.
+fn rendered(app: fn() -> Element) -> String {
+    without_form_id(&render_to_html(app))
+}
+
+#[component]
+fn TitleThroughTextInput() -> Element {
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_widget("title", TextInput))
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn UntouchedEvent() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<EventForCreate>::default()));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_widget_type_renders_what_the_derived_widget_renders() {
+    expect_that!(
+        rendered(TitleThroughTextInput),
+        eq(&rendered(UntouchedEvent))
+    );
+}
+
+#[component]
+fn TitleThroughTextarea() -> Element {
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_widget("title", Textarea))
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn TitleThroughOldTextarea() -> Element {
+    let form = use_form(|| {
+        empty_form(
+            FormSpec::<EventForCreate>::default()
+                .with_custom_widget("title", WidgetType::Builtin(BuiltinWidget::Textarea)),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// An override, not just the default by another route.
+#[gtest]
+fn a_widget_type_overrides_like_a_widget_type_override() {
+    let html = rendered(TitleThroughTextarea);
+    expect_that!(html, contains_substring("<textarea"));
+    expect_that!(html, eq(&rendered(TitleThroughOldTextarea)));
+}
+
+#[component]
+fn EnabledThroughCheckboxInput() -> Element {
+    let form =
+        use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", CheckboxInput)));
+    form.render(using_fns! {})
+}
+
+/// Same markup as the derived checkbox, so in particular no `required` on
+/// it: `FieldNode::is_checkbox` reads the widget type's name.
+#[gtest]
+fn a_checkbox_widget_type_renders_as_the_derived_checkbox() {
+    expect_that!(
+        rendered(EnabledThroughCheckboxInput),
+        eq(&rendered(UntouchedFlags))
+    );
+}
+
+/// An unticked box is a complete `false`, not a missing value, for a
+/// checkbox set through `with_widget` as for the derived one.
+#[gtest]
+fn an_unticked_checkbox_widget_type_validates() {
+    let mut form = empty_form(FormSpec::<Flags>::default().with_widget("enabled", CheckboxInput));
+    expect_that!(
+        form.validate(),
+        some(eq(&Flags {
+            enabled: false,
+            subscribed: None,
+        }))
+    );
+}
+
+#[component]
+fn EnabledThroughSelect() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", Select)));
+    form.render(using_fns! {})
+}
+
+/// A bool's true/false reach a `Select` with no choices of its own.
+#[gtest]
+fn a_select_widget_type_over_a_bool_matches_the_override() {
+    expect_that!(
+        rendered(EnabledThroughSelect),
+        eq(&rendered(BoolForcedToSelect))
+    );
+}
+
+#[component]
+fn BothWidgetsSet() -> Element {
+    let form = use_form(|| {
+        empty_form(
+            FormSpec::<EventForCreate>::default()
+                .with_custom_widget("title", WidgetType::Builtin(BuiltinWidget::Textarea))
+                .with_widget("title", TextInput),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// While both exist, the widget type wins over the `WidgetType`.
+#[gtest]
+fn a_widget_type_beats_a_widget_type_override() {
+    let html = rendered(BothWidgetsSet);
+    expect_that!(html, not(contains_substring("<textarea")));
+    expect_that!(html, eq(&rendered(UntouchedEvent)));
+}
+
+#[gtest]
+#[should_panic(expected = "location is a field set")]
+fn a_widget_type_on_a_field_set_is_rejected() {
+    let _ = empty_form(FormSpec::<EventForCreate>::default().with_widget("location", Textarea));
+}
+
+#[gtest]
+#[should_panic(expected = "venues is a list")]
+fn a_widget_type_on_a_list_is_rejected() {
+    let _ = empty_form(FormSpec::<WithRows>::default().with_widget("venues", Select));
 }
 
 // ── Rejections and no-ops ────────────────────────────────────────────────

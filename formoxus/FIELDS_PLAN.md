@@ -509,6 +509,13 @@ widgets become ONE concept.
   `macro_rules!`, `e54bb27` hidden/checkbox/textarea, then select and radio
   group). Tests: `tests/suite/builtin_widgets.rs`, each pinned to render what
   `ScalarWidget` renders.
+- [x] **Bridge: a `FieldSpec` can hold an `AnyWidget`** (Todd, 2026-10-20;
+  he writes it). `with_widget(path, impl Into<AnyWidget>)` sets
+  `FieldSpec::widget: Option<AnyWidget>`; `FieldNode::render` calls
+  `widget.render(WidgetProps { … })` when there is one, else `ScalarWidget`
+  as before. Keeps every step green: a field without `widget:` keeps the old
+  path until the `default_widget` box. `builtin_widgets` already shows the
+  two paths render alike.
 - [ ] **`form!`: props in the widget's braces**, a struct expression with
   `..Default::default()` (today's "a widget takes no arguments" error goes,
   with NO special case for `choices` inside the braces: unreleased, so
@@ -522,6 +529,20 @@ widgets become ONE concept.
   `group_class`/`input_class` props (W-A)**, deferred from the built-ins box
   (Todd, 2026-10-20: "just don't forget about it") because this is where a
   dev can first write one.
+  Decided 2026-10-20 (Todd): a capitalized `widget: Textarea` is a plain
+  path, so it needs the dev's own `use` (rustc's "cannot find type" replaces
+  today's lowercase hint); the "a custom widget supplies its own choices"
+  refusal goes, since choices reach any widget through `WidgetProps`; a
+  built-in name keeps its `BuiltinWidget` kind checks, a custom path gets
+  only `is_single_value`. Steps: parse a name or a path plus
+  `Punctuated<syn::FieldValue, Token![,]>`; the 18-row name → type table;
+  emit the struct expression into `.with_widget`; one `EXTENDS` assert per
+  table, non-validated, field-level attribute.
+  **Gap: with no `widget:`, nothing checks `EXTENDS`**, since the default
+  is `Field::default_widget`'s, chosen at run time (`placeholder` on a bool
+  rendered as a checkbox). The table's `for:` check catches most. Once
+  formoxus has logging, warn at run time about an attribute the resolved
+  widget does not extend (needs an `extends()` on `DynWidget`).
 - [ ] **`Field::default_widget`** returns one; `ChoiceField` returns a
   `Select` (its choices reach it through `WidgetProps`, decision 4 above,
   not as a prop).
@@ -534,6 +555,13 @@ widgets become ONE concept.
 - [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
   wrapper, label and errors around the form control a widget builds; the radio
   group keeps its own shape. Snapshot-guarded.
+- [ ] **OPEN (Todd): where the kind checks go once `BuiltinWidget` is
+  deleted.** `renders`, `accepts_optional`, `takes_choices` and
+  `default_for` are all `BuiltinWidget` methods today, read by `form!`'s
+  `const _` asserts. Proposed: consts on `Widget` (`ACCEPTS: FieldTypeSet`,
+  a const bitset over `FieldType` like `AttrSet`; `ACCEPTS_OPTIONAL`;
+  `TAKES_CHOICES`), which would give a custom widget the same checks. Blocks
+  the delete, not the bridge or the props box.
 - [ ] **Flatten `FieldControl` into `Element`** (Todd, 2026-10-20), in the
   same change as the delete below: `Element` becomes `Div | Fieldset | Label
   | Legend | Input(InputType) | Textarea | Select`. Its jobs are gone: typing

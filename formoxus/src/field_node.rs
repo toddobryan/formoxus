@@ -11,7 +11,8 @@ use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
-use crate::widgets::{FieldProps, ScalarWidget, WidgetType};
+use crate::widgets::widget_props::WidgetProps;
+use crate::widgets::{AnyWidget, CheckboxInput, FieldProps, ScalarWidget, Widget, WidgetType};
 
 /// Everything the walk knows about a leaf when it builds one.
 ///
@@ -45,6 +46,7 @@ impl LeafArgs<'_> {
             label: spec.and_then(|s| s.label.clone()),
             optional: self.optional,
             attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
+            widget: spec.and_then(|s| s.widget.clone()),
             custom_widget: spec.and_then(|s| s.custom_widget),
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
@@ -96,6 +98,7 @@ pub struct FieldNode<F: Field> {
     pub optional: bool,
     /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
+    pub widget: Option<AnyWidget>,
     /// Becomes `widget: AnyWidget` in Step 5, resolved once by `build.rs`.
     pub custom_widget: Option<WidgetType>,
     /// The newtype this field's value is wrapped in — `Markdown` for a
@@ -173,12 +176,21 @@ impl<F: Field> FieldNode<F> {
         self.custom_widget.unwrap_or_else(|| self.default_widget())
     }
 
-    fn is_unticked_checkbox(&self) -> bool {
-        matches!(self.value, FieldValue::Empty)
-            && matches!(
+    /// Whether this field renders as a checkbox: by its `AnyWidget`'s name
+    /// when it has one, else by the `WidgetType` it resolves to. The one
+    /// place either is asked, until the bridge's `WidgetType` path goes.
+    fn is_checkbox(&self) -> bool {
+        match &self.widget {
+            Some(widget) => widget.name() == CheckboxInput::NAME,
+            None => matches!(
                 self.widget(),
                 WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-            )
+            ),
+        }
+    }
+
+    fn is_unticked_checkbox(&self) -> bool {
+        matches!(self.value, FieldValue::Empty) && self.is_checkbox()
     }
 
     /// The raw value `validate` checks: `"false"` for an unticked checkbox,
@@ -263,33 +275,51 @@ impl<F: Field> Node for FieldNode<F> {
     }
 
     fn render(&self, ctx: &NodeContext) -> Element {
-        let widget = self.widget();
         // The field's own attributes (`min`, `pattern`, …), so the browser
         // checks what `check` does, then the author's, which only render.
         // Bounds resolved to the field's kind here, so no widget needs it.
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
-            &widget,
+            self.is_checkbox(),
             ctx.required,
             self.has_errors_here(),
             &self.field.widget_attrs().then(&self.attrs),
         )
         .resolve_bounds(self.field_type());
 
-        rsx! {
-            ScalarWidget {
-                field_type: self.field_type(),
-                field_attrs: field_attrs,
-                widget: widget,
-                choices: self.field.choices(),
+        // The bridge (`FIELDS_PLAN.md` Step 5): a widget set through
+        // `with_widget` renders itself; anything else still goes through
+        // `ScalarWidget` until `default_widget` returns an `AnyWidget`.
+        if let Some(widget) = &self.widget {
+            widget.render(WidgetProps {
+                id: ctx.id(&self.name),
+                path: ctx.path(&self.name),
+                label: self.label(ctx.label_case),
+                errors: self.errors.clone(),
+                classes: ctx.classes.clone(),
                 values: ctx.values,
-                props: FieldProps {
-                    id: ctx.id(&self.name),
-                    path: ctx.path(&self.name),
-                    label: self.label(ctx.label_case),
-                    classes: ctx.classes.clone(),
-                    errors: self.errors.clone(),
-                },
+                choices: self.field.choices(),
+                attrs: field_attrs,
+                extra_attrs: Vec::new(),
+            })
+        } else {
+            let widget = self.widget();
+
+            rsx! {
+                ScalarWidget {
+                    field_type: self.field_type(),
+                    field_attrs: field_attrs,
+                    widget: widget,
+                    choices: self.field.choices(),
+                    values: ctx.values,
+                    props: FieldProps {
+                        id: ctx.id(&self.name),
+                        path: ctx.path(&self.name),
+                        label: self.label(ctx.label_case),
+                        classes: ctx.classes.clone(),
+                        errors: self.errors.clone(),
+                    },
+                }
             }
         }
     }
@@ -429,6 +459,7 @@ mod tests {
             label: None,
             optional: false,
             attrs: FieldAttrs::default(),
+            widget: None,
             custom_widget: None,
             wrapper: None,
             value,

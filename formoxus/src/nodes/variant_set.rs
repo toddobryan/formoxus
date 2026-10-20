@@ -11,7 +11,7 @@ use crate::nodes::{
     qualify, variant_segment,
 };
 use crate::widgets::label::required_marker;
-use crate::widgets::{BuiltinWidget, FieldProps, VariantSelect, WidgetType};
+use crate::widgets::{FieldProps, VariantSelect, WidgetType};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -207,7 +207,7 @@ impl Node for VariantSet {
         };
         let attrs = FieldAttrs::with_owned_attrs(
             &id,
-            &WidgetType::Builtin(BuiltinWidget::Select),
+            false,
             ctx.required,
             self.has_errors_here(),
             &field_attrs,
