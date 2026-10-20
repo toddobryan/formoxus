@@ -31,7 +31,7 @@
 //! in the history saying otherwise predates that.
 //!
 //! Each component is then named for the element at its core — `InputView`,
-//! [`Select`], [`Textarea`], [`RadioGroup`] — since that is what a reader is
+//! [`Select`], `TextareaView`, [`RadioGroup`] — since that is what a reader is
 //! looking for when they go hunting. A checkbox is an `InputView`, routed by its
 //! type to its own body. [`RadioGroup`] is the one named
 //! for something HTML has no element for, which is the point made just above.
@@ -72,8 +72,8 @@ pub mod widget_props;
 pub use errors::FieldErrors;
 pub use formoxus_spec::{BuiltinWidget, RenderedInputType};
 pub use input::{
-    ColorInput, DateInput, DatetimeLocalInput, EmailInput, MonthInput, NumberInput, PasswordInput,
-    SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
+    CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
+    NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
 pub use radio_group::RadioGroup;
 pub use row_buttons::{AddRowButton, RemoveRowButton};

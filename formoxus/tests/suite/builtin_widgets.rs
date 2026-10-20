@@ -7,14 +7,15 @@
 use dioxus::core::Attribute;
 use dioxus::prelude::*;
 use formoxus::ValidationMessage;
+use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, FieldType, RenderedInputType as R};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::widgets::widget_props::WidgetProps;
 use formoxus::widgets::{
-    AnyWidget, ColorInput, DateInput, DatetimeLocalInput, EmailInput, FieldProps, MonthInput,
-    NumberInput, PasswordInput, ScalarWidget, SearchInput, TelInput, TextInput, TimeInput,
-    UrlInput, WeekInput, Widget, WidgetType,
+    AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, FieldProps,
+    HiddenInput, MonthInput, NumberInput, PasswordInput, ScalarWidget, SearchInput, TelInput,
+    TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetType,
 };
 use googletest::prelude::*;
 use std::collections::HashMap;
@@ -42,6 +43,29 @@ fn text_likes() -> Vec<(AnyWidget, R)> {
         (MonthInput.into(), R::Month),
         (WeekInput.into(), R::Week),
     ]
+}
+
+/// Every built-in widget type so far, beside the `BuiltinWidget` it stands
+/// in for and a field type that widget renders (`ScalarWidget` asserts it).
+fn builtins() -> Vec<(AnyWidget, BuiltinWidget, FieldType)> {
+    let mut all: Vec<_> = text_likes()
+        .into_iter()
+        .map(|(w, t)| (w, BuiltinWidget::Input(t), FieldType::Text))
+        .collect();
+    all.extend([
+        (
+            HiddenInput.into(),
+            BuiltinWidget::Input(R::Hidden),
+            FieldType::Text,
+        ),
+        (
+            CheckboxInput.into(),
+            BuiltinWidget::Input(R::Checkbox),
+            FieldType::Bool,
+        ),
+        (Textarea.into(), BuiltinWidget::Textarea, FieldType::Text),
+    ]);
+    all
 }
 
 /// SSR of `root` given `props`: `render_to_html`, for a root that takes props,
@@ -95,13 +119,13 @@ fn through_widget(widget: AnyWidget) -> Element {
     })
 }
 
-fn through_scalar_widget(input_type: R) -> Element {
+fn through_scalar_widget((builtin, field_type): (BuiltinWidget, FieldType)) -> Element {
     let values = use_store(values);
     rsx! {
         ScalarWidget {
-            field_type: FieldType::Text,
+            field_type,
             field_attrs: field_attrs(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(input_type)),
+            widget: WidgetType::Builtin(builtin),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -130,10 +154,22 @@ fn every_text_like_input_has_a_widget_type() {
 
 /// The wrapper adds nothing and drops nothing.
 #[gtest]
-fn each_text_like_renders_what_scalar_widget_renders() {
+fn each_builtin_renders_what_scalar_widget_renders() {
+    for (widget, builtin, field_type) in builtins() {
+        expect_that!(
+            html_of(through_widget, widget.clone()),
+            eq(&html_of(through_scalar_widget, (builtin, field_type))),
+            "{}",
+            widget.name()
+        );
+    }
+}
+
+/// Not two empty strings agreeing: each piece of the props is there.
+#[gtest]
+fn each_text_like_renders_every_prop() {
     for (widget, input_type) in text_likes() {
         let html = html_of(through_widget, widget.clone());
-        // Not two empty strings agreeing: each piece of the props is there.
         expect_that!(
             html,
             all![
@@ -151,9 +187,40 @@ fn each_text_like_renders_what_scalar_widget_renders() {
             "{}",
             widget.name()
         );
+    }
+}
+
+/// Bare: nothing a user sees, so nothing to label or mark invalid.
+#[gtest]
+fn hidden_input_renders_bare() {
+    let html = html_of(through_widget, HiddenInput.into());
+    expect_that!(
+        html,
+        all![
+            contains_substring(r#"type="hidden""#),
+            contains_substring(r#"value="A""#),
+            not(contains_substring("Title")),
+            not(contains_substring("too short")),
+            not(contains_substring("<label")),
+        ]
+    );
+}
+
+#[gtest]
+fn checkbox_and_textarea_render_every_prop() {
+    for (widget, element) in [
+        (AnyWidget::from(CheckboxInput), r#"type="checkbox""#),
+        (Textarea.into(), "<textarea"),
+    ] {
         expect_that!(
-            html,
-            eq(&html_of(through_scalar_widget, input_type)),
+            html_of(through_widget, widget.clone()),
+            all![
+                contains_substring(element),
+                contains_substring("Title"),
+                contains_substring("too short"),
+                contains_substring(r#"autocomplete="off""#),
+                contains_substring("fx-invalid"),
+            ],
             "{}",
             widget.name()
         );
@@ -162,39 +229,43 @@ fn each_text_like_renders_what_scalar_widget_renders() {
 
 /// `default_classes` repeats `Classes::fx()`'s slots until `Classes` is keyed
 /// on `Widget::NAME`; this catches the two drifting.
+///
+/// Part by part, so a part `fx()` gives no class (a hidden input's) must have
+/// no slot either, and a slot for a part the widget lacks fails too.
 #[gtest]
-fn each_text_likes_default_classes_match_classes_fx() {
+fn each_builtins_default_classes_match_classes_fx() {
     let fx = Classes::fx();
-    for (widget, input_type) in text_likes() {
-        let builtin = BuiltinWidget::Input(input_type);
+    for (widget, builtin, _) in builtins() {
         let slots = widget.default_classes();
-        for (part, slot) in &slots {
+        let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
+        for part in &parts {
+            let mine = slots.iter().find(|(p, _)| p == part).map(|(_, s)| s);
             expect_that!(
-                fx.part(builtin, part),
-                some(eq(slot)),
+                mine,
+                eq(fx.part(builtin, part)),
                 "{}'s `{part}`",
                 widget.name()
             );
         }
-        expect_that!(
-            slots.len(),
-            eq(builtin.parts().len()),
-            "{}: one slot per part",
-            widget.name()
-        );
+        for (part, _) in &slots {
+            expect_that!(
+                parts,
+                contains(eq(part)),
+                "{} has no `{part}`",
+                widget.name()
+            );
+        }
     }
 }
 
 /// `NAME` is `form!`'s spelling, so a `classes_plus:` selector keeps working
 /// once `Classes` is keyed on it.
 #[gtest]
-fn each_text_like_is_named_as_form_spells_it() {
-    for (widget, input_type) in text_likes() {
-        expect_that!(
-            widget.name(),
-            eq(BuiltinWidget::Input(input_type).form_name())
-        );
+fn each_builtin_is_named_as_form_spells_it() {
+    for (widget, builtin, _) in builtins() {
+        expect_that!(widget.name(), eq(builtin.form_name()));
     }
+    expect_that!(Textarea::NAME, eq("textarea"));
     expect_that!(TextInput::NAME, eq("text"));
     expect_that!(TelInput::NAME, eq("tel"));
     expect_that!(DatetimeLocalInput::NAME, eq("datetime_local"));
@@ -224,4 +295,23 @@ fn each_input_type_extends_its_own_attributes() {
     expect_that!(NumberInput::EXTENDS.contains(Attr::Pattern), eq(false));
     // Valid on an email input, but owned (a leaf holds one string).
     expect_that!(EmailInput::EXTENDS.contains(Attr::Multiple), eq(false));
+}
+
+/// Empty, because `InputView` spreads nothing onto a hidden input: anything
+/// written for one would be dropped, so `form!` should refuse it.
+#[gtest]
+fn hidden_input_extends_nothing() {
+    expect_that!(HiddenInput::EXTENDS, eq(AttrSet::EMPTY));
+}
+
+#[gtest]
+fn checkbox_and_textarea_extend_their_own_elements() {
+    expect_that!(Textarea::EXTENDS.contains(Attr::Rows), eq(true));
+    expect_that!(Textarea::EXTENDS.contains(Attr::MaxLength), eq(true));
+    expect_that!(Textarea::EXTENDS.contains(Attr::Pattern), eq(false));
+    expect_that!(
+        CheckboxInput::EXTENDS.contains(Attr::Placeholder),
+        eq(false)
+    );
+    expect_that!(CheckboxInput::EXTENDS.contains(Attr::Disabled), eq(true));
 }

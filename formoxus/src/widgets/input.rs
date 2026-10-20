@@ -41,7 +41,7 @@ macro_rules! text_like_inputs {
                 ));
 
                 fn render(&self, props: WidgetProps) -> Element {
-                    render_text_like(RenderedInputType::$variant, props)
+                    render_input(RenderedInputType::$variant, props)
                 }
 
                 fn default_classes() -> Vec<(&'static str, Slot)> {
@@ -82,9 +82,58 @@ text_like_inputs! {
     WeekInput => Week,
 }
 
-/// Every text-like widget's `render`: `props` split into what `InputView`
+/// `<input type="hidden">`: bare, with no label, caption or errors, since
+/// nothing is shown to wrap.
+///
+/// `EXTENDS` is EMPTY, not what HTML allows on a hidden input: `InputView`
+/// renders it without spreading any attribute, so one written for it would
+/// be dropped. Empty makes `form!` refuse it instead (the props box).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct HiddenInput;
+
+impl Widget for HiddenInput {
+    const NAME: &'static str = BuiltinWidget::Input(RenderedInputType::Hidden).form_name();
+
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        render_input(RenderedInputType::Hidden, props)
+    }
+
+    /// None: `Classes::fx()` gives a hidden input no class.
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        Vec::new()
+    }
+}
+
+/// `<input type="checkbox">`, the default for a `bool`: box first, then its
+/// caption.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct CheckboxInput;
+
+impl Widget for CheckboxInput {
+    const NAME: &'static str = BuiltinWidget::Input(RenderedInputType::Checkbox).form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(
+        InputType::Checkbox,
+    )));
+
+    fn render(&self, props: WidgetProps) -> Element {
+        render_input(RenderedInputType::Checkbox, props)
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        vec![
+            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
+            ("input", Slot::new("fx-control fx-checkbox")),
+            ("label", Slot::new("fx-field-label")),
+        ]
+    }
+}
+
+/// Every `<input>` widget's `render`: `props` split into what `InputView`
 /// takes. A plain fn, called from `render`, so it must not call hooks either.
-fn render_text_like(input_type: RenderedInputType, props: WidgetProps) -> Element {
+fn render_input(input_type: RenderedInputType, props: WidgetProps) -> Element {
     rsx! {
         InputView {
             input_type,

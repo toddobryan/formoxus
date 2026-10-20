@@ -7,7 +7,7 @@ use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 use super::input::InputView;
 use super::radio_group::RadioGroup;
 use super::select::Select;
-use super::textarea::Textarea;
+use super::textarea::TextareaView;
 use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
@@ -88,7 +88,7 @@ pub fn ScalarWidget(
             rsx! { InputView { input_type, field_attrs, values, props, attrs } }
         }
         BuiltinWidget::Textarea => {
-            rsx! { Textarea { field_attrs, values, props, attrs } }
+            rsx! { TextareaView { field_attrs, values, props, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. A bool's choices

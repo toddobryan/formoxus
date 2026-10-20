@@ -1,14 +1,51 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget};
+use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
+use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
+use crate::widgets::{Widget, widget_props::WidgetProps};
+
+/// `<textarea>`, a multi-line text input. For a `String` field only.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Textarea;
+
+impl Widget for Textarea {
+    const NAME: &'static str = BuiltinWidget::Textarea.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Textarea));
+
+    fn render(&self, props: WidgetProps) -> Element {
+        rsx! {
+            TextareaView {
+                field_attrs: props.attrs,
+                values: props.values,
+                props: FieldProps {
+                    id: props.id,
+                    path: props.path,
+                    label: props.label,
+                    classes: props.classes,
+                    errors: props.errors,
+                },
+                attrs: props.extra_attrs,
+            }
+        }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        vec![
+            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
+            ("label", Slot::new("fx-field-label")),
+            ("textarea", Slot::new("fx-control fx-textarea")),
+        ]
+    }
+}
 
 /// A multi-line text input bound to one path in the value map.
 ///
@@ -18,7 +55,7 @@ use crate::nodes::ValuesStore;
 /// nothing here needs the extra `InputType` cases (`Password`'s masking,
 /// `Hidden`'s bare markup) that make `Input` carry one.
 #[component]
-pub fn Textarea(
+pub(crate) fn TextareaView(
     field_attrs: FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
