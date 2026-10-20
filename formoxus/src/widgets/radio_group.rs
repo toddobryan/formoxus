@@ -1,17 +1,79 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget};
+use formoxus_spec::{Attr, AttrSet, BuiltinWidget, HtmlElement};
 
+use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
 use crate::widgets::label::required_marker;
-use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
+use crate::widgets::types::bool_choices;
+use crate::widgets::{
+    Choice, FieldErrors, FieldProps, Widget, get_current, widget_props::WidgetProps, write_value,
+};
+
+/// Radio buttons, one per choice, for a REQUIRED field: a picked radio
+/// can't be un-picked. Over a `bool` without choices it offers true and
+/// false.
+///
+/// Its class slots are the fieldset's parts. Per-field `group_class` and
+/// `input_class` props (W-A) come with `form!`'s props box, where a dev can
+/// first write one.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct RadioGroup;
+
+impl Widget for RadioGroup {
+    const NAME: &'static str = BuiltinWidget::RadioGroup.form_name();
+
+    /// The `<fieldset>`'s, where the spread lands.
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Fieldset);
+
+    fn render(&self, props: WidgetProps) -> Element {
+        reject_if_not_required(&props.attrs, &props.path);
+        rsx! {
+            RadioGroupView {
+                field_attrs: props.attrs,
+                values: props.values,
+                choices: props.choices.unwrap_or_else(bool_choices),
+                props: FieldProps {
+                    id: props.id,
+                    path: props.path,
+                    label: props.label,
+                    classes: props.classes,
+                    errors: props.errors,
+                },
+                attrs: props.extra_attrs,
+            }
+        }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        vec![
+            (
+                "fieldset",
+                Slot::new("fx-form-field fx-radio-group").with_invalid("fx-invalid"),
+            ),
+            ("legend", Slot::new("fx-legend fx-field-label")),
+            ("div", Slot::new("fx-choice")),
+            ("input", Slot::new("fx-control fx-radio")),
+            ("label", Slot::new("fx-choice-label")),
+        ]
+    }
+}
+
+/// A radio group cannot say "no answer", so an optional field is refused.
+/// `form!` refuses it at compile time; this catches a hand-built spec.
+pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
+    assert!(
+        attrs.contains(Attr::Required),
+        "do not use `radio_group` because the field {path} is not required - use `select` instead",
+    );
+}
 
 /// A group of radio buttons over a fixed set of choices, bound to one path.
 ///
 /// Reads its current value from `values` rather than taking it as a prop, for
-/// the reason [`Select`](super::Select) spells out: computing `checked` for a
+/// the reason `SelectView` spells out: computing `checked` for a
 /// prop would mean reading the store in `Field::render`, which has no scope
 /// of its own and so would subscribe the whole form.
 ///
@@ -24,7 +86,7 @@ use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 /// makes the browser block submit until the user picks; in edit mode the stored
 /// value comes back as `current` and checks its own radio.
 #[component]
-pub fn RadioGroup(
+pub(crate) fn RadioGroupView(
     field_attrs: FieldAttrs,
     values: ValuesStore,
     choices: Vec<Choice>,
@@ -118,5 +180,30 @@ pub fn RadioGroup(
             { radios.into_iter() }
             FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use formoxus_spec::{AttrKey, AttrValue};
+    use googletest::prelude::*;
+
+    // Tested here, not through `RadioGroup::render` in the suite: Dioxus
+    // catches a panic raised while a component renders, so `should_panic`
+    // never sees it there.
+
+    #[gtest]
+    #[should_panic(expected = "the field title is not required")]
+    fn a_field_that_is_not_required_is_refused() {
+        reject_if_not_required(&FieldAttrs::default(), "title");
+    }
+
+    #[gtest]
+    fn a_required_field_is_accepted() {
+        reject_if_not_required(
+            &FieldAttrs::from([(AttrKey::Std(Attr::Required), AttrValue::Flag)]),
+            "title",
+        );
     }
 }

@@ -5,6 +5,16 @@ metadata:
   type: project
 ---
 
+**2026-10-20, AFTERNOON: STEP 5's BUILT-IN TYPES BOX DONE (not pushed).**
+All 18 widget types exist and render what `ScalarWidget` renders
+(`tests/suite/builtin_widgets.rs`); nothing uses them yet. Todd wrote
+`TextInput`, I wrote the rest (13 text-likes from one `macro_rules!`).
+Components are `pub(crate)` `*View`s. Choices travel in `WidgetProps`
+(Todd: not a `Select { choices }` prop). `RadioGroup`'s class props are
+DEFERRED to the props box and written into it, "don't forget".
+`formoxus_spec::Element` is now `HtmlElement`. **Next: `form!` props in the
+widget's braces + `EXTENDS` asserts; then the goldens (mine).**
+
 **2026-10-20, LATER: BOX ORDER CHANGED (Todd).** The built-in widget types
 come BEFORE `form!`'s props-in-braces box, since the struct expression and the
 `EXTENDS` asserts both need a concrete type to name. No special case for

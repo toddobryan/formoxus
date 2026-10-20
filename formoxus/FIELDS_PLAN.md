@@ -479,7 +479,7 @@ widgets become ONE concept.
   Tests (Claude), inline in `widget.rs` with two toy widgets: `eq` across
   equal props, different props and different types; a clone is equal; `name`
   and `default_classes` reach through `AnyWidget`.
-- [ ] **The built-in widget types**, per W-C, each wrapping today's component.
+- [x] **The built-in widget types**, per W-C, each wrapping today's component.
   FIRST of the remaining boxes (Todd, 2026-10-20). Todd writes the first few
   to learn the pattern, then hands the rest to Claude. Decided 2026-10-20:
   1. **Today's components take a `View` suffix** (`InputView`,
@@ -494,6 +494,21 @@ widgets become ONE concept.
   3. **`Classes` keeps its `BuiltinWidget` key for now.** Each type's
      `default_classes()` returns the slots `Classes::fx()` already builds;
      re-keying onto `NAME` waits for the delete box.
+  4. **Choices travel in `WidgetProps`** (Todd, 2026-10-20), as
+     `choices: Option<Vec<Choice>>` read from `Field::choices()` every
+     render, NOT as a `Select { choices }` prop. A dev-chosen widget arrives
+     as `RadioGroup { ..Default::default() }`, with no choices of its own, so
+     a prop would need the field to push them in (Django's way, a setter on
+     the trait). Read per render, a field whose choices change (runtime
+     choices, Step 8) is shown with the new ones. `Select`/`RadioGroup` fall
+     back to a bool's true/false when `None`, as `ScalarWidget` did.
+  5. **`HiddenInput::EXTENDS` is `AttrSet::EMPTY`**: `InputView` spreads
+     nothing onto a hidden input, so an attribute for one would be dropped.
+
+  DONE 2026-10-20: all 18 (`784ad08` the 13 text-likes from one
+  `macro_rules!`, `e54bb27` hidden/checkbox/textarea, then select and radio
+  group). Tests: `tests/suite/builtin_widgets.rs`, each pinned to render what
+  `ScalarWidget` renders.
 - [ ] **`form!`: props in the widget's braces**, a struct expression with
   `..Default::default()` (today's "a widget takes no arguments" error goes,
   with NO special case for `choices` inside the braces: unreleased, so
@@ -503,13 +518,17 @@ widgets become ONE concept.
   built-in name, anything else a path. AFTER the built-in types (Todd,
   2026-10-20), since the struct expression and the asserts both name one.
   Goldens (Claude) once this lands: a misspelled prop, a prop of the wrong
-  type, an attribute not in `EXTENDS`.
-- [ ] **`Field::default_widget`** returns one; `ChoiceField` builds its chooser
-  with its choices inside it (Django style: `Select { choices }`).
+  type, an attribute not in `EXTENDS`. **Also here: `RadioGroup`'s
+  `group_class`/`input_class` props (W-A)**, deferred from the built-ins box
+  (Todd, 2026-10-20: "just don't forget about it") because this is where a
+  dev can first write one.
+- [ ] **`Field::default_widget`** returns one; `ChoiceField` returns a
+  `Select` (its choices reach it through `WidgetProps`, decision 4 above,
+  not as a prop).
 - [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
   AnyWidget`, never an `Option`.
 - [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
-  errors, classes`) replaces `FieldProps`, the old `WidgetProps`, and
+  errors, classes, choices`) replaces `FieldProps`, the old `WidgetProps`, and
   `ScalarWidget`'s props. `ScalarWidget` itself goes: `FieldNode::render`
   calls `self.widget.render(props)`.
 - [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering

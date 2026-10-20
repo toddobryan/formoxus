@@ -2,11 +2,11 @@
 
 use dioxus::prelude::*;
 
-use formoxus_spec::{Attr, BuiltinWidget, FieldType};
+use formoxus_spec::{BuiltinWidget, FieldType};
 
 use super::input::InputView;
-use super::radio_group::RadioGroup;
-use super::select::Select;
+use super::radio_group::{RadioGroupView, reject_if_not_required};
+use super::select::SelectView;
 use super::textarea::TextareaView;
 use super::types::{Choice, FieldProps, WidgetProps, WidgetType, bool_choices};
 use crate::field_attrs::FieldAttrs;
@@ -97,22 +97,15 @@ pub fn ScalarWidget(
         // a form that would rather say "Yes"/"No".
         BuiltinWidget::Select => {
             let choices = choices.unwrap_or_else(bool_choices);
-            rsx! { Select { field_attrs, values, choices, props, attrs } }
+            rsx! { SelectView { field_attrs, values, choices, props, attrs } }
         }
         BuiltinWidget::RadioGroup => {
             reject_if_not_required(&field_attrs, &props.path);
             let choices = choices.unwrap_or_else(bool_choices);
-            rsx! { RadioGroup { field_attrs, values, choices, props, attrs } }
+            rsx! { RadioGroupView { field_attrs, values, choices, props, attrs } }
         }
         BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
             unreachable!("`is_rendered` is false for these, so the first assert stopped them")
         }
     }
-}
-
-fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
-    assert!(
-        attrs.contains(Attr::Required),
-        "do not use `radio_group` because the field {path} is not required - use `select` instead",
-    );
 }

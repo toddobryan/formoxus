@@ -1,14 +1,53 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget};
+use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
-use super::types::{Choice, FieldProps};
+use super::types::{Choice, FieldProps, bool_choices};
 use super::values::{get_current, write_value};
+use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
+use crate::widgets::{Widget, widget_props::WidgetProps};
+
+/// `<select>`, the default for an optional `bool` and for a field with
+/// `choices`. Over a `bool` without choices it offers true and false.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Select;
+
+impl Widget for Select {
+    const NAME: &'static str = BuiltinWidget::Select.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Select));
+
+    fn render(&self, props: WidgetProps) -> Element {
+        rsx! {
+            SelectView {
+                field_attrs: props.attrs,
+                values: props.values,
+                choices: props.choices.unwrap_or_else(bool_choices),
+                props: FieldProps {
+                    id: props.id,
+                    path: props.path,
+                    label: props.label,
+                    classes: props.classes,
+                    errors: props.errors,
+                },
+                attrs: props.extra_attrs,
+            }
+        }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        vec![
+            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
+            ("label", Slot::new("fx-field-label")),
+            ("select", Slot::new("fx-control fx-select")),
+        ]
+    }
+}
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
 ///
@@ -27,7 +66,7 @@ use crate::nodes::ValuesStore;
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub fn Select(
+pub(crate) fn SelectView(
     field_attrs: FieldAttrs,
     values: ValuesStore,
     choices: Vec<Choice>,

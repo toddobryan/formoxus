@@ -31,7 +31,7 @@
 //! in the history saying otherwise predates that.
 //!
 //! Each component is then named for the element at its core — `InputView`,
-//! [`Select`], `TextareaView`, [`RadioGroup`] — since that is what a reader is
+//! `SelectView`, `TextareaView`, `RadioGroupView` — since that is what a reader is
 //! looking for when they go hunting. A checkbox is an `InputView`, routed by its
 //! type to its own body. [`RadioGroup`] is the one named
 //! for something HTML has no element for, which is the point made just above.

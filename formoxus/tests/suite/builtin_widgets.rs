@@ -11,11 +11,12 @@ use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, FieldType, RenderedInputType as R};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::widgets::Choice;
 use formoxus::widgets::widget_props::WidgetProps;
 use formoxus::widgets::{
     AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, FieldProps,
-    HiddenInput, MonthInput, NumberInput, PasswordInput, ScalarWidget, SearchInput, TelInput,
-    TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetType,
+    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, ScalarWidget, SearchInput,
+    Select, TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetType,
 };
 use googletest::prelude::*;
 use std::collections::HashMap;
@@ -64,6 +65,13 @@ fn builtins() -> Vec<(AnyWidget, BuiltinWidget, FieldType)> {
             FieldType::Bool,
         ),
         (Textarea.into(), BuiltinWidget::Textarea, FieldType::Text),
+        // Over a bool, so neither needs a list (`ScalarWidget` asserts that).
+        (Select.into(), BuiltinWidget::Select, FieldType::Bool),
+        (
+            RadioGroup.into(),
+            BuiltinWidget::RadioGroup,
+            FieldType::Bool,
+        ),
     ]);
     all
 }
@@ -101,11 +109,7 @@ fn values() -> HashMap<String, String> {
     HashMap::from([(PATH.to_string(), "A".to_string())])
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "a root component takes its props by value"
-)]
-fn through_widget(widget: AnyWidget) -> Element {
+fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
     let values = use_store(values);
     widget.render(WidgetProps {
         id: ID.into(),
@@ -116,16 +120,20 @@ fn through_widget(widget: AnyWidget) -> Element {
         extra_attrs: extra_attrs(),
         values,
         classes: Rc::new(Classes::fx()),
+        choices,
     })
 }
 
-fn through_scalar_widget((builtin, field_type): (BuiltinWidget, FieldType)) -> Element {
+fn through_scalar_widget(
+    (builtin, field_type, choices): (BuiltinWidget, FieldType, Option<Vec<Choice>>),
+) -> Element {
     let values = use_store(values);
     rsx! {
         ScalarWidget {
             field_type,
             field_attrs: field_attrs(),
             widget: WidgetType::Builtin(builtin),
+            choices: choices.clone(),
             values,
             props: FieldProps {
                 id: ID.into(),
@@ -157,8 +165,8 @@ fn every_text_like_input_has_a_widget_type() {
 fn each_builtin_renders_what_scalar_widget_renders() {
     for (widget, builtin, field_type) in builtins() {
         expect_that!(
-            html_of(through_widget, widget.clone()),
-            eq(&html_of(through_scalar_widget, (builtin, field_type))),
+            html_of(through_widget, (widget.clone(), None)),
+            eq(&html_of(through_scalar_widget, (builtin, field_type, None))),
             "{}",
             widget.name()
         );
@@ -169,7 +177,7 @@ fn each_builtin_renders_what_scalar_widget_renders() {
 #[gtest]
 fn each_text_like_renders_every_prop() {
     for (widget, input_type) in text_likes() {
-        let html = html_of(through_widget, widget.clone());
+        let html = html_of(through_widget, (widget.clone(), None));
         expect_that!(
             html,
             all![
@@ -193,7 +201,7 @@ fn each_text_like_renders_every_prop() {
 /// Bare: nothing a user sees, so nothing to label or mark invalid.
 #[gtest]
 fn hidden_input_renders_bare() {
-    let html = html_of(through_widget, HiddenInput.into());
+    let html = html_of(through_widget, (HiddenInput.into(), None));
     expect_that!(
         html,
         all![
@@ -213,7 +221,7 @@ fn checkbox_and_textarea_render_every_prop() {
         (Textarea.into(), "<textarea"),
     ] {
         expect_that!(
-            html_of(through_widget, widget.clone()),
+            html_of(through_widget, (widget.clone(), None)),
             all![
                 contains_substring(element),
                 contains_substring("Title"),
@@ -314,4 +322,66 @@ fn checkbox_and_textarea_extend_their_own_elements() {
         eq(false)
     );
     expect_that!(CheckboxInput::EXTENDS.contains(Attr::Disabled), eq(true));
+}
+
+// ── The choosers ─────────────────────────────────────────────────────────
+
+fn states() -> Vec<Choice> {
+    vec![Choice::new("NY", "New York"), Choice::new("OH", "Ohio")]
+}
+
+/// The field's choices reach the widget through `WidgetProps`, and win over
+/// a bool's true/false; the markup still matches `ScalarWidget`'s.
+#[gtest]
+fn each_chooser_renders_the_choices_it_is_given() {
+    for (widget, builtin) in [
+        (AnyWidget::from(Select), BuiltinWidget::Select),
+        (RadioGroup.into(), BuiltinWidget::RadioGroup),
+    ] {
+        let html = html_of(through_widget, (widget.clone(), Some(states())));
+        expect_that!(
+            html,
+            all![
+                contains_substring(r#"value="NY""#),
+                contains_substring("Ohio"),
+                not(contains_substring(r#"value="true""#)),
+            ],
+            "{}",
+            widget.name()
+        );
+        expect_that!(
+            html,
+            eq(&html_of(
+                through_scalar_widget,
+                (builtin, FieldType::Text, Some(states()))
+            )),
+            "{}",
+            widget.name()
+        );
+    }
+}
+
+/// With no list, a chooser over a bool offers true and false.
+#[gtest]
+fn each_chooser_falls_back_to_a_bools_choices() {
+    for widget in [AnyWidget::from(Select), RadioGroup.into()] {
+        expect_that!(
+            html_of(through_widget, (widget.clone(), None)),
+            all![
+                contains_substring(r#"value="true""#),
+                contains_substring(r#"value="false""#),
+            ],
+            "{}",
+            widget.name()
+        );
+    }
+}
+
+#[gtest]
+fn the_choosers_extend_their_own_elements() {
+    expect_that!(Select::EXTENDS.contains(Attr::Size), eq(true));
+    expect_that!(Select::EXTENDS.contains(Attr::Placeholder), eq(false));
+    // The spread lands on the fieldset, so a radio's attributes are not here.
+    expect_that!(RadioGroup::EXTENDS.contains(Attr::Disabled), eq(true));
+    expect_that!(RadioGroup::EXTENDS.contains(Attr::Checked), eq(false));
 }
