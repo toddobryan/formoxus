@@ -1,7 +1,7 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
@@ -19,7 +19,6 @@ use crate::nodes::ValuesStore;
 /// `Hidden`'s bare markup) that make `Input` carry one.
 #[component]
 pub fn Textarea(
-    field_type: FieldType,
     field_attrs: FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
@@ -29,7 +28,7 @@ pub fn Textarea(
     let is_invalid = props.is_invalid();
 
     let class = field_attrs.class(props.classes.part(my_widget, "textarea"), is_invalid);
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
 
     let field_class = props
         .classes

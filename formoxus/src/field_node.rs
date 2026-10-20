@@ -266,13 +266,15 @@ impl<F: Field> Node for FieldNode<F> {
         let widget = self.widget();
         // The field's own attributes (`min`, `pattern`, …), so the browser
         // checks what `check` does, then the author's, which only render.
+        // Bounds resolved to the field's kind here, so no widget needs it.
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
             &widget,
             ctx.required,
             self.has_errors_here(),
             &self.field.widget_attrs().then(&self.attrs),
-        );
+        )
+        .resolve_bounds(self.field_type());
 
         rsx! {
             ScalarWidget {

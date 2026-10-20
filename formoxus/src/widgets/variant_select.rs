@@ -1,7 +1,7 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget};
 
 use crate::field_attrs::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
@@ -64,7 +64,7 @@ pub fn VariantSelect(
                     let variant = (!v.is_empty()).then_some(v);
                     on_edit.call(Edit::new_choose_variant(&props.path, variant.as_deref()));
                 },
-                ..field_attrs.merge_with_attrs(FieldType::Text, attrs),
+                ..field_attrs.merge_with_attrs(attrs),
                 // Required + unchosen: an unselectable placeholder that keeps the browser's
                 // own validation on the hook. Not required: a real "--none--" the user can
                 // pick, which routes through the empty arm above to Unchosen.

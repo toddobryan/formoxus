@@ -44,7 +44,7 @@ pub fn ScalarWidget(
         // parser and nothing to a `<select>`. The author named this input for
         // this field; that IS the evidence.
         WidgetType::Custom { render, .. } => {
-            let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+            let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
             return render(WidgetProps {
                 values,
                 props,
@@ -85,10 +85,10 @@ pub fn ScalarWidget(
         // `type="number"` would eat a half-typed value — but `number` is a
         // perfectly good override, and so is `text` on a numeric.
         BuiltinWidget::Input(input_type) => {
-            rsx! { Input { input_type, field_type, field_attrs, values, props, attrs } }
+            rsx! { Input { input_type, field_attrs, values, props, attrs } }
         }
         BuiltinWidget::Textarea => {
-            rsx! { Textarea { field_type, field_attrs, values, props, attrs } }
+            rsx! { Textarea { field_attrs, values, props, attrs } }
         }
         // Any single scalar can be chosen from a list, because a choice's value
         // is just the raw string this field already parses. A bool's choices
@@ -97,12 +97,12 @@ pub fn ScalarWidget(
         // a form that would rather say "Yes"/"No".
         BuiltinWidget::Select => {
             let choices = choices.unwrap_or_else(bool_choices);
-            rsx! { Select { field_type, field_attrs, values, choices, props, attrs } }
+            rsx! { Select { field_attrs, values, choices, props, attrs } }
         }
         BuiltinWidget::RadioGroup => {
             reject_if_not_required(&field_attrs, &props.path);
             let choices = choices.unwrap_or_else(bool_choices);
-            rsx! { RadioGroup { field_type, field_attrs, values, choices, props, attrs } }
+            rsx! { RadioGroup { field_attrs, values, choices, props, attrs } }
         }
         BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
             unreachable!("`is_rendered` is false for these, so the first assert stopped them")

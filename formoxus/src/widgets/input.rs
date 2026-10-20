@@ -4,7 +4,7 @@
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType, RenderedInputType};
+use formoxus_spec::{Attr, BuiltinWidget, RenderedInputType};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
@@ -16,7 +16,6 @@ use crate::nodes::ValuesStore;
 #[component]
 pub fn Input(
     input_type: RenderedInputType,
-    field_type: FieldType,
     field_attrs: FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
@@ -26,7 +25,7 @@ pub fn Input(
     // (`Range` is the likely one) has to be routed here before it compiles.
     match input_type {
         RenderedInputType::Hidden => hidden(props.path, values),
-        RenderedInputType::Checkbox => checkbox(field_type, &field_attrs, values, props, attrs),
+        RenderedInputType::Checkbox => checkbox(&field_attrs, values, props, attrs),
         RenderedInputType::Text
         | RenderedInputType::Password
         | RenderedInputType::Number
@@ -39,9 +38,7 @@ pub fn Input(
         | RenderedInputType::Time
         | RenderedInputType::DatetimeLocal
         | RenderedInputType::Month
-        | RenderedInputType::Week => {
-            text_like(input_type, field_type, &field_attrs, values, props, attrs)
-        }
+        | RenderedInputType::Week => text_like(input_type, &field_attrs, values, props, attrs),
     }
 }
 
@@ -84,7 +81,6 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // and the only asymmetric input in the set.
 fn text_like(
     input_type: RenderedInputType,
-    field_type: FieldType,
     field_attrs: &FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
@@ -95,7 +91,7 @@ fn text_like(
 
     let class: Option<String> =
         field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
 
     let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 
@@ -134,7 +130,6 @@ fn text_like(
 }
 
 fn checkbox(
-    field_type: FieldType,
     field_attrs: &FieldAttrs,
     values: ValuesStore,
     props: FieldProps,
@@ -144,7 +139,7 @@ fn checkbox(
     let is_invalid = props.is_invalid();
 
     let class = field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
 
     let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 

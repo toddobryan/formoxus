@@ -479,11 +479,31 @@ widgets become ONE concept.
   Tests (Claude), inline in `widget.rs` with two toy widgets: `eq` across
   equal props, different props and different types; a clone is equal; `name`
   and `default_classes` reach through `AnyWidget`.
-- [ ] **`form!`: props in the widget's braces**, a struct expression with
-  `..Default::default()` (today's "a widget takes no arguments" error goes);
-  a `const _` assert per field-level HTML attribute against `EXTENDS`,
-  skipping validated keys.
 - [ ] **The built-in widget types**, per W-C, each wrapping today's component.
+  FIRST of the remaining boxes (Todd, 2026-10-20). Todd writes the first few
+  to learn the pattern, then hands the rest to Claude. Decided 2026-10-20:
+  1. **Today's components take a `View` suffix** (`InputView`,
+     `TextareaView`, `SelectView`, `RadioGroupView`), `pub(crate)`, so the
+     bare names belong to the widget types. A stopgap: Todd hopes to retire
+     the components outright.
+  2. **No `field_type` in `WidgetProps`; `FieldNode` converts first.** The
+     only use of `field_type` in every component is `merge_with_attrs`,
+     which turns a `Bound` into the field's kind (`int_bound`/`float_bound`).
+     Resolving the bounds once, before a widget sees them, means no widget,
+     built-in or custom, ever deals with a field kind.
+  3. **`Classes` keeps its `BuiltinWidget` key for now.** Each type's
+     `default_classes()` returns the slots `Classes::fx()` already builds;
+     re-keying onto `NAME` waits for the delete box.
+- [ ] **`form!`: props in the widget's braces**, a struct expression with
+  `..Default::default()` (today's "a widget takes no arguments" error goes,
+  with NO special case for `choices` inside the braces: unreleased, so
+  rustc's "no field `choices`" is enough, Todd 2026-10-20); a `const _`
+  assert per field-level HTML attribute against `EXTENDS`, skipping
+  validated keys. `custom(Path)` goes too (W-B): a lowercase ident is a
+  built-in name, anything else a path. AFTER the built-in types (Todd,
+  2026-10-20), since the struct expression and the asserts both name one.
+  Goldens (Claude) once this lands: a misspelled prop, a prop of the wrong
+  type, an attribute not in `EXTENDS`.
 - [ ] **`Field::default_widget`** returns one; `ChoiceField` builds its chooser
   with its choices inside it (Django style: `Select { choices }`).
 - [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
@@ -495,6 +515,15 @@ widgets become ONE concept.
 - [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
   wrapper, label and errors around the form control a widget builds; the radio
   group keeps its own shape. Snapshot-guarded.
+- [ ] **Flatten `FieldControl` into `Element`** (Todd, 2026-10-20), in the
+  same change as the delete below: `Element` becomes `Div | Fieldset | Label
+  | Legend | Input(InputType) | Textarea | Select`. Its jobs are gone: typing
+  `BuiltinWidget::form_control()`/`parts()` leaves with `BuiltinWidget`, and
+  `true_and_on(…)` (with `is_also_validated_on` and `is_allowed`, called
+  only by `formoxus-spec`'s own tests) is replaced by W-A's rule that a
+  validated key is a field setting, server-checked and emitted only where it
+  fits. Drop the three `true_and_on` rows' extra arms. CLAUDE.md's "control"
+  exception shrinks to `fx-control`.
 - [ ] **Delete** `WidgetType`, the `Custom` fn pointer, `FieldSpec::custom_widget`,
   and (W-B) `BuiltinWidget`, `RenderedInputType` if nothing else needs it,
   `SlotKey::Part`'s enum key and the macro's "unknown widget" table beyond

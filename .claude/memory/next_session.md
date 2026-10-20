@@ -5,6 +5,17 @@ metadata:
   type: project
 ---
 
+**2026-10-20, LATER: BOX ORDER CHANGED (Todd).** The built-in widget types
+come BEFORE `form!`'s props-in-braces box, since the struct expression and the
+`EXTENDS` asserts both need a concrete type to name. No special case for
+`choices` written inside a widget's braces (unreleased; rustc's "no field"
+suffices). Goldens for the props box wait until it lands. Built-in box
+decided (see its entry in `FIELDS_PLAN.md`): components get a `View` suffix;
+`FieldNode` resolves bounds so `WidgetProps` has no `field_type`; `Classes`
+re-key deferred. `FieldControl` flattens into `Element` and `true_and_on`
+goes, both in the delete box. **Next: Todd writes the first few built-in
+widget types, then hands the rest to me.**
+
 **2026-10-20: STEP 5's `Widget` BOX DONE (pushed).** Todd wrote `trait
 Widget` (`NAME`, `EXTENDS`, `render(&self, props: WidgetProps)`,
 `default_classes()`), the `pub(crate) DynWidget` and `AnyWidget` in

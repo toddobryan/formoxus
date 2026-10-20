@@ -66,7 +66,9 @@ impl FieldAttrs {
         })
     }
 
-    fn to_attributes(&self, field_type: FieldType) -> Vec<Attribute> {
+    /// Every entry but the classes, as Dioxus attributes. A bound is emitted as
+    /// written, so call [`FieldAttrs::resolve_bounds`] first.
+    fn to_attributes(&self) -> Vec<Attribute> {
         let mut out = Vec::new();
         for (attr_key, attr_value) in &self.0 {
             if matches!(attr_key, AttrKey::Std(Attr::Class | Attr::ClassPlus)) {
@@ -80,18 +82,18 @@ impl FieldAttrs {
                 AttrValue::Int(n) => Attribute::new(name, *n, None, false),
                 AttrValue::Regex(patt) => Attribute::new(name, *patt, None, false),
                 AttrValue::Flag => Attribute::new(name, true, None, false),
-                AttrValue::Bound(b) => match field_type {
-                    FieldType::Int => Attribute::new(name, int_bound(*b, name), None, false),
-                    _ => Attribute::new(name, float_bound(*b), None, false),
-                },
-                // A pass-through value, so emitted as written, not as the
-                // field's kind the way a bound is. `form!` refuses a
-                // fractional one on an int field at compile time; a
-                // hand-built spec's is emitted anyway, since it validates
-                // nothing and so has nothing to panic over.
+                // Both emitted as written. A bound is already in the field's
+                // kind (`resolve_bounds`). A step is a pass-through, never
+                // converted: `form!` refuses a fractional one on an int field
+                // at compile time; a hand-built spec's is emitted anyway, since
+                // it validates nothing and so has nothing to panic over.
+                AttrValue::Bound(Bound::Int(n)) | AttrValue::Step(Step::By(Bound::Int(n))) => {
+                    Attribute::new(name, *n, None, false)
+                }
+                AttrValue::Bound(Bound::Float(x)) | AttrValue::Step(Step::By(Bound::Float(x))) => {
+                    Attribute::new(name, *x, None, false)
+                }
                 AttrValue::Step(Step::Any) => Attribute::new(name, "any", None, false),
-                AttrValue::Step(Step::By(Bound::Int(n))) => Attribute::new(name, *n, None, false),
-                AttrValue::Step(Step::By(Bound::Float(x))) => Attribute::new(name, *x, None, false),
                 AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
                 AttrValue::List(vs) => {
                     assert!(matches!(
@@ -106,13 +108,9 @@ impl FieldAttrs {
         out
     }
 
-    pub fn merge_with_attrs(
-        &self,
-        field_type: FieldType,
-        extras: Vec<Attribute>,
-    ) -> Vec<Attribute> {
+    pub fn merge_with_attrs(&self, extras: Vec<Attribute>) -> Vec<Attribute> {
         let mut mapped_attrs: IndexMap<&'static str, Attribute> = self
-            .to_attributes(field_type)
+            .to_attributes()
             .into_iter()
             .map(|a| (a.name, a))
             .collect();
@@ -188,6 +186,27 @@ impl FieldAttrs {
         }
         map.extend(attrs.0.clone());
         FieldAttrs(map)
+    }
+
+    /// This map with every `Bound` in the field's kind: `Bound::Int` on an int
+    /// field, `Bound::Float` on any other. `FieldNode` calls it once, before a
+    /// widget sees the map, so `to_attributes` emits a bound as written and no
+    /// widget, built-in or custom, needs the field's type. Panics on a
+    /// fractional bound on an int field, as [`int_bound`] does.
+    pub fn resolve_bounds(mut self, field_type: FieldType) -> Self {
+        for (key, value) in &mut self.0 {
+            if let AttrValue::Bound(bound) = value {
+                let name = match key {
+                    AttrKey::Std(attr) => attr.name(),
+                    AttrKey::NonStd(name) => name,
+                };
+                *bound = match field_type {
+                    FieldType::Int => Bound::Int(int_bound(*bound, name)),
+                    _ => Bound::Float(float_bound(*bound)),
+                };
+            }
+        }
+        self
     }
 }
 
@@ -294,17 +313,18 @@ mod tests {
         }
     }
 
-    fn names((attrs, field_type): &(FieldAttrs, FieldType)) -> Vec<&'static str> {
-        attrs
-            .to_attributes(*field_type)
-            .iter()
-            .map(|a| a.name)
-            .collect()
+    /// What a widget gets: the bounds resolved, then emitted.
+    fn rendered((attrs, field_type): &(FieldAttrs, FieldType)) -> Vec<Attribute> {
+        attrs.clone().resolve_bounds(*field_type).to_attributes()
+    }
+
+    fn names(pair: &(FieldAttrs, FieldType)) -> Vec<&'static str> {
+        rendered(pair).iter().map(|a| a.name).collect()
     }
 
     /// The value of the one emitted attribute called `name`.
-    fn emitted((attrs, field_type): &(FieldAttrs, FieldType), name: &str) -> AttributeValue {
-        let attrs = attrs.to_attributes(*field_type);
+    fn emitted(pair: &(FieldAttrs, FieldType), name: &str) -> AttributeValue {
+        let attrs = rendered(pair);
         let found: Vec<&Attribute> = attrs.iter().filter(|a| a.name == name).collect();
         assert!(
             found.len() == 1,
@@ -446,6 +466,32 @@ mod tests {
         );
     }
 
+    /// `form!` refuses this at compile time, so only a hand-built spec reaches
+    /// it, and `FieldNode` resolves before any widget renders.
+    #[gtest]
+    #[should_panic(expected = "fractional min 2.5")]
+    fn resolving_a_fractional_bound_on_an_int_field_panics() {
+        let _ = bounds(Some(Bound::Float(2.5)), None).resolve_bounds(FieldType::Int);
+    }
+
+    /// Only bounds change: every other entry, and the order, come through.
+    #[gtest]
+    fn resolving_leaves_everything_but_bounds_alone() {
+        let attrs = all(&[
+            (Attr::Pattern, AttrValue::Regex("[a-z]+")),
+            (Attr::Min, AttrValue::Bound(Bound::Float(2.0))),
+            (Attr::Required, AttrValue::Flag),
+        ]);
+        expect_that!(
+            attrs.resolve_bounds(FieldType::Int),
+            eq(&all(&[
+                (Attr::Pattern, AttrValue::Regex("[a-z]+")),
+                (Attr::Min, AttrValue::Bound(Bound::Int(2))),
+                (Attr::Required, AttrValue::Flag),
+            ]))
+        );
+    }
+
     // ── Author attributes ────────────────────────────────────────────────
     //
     // A quoted `form!` key is a `NonStd` entry holding an `AttrValue::String`.
@@ -466,7 +512,7 @@ mod tests {
                 })
                 .collect(),
         )
-        .to_attributes(FieldType::Text)
+        .to_attributes()
     }
 
     #[gtest]

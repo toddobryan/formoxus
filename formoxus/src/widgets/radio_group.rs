@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget};
 
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
@@ -25,7 +25,6 @@ use crate::widgets::{Choice, FieldErrors, FieldProps, get_current, write_value};
 /// value comes back as `current` and checks its own radio.
 #[component]
 pub fn RadioGroup(
-    field_type: FieldType,
     field_attrs: FieldAttrs,
     values: ValuesStore,
     choices: Vec<Choice>,
@@ -45,9 +44,7 @@ pub fn RadioGroup(
     // 1.2 defines `aria-invalid` on role `radiogroup` and NOT on `radio`; so it
     // stays in the spread, which lands on the fieldset given that role below.
     let required = field_attrs.contains(Attr::Required);
-    let attrs: Vec<Attribute> = field_attrs
-        .without(Attr::Required)
-        .merge_with_attrs(field_type, attrs);
+    let attrs: Vec<Attribute> = field_attrs.without(Attr::Required).merge_with_attrs(attrs);
 
     let field_class = props.classes.part_class(my_widget, "fieldset", is_invalid);
 
