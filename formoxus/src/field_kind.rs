@@ -177,6 +177,12 @@ pub const fn is_enum(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Enum)
 }
 
+/// Whether this field holds an integer, `Option` peeled: what refuses a
+/// fractional `step` on one.
+pub const fn is_int(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Int)
+}
+
 enum Kind {
     Text,
     Int,

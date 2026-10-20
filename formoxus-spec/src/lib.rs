@@ -31,7 +31,7 @@ mod widgets;
 pub use attrs::{
     Attr, AttrKey, AttrSet, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner,
 };
-pub use bound::Bound;
+pub use bound::{Bound, Step};
 pub use buttons::{ButtonType, Invocation};
 pub use elements::{Element, FieldControl};
 pub use fixed_keys::FixedKey;

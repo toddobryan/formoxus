@@ -471,6 +471,20 @@ for Address { … } }` names it, item and expression both, `Form<Address>` kept.
   generic over the context (`impl<C: HasDb> Field<C>`); an axum `FromRef`-style
   projection from the form's context; or `Context` reaches only server checks,
   through `FieldNode`, as `&dyn Any`.
+- [ ] **Runtime attribute values (Todd, 2026-10-19; a possibility, not
+  decided).** Tier 2, render-time, in the choices note's numbering. `step:
+  compute_step()` stopped compiling once `form!` began checking `step` at
+  compile time (above zero, whole on an int field), as `min: f()` never
+  could; and once `form!` has built the spec, nothing can reach in to change
+  it. Two shapes:
+  (a) **a closure over the `Context`**, as `choices: |ctx| …` will be:
+  `step: |ctx| ctx.step`. The const checks skip a closure value, and the
+  same checks run when it is called, or not at all for a pass-through
+  attribute. It falls out of the `Context` box above.
+  (b) **a hook on the form's render** (Todd's idea) letting a dev adjust a
+  field's attributes as it is emitted. More general, since it needs no
+  `Context`, but it is a second way to set an attribute, and it bypasses the
+  table's checks unless it goes back through them.
 - [ ] **`check_on_server`** runs in `Submission::accept`, never on the
   client; errors come back like `reject_field`'s.
 - [ ] Gallery example: "username not taken" against a fixed server-side list

@@ -110,6 +110,45 @@ fn no_step_is_emitted_for_a_float() {
     expect_that!(html, not(contains_substring("step")));
 }
 
+/// What a dev writes instead: `step` is a pass-through attribute, emitted as
+/// written. `"any"` is what a float on `type="number"` usually wants.
+#[gtest]
+fn a_dev_step_of_any_reaches_the_number_input() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! { Counts { fraction => { widget: number, step: "any" } } })
+        });
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring(r#"step="any""#));
+}
+
+#[gtest]
+fn a_dev_numeric_step_reaches_the_number_input() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! { Counts { fraction => { widget: number, step: 0.25 } } })
+        });
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring("step=0.25"));
+}
+
+/// A whole float literal is still a whole step: only a fractional one is
+/// refused on an int field (`tests/ui/form_fractional_step_on_an_integer.rs`).
+#[gtest]
+fn an_int_field_takes_a_whole_float_step() {
+    #[component]
+    fn App() -> Element {
+        let form =
+            use_form(|| empty_form(form! { Counts { whole => { widget: number, step: 2.0 } } }));
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring("step=2"));
+}
+
 /// A hidden input is not user-editable and browsers do not validate it. It is
 /// skipped by `Input`'s early return rather than by the map — that return
 /// renders the input BARE (no wrapper, no label, no spread), so this passes for

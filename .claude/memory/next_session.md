@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+**2026-10-19, EVENING: STEP 5's `AttrSet` BOX DONE, plus `step`
+(two commits, `8183d4f` AttrSet then `step`; not pushed).** Todd wrote `AttrSet` (`EMPTY`, `ANY`, `valid_on(element)`,
+`with`/`without`/`contains`, all const) in `formoxus-spec`; I wrote its tests.
+It is exported from `formoxus::attrs`. `step` got a table row and its own
+`AttrType::Step` (`"any"` or a number); `form!` refuses a fractional one on an
+int field and one not above zero (see [[constraint-attributes-gap]]). Runtime
+attribute values filed as a Step 8 possibility. **Next: `trait Widget`.**
+
 **2026-10-19: W-B, W-C AND W-A's PROP QUESTION DECIDED** (in
 `formoxus/FIELDS_PLAN.md` Step 5). `BuiltinWidget` is retired; class slots key
 on a per-widget `const NAME`; lowercase `widget: textarea` stays as the

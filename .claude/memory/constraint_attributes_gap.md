@@ -86,3 +86,23 @@ Instead: a comment where the `Float` arm builds its attributes, and **a rustdoc
 note in the doc pass** — an author who wants `widget: number` on a float supplies
 `step` themselves. Recorded here because the plan file gets deleted and the doc
 pass has not happened yet ([[pre-publish-checklist]] tracks it, 200 items).
+
+**2026-10-19 (Todd): a dev MAY write `step`; formoxus still never emits one.**
+`step` got its own table row, pass-through (`owner: Author`, `validated:
+false`, same `for:`/`on:` as `min`/`max`), and its own `AttrType::Step`, the
+one attribute that type serves: the value is `Step::Any` (`step: "any"`, the
+value a float on `type="number"` usually wants) or `Step::By(Bound)` (any
+number expression). `form!` refuses any other string literal at the literal.
+Emitted as written, NOT converted to the field's kind the way `min`/`max` are.
+A fractional `step` on an int field is a compile error instead (Todd: "probably
+a mistake"): `step` is not a field setting, so rustc never types it as `T` the
+way it does `min`, and `form!` emits a `const _` assert with
+`field_kind::is_int(shape)` and `(step as f64) % 1.0 == 0.0`, golden
+`tests/ui/form_fractional_step_on_an_integer.rs`. `step: 2.0` passes. A step
+that is not above zero is refused the same way (Todd: "I hate libraries that do
+things half-assed"; HTML ignores one), golden `form_step_not_above_zero.rs`.
+The cost: a `step` must now be a const expression, like `min`; `step:
+compute_step()` no longer compiles. A way back in is a Step 8 box in
+`formoxus/FIELDS_PLAN.md` ("Runtime attribute values").
+Todd chose the new type over `String` (no unquoted numbers) and `Bound` (no
+`"any"`), knowing it has one user.

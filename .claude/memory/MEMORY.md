@@ -40,7 +40,7 @@
 - [Choice fields design](choice_fields_design.md) — tier 1 now FIELD-level `choices:` → typed `ChoiceField<T>` (2026-10-18); tiers 2–3 open (runtime = Step 8 `Context`); `""` never a value
 - [Chooser ideas](chooser_ideas.md) — QUEUED: select-vs-radio by choice count, per-choice hint text
 - [Enum as a value choice](enum_as_a_value_choice.md) — GAP: a unit enum can't take a widget (no radio group over an enum)
-- [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; no `step`
+- [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; `step` never emitted, but a dev may write one (2026-10-19)
 - [Shrink FieldProps idea](shrink_fieldprops_idea.md) — 2026-10-08: `required`/`aria_invalid` DO move into the typed map (3d); `path`/`choices`/`errors` stay props; RadioGroup hard-places aria-invalid
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`

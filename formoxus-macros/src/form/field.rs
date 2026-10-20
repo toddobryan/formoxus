@@ -8,7 +8,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
 use regress::Regex;
 use syn::{
-    Expr, Ident, LitStr, Result, Token, braced, bracketed,
+    Expr, ExprLit, Ident, Lit, LitStr, Result, Token, braced, bracketed,
     ext::IdentExt,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
@@ -118,7 +118,7 @@ impl ParsedAttr {
     fn value_span(&self) -> Span {
         match &self.source {
             AttrSource::Expr(e) => e.span(),
-            AttrSource::Regex(s) => s.span(),
+            AttrSource::Regex(s) | AttrSource::Any(s) => s.span(),
             AttrSource::Flag => self.key_span,
             AttrSource::List(items) => items.first().map_or(self.key_span, LitStr::span),
         }
@@ -142,6 +142,7 @@ impl ParsedAttr {
                 quote_spanned! { span=> __f.#name = ::core::option::Option::Some(#s); }
             }
             AttrSource::List(_) => unreachable!("`{attr:?}` is validated but parsed as a list"),
+            AttrSource::Any(_) => unreachable!("`{attr:?}` is validated but parsed as `\"any\"`"),
         }
     }
 
@@ -169,6 +170,12 @@ impl ParsedAttr {
             (AttrType::Bound, AttrSource::Expr(e)) => {
                 quote! { #attrs::AttrValue::Bound((#e).into()) }
             }
+            (AttrType::Step, AttrSource::Expr(e)) => {
+                quote! { #attrs::AttrValue::Step(#attrs::Step::By((#e).into())) }
+            }
+            (AttrType::Step, AttrSource::Any(_)) => {
+                quote! { #attrs::AttrValue::Step(#attrs::Step::Any) }
+            }
             (AttrType::Regex, AttrSource::Regex(s)) => quote! { #attrs::AttrValue::Regex(#s) },
             (AttrType::Flag, AttrSource::Flag) => quote! { #attrs::AttrValue::Flag },
             (AttrType::TokenList | AttrType::Declarations, AttrSource::List(items)) => {
@@ -188,6 +195,9 @@ pub(crate) enum AttrSource {
     Regex(LitStr),
     Flag,
     List(Vec<LitStr>),
+    /// `step: "any"`, the one string a `step` takes; any other value is a
+    /// number, so an `Expr`.
+    Any(LitStr),
 }
 
 /// Whether formoxus validates this attribute, which makes it a setting of the
@@ -257,7 +267,8 @@ impl FieldBody {
 
     /// Free `const _` assertions that the field at `place` can take what this
     /// body declares: one per table attribute (two for `required_true`),
-    /// `min <= max` and `min_length <= max_length`, and whether the widget can
+    /// `min <= max` and `min_length <= max_length`, a `step` above zero and
+    /// whole on an int field, and whether the widget can
     /// render it (see `WidgetRef::checks`). Whether a bound fits the field's
     /// type is rustc's question, since `settings_tokens` assigns it to the
     /// field's own setting.
@@ -347,6 +358,27 @@ impl FieldBody {
                 const _: () = ::core::assert!(
                     (#min) <= (#max),
                     "`min_length` must not exceed `max_length`"
+                );
+            });
+        }
+        // `step` is a pass-through attribute, not a setting, so nothing types
+        // it as the field's `T` the way `min` is; a fractional one on an int
+        // field is refused here instead. HTML ignores a step that is not
+        // above zero, so that is refused too. `"any"` is not an `Expr`, so it
+        // is never asked.
+        if let Some(step) = self.attrs.expr(Attr::Step) {
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    ((#step) as f64) > 0.0,
+                    "`step` must be greater than zero"
+                );
+            });
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    !::formoxus::field_kind::is_int(#shape) || ((#step) as f64) % 1.0 == 0.0,
+                    "`step` on an integer field must be a whole number"
                 );
             });
         }
@@ -515,6 +547,7 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
     body.parse::<Token![:]>()?;
     Ok(match attr.attr_type() {
         AttrType::String | AttrType::Int | AttrType::Bound => AttrSource::Expr(body.parse()?),
+        AttrType::Step => step_value(body.parse()?)?,
         AttrType::Regex => AttrSource::Regex(checked_pattern(body.parse()?)?),
         AttrType::TokenList => {
             let empty = (attr == Attr::ClassPlus)
@@ -839,6 +872,28 @@ fn checked_pattern(pattern: LitStr) -> Result<LitStr> {
     Ok(pattern)
 }
 
+/// A `step`: `"any"`, or a number as any expression, which `Bound`'s `From`
+/// impls then type. A string literal can only be `"any"`; one that is not
+/// is refused here, at the literal, since `Bound` would only say that `&str`
+/// does not convert.
+fn step_value(value: Expr) -> Result<AttrSource> {
+    match value {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(s), ..
+        }) => {
+            if s.value() == "any" {
+                Ok(AttrSource::Any(s))
+            } else {
+                Err(syn::Error::new_spanned(
+                    s,
+                    "`step` takes a number or `\"any\"`; for a number, write it unquoted",
+                ))
+            }
+        }
+        value => Ok(AttrSource::Expr(Box::new(value))),
+    }
+}
+
 /// The refusal for an attribute formoxus sets itself.
 fn owned(attr: Attr) -> String {
     let hint = if attr == Attr::Required {
@@ -1065,9 +1120,9 @@ mod tests {
                         formoxus_spec::AttrType::String | formoxus_spec::AttrType::Regex => {
                             quote!(#ident: "x")
                         }
-                        formoxus_spec::AttrType::Int | formoxus_spec::AttrType::Bound => {
-                            quote!(#ident: 1)
-                        }
+                        formoxus_spec::AttrType::Int
+                        | formoxus_spec::AttrType::Bound
+                        | formoxus_spec::AttrType::Step => quote!(#ident: 1),
                         formoxus_spec::AttrType::TokenList => quote!(#ident: [x, "y"]),
                         formoxus_spec::AttrType::Declarations => quote!(#ident: { x: y }),
                     }
@@ -1621,6 +1676,38 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { zip => { pattern: "[", max_length: 10 } } }),
             contains_substring("`pattern` is not a valid regular expression")
+        );
+    }
+
+    // ── A step is a number or "any" ──────────────────────────────────────
+
+    #[gtest]
+    fn a_step_of_any_becomes_step_any() {
+        let tokens = parse(quote! { Source { weight => { step: "any" } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, contains_substring("Step :: Any"));
+    }
+
+    /// A number goes through `Bound`'s `From` impls, like a bound, so a named
+    /// const works as well as a literal.
+    #[gtest]
+    fn a_numeric_step_becomes_step_by() {
+        let tokens = parse(quote! { Source { weight => { step: STEP } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, contains_substring("Step :: By ((STEP) . into ())"));
+    }
+
+    /// Refused at the literal, rather than left to `Bound`'s "`&str` does not
+    /// convert", which would not say what a `step` takes.
+    #[gtest]
+    fn a_step_string_other_than_any_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { weight => { step: "0.5" } } }),
+            contains_substring("`step` takes a number or `\"any\"`")
         );
     }
 }

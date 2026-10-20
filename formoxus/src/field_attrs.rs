@@ -1,5 +1,7 @@
 use dioxus::core::Attribute;
-use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, BuiltinWidget, FieldType, RenderedInputType};
+use formoxus_spec::{
+    Attr, AttrKey, AttrValue, Bound, BuiltinWidget, FieldType, RenderedInputType, Step,
+};
 use indexmap::IndexMap;
 
 use crate::{
@@ -82,6 +84,14 @@ impl FieldAttrs {
                     FieldType::Int => Attribute::new(name, int_bound(*b, name), None, false),
                     _ => Attribute::new(name, float_bound(*b), None, false),
                 },
+                // A pass-through value, so emitted as written, not as the
+                // field's kind the way a bound is. `form!` refuses a
+                // fractional one on an int field at compile time; a
+                // hand-built spec's is emitted anyway, since it validates
+                // nothing and so has nothing to panic over.
+                AttrValue::Step(Step::Any) => Attribute::new(name, "any", None, false),
+                AttrValue::Step(Step::By(Bound::Int(n))) => Attribute::new(name, *n, None, false),
+                AttrValue::Step(Step::By(Bound::Float(x))) => Attribute::new(name, *x, None, false),
                 AttrValue::String(s) => Attribute::new(name, s.clone(), None, false),
                 AttrValue::List(vs) => {
                     assert!(matches!(

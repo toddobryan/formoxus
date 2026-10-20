@@ -1,4 +1,4 @@
-use crate::{Bound, Element, FieldControl};
+use crate::{Bound, Element, FieldControl, Step};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Owner {
@@ -12,6 +12,7 @@ pub enum AttrType {
     String,
     Int,
     Bound,
+    Step,
     Regex,
     Flag,
     TokenList,
@@ -29,6 +30,7 @@ pub enum AttrValue {
     String(String),
     Int(usize),
     Bound(Bound),
+    Step(Step),
     Regex(&'static str),
     Flag,
     List(&'static [&'static str]),
@@ -599,6 +601,14 @@ attributes! {
         validated: false,
     },
     // Like `Class`: `Style` replaces, `StylePlus` appends, only one per field.
+    Step {
+        name: "step",
+        owner: Author,
+        type: Step,
+        for: Int | Float,
+        on: Control(Input(Number | Range | Date | Month | Week | Time | DatetimeLocal)),
+        validated: false,
+    },
     Style {
         name: "style",
         owner: Merged,
@@ -1224,7 +1234,9 @@ mod tests {
             Attr::MinLength | Attr::MaxLength => (TEXT_LIKE.to_vec(), vec![TEXTAREA]),
             // No `<textarea>`: HTML has no `pattern` on one.
             Attr::Pattern => (TEXT_LIKE.to_vec(), vec![]),
-            Attr::Min | Attr::Max => (keywords(&[DATE_LIKE, &["number", "range"]]), vec![]),
+            Attr::Min | Attr::Max | Attr::Step => {
+                (keywords(&[DATE_LIKE, &["number", "range"]]), vec![])
+            }
             // The spec also lists `checkbox` for `required`. That sense is
             // `RequiredTrue`, so the presence row leaves it out on purpose.
             Attr::Required => (
@@ -1330,7 +1342,7 @@ mod tests {
             Attr::Autocorrect,
             Attr::Spellcheck,
         ];
-        let numbers = [Attr::Min, Attr::Max];
+        let numbers = [Attr::Min, Attr::Max, Attr::Step];
         let bools = [Attr::RequiredTrue];
         for &attr in Attr::ALL {
             let applies: &[FieldType] = if text_only.contains(&attr) {
@@ -1551,6 +1563,7 @@ mod tests {
             (Attr::Pattern, AttrType::Regex),
             (Attr::Min, AttrType::Bound),
             (Attr::Max, AttrType::Bound),
+            (Attr::Step, AttrType::Step),
             (Attr::Required, AttrType::Flag),
             (Attr::RequiredTrue, AttrType::Flag),
             (Attr::Checked, AttrType::Flag),
@@ -1623,10 +1636,10 @@ mod tests {
     }
 
     #[gtest]
-    fn valid_on_a_textarea_takes_rows_but_not_min() {
+    fn valid_on_a_textarea_takes_rows_but_not_step() {
         let set = AttrSet::valid_on(TEXTAREA);
         expect_that!(set.contains(Attr::Rows), eq(true));
-        expect_that!(set.contains(Attr::Min), eq(false));
+        expect_that!(set.contains(Attr::Step), eq(false));
     }
 
     /// `valid_on` restates the table's `on:` column as a set, minus the owned
@@ -1681,7 +1694,7 @@ mod tests {
     fn with_and_without_leave_the_other_attributes_alone() {
         let set = AttrSet::EMPTY.with(Attr::Rows).with(Attr::Cols);
         expect_that!(set.without(Attr::Rows).contains(Attr::Cols), eq(true));
-        expect_that!(set.with(Attr::Min).contains(Attr::Rows), eq(true));
+        expect_that!(set.with(Attr::Step).contains(Attr::Rows), eq(true));
     }
 
     /// Nothing can put an owned row in a set, so taking one out of any set
