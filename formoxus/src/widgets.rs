@@ -9,7 +9,7 @@
 //!
 //! # "widget", not "control" and not "input"
 //!
-//! Not one of these renders a bare element. [`InputView`] is the plainest, and even
+//! Not one of these renders a bare element. `InputView` is the plainest, and even
 //! it wraps its `<input>` in a `<label class="fx-form-field">` with a caption, a
 //! required marker and an error list — the only exception is `type="hidden"`,
 //! which renders bare precisely because there is nothing to wrap. So "control",
@@ -30,9 +30,9 @@
 //! taking `(values, props)`, and a custom one needs no trait at all. Anything
 //! in the history saying otherwise predates that.
 //!
-//! Each component is then named for the element at its core — [`InputView`],
+//! Each component is then named for the element at its core — `InputView`,
 //! [`Select`], [`Textarea`], [`RadioGroup`] — since that is what a reader is
-//! looking for when they go hunting. A checkbox is an [`InputView`], routed by its
+//! looking for when they go hunting. A checkbox is an `InputView`, routed by its
 //! type to its own body. [`RadioGroup`] is the one named
 //! for something HTML has no element for, which is the point made just above.
 //!
@@ -71,7 +71,7 @@ pub mod widget_props;
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
 pub use formoxus_spec::{BuiltinWidget, RenderedInputType};
-pub use input::{InputView, TextInput};
+pub use input::TextInput;
 pub use radio_group::RadioGroup;
 pub use row_buttons::{AddRowButton, RemoveRowButton};
 pub use scalar::ScalarWidget;

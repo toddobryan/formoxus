@@ -12,7 +12,7 @@ use crate::nodes::ValuesStore;
 
 /// A multi-line text input bound to one path in the value map.
 ///
-/// Otherwise identical to [`InputView`] — same controlled-value binding, same
+/// Otherwise identical to `InputView` — same controlled-value binding, same
 /// `aria-invalid` rule, same label layout. There is no hidden-input branch to
 /// mirror: `Textarea` is only ever chosen as an override on a `Text` field, and
 /// nothing here needs the extra `InputType` cases (`Password`'s masking,
