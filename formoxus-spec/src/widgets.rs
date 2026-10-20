@@ -1,4 +1,4 @@
-use crate::{Element, FieldControl, FieldType, InputType, RenderedInputType, attrs::str_eq};
+use crate::{FieldControl, FieldType, HtmlElement, InputType, RenderedInputType, attrs::str_eq};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinWidget {
@@ -22,9 +22,9 @@ macro_rules! labelled {
     ($control:expr) => {
         const {
             &[
-                Part::from_element(Element::Div),
-                Part::from_element(Element::Label),
-                Part::from_element(Element::Control($control)),
+                Part::from_element(HtmlElement::Div),
+                Part::from_element(HtmlElement::Label),
+                Part::from_element(HtmlElement::Control($control)),
             ]
         }
     };
@@ -37,11 +37,11 @@ macro_rules! grouped {
     ($control:expr) => {
         const {
             &[
-                Part::from_element(Element::Fieldset),
-                Part::from_element(Element::Legend),
-                Part::from_element(Element::Div),
-                Part::from_element(Element::Control($control)),
-                Part::from_element(Element::Label),
+                Part::from_element(HtmlElement::Fieldset),
+                Part::from_element(HtmlElement::Legend),
+                Part::from_element(HtmlElement::Div),
+                Part::from_element(HtmlElement::Control($control)),
+                Part::from_element(HtmlElement::Label),
             ]
         }
     };
@@ -150,19 +150,19 @@ impl BuiltinWidget {
         match self {
             Self::Input(R::Hidden) => {
                 const {
-                    &[Part::from_element(Element::Control(FieldControl::Input(
-                        InputType::Hidden,
-                    )))]
+                    &[Part::from_element(HtmlElement::Control(
+                        FieldControl::Input(InputType::Hidden),
+                    ))]
                 }
             }
             Self::Input(R::Checkbox) => {
                 const {
                     &[
-                        Part::from_element(Element::Div),
-                        Part::from_element(Element::Control(FieldControl::Input(
+                        Part::from_element(HtmlElement::Div),
+                        Part::from_element(HtmlElement::Control(FieldControl::Input(
                             InputType::Checkbox,
                         ))),
-                        Part::from_element(Element::Label),
+                        Part::from_element(HtmlElement::Label),
                     ]
                 }
             }
@@ -299,11 +299,11 @@ impl BuiltinWidget {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Part {
     pub name: &'static str,
-    pub element: Element,
+    pub element: HtmlElement,
 }
 
 impl Part {
-    const fn from_element(element: Element) -> Self {
+    const fn from_element(element: HtmlElement) -> Self {
         Part {
             name: element.tag(),
             element,
@@ -314,7 +314,7 @@ impl Part {
 #[cfg(test)]
 mod tests {
     use super::{BuiltinWidget, Part};
-    use crate::{Element, FieldType, RenderedInputType};
+    use crate::{FieldType, HtmlElement, RenderedInputType};
     use googletest::prelude::*;
 
     const FIELD_TYPES: [FieldType; 4] = [
@@ -406,7 +406,7 @@ mod tests {
         w.parts()
             .iter()
             .copied()
-            .filter(|p| matches!(p.element, Element::Control(_)))
+            .filter(|p| matches!(p.element, HtmlElement::Control(_)))
             .collect()
     }
 
@@ -420,7 +420,7 @@ mod tests {
                 controls(w),
                 elements_are![field!(
                     &Part.element,
-                    eq(Element::Control(w.form_control()))
+                    eq(HtmlElement::Control(w.form_control()))
                 )],
                 "{w:?}"
             );
@@ -445,7 +445,7 @@ mod tests {
     #[gtest]
     fn every_widget_but_hidden_has_a_label_part() {
         for &w in BuiltinWidget::ALL {
-            let has_label = w.parts().iter().any(|p| p.element == Element::Label);
+            let has_label = w.parts().iter().any(|p| p.element == HtmlElement::Label);
             expect_that!(
                 has_label,
                 eq(w != BuiltinWidget::Input(RenderedInputType::Hidden)),

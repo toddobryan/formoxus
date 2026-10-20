@@ -33,7 +33,7 @@ pub use attrs::{
 };
 pub use bound::{Bound, Step};
 pub use buttons::{ButtonType, Invocation};
-pub use elements::{Element, FieldControl};
+pub use elements::{FieldControl, HtmlElement};
 pub use fixed_keys::FixedKey;
 pub use input_types::{InputType, RenderedInputType};
 pub use slot_key::SlotKey;

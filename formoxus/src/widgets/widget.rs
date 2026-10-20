@@ -3,8 +3,8 @@
 
 use std::{any::Any, fmt::Debug};
 
-// Dioxus's `Element`, what `render` returns. The other `Element`,
-// `formoxus_spec::Element`, names an HTML element for the attribute table.
+// Dioxus's `Element`, what `render` returns. The attribute table's is
+// `formoxus_spec::HtmlElement`, named apart so the two never need an alias.
 use dioxus::prelude::Element;
 use formoxus_spec::AttrSet;
 

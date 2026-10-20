@@ -22,7 +22,7 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_spec::{Attr, BuiltinWidget, Element, FieldControl, FieldType};
+use formoxus_spec::{Attr, BuiltinWidget, FieldControl, FieldType, HtmlElement};
 
 use crate::field::Field;
 use crate::field_node::NodeCtor;
@@ -89,7 +89,9 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
 pub const fn applies(attr: Attr, shape: &Shape) -> bool {
     match kind(shape) {
         // no need to check Attr::Multiple since it's owned by Formoxus
-        Kind::Enum => !attr.validated() && attr.is_valid_on(Element::Control(FieldControl::Select)),
+        Kind::Enum => {
+            !attr.validated() && attr.is_valid_on(HtmlElement::Control(FieldControl::Select))
+        }
         Kind::Unknown => true,
         Kind::Other => false,
         _ => match field_type(shape) {

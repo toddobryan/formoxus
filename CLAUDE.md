@@ -53,9 +53,11 @@ HTML spec's own term. Two things use it, both deliberately:
   `formoxus-spec/src/elements.rs` naming a bare form control:
   `Input(InputType) | Textarea | Select`, nothing else. It types whatever
   must be a control (`true_and_on(…)`, a widget's form-control part).
-  Attribute validity is keyed on the wider **`Element`**
+  Attribute validity is keyed on the wider **`HtmlElement`** (`Element` until
+  2026-10-20; renamed so it never collides with Dioxus's `Element`)
   (`Div | Fieldset | Label | Legend | Control(FieldControl)`), every element a
-  widget part can be. `Fieldset` was once a `FieldControl`, a stretch because
+  widget part can be. Both are due to flatten into one `HtmlElement` in
+  `FIELDS_PLAN.md` Step 5's delete box. `Fieldset` was once a `FieldControl`, a stretch because
   `RadioGroup` spread onto it; P2-a in `formoxus/ATTRIBUTES_PLAN.md` ended that.
 
 Anything that RENDERS a field is still a widget. A new Rust name containing

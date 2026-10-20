@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, Element as FxElement, FieldControl, InputType, RenderedInputType,
+    Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement, InputType, RenderedInputType,
 };
 
 use super::errors::FieldErrors;
@@ -24,7 +24,7 @@ impl Widget for TextInput {
     const NAME: &'static str = "text";
 
     const EXTENDS: AttrSet =
-        AttrSet::valid_on(FxElement::Control(FieldControl::Input(InputType::Text)));
+        AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(InputType::Text)));
 
     fn render(&self, props: WidgetProps) -> Element {
         rsx! {

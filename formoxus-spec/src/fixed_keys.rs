@@ -12,7 +12,7 @@ use crate::buttons::ButtonType;
 /// Keyed by the node or role that renders the element, not by the element:
 /// three keys render a `<fieldset>`, and the key says which. So `FieldSet` is
 /// `formoxus::nodes::FieldSet`'s `<fieldset>`, capitalized like that type,
-/// and not [`Element::Fieldset`](crate::Element::Fieldset), which is spelled
+/// and not [`HtmlElement::Fieldset`](crate::HtmlElement::Fieldset), which is spelled
 /// as HTML spells the element.
 ///
 /// `#[non_exhaustive]` so a slot can be added without breaking a `match`.

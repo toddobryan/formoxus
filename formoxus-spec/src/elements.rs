@@ -1,7 +1,7 @@
 use crate::InputType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Element {
+pub enum HtmlElement {
     Div,
     Fieldset,
     Label,
@@ -9,14 +9,14 @@ pub enum Element {
     Control(FieldControl),
 }
 
-impl Element {
+impl HtmlElement {
     pub const fn tag(&self) -> &'static str {
         match self {
-            Element::Div => "div",
-            Element::Fieldset => "fieldset",
-            Element::Label => "label",
-            Element::Legend => "legend",
-            Element::Control(field_control) => match field_control {
+            HtmlElement::Div => "div",
+            HtmlElement::Fieldset => "fieldset",
+            HtmlElement::Label => "label",
+            HtmlElement::Legend => "legend",
+            HtmlElement::Control(field_control) => match field_control {
                 FieldControl::Input(_) => "input",
                 FieldControl::Textarea => "textarea",
                 FieldControl::Select => "select",
@@ -34,7 +34,7 @@ pub enum FieldControl {
     Select,
 }
 
-impl From<FieldControl> for Element {
+impl From<FieldControl> for HtmlElement {
     fn from(value: FieldControl) -> Self {
         Self::Control(value)
     }

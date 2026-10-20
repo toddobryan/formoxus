@@ -57,8 +57,8 @@
 /// `formoxus::buttons` and `formoxus::classes`.
 pub mod attrs {
     pub use formoxus_spec::{
-        Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, BuiltinWidget, Element, FieldControl,
-        FieldType, FieldTypeWithOptional, InputType, Owner, Part, RenderedInputType, Step,
+        Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, BuiltinWidget, FieldControl, FieldType,
+        FieldTypeWithOptional, HtmlElement, InputType, Owner, Part, RenderedInputType, Step,
     };
 }
 

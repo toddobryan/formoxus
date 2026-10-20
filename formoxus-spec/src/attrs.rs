@@ -1,4 +1,4 @@
-use crate::{Bound, Element, FieldControl, Step};
+use crate::{Bound, FieldControl, HtmlElement, Step};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Owner {
@@ -82,7 +82,7 @@ macro_rules! validated_flag {
 /// - `type`: the type of the attribute's VALUE, which decides how `form!`
 ///   parses it.
 /// - `for`: the [`FieldType`]s it applies to.
-/// - `on`: the [`Element`]s it may be EMITTED on, straight from the spec.
+/// - `on`: the [`HtmlElement`]s it may be EMITTED on, straight from the spec.
 /// - `validated`: whether formoxus's own validation enforces it. `false`;
 ///   `true` (enforced, and the browser enforces it too wherever it is
 ///   emitted); or `true_and_on(…)`, which is `true` PLUS these extra controls,
@@ -142,8 +142,8 @@ macro_rules! attributes {
 
             /// Whether the attribute may be EMITTED on this element.
             #[deny(unused_variables)]
-            pub const fn is_valid_on(self, element: Element) -> bool {
-                use crate::Element::*;
+            pub const fn is_valid_on(self, element: HtmlElement) -> bool {
+                use crate::HtmlElement::*;
                 use crate::FieldControl::*;
                 use crate::InputType::*;
                 match (self, element) {
@@ -229,7 +229,7 @@ impl AttrSet {
         set
     };
 
-    pub const fn valid_on(element: Element) -> Self {
+    pub const fn valid_on(element: HtmlElement) -> Self {
         let mut set = Self::EMPTY;
         let mut i = 0;
         while i < Attr::ALL.len() {
@@ -278,7 +278,7 @@ impl Attr {
     /// a [`Owner::Formoxus`] attribute is refused whatever this says.
     pub const fn is_allowed(self, field_type: FieldType, field_control: FieldControl) -> bool {
         self.applies_to(field_type)
-            && (self.is_valid_on(Element::Control(field_control))
+            && (self.is_valid_on(HtmlElement::Control(field_control))
                 || self.is_also_validated_on(field_control))
     }
 }
@@ -1122,12 +1122,12 @@ pub(crate) const fn str_eq(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{Attr, AttrSet, AttrType, FieldType, Owner};
-    use crate::{Element, FieldControl, InputType};
+    use crate::{FieldControl, HtmlElement, InputType};
     use googletest::prelude::*;
 
-    const TEXTAREA: Element = Element::Control(FieldControl::Textarea);
-    const SELECT: Element = Element::Control(FieldControl::Select);
-    const FIELDSET: Element = Element::Fieldset;
+    const TEXTAREA: HtmlElement = HtmlElement::Control(FieldControl::Textarea);
+    const SELECT: HtmlElement = HtmlElement::Control(FieldControl::Select);
+    const FIELDSET: HtmlElement = HtmlElement::Fieldset;
 
     const INPUT_TYPES: [InputType; 22] = [
         InputType::Text,
@@ -1176,7 +1176,7 @@ mod tests {
     /// and which other elements (`<textarea>`, `<select>`, `<fieldset>`, …) it may appear on.
     struct Expected {
         inputs: Vec<&'static str>,
-        others: Vec<Element>,
+        others: Vec<HtmlElement>,
     }
 
     fn every_input_keyword() -> Vec<&'static str> {
@@ -1188,21 +1188,21 @@ mod tests {
     }
 
     /// Every element besides `<input>`, which is checked per input type.
-    fn every_other_element() -> Vec<Element> {
+    fn every_other_element() -> Vec<HtmlElement> {
         vec![
             TEXTAREA,
             SELECT,
             FIELDSET,
-            Element::Label,
-            Element::Legend,
-            Element::Div,
+            HtmlElement::Label,
+            HtmlElement::Legend,
+            HtmlElement::Div,
         ]
     }
 
     /// The spec's answer for `attr`, or `None` if this test has no statement
     /// for it, which `every_row_has_a_spec_expectation` turns into a failure.
     fn expected(attr: Attr) -> Option<Expected> {
-        let (inputs, others): (Vec<&'static str>, Vec<Element>) = match attr {
+        let (inputs, others): (Vec<&'static str>, Vec<HtmlElement>) = match attr {
             // Global attributes, `role` and `aria-*`: every element.
             _ if attr.name().starts_with("aria-") => (every_input_keyword(), every_other_element()),
             Attr::Accesskey
@@ -1297,7 +1297,7 @@ mod tests {
             for t in INPUT_TYPES {
                 let keyword = t.html_type();
                 expect_that!(
-                    attr.is_valid_on(Element::Control(FieldControl::Input(t))),
+                    attr.is_valid_on(HtmlElement::Control(FieldControl::Input(t))),
                     eq(inputs.contains(&keyword)),
                     "{attr:?} on input type={keyword}"
                 );
@@ -1485,7 +1485,7 @@ mod tests {
             for control in all_controls() {
                 expect_that!(
                     attr.is_also_validated_on(control)
-                        && attr.is_valid_on(Element::Control(control)),
+                        && attr.is_valid_on(HtmlElement::Control(control)),
                     eq(false),
                     "{attr:?} on {control:?}"
                 );
@@ -1543,7 +1543,7 @@ mod tests {
     fn min_on_a_text_input_is_allowed_but_pattern_on_a_textarea_is_not() {
         let text_input = FieldControl::Input(InputType::Text);
         expect_that!(
-            Attr::Min.is_valid_on(Element::Control(text_input)),
+            Attr::Min.is_valid_on(HtmlElement::Control(text_input)),
             eq(false)
         );
         expect_that!(Attr::Min.is_allowed(FieldType::Int, text_input), eq(true));
@@ -1623,10 +1623,10 @@ mod tests {
     // ── `AttrSet` ────────────────────────────────────────────────────────
 
     /// Every element a widget part can be: each `<input>` type, then the rest.
-    fn every_element() -> Vec<Element> {
+    fn every_element() -> Vec<HtmlElement> {
         INPUT_TYPES
             .iter()
-            .map(|&t| Element::Control(FieldControl::Input(t)))
+            .map(|&t| HtmlElement::Control(FieldControl::Input(t)))
             .chain(every_other_element())
             .collect()
     }
