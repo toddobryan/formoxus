@@ -17,40 +17,100 @@ use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct TextInput;
+/// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
+///
+/// Everything a type needs follows from its `RenderedInputType` variant:
+/// `NAME` is `form!`'s spelling of it (`BuiltinWidget::form_name`, so the two
+/// cannot drift), `EXTENDS` is what HTML allows on that `<input>`, and
+/// `render` and `default_classes` are shared. The variant names one in both
+/// `RenderedInputType` and `InputType`, which spell them alike. Hidden and
+/// checkbox render differently, so they are written by hand.
+macro_rules! text_like_inputs {
+    ($( $(#[$doc:meta])* $widget:ident => $variant:ident, )+) => {
+        $(
+            $(#[$doc])*
+            #[derive(Clone, Debug, PartialEq, Default)]
+            pub struct $widget;
 
-impl Widget for TextInput {
-    const NAME: &'static str = "text";
+            impl Widget for $widget {
+                const NAME: &'static str =
+                    BuiltinWidget::Input(RenderedInputType::$variant).form_name();
 
-    const EXTENDS: AttrSet =
-        AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(InputType::Text)));
+                const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(
+                    FieldControl::Input(InputType::$variant),
+                ));
 
-    fn render(&self, props: WidgetProps) -> Element {
-        rsx! {
-            InputView {
-                input_type: RenderedInputType::Text,
-                field_attrs: props.attrs,
-                values: props.values,
-                props: FieldProps {
-                    id: props.id,
-                    path: props.path,
-                    label: props.label,
-                    classes: props.classes,
-                    errors: props.errors,
-                },
-                attrs: props.extra_attrs,
+                fn render(&self, props: WidgetProps) -> Element {
+                    render_text_like(RenderedInputType::$variant, props)
+                }
+
+                fn default_classes() -> Vec<(&'static str, Slot)> {
+                    text_like_classes()
+                }
             }
+        )+
+    };
+}
+
+text_like_inputs! {
+    /// `<input type="text">`, the default for a `String` or a number.
+    TextInput => Text,
+    /// `<input type="password">`. Echoes its value back, like the rest.
+    PasswordInput => Password,
+    /// `<input type="number">`. Never a default: a half-typed number reads as
+    /// `""`, so a dev chooses it.
+    NumberInput => Number,
+    /// `<input type="email">`.
+    EmailInput => Email,
+    /// `<input type="tel">`.
+    TelInput => Telephone,
+    /// `<input type="url">`.
+    UrlInput => Url,
+    /// `<input type="search">`.
+    SearchInput => Search,
+    /// `<input type="color">`.
+    ColorInput => Color,
+    /// `<input type="date">`.
+    DateInput => Date,
+    /// `<input type="time">`.
+    TimeInput => Time,
+    /// `<input type="datetime-local">`.
+    DatetimeLocalInput => DatetimeLocal,
+    /// `<input type="month">`.
+    MonthInput => Month,
+    /// `<input type="week">`.
+    WeekInput => Week,
+}
+
+/// Every text-like widget's `render`: `props` split into what `InputView`
+/// takes. A plain fn, called from `render`, so it must not call hooks either.
+fn render_text_like(input_type: RenderedInputType, props: WidgetProps) -> Element {
+    rsx! {
+        InputView {
+            input_type,
+            field_attrs: props.attrs,
+            values: props.values,
+            props: FieldProps {
+                id: props.id,
+                path: props.path,
+                label: props.label,
+                classes: props.classes,
+                errors: props.errors,
+            },
+            attrs: props.extra_attrs,
         }
     }
+}
 
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        vec![
-            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
-            ("label", Slot::new("fx-field-label")),
-            ("input", Slot::new("fx-control fx-input")),
-        ]
-    }
+/// The slots `Classes::fx()` gives every text-like input, repeated until
+/// `Classes` is keyed on `Widget::NAME` (`tests/suite/builtin_widgets.rs`
+/// checks the two agree).
+fn text_like_classes() -> Vec<(&'static str, Slot)> {
+    vec![
+        ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
+        ("label", Slot::new("fx-field-label")),
+        ("input", Slot::new("fx-control fx-input")),
+    ]
 }
 
 #[component]

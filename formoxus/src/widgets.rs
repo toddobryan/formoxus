@@ -71,7 +71,10 @@ pub mod widget_props;
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
 pub use formoxus_spec::{BuiltinWidget, RenderedInputType};
-pub use input::TextInput;
+pub use input::{
+    ColorInput, DateInput, DatetimeLocalInput, EmailInput, MonthInput, NumberInput, PasswordInput,
+    SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
+};
 pub use radio_group::RadioGroup;
 pub use row_buttons::{AddRowButton, RemoveRowButton};
 pub use scalar::ScalarWidget;
