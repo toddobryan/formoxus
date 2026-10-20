@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 use formoxus_spec::{Attr, BuiltinWidget, FieldType};
 
-use super::input::Input;
+use super::input::InputView;
 use super::radio_group::RadioGroup;
 use super::select::Select;
 use super::textarea::Textarea;
@@ -85,7 +85,7 @@ pub fn ScalarWidget(
         // `type="number"` would eat a half-typed value — but `number` is a
         // perfectly good override, and so is `text` on a numeric.
         BuiltinWidget::Input(input_type) => {
-            rsx! { Input { input_type, field_attrs, values, props, attrs } }
+            rsx! { InputView { input_type, field_attrs, values, props, attrs } }
         }
         BuiltinWidget::Textarea => {
             rsx! { Textarea { field_attrs, values, props, attrs } }

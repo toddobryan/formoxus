@@ -25,6 +25,8 @@ pub mod models;
 mod author_attrs;
 #[path = "suite/browser_validation.rs"]
 mod browser_validation;
+#[path = "suite/builtin_widgets.rs"]
+mod builtin_widgets;
 #[path = "suite/buttons.rs"]
 mod buttons;
 #[path = "suite/choices.rs"]

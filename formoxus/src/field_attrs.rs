@@ -192,7 +192,7 @@ impl FieldAttrs {
     /// field, `Bound::Float` on any other. `FieldNode` calls it once, before a
     /// widget sees the map, so `to_attributes` emits a bound as written and no
     /// widget, built-in or custom, needs the field's type. Panics on a
-    /// fractional bound on an int field, as [`int_bound`] does.
+    /// fractional bound on an int field, as `int_bound` does.
     pub fn resolve_bounds(mut self, field_type: FieldType) -> Self {
         for (key, value) in &mut self.0 {
             if let AttrValue::Bound(bound) = value {

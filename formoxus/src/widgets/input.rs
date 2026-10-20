@@ -4,17 +4,57 @@
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, RenderedInputType};
+use formoxus_spec::{
+    Attr, AttrSet, BuiltinWidget, Element as FxElement, FieldControl, InputType, RenderedInputType,
+};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
 use super::types::FieldProps;
 use super::values::{get_current, write_value};
+use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
+use crate::widgets::{Widget, widget_props::WidgetProps};
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct TextInput;
+
+impl Widget for TextInput {
+    const NAME: &'static str = "text";
+
+    const EXTENDS: AttrSet =
+        AttrSet::valid_on(FxElement::Control(FieldControl::Input(InputType::Text)));
+
+    fn render(&self, props: WidgetProps) -> Element {
+        rsx! {
+            InputView {
+                input_type: RenderedInputType::Text,
+                field_attrs: props.attrs,
+                values: props.values,
+                props: FieldProps {
+                    id: props.id,
+                    path: props.path,
+                    label: props.label,
+                    classes: props.classes,
+                    errors: props.errors,
+                },
+                attrs: props.extra_attrs,
+            }
+        }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        vec![
+            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
+            ("label", Slot::new("fx-field-label")),
+            ("input", Slot::new("fx-control fx-input")),
+        ]
+    }
+}
 
 #[component]
-pub fn Input(
+pub(crate) fn InputView(
     input_type: RenderedInputType,
     field_attrs: FieldAttrs,
     values: ValuesStore,
