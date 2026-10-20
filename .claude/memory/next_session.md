@@ -5,7 +5,14 @@ metadata:
   type: project
 ---
 
-**2026-10-20, AFTERNOON: STEP 5's BUILT-IN TYPES BOX DONE (not pushed).**
+**2026-10-20, END OF DAY (pushed): THE BRIDGE IS DONE (`d854acb`); NEXT IS
+`form!`'s PROPS BOX, and its 17-item to-do list is written into that box in
+`formoxus/FIELDS_PLAN.md`.** Todd picks up items 1–12 from home (parse,
+emit, check); 13–17 are mine once he reaches checkpoint 1. `FormSpec::with_widget`
+exists, and `FieldNode` renders an `AnyWidget` when it has one, else
+`ScalarWidget`.
+
+**2026-10-20, AFTERNOON: STEP 5's BUILT-IN TYPES BOX DONE.**
 All 18 widget types exist and render what `ScalarWidget` renders
 (`tests/suite/builtin_widgets.rs`); nothing uses them yet. Todd wrote
 `TextInput`, I wrote the rest (13 text-likes from one `macro_rules!`).
