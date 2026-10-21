@@ -109,3 +109,10 @@ string, which is also where [[emitted-classes-and-strings]] will land.
 client-side render goes through `setAttribute`, where the LAST write would win —
 which would make SSR and CSR disagree. Check `dioxus-web` before relying on
 either.
+
+**A lone parameter named `props` is the props struct itself** (2026-10-21).
+`#[component] fn SelectView(props: WidgetProps)` makes Dioxus treat
+`WidgetProps` as the component's whole props type, and fails with "`Props` is
+not implemented for `WidgetProps`". Name it anything else
+(`widget_props: WidgetProps`) and rebind it; with two or more parameters,
+`props` is an ordinary name again.

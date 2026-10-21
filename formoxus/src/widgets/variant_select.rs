@@ -3,10 +3,9 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, BuiltinWidget};
 
-use crate::field_attrs::FieldAttrs;
 use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::Edit;
-use crate::widgets::FieldProps;
+use crate::widgets::widget_props::WidgetProps;
 
 use super::errors::FieldErrors;
 use super::label::field_label;
@@ -21,7 +20,6 @@ use super::select::ABSENT_DISPLAY;
 /// [`Edit`] and rebuilds the form beneath it.
 #[component]
 pub fn VariantSelect(
-    field_attrs: FieldAttrs,
     variants: Vec<&'static str>,
     selected: Option<String>,
     on_edit: Callback<Edit>,
@@ -29,9 +27,9 @@ pub fn VariantSelect(
     /// than a `defaults()` call, so the per-form tier is not skipped — see
     /// [`crate::buttons::ButtonSpec::label`].
     label_case: LabelCase,
-    props: FieldProps,
-    #[props(extends = select)] attrs: Vec<Attribute>,
+    props: WidgetProps,
 ) -> Element {
+    let field_attrs = &props.attrs;
     let my_widget = BuiltinWidget::Select;
     let is_invalid = props.is_invalid();
     let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
@@ -64,7 +62,7 @@ pub fn VariantSelect(
                     let variant = (!v.is_empty()).then_some(v);
                     on_edit.call(Edit::new_choose_variant(&props.path, variant.as_deref()));
                 },
-                ..field_attrs.merge_with_attrs(attrs),
+                ..field_attrs.merge_with_attrs(props.extra_attrs),
                 // Required + unchosen: an unselectable placeholder that keeps the browser's
                 // own validation on the hook. Not required: a real "--none--" the user can
                 // pick, which routes through the empty arm above to Unchosen.

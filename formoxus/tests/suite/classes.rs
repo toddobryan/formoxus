@@ -15,7 +15,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::AttrSet;
 use formoxus::classes::{FixedKey, Slot};
-use formoxus::widgets::widget_props::WidgetProps;
+use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{BuiltinWidget, RenderedInputType, Widget};
 use formoxus::{Classes, Form, FormSpec, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;

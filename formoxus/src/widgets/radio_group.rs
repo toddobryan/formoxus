@@ -5,12 +5,9 @@ use formoxus_spec::{Attr, AttrSet, BuiltinWidget, HtmlElement};
 
 use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
-use crate::nodes::ValuesStore;
 use crate::widgets::label::required_marker;
 use crate::widgets::types::bool_choices;
-use crate::widgets::{
-    Choice, FieldErrors, FieldProps, Widget, get_current, widget_props::WidgetProps, write_value,
-};
+use crate::widgets::{FieldErrors, Widget, get_current, widget_props::WidgetProps, write_value};
 
 /// Radio buttons, one per choice, for a REQUIRED field: a picked radio
 /// can't be un-picked. Over a `bool` without choices it offers true and
@@ -33,19 +30,7 @@ impl Widget for RadioGroup {
     fn render(&self, props: WidgetProps) -> Element {
         reject_if_not_required(&props.attrs, &props.path);
         rsx! {
-            RadioGroupView {
-                field_attrs: props.attrs,
-                values: props.values,
-                choices: props.choices.unwrap_or_else(bool_choices),
-                props: FieldProps {
-                    id: props.id,
-                    path: props.path,
-                    label: props.label,
-                    classes: props.classes,
-                    errors: props.errors,
-                },
-                attrs: props.extra_attrs,
-            }
+            RadioGroupView { widget_props: props }
         }
     }
 
@@ -83,21 +68,21 @@ pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
 /// can't be un-picked, so a synthetic absent option is the only way back — and
 /// `--none--` is a poor stand-in for the explicit "None of the above" that a
 /// genuinely unanswerable question wants. That is also why an optional field is
-/// rejected outright, at compile time by `field_kind::is_optional`. (Only at
-/// compile time: a hand-built `FormSpec` that puts one on an optional field
-/// renders it.) In create mode nothing is checked and `required`
-/// makes the browser block submit until the user picks; in edit mode the stored
-/// value comes back as `current` and checks its own radio.
+/// rejected outright, at compile time by `field_kind::is_optional` and, for a
+/// hand-built `FormSpec`, at render by [`reject_if_not_required`]. In create
+/// mode nothing is checked and `required` makes the browser block submit until
+/// the user picks; in edit mode the stored value comes back as `current` and
+/// checks its own radio.
 #[component]
-pub(crate) fn RadioGroupView(
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    choices: Vec<Choice>,
-    props: FieldProps,
-    #[props(extends = fieldset)] attrs: Vec<Attribute>,
-) -> Element {
+pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
+    // Not `props`: Dioxus reads a component's lone `props` parameter as its
+    // whole props struct, which `WidgetProps` is not.
+    let props = widget_props;
     let my_widget = BuiltinWidget::RadioGroup;
     let is_invalid = props.is_invalid();
+    let field_attrs = &props.attrs;
+    let values = props.values;
+    let choices = props.choices.unwrap_or_else(bool_choices);
 
     // `required` and `aria-invalid` are both judgments about the GROUP, but each
     // spec puts its own in a different place. HTML has `required` only on an
@@ -106,7 +91,9 @@ pub(crate) fn RadioGroupView(
     // 1.2 defines `aria-invalid` on role `radiogroup` and NOT on `radio`; so it
     // stays in the spread, which lands on the fieldset given that role below.
     let required = field_attrs.contains(Attr::Required);
-    let attrs: Vec<Attribute> = field_attrs.without(Attr::Required).merge_with_attrs(attrs);
+    let attrs: Vec<Attribute> = field_attrs
+        .without(Attr::Required)
+        .merge_with_attrs(props.extra_attrs);
 
     let field_class = field_attrs.class(props.classes.part(my_widget, "fieldset"), is_invalid);
 

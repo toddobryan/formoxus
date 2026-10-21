@@ -5,11 +5,9 @@ use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
-use super::types::{Choice, FieldProps, bool_choices};
+use super::types::bool_choices;
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
-use crate::field_attrs::FieldAttrs;
-use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<select>`, the default for an optional `bool` and for a field with
@@ -24,19 +22,7 @@ impl Widget for Select {
 
     fn render(&self, props: WidgetProps) -> Element {
         rsx! {
-            SelectView {
-                field_attrs: props.attrs,
-                values: props.values,
-                choices: props.choices.unwrap_or_else(bool_choices),
-                props: FieldProps {
-                    id: props.id,
-                    path: props.path,
-                    label: props.label,
-                    classes: props.classes,
-                    errors: props.errors,
-                },
-                attrs: props.extra_attrs,
-            }
+            SelectView { widget_props: props }
         }
     }
 
@@ -66,18 +52,18 @@ impl Widget for Select {
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub(crate) fn SelectView(
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    choices: Vec<Choice>,
-    props: FieldProps,
-    #[props(extends = select)] attrs: Vec<Attribute>,
-) -> Element {
+pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
+    // Not `props`: Dioxus reads a component's lone `props` parameter as its
+    // whole props struct, which `WidgetProps` is not.
+    let props = widget_props;
     let my_widget = BuiltinWidget::Select;
     let is_invalid = props.is_invalid();
+    let field_attrs = &props.attrs;
+    let values = props.values;
+    let choices = props.choices.unwrap_or_else(bool_choices);
 
     let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
 
     let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 

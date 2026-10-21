@@ -5,11 +5,8 @@ use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
 use super::errors::FieldErrors;
 use super::label::field_label;
-use super::types::FieldProps;
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
-use crate::field_attrs::FieldAttrs;
-use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<textarea>`, a multi-line text input. For a `String` field only.
@@ -23,18 +20,7 @@ impl Widget for Textarea {
 
     fn render(&self, props: WidgetProps) -> Element {
         rsx! {
-            TextareaView {
-                field_attrs: props.attrs,
-                values: props.values,
-                props: FieldProps {
-                    id: props.id,
-                    path: props.path,
-                    label: props.label,
-                    classes: props.classes,
-                    errors: props.errors,
-                },
-                attrs: props.extra_attrs,
-            }
+            TextareaView { widget_props: props }
         }
     }
 
@@ -55,28 +41,29 @@ impl Widget for Textarea {
 /// nothing here needs the extra `InputType` cases (`Password`'s masking,
 /// `Hidden`'s bare markup) that make `Input` carry one.
 #[component]
-pub(crate) fn TextareaView(
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    #[props(extends = textarea)] attrs: Vec<Attribute>,
-) -> Element {
+pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
+    // Not `props`: Dioxus reads a component's lone `props` parameter as its
+    // whole props struct, which `WidgetProps` is not.
+    let props = widget_props;
     let my_widget = BuiltinWidget::Textarea;
     let is_invalid = props.is_invalid();
 
-    let class = field_attrs.class(props.classes.part(my_widget, "textarea"), is_invalid);
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
+    let class = props
+        .attrs
+        .class(props.classes.part(my_widget, "textarea"), is_invalid);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs);
 
     let field_class = props
         .classes
-        .part_class(BuiltinWidget::Textarea, "div", props.is_invalid());
+        .part_class(BuiltinWidget::Textarea, "div", is_invalid);
 
+    let values = props.values;
     let current = get_current(&props.path, values);
 
     let label = field_label(
         &props.id,
         props.label,
-        field_attrs.contains(Attr::Required),
+        props.attrs.contains(Attr::Required),
         &props.classes,
         is_invalid,
         my_widget,

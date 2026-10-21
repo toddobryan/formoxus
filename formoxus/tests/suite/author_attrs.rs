@@ -23,7 +23,7 @@ use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::Widget;
-use formoxus::widgets::widget_props::WidgetProps;
+use formoxus::widgets::WidgetProps;
 use googletest::prelude::*;
 
 use super::models::Shape;

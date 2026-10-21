@@ -33,7 +33,7 @@ updates tests, goldens and the e2e forms, and does mechanical fixes when asked.
 | `T` decides parsing; `FieldAttrs` walk decides checks | `Field::parse`, `Field::check`, `Field::widget_attrs` per field type |
 | `choices: Option<Vec<Choice>>` on every field | only on `ChoiceField<T>`, which hands them to its widget |
 | `WidgetType::{Builtin(BuiltinWidget), Custom { fn }}`, `custom_widget: Option<WidgetType>` resolved on every call | trait `Widget`, implemented by `TextInput`, `Textarea`, `Select`, … and a dev's own; resolved once in `build.rs` |
-| `FieldProps` + `WidgetProps` + `FieldAttrs` + `ScalarWidget`'s props | one `WidgetProps` (Todd's WIP, `widgets/widget_props.rs`) |
+| `FieldProps` + `WidgetProps` + `FieldAttrs` + `ScalarWidget`'s props | one `formoxus::widgets::WidgetProps` (DONE 2026-10-21) |
 | errors as a prop computed from `state.read()` | `ErrorsStore`, a client projection with one writer |
 | `form!` emits a `FormSpec<T>` expression | `form!` emits `XForm: FormDef` (`type Model`, `type Context`) |
 | server checks only by hand, through `Submission::reject_field` | `Field::check_on_server`, run only by `Submission` |
@@ -701,10 +701,72 @@ widgets become ONE concept.
   8. [x] `src/field_node.rs` tests: the `node()` helper (451) and
      `a_bool_field` (516) take an `AnyWidget`, so the select tests at 569 and
      582 pass `Select.into()`.
-- [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
+- [x] **One `WidgetProps`** (DONE 2026-10-21; `just ci` and all 33 e2e green) (`id, path, label, attrs, extra_attrs, values,
   errors, classes, choices`) replaces `FieldProps`, the old `WidgetProps`, and
   `ScalarWidget`'s props. `ScalarWidget` itself goes: `FieldNode::render`
-  calls `self.widget.render(props)`.
+  calls `self.widget.render(props)`. (`ScalarWidget` and its props went in
+  `aabf917`.) Every View component then takes the one `props: WidgetProps`
+  that `render` was handed, instead of rebuilding a `FieldProps` and passing
+  `field_attrs`, `values` and `attrs` beside it. It can: every field of
+  `WidgetProps` is `Clone + PartialEq` (dioxus-core 0.7.10 derives both on
+  `Attribute`), which is all `#[component]` asks.
+
+  Line numbers are as of `566c61c`.
+
+  Decisions (Todd, 2026-10-21: D1 (a), D2 as recommended):
+  - **D1. `VariantSelect`** is not a `Widget`, but it takes a `FieldProps`
+    (`variant_select.rs:23`, built at `nodes/variant_set.rs:229`). Either
+    (a) it takes a `WidgetProps` now, with `values` the form's (unused) and
+    `choices: None`, so `FieldProps` goes in this box; or (b) `FieldProps`
+    lives on for it alone until the `VariantSelect` box, which may want its
+    variants AS `choices`. Claude recommends (a): this box is the one that
+    rules them all, and (a) does not get in that box's way.
+  - **D2. The address.** With the old `WidgetProps` gone, the new one can
+    be `formoxus::widgets::WidgetProps` (re-exported beside `Widget` and
+    `AnyWidget`, the custom-widget kit) instead of
+    `formoxus::widgets::widget_props::WidgetProps`. Claude recommends the
+    re-export, with `widget_props` made private, so there is one path.
+
+  Todd:
+  1. [x] `src/widgets/widget_props.rs:10`: derive `Clone, PartialEq`;
+     gain `is_invalid()` (from `types.rs:102`) and `FieldProps`'s field docs
+     for `id`, `path` and `classes` (`types.rs:84–99`).
+  2. [x] `src/widgets/types.rs`: delete `WidgetType` and its impls (16–57),
+     the old `WidgetProps` (59–75) and `FieldProps` (83–106). What is left
+     is `Choice` and `InputType`. `src/widgets.rs:81`'s re-export shrinks to
+     match, and gains `WidgetProps` per D2.
+  3. [x] `src/widgets/input.rs`: `render_input` (136) passes `props`
+     whole; `InputView` (166) takes `input_type` and `props: WidgetProps`;
+     `hidden` (198), `text_like` (231) and `checkbox` (281) read
+     `props.attrs`/`props.extra_attrs` where they took `field_attrs`/`attrs`.
+     The `#[props(extends = input)]` goes: nothing passes attributes in rsx,
+     they arrive as `extra_attrs`.
+  4. [x] The same for `TextareaView` (`textarea.rs:58`), `SelectView`
+     (`select.rs:69`) and `RadioGroupView` (`radio_group.rs:91`). The two
+     choosers resolve `props.choices.unwrap_or_else(bool_choices)` inside
+     the View, or `render` sets `props.choices = Some(…)` first; either
+     keeps one `props`. `reject_if_not_required` (`radio_group.rs:68`) can
+     take `&WidgetProps`.
+  5. [x] Per D1: `VariantSelect` (`variant_select.rs:23`) and its one
+     caller (`nodes/variant_set.rs:229`).
+  6. [x] `src/nodes.rs:266`: "`Rc`, and only here and in `FieldProps`"
+     names `WidgetProps`.
+  Claude, after:
+  7. [x] Tests: the D2 import in `builtin_widgets.rs`, `widgets.rs`,
+     `author_attrs.rs`, `classes.rs` and the two `form_widget_prop_*` UI
+     tests (re-bless only if a path in their `.stderr` moves, and read the
+     diff); anything that built a `FieldProps`.
+  8. [x] `src/widgets.rs`'s module doc: line 22 (`WidgetType::Custom` is how
+     a dev supplies one) and 29 ("Nothing implements anything now … a custom
+     one needs no trait at all") predate the `Widget` trait; the Layout
+     entry for `types` (41, "the two prop bundles") shrinks to `Choice`.
+  Found doing it: Dioxus reads a component's LONE `props` parameter as its
+  whole props struct, so the single-prop Views (`TextareaView`, `SelectView`,
+  `RadioGroupView`) take `widget_props: WidgetProps` and rebind it; `InputView`
+  and `VariantSelect` take other props too, so theirs is `props`.
+  `widget_props` is `pub(crate)`; the one public path is the re-export.
+  9. [x] Line 36's table row above ("`FieldProps` + `WidgetProps` + …")
+     and the memory index entries that name `FieldProps`.
 - [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
   wrapper, label and errors around the form control a widget builds; the radio
   group keeps its own shape. Snapshot-guarded.

@@ -10,8 +10,9 @@ use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
+use crate::widgets::VariantSelect;
 use crate::widgets::label::required_marker;
-use crate::widgets::{FieldProps, VariantSelect};
+use crate::widgets::widget_props::WidgetProps;
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -227,12 +228,11 @@ impl Node for VariantSet {
                     }
                 }
                 VariantSelect {
-                    field_attrs: attrs,
                     variants: self.variants(),
                     selected: self.chosen(),
                     on_edit: ctx.on_edit,
                     label_case: ctx.label_case,
-                    props: FieldProps {
+                    props: WidgetProps {
                         id: id.clone(),
                         path: ctx.path(&self.name),
                         // The legend above already names this group; a second copy
@@ -240,6 +240,12 @@ impl Node for VariantSet {
                         label: None,
                         classes: ctx.classes.clone(),
                         errors: self.errors.clone(),
+                        attrs,
+                        extra_attrs: Vec::new(),
+                        // Read by no one: a variant choice is not a value in
+                        // the store, and its variants arrive as `variants`.
+                        values: ctx.values,
+                        choices: None,
                     }
                 }
                 { nodes.into_iter() }

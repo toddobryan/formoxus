@@ -263,7 +263,7 @@ pub struct NodeContext {
     /// then the form's `classes:` and `classes_plus:`), shared by every node
     /// and widget of one render.
     ///
-    /// **`Rc`, and only here and in `FieldProps`.** Dioxus renders on one
+    /// **`Rc`, and only here and in `WidgetProps`.** Dioxus renders on one
     /// thread, so `Arc` would only add an atomic count. But an `Rc` must never
     /// go into `FormSpec` or `FormState`: both reach the server, where
     /// `Submission` rebuilds a `FormState` and a handler's future must be

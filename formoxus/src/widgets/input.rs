@@ -10,10 +10,8 @@ use formoxus_spec::{
 
 use super::errors::FieldErrors;
 use super::label::field_label;
-use super::types::FieldProps;
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
-use crate::field_attrs::FieldAttrs;
 use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
@@ -135,19 +133,7 @@ impl Widget for CheckboxInput {
 /// takes. A plain fn, called from `render`, so it must not call hooks either.
 fn render_input(input_type: RenderedInputType, props: WidgetProps) -> Element {
     rsx! {
-        InputView {
-            input_type,
-            field_attrs: props.attrs,
-            values: props.values,
-            props: FieldProps {
-                id: props.id,
-                path: props.path,
-                label: props.label,
-                classes: props.classes,
-                errors: props.errors,
-            },
-            attrs: props.extra_attrs,
-        }
+        InputView { input_type, props }
     }
 }
 
@@ -163,18 +149,12 @@ fn text_like_classes() -> Vec<(&'static str, Slot)> {
 }
 
 #[component]
-pub(crate) fn InputView(
-    input_type: RenderedInputType,
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    #[props(extends = input)] attrs: Vec<Attribute>,
-) -> Element {
+pub(crate) fn InputView(input_type: RenderedInputType, props: WidgetProps) -> Element {
     // No wildcard arm, on purpose: a type that joins `RenderedInputType`
     // (`Range` is the likely one) has to be routed here before it compiles.
     match input_type {
-        RenderedInputType::Hidden => hidden(props.path, values),
-        RenderedInputType::Checkbox => checkbox(&field_attrs, values, props, attrs),
+        RenderedInputType::Hidden => hidden(props.path, props.values),
+        RenderedInputType::Checkbox => checkbox(props),
         RenderedInputType::Text
         | RenderedInputType::Password
         | RenderedInputType::Number
@@ -187,7 +167,7 @@ pub(crate) fn InputView(
         | RenderedInputType::Time
         | RenderedInputType::DatetimeLocal
         | RenderedInputType::Month
-        | RenderedInputType::Week => text_like(input_type, &field_attrs, values, props, attrs),
+        | RenderedInputType::Week => text_like(input_type, props),
     }
 }
 
@@ -228,19 +208,15 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // Withholding it cost more than it bought: a field nothing could CLEAR
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
-fn text_like(
-    input_type: RenderedInputType,
-    field_attrs: &FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    attrs: Vec<Attribute>,
-) -> Element {
+fn text_like(input_type: RenderedInputType, props: WidgetProps) -> Element {
     let my_widget = BuiltinWidget::Input(input_type);
+    let field_attrs = &props.attrs;
+    let values = props.values;
     let is_invalid = props.is_invalid();
 
     let class: Option<String> =
         field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
 
     let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 
@@ -278,17 +254,14 @@ fn text_like(
     }
 }
 
-fn checkbox(
-    field_attrs: &FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    attrs: Vec<Attribute>,
-) -> Element {
+fn checkbox(props: WidgetProps) -> Element {
     let my_widget = BuiltinWidget::Input(RenderedInputType::Checkbox);
+    let field_attrs = &props.attrs;
+    let values = props.values;
     let is_invalid = props.is_invalid();
 
     let class = field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(attrs);
+    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
 
     let field_class = props.classes.part_class(my_widget, "div", is_invalid);
 

@@ -10,7 +10,7 @@ use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, RenderedInputType
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::widgets::Choice;
-use formoxus::widgets::widget_props::WidgetProps;
+use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{
     AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
     MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput,

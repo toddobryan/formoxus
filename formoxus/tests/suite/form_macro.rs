@@ -636,7 +636,7 @@ impl formoxus::widgets::Widget for ShoutyWidget {
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
 
     /// `render` may not call hooks, so it hands off to a component that does.
-    fn render(&self, props: formoxus::widgets::widget_props::WidgetProps) -> Element {
+    fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         let label = props.label.unwrap_or_default();
         rsx! { ShoutyView { path: props.path, label } }
     }

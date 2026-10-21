@@ -6,7 +6,7 @@ use facet::Facet;
 use formoxus::attrs::AttrSet;
 use formoxus::classes::Slot;
 use formoxus::widgets::Widget;
-use formoxus::widgets::widget_props::WidgetProps;
+use formoxus::widgets::WidgetProps;
 use formoxus::{empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
