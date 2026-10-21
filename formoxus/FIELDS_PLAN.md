@@ -779,26 +779,113 @@ widgets become ONE concept.
   The five `tests/snapshots/` goldens unchanged, all 33 e2e green. Both stay
   crate-private until `Classes` is keyed on `Widget::NAME`, since a dev's
   widget has no `BuiltinWidget` to pass.
-- [ ] **OPEN (Todd): where the kind checks go once `BuiltinWidget` is
-  deleted.** `renders`, `accepts_optional`, `takes_choices` and
-  `default_for` are all `BuiltinWidget` methods today, read by `form!`'s
-  `const _` asserts. Proposed: consts on `Widget` (`ACCEPTS: FieldTypeSet`,
-  a const bitset over `FieldType` like `AttrSet`; `ACCEPTS_OPTIONAL`;
-  `TAKES_CHOICES`), which would give a custom widget the same checks. Blocks
-  the delete, not the bridge or the props box.
-- [ ] **Flatten `FieldControl` into `Element`** (Todd, 2026-10-20), in the
-  same change as the delete below: `Element` becomes `Div | Fieldset | Label
-  | Legend | Input(InputType) | Textarea | Select`. Its jobs are gone: typing
-  `BuiltinWidget::form_control()`/`parts()` leaves with `BuiltinWidget`, and
-  `true_and_on(…)` (with `is_also_validated_on` and `is_allowed`, called
-  only by `formoxus-spec`'s own tests) is replaced by W-A's rule that a
-  validated key is a field setting, server-checked and emitted only where it
-  fits. Drop the three `true_and_on` rows' extra arms. CLAUDE.md's "control"
-  exception shrinks to `fx-control`.
-- [ ] **Delete** `WidgetType`, the `Custom` fn pointer, `FieldSpec::custom_widget`,
-  and (W-B) `BuiltinWidget`, `RenderedInputType` if nothing else needs it,
-  `SlotKey::Part`'s enum key and the macro's "unknown widget" table beyond
-  the lowercase built-in names.
+- [x] **DECIDED (Todd, 2026-10-21): the kind checks become consts on
+  `Widget`**, and `BuiltinWidget` goes. Built-ins keep their per-widget
+  error wording from a table in the macro; a path widget gets a generic
+  message naming its type (no `const REFUSAL` on `Widget` yet). The three
+  unbuilt names (`select_multiple`, `checkbox_multiple`, `file`) stay in a
+  short list so `form!` still says "not supported yet". **Todd builds it**,
+  in the four checkpoints below, one green commit each, on `widget`.
+- [ ] **Delete `BuiltinWidget`** (W-B). Line numbers as of `7b37772`.
+
+  **How it fits together today**, since four things lean on one enum:
+  `BuiltinWidget` (`formoxus-spec/src/widgets.rs:50`) is (i) the
+  compile-time RULES `form!` asserts (`renders` 250, `accepts_optional`
+  228, `takes_choices` 214), (ii) the KEY of every class slot
+  (`SlotKey::Part(BuiltinWidget, &str)`, `formoxus-spec/src/slot_key.rs:20`),
+  (iii) the NAME table `form!` parses `widget: textarea` with
+  (`form_name` 104, `from_form_name` 86, `ALL` 53), and (iv) the PARTS
+  each widget renders (`parts` 148, `form_control` 199). It lives in
+  `formoxus-spec` because `formoxus-macros` cannot depend on `formoxus`,
+  and the macro needs (i)–(iv) at expansion time. The way out of that
+  constraint: the macro stops ANSWERING (i) and (iv) and starts EMITTING
+  `const _` asserts that rustc answers in the dev's crate, where
+  `<TextInput as Widget>::ACCEPTS` is visible. Only (iii), mapping
+  `textarea` to the type `Textarea`, has to stay data the macro reads.
+
+  **Checkpoint 1: the consts exist** (additive; nothing reads them yet).
+  1. [ ] `FieldTypeSet` in `formoxus-spec/src/attrs.rs`, beside `FieldType`
+     (40): a `u8` bitset with `const` `EMPTY`, `ALL`, `of(&[FieldType])`
+     (or `with`) and `contains`. Copy `AttrSet`'s shape (214–262): a
+     `while` loop, because `for` is not allowed in a `const fn`.
+  2. [ ] On `Widget` (`formoxus/src/widgets/widget.rs:22`), three consts
+     WITH defaults, so a dev's widget keeps compiling: `ACCEPTS:
+     FieldTypeSet = FieldTypeSet::ALL`, `ACCEPTS_OPTIONAL: bool = true`,
+     `TAKES_CHOICES: bool = true` (today a path widget already gets
+     choices). The rule, for the doc comment: a widget renders a field of
+     type `t` when `ACCEPTS.contains(t) || (TAKES_CHOICES && has_choices)`.
+  3. [ ] Each built-in sets them to what `BuiltinWidget::renders` etc. say
+     now: the `text_like_inputs!` macro (`input.rs:28`) once for all 13
+     (`Text|Int|Float`, no choices); `HiddenInput` likewise; `CheckboxInput`
+     `Bool`, not optional, no choices; `Textarea` `Text`, no choices;
+     `Select` `Bool` with choices; `RadioGroup` `Bool` with choices, not
+     optional.
+  4. [ ] (Claude) A test per built-in that its consts agree with
+     `BuiltinWidget`'s answers for every `FieldType`, so checkpoint 2 can
+     switch over knowing nothing moved.
+
+  **Checkpoint 2: `form!` asks the consts.**
+  5. [ ] `formoxus/src/field_kind.rs:163` `renders(shape, widget:
+     BuiltinWidget, …)` becomes `renders::<W: Widget>(shape, has_choices)`,
+     reading `W::ACCEPTS`/`W::TAKES_CHOICES`, plus `accepts_optional::<W>`.
+     A `const fn` may have a trait bound and read associated consts; it
+     may not call trait METHODS, which is why these are consts and not fns.
+  6. [ ] `formoxus-macros/src/form/widget.rs:223` `WidgetRef::checks` emits
+     those for BOTH kinds: a built-in as `::formoxus::widgets::Textarea`
+     (`builtin_type`, 57, already maps the name), a path as written. Today
+     the `let … else { return single; }` at 237 skips a path widget
+     entirely. The messages: `cannot_render` (201) and `optional_refusal`
+     (187) for a built-in, a generic one naming the type for a path.
+  7. [ ] `reject_choices_unless_chooser` (`field.rs:1050`) can stay
+     macro-side for built-ins (`takes_choices` via the name table) or move
+     to a `const _` on `W::TAKES_CHOICES`. The second also covers a dev's
+     widget that sets `TAKES_CHOICES = false`.
+  8. [ ] (Claude) Goldens: built-in messages should be unchanged; new
+     goldens for a dev's widget with narrowed consts.
+
+  **Checkpoint 3: class slots keyed on `Widget::NAME`.**
+  9. [ ] `SlotKey::Part(&'static str, &'static str)`, widget name then part
+     (`slot_key.rs:20`). `SlotKey::part` (27) checks the part against
+     what? See 10.
+  10. [ ] A `PARTS: &'static [Part]` const on `Widget` (no default: every
+      widget states its parts), replacing `BuiltinWidget::parts`. Then the
+      part list exists at compile time, so `classes_plus: { select: {
+      lable: … } }` is refused by a `const _` assert in the dev's crate
+      instead of by the macro reading `parts()` (`classes.rs:162`
+      `part_key`). The suggestion text for a misspelled part may get
+      plainer; Claude re-blesses.
+  11. [ ] `formoxus/src/classes.rs`: `part`/`part_class`/`with_part` (220,
+      236, 253) take a widget name (or `W: Widget`) instead of a
+      `BuiltinWidget`; `fx()` (347) is built by asking each built-in's
+      `default_classes()`, which removes the second copy and the test that
+      kept the two in step (`builtin_widgets.rs`
+      `each_builtins_default_classes_match_classes_fx`).
+  12. [ ] The Views, `field_row` and `WidgetProps::part_class`/
+      `control_class` pass `Self::NAME` (or the widget's `NAME`) where they
+      pass `BuiltinWidget::…` now. That also makes `field_row` and the two
+      helpers safe to make `pub` for a dev's widget (decide then).
+
+  **Checkpoint 4: delete.**
+  13. [ ] `BuiltinWidget` → a name table in `formoxus-spec`: each built-in's
+      `form!` name and Rust type name, plus the three not-yet names. The
+      macro's `builtin_type` (`widget.rs:57`), `from_form_name` callers
+      (290, 318; `classes.rs:163`, 195) and suggestion lists (`widget.rs:30`,
+      `field.rs:1057`) read it.
+  14. [ ] `RenderedInputType`: once nothing keys on `BuiltinWidget::Input(t)`,
+      `InputView` (`input.rs:166`) can route on `InputType` directly and
+      `RenderedInputType` goes, if nothing else needs it.
+  15. [ ] **Flatten `FieldControl` into `HtmlElement`** (Todd, 2026-10-20):
+      `HtmlElement` becomes `Div | Fieldset | Label | Legend | Input(InputType)
+      | Textarea | Select`. Its jobs are gone: typing `form_control()` and
+      `parts()` leaves with `BuiltinWidget`, and `true_and_on(…)` (with
+      `is_also_validated_on` and `is_allowed`, called only by
+      `formoxus-spec`'s own tests) is replaced by W-A's rule that a validated
+      key is a field setting, server-checked and emitted only where it fits.
+      Drop the three `true_and_on` rows' extra arms. CLAUDE.md's "control"
+      exception shrinks to `fx-control`.
+  16. [ ] Re-exports: `formoxus/src/lib.rs:60` and `widgets.rs:75`.
+  17. [ ] (Claude) `widget_matrix` (it walks `BuiltinWidget::ALL`), the
+      tests that compare against `BuiltinWidget`, the README, and memory.
 - [ ] **The variant picker** (`VariantSelect`) becomes a chooser widget that
   still fires `on_edit` (decided 2026-10-16). **And `enum_node` reads
   `spec.widget`** so `with_widget` on an enum picks the chooser (a radio

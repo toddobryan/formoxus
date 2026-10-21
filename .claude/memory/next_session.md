@@ -5,6 +5,13 @@ metadata:
   type: project
 ---
 
+**2026-10-21, LATER: STEP 5's boxes through `field_row` DONE and pushed
+(`7b37772`). NEXT: delete `BuiltinWidget`, TODD BUILDS IT** ("I'm losing
+track of how things work"), from the 17-item list in `FIELDS_PLAN.md`'s
+"Delete `BuiltinWidget`" box, which opens with how the four jobs fit
+together. Mine: items 4, 8, 17 and goldens. Give hints and reasons when he
+asks, not finished code ([[user-role]]).
+
 **2026-10-21: "`build.rs` RESOLVES THE WIDGET ONCE", OPTION A (Todd).**
 Callers move off `with_custom_widget` on a leaf rather than adapting
 `WidgetType`. My items 1–4 DONE (`cdbcaea`, not pushed); Todd's 5–8 are
