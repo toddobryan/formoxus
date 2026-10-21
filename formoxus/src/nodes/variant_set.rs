@@ -11,7 +11,7 @@ use crate::nodes::{
     qualify, variant_segment,
 };
 use crate::widgets::label::required_marker;
-use crate::widgets::{FieldProps, VariantSelect, WidgetType};
+use crate::widgets::{FieldProps, VariantSelect};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -41,7 +41,6 @@ pub struct VariantSet {
     pub field_attrs: FieldAttrs,
     pub name: String,
     pub label: Option<String>,
-    pub custom_widget: Option<WidgetType>,
     pub enum_type: &'static EnumType,
     pub optional: bool,
     pub choice: VariantChoice,

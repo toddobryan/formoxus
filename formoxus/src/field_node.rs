@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
-use formoxus_spec::{BuiltinWidget, FieldType, RenderedInputType};
+use formoxus_spec::FieldType;
 
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
@@ -12,7 +12,7 @@ use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
 use crate::widgets::widget_props::WidgetProps;
-use crate::widgets::{AnyWidget, CheckboxInput, FieldProps, ScalarWidget, Widget, WidgetType};
+use crate::widgets::{AnyWidget, CheckboxInput, Widget};
 
 /// Everything the walk knows about a leaf when it builds one.
 ///
@@ -46,8 +46,9 @@ impl LeafArgs<'_> {
             label: spec.and_then(|s| s.label.clone()),
             optional: self.optional,
             attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
-            widget: spec.and_then(|s| s.widget.clone()),
-            custom_widget: spec.and_then(|s| s.custom_widget),
+            widget: spec
+                .and_then(|s| s.widget.clone())
+                .unwrap_or_else(|| field.default_widget(self.optional)),
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
             errors: Vec::new(),
@@ -91,14 +92,6 @@ impl PartialEq for NodeCtor {
     }
 }
 
-/// What renders a field during the bridge (`FIELDS_PLAN.md` Step 5): a
-/// widget that renders itself, or a hand-built spec's `WidgetType`, through
-/// `ScalarWidget`. Goes when `WidgetType` does.
-enum Renderer {
-    Widget(AnyWidget),
-    Scalar(WidgetType),
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldNode<F: Field> {
     pub name: String,
@@ -106,9 +99,7 @@ pub struct FieldNode<F: Field> {
     pub optional: bool,
     /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
-    pub widget: Option<AnyWidget>,
-    /// Becomes `widget: AnyWidget` in Step 5, resolved once by `build.rs`.
-    pub custom_widget: Option<WidgetType>,
+    pub widget: AnyWidget,
     /// The newtype this field's value is wrapped in — `Markdown` for a
     /// `String` field standing in for a `Markdown` field. `None` for an
     /// ordinary scalar.
@@ -164,27 +155,9 @@ impl<F: Field> FieldNode<F> {
         }
     }
 
-    /// What renders this field, in order: the widget `form!` set
-    /// (`with_widget`), a hand-built spec's `WidgetType`
-    /// (`with_custom_widget`), else the field's own `default_widget`.
-    fn renderer(&self) -> Renderer {
-        match (&self.widget, self.custom_widget) {
-            (Some(widget), _) => Renderer::Widget(widget.clone()),
-            (None, Some(widget_type)) => Renderer::Scalar(widget_type),
-            (None, None) => Renderer::Widget(self.field.default_widget(self.optional)),
-        }
-    }
-
-    /// Whether this field renders as a checkbox. The one place that is asked,
-    /// until the bridge's `WidgetType` path goes.
+    /// Whether this field renders as a checkbox, by its widget's name.
     fn is_checkbox(&self) -> bool {
-        match self.renderer() {
-            Renderer::Widget(widget) => widget.name() == CheckboxInput::NAME,
-            Renderer::Scalar(widget_type) => matches!(
-                widget_type,
-                WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-            ),
-        }
+        self.widget.name() == CheckboxInput::NAME
     }
 
     fn is_unticked_checkbox(&self) -> bool {
@@ -285,38 +258,17 @@ impl<F: Field> Node for FieldNode<F> {
         )
         .resolve_bounds(self.field_type());
 
-        // The bridge (`FIELDS_PLAN.md` Step 5): every widget renders itself
-        // but a hand-built spec's `WidgetType`, which still goes through
-        // `ScalarWidget` until `build.rs` resolves every widget once.
-        match self.renderer() {
-            Renderer::Widget(widget) => widget.render(WidgetProps {
-                id: ctx.id(&self.name),
-                path: ctx.path(&self.name),
-                label: self.label(ctx.label_case),
-                errors: self.errors.clone(),
-                classes: ctx.classes.clone(),
-                values: ctx.values,
-                choices: self.field.choices(),
-                attrs: field_attrs,
-                extra_attrs: Vec::new(),
-            }),
-            Renderer::Scalar(widget) => rsx! {
-                ScalarWidget {
-                    field_type: self.field_type(),
-                    field_attrs: field_attrs,
-                    widget: widget,
-                    choices: self.field.choices(),
-                    values: ctx.values,
-                    props: FieldProps {
-                        id: ctx.id(&self.name),
-                        path: ctx.path(&self.name),
-                        label: self.label(ctx.label_case),
-                        classes: ctx.classes.clone(),
-                        errors: self.errors.clone(),
-                    },
-                }
-            },
-        }
+        self.widget.render(WidgetProps {
+            id: ctx.id(&self.name),
+            path: ctx.path(&self.name),
+            label: self.label(ctx.label_case),
+            errors: self.errors.clone(),
+            classes: ctx.classes.clone(),
+            values: ctx.values,
+            choices: self.field.choices(),
+            attrs: field_attrs,
+            extra_attrs: Vec::new(),
+        })
     }
 
     fn validate(&mut self) {
@@ -441,7 +393,10 @@ impl<F: Field> Node for FieldNode<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fields::{BoolField, NumberField, StringField};
+    use crate::{
+        fields::{BoolField, NumberField, StringField},
+        widgets::Select,
+    };
     use googletest::prelude::*;
 
     // What each field's `check` allows is tested beside the field. These test
@@ -454,8 +409,7 @@ mod tests {
             label: None,
             optional: false,
             attrs: FieldAttrs::default(),
-            widget: None,
-            custom_widget: None,
+            widget: field.default_widget(false),
             wrapper: None,
             value,
             errors: Vec::new(),
@@ -511,16 +465,15 @@ mod tests {
     // An unticked checkbox is `Empty`, and `Empty` returns early for every
     // other field, so this is where one could slip past `BoolField`.
 
-    /// A non-optional bool field, holding `value`, rendered by `widget` (`None`
-    /// means the default, a checkbox).
+    /// A non-optional bool field, holding `value`, rendered by `widget`
     fn a_bool_field(
         value: FieldValue<bool>,
-        widget: Option<WidgetType>,
+        widget: AnyWidget,
         required_true: bool,
     ) -> FieldNode<BoolField> {
         FieldNode {
             name: "agreed".to_string(),
-            custom_widget: widget,
+            widget,
             ..node(value, BoolField { required_true })
         }
     }
@@ -530,7 +483,7 @@ mod tests {
     /// is left out of the form data. The node hands it to the field as `false`.
     #[gtest]
     fn an_untouched_required_true_checkbox_is_rejected() {
-        let field = a_bool_field(FieldValue::Empty, None, true);
+        let field = a_bool_field(FieldValue::Empty, CheckboxInput.into(), true);
         expect_that!(
             validation_messages(field),
             elements_are![eq("this value must be true")]
@@ -542,7 +495,7 @@ mod tests {
     /// the user got there.
     #[gtest]
     fn a_ticked_then_unticked_required_true_checkbox_is_rejected_the_same_way() {
-        let field = a_bool_field(FieldValue::Valid(false), None, true);
+        let field = a_bool_field(FieldValue::Valid(false), CheckboxInput.into(), true);
         expect_that!(
             validation_messages(field),
             elements_are![eq("this value must be true")]
@@ -551,7 +504,7 @@ mod tests {
 
     #[gtest]
     fn a_ticked_required_true_checkbox_passes() {
-        let field = a_bool_field(FieldValue::Valid(true), None, true);
+        let field = a_bool_field(FieldValue::Valid(true), CheckboxInput.into(), true);
         expect_that!(validation_messages(field), is_empty());
     }
 
@@ -559,7 +512,7 @@ mod tests {
     /// error and no other either.
     #[gtest]
     fn an_untouched_plain_checkbox_passes() {
-        let field = a_bool_field(FieldValue::Empty, None, false);
+        let field = a_bool_field(FieldValue::Empty, CheckboxInput.into(), false);
         expect_that!(validation_messages(field), is_empty());
     }
 
@@ -567,11 +520,7 @@ mod tests {
     /// error and nothing else. It gets one error, not that plus "must be true".
     #[gtest]
     fn an_empty_required_true_select_gets_only_the_required_error() {
-        let field = a_bool_field(
-            FieldValue::Empty,
-            Some(WidgetType::Builtin(BuiltinWidget::Select)),
-            true,
-        );
+        let field = a_bool_field(FieldValue::Empty, Select.into(), true);
         expect_that!(
             validation_messages(field),
             elements_are![eq("This field is required.")]
@@ -580,11 +529,7 @@ mod tests {
 
     #[gtest]
     fn a_required_true_select_rejects_false() {
-        let field = a_bool_field(
-            FieldValue::Valid(false),
-            Some(WidgetType::Builtin(BuiltinWidget::Select)),
-            true,
-        );
+        let field = a_bool_field(FieldValue::Valid(false), Select.into(), true);
         expect_that!(
             validation_messages(field),
             elements_are![eq("this value must be true")]

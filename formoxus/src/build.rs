@@ -365,8 +365,9 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 /// runtime, on one target.
 ///
 /// **This walk no longer decides anything about presentation.** It used to
-/// assign an `InputKind` per arm; the widget is now derived on the read side
-/// from `T::SHAPE`, with `custom_widget` beside it as the override slot. So the
+/// assign an `InputKind` per arm; the widget is now resolved once, in
+/// `LeafArgs::node`: the spec's `with_widget`, else the field's own
+/// `default_widget`. So the
 /// only thing the shape contributes here is *which concrete `T`* the field
 /// carries, and the only thing the walk contributes is `optional` — a
 /// structural fact (`Option` peeling) that no later reader can recover,
@@ -488,7 +489,7 @@ fn list_node(
     let spec = walk.spec_for(prefix);
     if let Some(spec) = spec {
         assert!(
-            spec.custom_widget.is_none() && spec.widget.is_none(),
+            spec.widget.is_none(),
             "{prefix} is a list, which has no single widget to override — \
              write `{name}[]` to give every ROW a widget, or did you mean `label`?",
         );
@@ -519,7 +520,7 @@ fn struct_node(
     let spec = walk.spec_for(prefix);
     if let Some(spec) = spec {
         assert!(
-            spec.custom_widget.is_none() && spec.widget.is_none(),
+            spec.widget.is_none(),
             "{prefix} is a field set, which has no single widget to override \
              (a composite widget for one isn't supported yet) — did you mean `label`?"
         );
@@ -555,10 +556,6 @@ fn enum_node(
         field_attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
-        // A variant chooser is the one container that DOES have a widget of its
-        // own — the `<select>` — so an override here is meaningful (a radio
-        // group), even though nothing renders one yet.
-        custom_widget: spec.and_then(|s| s.custom_widget),
         enum_type,
         optional,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it

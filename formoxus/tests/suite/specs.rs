@@ -15,7 +15,7 @@ use formoxus::field_kind::field_for;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::{BuiltinWidget, CheckboxInput, Select, TextInput, Textarea, WidgetType};
+use formoxus::widgets::{CheckboxInput, Select, TextInput, Textarea};
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -254,37 +254,6 @@ fn an_unmatched_path_is_a_no_op() {
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct WithRows {
     venues: Vec<Location>,
-}
-
-/// The chooser has to be a FIELD, not the whole model: a bare-enum `T` has no
-/// variant chosen in blank mode, and `fields_from_enum` refuses to build one.
-#[derive(Facet, Clone, Debug, PartialEq)]
-struct Drawing {
-    shape: super::models::Shape,
-}
-
-#[component]
-fn ChooserWithAWidget() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<Drawing>::default()
-                .with_custom_widget("shape", WidgetType::Builtin(BuiltinWidget::RadioGroup)),
-        )
-    });
-    form.render(using_fns! {})
-}
-
-#[gtest]
-fn a_widget_on_a_variant_chooser_is_accepted() {
-    // The one container that DOES own a widget — the `<select>` that picks the
-    // variant. The asymmetry with the two rejections above is deliberate.
-    //
-    // Nothing renders a radio group yet, so what this pins is that the override
-    // is STORED and ignored rather than refused: construction succeeds and the
-    // select still renders. It starts failing the day `RadioGroup` is honoured,
-    // which is the right moment to be told.
-    let html = render_to_html(ChooserWithAWidget);
-    expect_that!(html.matches("<select").count(), eq(1));
 }
 
 // ── `[]` — selecting every row of a list ─────────────────────────────────

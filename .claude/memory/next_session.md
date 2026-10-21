@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+**2026-10-21: "`build.rs` RESOLVES THE WIDGET ONCE", OPTION A (Todd).**
+Callers move off `with_custom_widget` on a leaf rather than adapting
+`WidgetType`. My items 1–4 DONE (`cdbcaea`, not pushed); Todd's 5–8 are
+in the box in `formoxus/FIELDS_PLAN.md` with file:line refs. Found: no
+widget type checks field type at runtime (`widget_matrix` `ok*`).
+LATER: box DONE (Todd deleted `ScalarWidget` and `custom_widget`). Golden
+flip was the toolchain: pinned 1.99.1 + rust-src ([[toolchain-pin-and-goldens]]).
+
 **2026-10-20, EVENING (committed `c151c41`, NOT pushed): `form!`'s PROPS
 BOX ITEMS 1–17 DONE.** `widget:` takes a lowercase built-in name or a path,
 props in braces, emitted into `.with_widget`; `EXTENDS` asserts at the key;

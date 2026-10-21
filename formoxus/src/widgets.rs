@@ -41,9 +41,9 @@
 //! - [`types`] — the vocabulary: which widgets exist, and the two prop
 //!   bundles every widget is handed. This is what `form!` speaks.
 //! - [`values`] — reading and writing one path in the store.
-//! - [`scalar`] — dispatch, deciding which widget a `(value kind, widget)`
-//!   pair actually gets. Which pairs work at all is
-//!   [`BuiltinWidget::renders`], which it asserts.
+//! - [`widget`] — the [`Widget`] trait every widget implements, and
+//!   [`AnyWidget`], the form a field holds one in.
+//! - [`widget_props`] — what a widget is handed to render a field.
 //! - `label` (crate-private) — the caption and required marker every widget
 //!   shares.
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
@@ -58,7 +58,6 @@ pub mod input;
 pub(crate) mod label;
 pub mod radio_group;
 pub mod row_buttons;
-pub mod scalar;
 pub mod select;
 pub mod textarea;
 pub mod types;
@@ -77,7 +76,6 @@ pub use input::{
 };
 pub use radio_group::RadioGroup;
 pub use row_buttons::{AddRowButton, RemoveRowButton};
-pub use scalar::ScalarWidget;
 pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, FieldProps, InputType, WidgetProps, WidgetType};

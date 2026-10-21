@@ -495,7 +495,7 @@ mod tests {
     }
 
     /// A widget that is not rendered yet must not claim any field, or the
-    /// `const _` check would pass a pair that `ScalarWidget` cannot draw.
+    /// `const _` check would pass a pair that nothing can draw.
     /// And every rendered widget renders SOMETHING, or it would be dead.
     #[gtest]
     fn a_widget_renders_some_field_exactly_when_it_is_rendered() {

@@ -83,8 +83,9 @@ pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
 /// can't be un-picked, so a synthetic absent option is the only way back — and
 /// `--none--` is a poor stand-in for the explicit "None of the above" that a
 /// genuinely unanswerable question wants. That is also why an optional field is
-/// rejected outright, at compile time by `field_kind::is_optional` and at
-/// render by `ScalarWidget`. In create mode nothing is checked and `required`
+/// rejected outright, at compile time by `field_kind::is_optional`. (Only at
+/// compile time: a hand-built `FormSpec` that puts one on an optional field
+/// renders it.) In create mode nothing is checked and `required`
 /// makes the browser block submit until the user picks; in edit mode the stored
 /// value comes back as `current` and checks its own radio.
 #[component]

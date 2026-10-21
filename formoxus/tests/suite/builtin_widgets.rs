@@ -1,22 +1,20 @@
-//! The built-in widget types (`FIELDS_PLAN.md` Step 5, W-C): each wraps
-//! today's component, so for the same props it must render exactly what
-//! `ScalarWidget` renders for the matching `BuiltinWidget`. Nothing builds one
-//! from a `form!` yet, so these drive `Widget::render` through `AnyWidget`
-//! directly, the way `FieldNode` will.
+//! The built-in widget types (`FIELDS_PLAN.md` Step 5, W-C), driven through
+//! `Widget::render` on an `AnyWidget` directly, the way `FieldNode` does, so
+//! each is tested apart from the node that hands it its props.
 
 use dioxus::core::Attribute;
 use dioxus::prelude::*;
 use formoxus::ValidationMessage;
 use formoxus::attrs::AttrSet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, FieldType, RenderedInputType as R};
+use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, RenderedInputType as R};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::widgets::Choice;
 use formoxus::widgets::widget_props::WidgetProps;
 use formoxus::widgets::{
-    AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, FieldProps,
-    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, ScalarWidget, SearchInput,
-    Select, TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetType,
+    AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
+    MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput,
+    Textarea, TimeInput, UrlInput, WeekInput, Widget,
 };
 use googletest::prelude::*;
 use std::collections::HashMap;
@@ -46,32 +44,18 @@ fn text_likes() -> Vec<(AnyWidget, R)> {
     ]
 }
 
-/// Every built-in widget type so far, beside the `BuiltinWidget` it stands
-/// in for and a field type that widget renders (`ScalarWidget` asserts it).
-fn builtins() -> Vec<(AnyWidget, BuiltinWidget, FieldType)> {
+/// Every built-in widget type, beside the `BuiltinWidget` it stands in for.
+fn builtins() -> Vec<(AnyWidget, BuiltinWidget)> {
     let mut all: Vec<_> = text_likes()
         .into_iter()
-        .map(|(w, t)| (w, BuiltinWidget::Input(t), FieldType::Text))
+        .map(|(w, t)| (w, BuiltinWidget::Input(t)))
         .collect();
     all.extend([
-        (
-            HiddenInput.into(),
-            BuiltinWidget::Input(R::Hidden),
-            FieldType::Text,
-        ),
-        (
-            CheckboxInput.into(),
-            BuiltinWidget::Input(R::Checkbox),
-            FieldType::Bool,
-        ),
-        (Textarea.into(), BuiltinWidget::Textarea, FieldType::Text),
-        // Over a bool, so neither needs a list (`ScalarWidget` asserts that).
-        (Select.into(), BuiltinWidget::Select, FieldType::Bool),
-        (
-            RadioGroup.into(),
-            BuiltinWidget::RadioGroup,
-            FieldType::Bool,
-        ),
+        (HiddenInput.into(), BuiltinWidget::Input(R::Hidden)),
+        (CheckboxInput.into(), BuiltinWidget::Input(R::Checkbox)),
+        (Textarea.into(), BuiltinWidget::Textarea),
+        (Select.into(), BuiltinWidget::Select),
+        (RadioGroup.into(), BuiltinWidget::RadioGroup),
     ]);
     all
 }
@@ -84,10 +68,10 @@ fn html_of<P: Clone + 'static>(root: fn(P) -> Element, props: P) -> String {
     dioxus_ssr::render(&dom)
 }
 
-// ── One set of props, handed to both paths ──────────────────────────────
+// ── One set of props, handed to every widget ────────────────────────────
 //
-// Everything a widget can be given, so a part the wrapper drops shows up as
-// a difference: a label, an error (so the invalid classes and the owned
+// Everything a widget can be given, so a part a widget drops shows up as a
+// missing substring: a label, an error (so the invalid classes and the owned
 // `aria-` attributes appear), a field attribute and an author one.
 
 fn field_attrs() -> FieldAttrs {
@@ -124,29 +108,6 @@ fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Elemen
     })
 }
 
-fn through_scalar_widget(
-    (builtin, field_type, choices): (BuiltinWidget, FieldType, Option<Vec<Choice>>),
-) -> Element {
-    let values = use_store(values);
-    rsx! {
-        ScalarWidget {
-            field_type,
-            field_attrs: field_attrs(),
-            widget: WidgetType::Builtin(builtin),
-            choices: choices.clone(),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: PATH.into(),
-                label: Some("Title".into()),
-                classes: Rc::new(Classes::fx()),
-                errors: errors(),
-            },
-            attrs: extra_attrs(),
-        }
-    }
-}
-
 // ── The text-like inputs ─────────────────────────────────────────────────
 
 /// Every text-like `RenderedInputType` has a widget type in the table: all
@@ -160,20 +121,7 @@ fn every_text_like_input_has_a_widget_type() {
     expect_that!(text_likes().len(), eq(inputs));
 }
 
-/// The wrapper adds nothing and drops nothing.
-#[gtest]
-fn each_builtin_renders_what_scalar_widget_renders() {
-    for (widget, builtin, field_type) in builtins() {
-        expect_that!(
-            html_of(through_widget, (widget.clone(), None)),
-            eq(&html_of(through_scalar_widget, (builtin, field_type, None))),
-            "{}",
-            widget.name()
-        );
-    }
-}
-
-/// Not two empty strings agreeing: each piece of the props is there.
+/// Each piece of the props reaches the markup.
 #[gtest]
 fn each_text_like_renders_every_prop() {
     for (widget, input_type) in text_likes() {
@@ -243,7 +191,7 @@ fn checkbox_and_textarea_render_every_prop() {
 #[gtest]
 fn each_builtins_default_classes_match_classes_fx() {
     let fx = Classes::fx();
-    for (widget, builtin, _) in builtins() {
+    for (widget, builtin) in builtins() {
         let slots = widget.default_classes();
         let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
         for part in &parts {
@@ -270,7 +218,7 @@ fn each_builtins_default_classes_match_classes_fx() {
 /// once `Classes` is keyed on it.
 #[gtest]
 fn each_builtin_is_named_as_form_spells_it() {
-    for (widget, builtin, _) in builtins() {
+    for (widget, builtin) in builtins() {
         expect_that!(widget.name(), eq(builtin.form_name()));
     }
     expect_that!(Textarea::NAME, eq("textarea"));
@@ -331,13 +279,10 @@ fn states() -> Vec<Choice> {
 }
 
 /// The field's choices reach the widget through `WidgetProps`, and win over
-/// a bool's true/false; the markup still matches `ScalarWidget`'s.
+/// a bool's true/false.
 #[gtest]
 fn each_chooser_renders_the_choices_it_is_given() {
-    for (widget, builtin) in [
-        (AnyWidget::from(Select), BuiltinWidget::Select),
-        (RadioGroup.into(), BuiltinWidget::RadioGroup),
-    ] {
+    for widget in [AnyWidget::from(Select), RadioGroup.into()] {
         let html = html_of(through_widget, (widget.clone(), Some(states())));
         expect_that!(
             html,
@@ -346,15 +291,6 @@ fn each_chooser_renders_the_choices_it_is_given() {
                 contains_substring("Ohio"),
                 not(contains_substring(r#"value="true""#)),
             ],
-            "{}",
-            widget.name()
-        );
-        expect_that!(
-            html,
-            eq(&html_of(
-                through_scalar_widget,
-                (builtin, FieldType::Text, Some(states()))
-            )),
             "{}",
             widget.name()
         );

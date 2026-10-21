@@ -17,6 +17,7 @@ use formoxus::label_case::LabelCase;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{FieldSet, Node};
 use formoxus::prelude::*;
+use formoxus::widgets::TextInput;
 use googletest::prelude::*;
 use std::any::Any;
 use std::marker::PhantomData;
@@ -28,8 +29,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         label: None,
         optional: false,
         attrs: FieldAttrs::default(),
-        widget: None,
-        custom_widget: None,
+        widget: TextInput.into(),
         wrapper: None,
         value,
         errors: Vec::new(),

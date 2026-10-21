@@ -18,11 +18,12 @@ cargo run -p formoxus-examples --bin widget_matrix
 A development tool rather than a teaching example. It prints which
 `(value kind, widget)` pairs actually render.
 
-That set is not written down anywhere. `form!` accepts every widget name in
-its table against every field, and whether the pair then works is decided at
-runtime by a match in `ScalarWidget` whose fallthrough arm panics — so a reader
-of the macro's table cannot tell which combinations are real. This prints the
-truth, and keeps the root README's "What isn't done" section honest.
+`form!` refuses a pair `BuiltinWidget::renders` rules out, at compile time.
+Nothing checks it at runtime, so a hand-built `FormSpec` can still reach one.
+The matrix builds each pair that way and prints what really happens beside
+what `form!` would say: `ok*` marks a pair that renders but `form!` refuses,
+and the widgets `form!` names but nothing renders yet are listed after the
+table. That keeps the root README's "What isn't done" section honest.
 
 **How it detects failure is the interesting part, and the obvious approach is
 wrong.** `catch_unwind` reports that every pair passes: Dioxus catches a panic

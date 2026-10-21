@@ -656,7 +656,9 @@ widgets become ONE concept.
   `specs.rs` tests and `widget_matrix`). `BuiltinWidget::default_for` is now
   unused at run time; it waits for the delete box (Todd). Suite and all 33
   e2e tests green.
-- [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
+- [x] **`build.rs` resolves the widget once** (DONE 2026-10-21; Todd deleted
+  `ScalarWidget`, and Claude moved the tests that drove it onto
+  `Widget::render`); `FieldNode` holds `widget:
   AnyWidget`, never an `Option`. Option A (Todd, 2026-10-21): move every
   caller off `with_custom_widget` on a LEAF first, rather than adapting a
   `WidgetType` into an `AnyWidget`; `FieldSpec::custom_widget` stays only for
@@ -681,14 +683,14 @@ widgets become ONE concept.
   shown as `ok*`); `ScalarWidget` asserted `renders`. Feeds the OPEN
   kind-checks box below.
   Todd, then:
-  5. [ ] `src/field_node.rs:42` `LeafArgs::node` resolves `spec.widget`,
+  5. [x] `src/field_node.rs:42` `LeafArgs::node` resolves `spec.widget`,
      else `field.default_widget(self.optional)`; the struct's `widget` (109)
      becomes `AnyWidget` and `custom_widget` (111) goes.
-  6. [ ] A leaf spec with `custom_widget` panics, naming `with_widget`, so it
+  6. [x] A leaf spec with `custom_widget` panics, naming `with_widget`, so it
      is never silently ignored. In `LeafArgs::node` (42) rather than
      `src/build.rs:374` `scalar_node`, since a spec's constructor also
      builds through `node`.
-  7. [ ] `src/field_node.rs`: the `Renderer` enum (97) and `renderer()` (170)
+  7. [x] `src/field_node.rs`: the `Renderer` enum (97) and `renderer()` (170)
      go; `is_checkbox` (180) is one line; `render`'s match (291) keeps only
      the `AnyWidget` arm, and the imports at 15 shrink. `ScalarWidget` loses
      its last caller (delete `src/widgets/scalar.rs`, or leave it for the
@@ -696,7 +698,7 @@ widgets become ONE concept.
      Deleting it also takes `tests/suite/widgets.rs`'s tests that drive
      `ScalarWidget` directly (from 166, and `PasswordWithEcho`); those are
      Claude's to move.
-  8. [ ] `src/field_node.rs` tests: the `node()` helper (451) and
+  8. [x] `src/field_node.rs` tests: the `node()` helper (451) and
      `a_bool_field` (516) take an `AnyWidget`, so the select tests at 569 and
      582 pass `Select.into()`.
 - [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
@@ -727,7 +729,11 @@ widgets become ONE concept.
   `SlotKey::Part`'s enum key and the macro's "unknown widget" table beyond
   the lowercase built-in names.
 - [ ] **The variant picker** (`VariantSelect`) becomes a chooser widget that
-  still fires `on_edit` (decided 2026-10-16).
+  still fires `on_edit` (decided 2026-10-16). **And `enum_node` reads
+  `spec.widget`** so `with_widget` on an enum picks the chooser (a radio
+  group). Since `custom_widget` went (2026-10-21) nothing reads it there,
+  so a widget on an enum is silently ignored until this box; no check
+  added meanwhile (Todd).
 - [ ] **`#[derive(Widget)]`** with `#[widget(extends = …)]` and per-prop
   `#[widget(default = …)]`, once the built-ins show what it should write.
   `CLAUDE.md`'s "never derives" gains its exception.

@@ -10,7 +10,6 @@ use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
 use facet::Facet;
-use formoxus::attrs::RenderedInputType;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::prelude::*;
 use formoxus::widgets::{
@@ -164,36 +163,39 @@ fn signals_are_populated_from_the_model() {
 
 // ── The store-bound widget boundary ──────────────────────────────────────
 //
-// These drive `ScalarWidget` directly rather than through `Node::render`,
-// so they stay meaningful regardless of how the nodes wire it up.
+// These drive a widget's `render` directly rather than through
+// `Node::render`, so they stay meaningful regardless of how the nodes wire it
+// up.
 
-use formoxus::attrs::FieldType;
-use formoxus::widgets::{BuiltinWidget, FieldProps, ScalarWidget, WidgetType};
+use formoxus::nodes::ValuesStore;
+use formoxus::widgets::Widget;
+use formoxus::widgets::widget_props::WidgetProps;
 
 const ID: &str = "rand0123-name";
+
+/// What a `String` field with no constraints hands its widget. Spelled out
+/// because nothing upstream computes it, which is the point: these pin the
+/// widget boundary independently of how the nodes wire it up.
+fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetProps {
+    WidgetProps {
+        id: ID.into(),
+        path: path.to_string(),
+        label: label.map(str::to_string),
+        errors: Vec::new(),
+        attrs: FieldAttrs::default(),
+        extra_attrs: Vec::new(),
+        values,
+        classes: Rc::new(Classes::default()),
+        choices: None,
+    }
+}
 
 #[component]
 fn PopulatedInput() -> Element {
     let values =
         use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the nodes wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "title".to_string(),
-                label: Some("Title".to_string()),
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {TextInput.render(plain_props(values, "title", Some("Title")))}
     }
 }
 
@@ -203,23 +205,7 @@ fn EmptyInput() -> Element {
     // chosen after mount produces.
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the nodes wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "shape.radius".to_string(),
-                label: None,
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {TextInput.render(plain_props(values, "shape.radius", None))}
     }
 }
 
@@ -267,7 +253,7 @@ fn type_into(app: fn() -> Element, text: &str) -> String {
             Mutation::NewEventListener { name, id } if name == "input" => Some(*id),
             _ => None,
         })
-        .expect("ScalarWidget should have registered an `oninput` listener");
+        .expect("the widget should have registered an `oninput` listener");
 
     // Listeners are registered against `PlatformEventData`, not `FormData` — the
     // `oninput` attribute macro does that conversion itself, inside the handler.
@@ -569,23 +555,7 @@ fn PasswordWithEcho() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     let stored = values.read().get("secret").cloned().unwrap_or_default();
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the nodes wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "secret".to_string(),
-                label: Some("Secret".to_string()),
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {PasswordInput.render(plain_props(values, "secret", Some("Secret")))}
         p { class: "echo", "{stored}" }
     }
 }
