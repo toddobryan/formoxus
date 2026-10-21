@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use dioxus::core::Attribute;
+use formoxus_spec::BuiltinWidget;
 
 use crate::{
     Classes, ValidationMessage, field_attrs::FieldAttrs, nodes::ValuesStore, widgets::Choice,
@@ -36,5 +37,22 @@ pub struct WidgetProps {
 impl WidgetProps {
     pub fn is_invalid(&self) -> bool {
         !self.errors.is_empty()
+    }
+
+    /// `part`'s classes from the form's `Classes`, with its invalid addition
+    /// when the field has errors.
+    ///
+    /// Crate-private, as `field_row` is, while a part is keyed by
+    /// `BuiltinWidget`: a dev's widget has none until `Classes` is keyed on
+    /// `Widget::NAME`.
+    pub(crate) fn part_class(&self, widget: BuiltinWidget, part: &str) -> Option<String> {
+        self.classes.part_class(widget, part, self.is_invalid())
+    }
+
+    /// The form control's `class`: `part`'s slot, as the field's own `class`
+    /// and `class_plus` replace or extend it.
+    pub(crate) fn control_class(&self, widget: BuiltinWidget, part: &str) -> Option<String> {
+        self.attrs
+            .class(self.classes.part(widget, part), self.is_invalid())
     }
 }

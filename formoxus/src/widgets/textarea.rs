@@ -3,8 +3,7 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
-use super::errors::FieldErrors;
-use super::label::field_label;
+use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
 use crate::widgets::{Widget, widget_props::WidgetProps};
@@ -46,46 +45,25 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
     let my_widget = BuiltinWidget::Textarea;
-    let is_invalid = props.is_invalid();
-
-    let class = props
-        .attrs
-        .class(props.classes.part(my_widget, "textarea"), is_invalid);
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs);
-
-    let field_class = props
-        .classes
-        .part_class(BuiltinWidget::Textarea, "div", is_invalid);
-
     let values = props.values;
-    let current = get_current(&props.path, values);
+    let path = props.path.clone();
+    let current = get_current(&path, values);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let label = field_label(
-        &props.id,
-        props.label,
-        props.attrs.contains(Attr::Required),
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    rsx! {
-        div {
-            class: field_class,
-            {label}
-            textarea {
-                class: class,
-                id: &props.id,
-                name: "{props.path}",
-                value: "{current}",
-                oninput: move |e: FormEvent| {
-                    let raw = e.value();
-                    write_value(&props.path, values, raw);
-                },
-                // TODO: delete pattern, since not allowed in HTML
-                ..attrs,
-            }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+    let control = rsx! {
+        textarea {
+            class: props.control_class(my_widget, "textarea"),
+            id: "{props.id}",
+            name: "{path}",
+            value: "{current}",
+            oninput: move |e: FormEvent| {
+                let raw = e.value();
+                write_value(&path, values, raw);
+            },
+            // TODO: delete pattern, since not allowed in HTML
+            ..attrs,
         }
-    }
+    };
+    let marked = props.attrs.contains(Attr::Required);
+    field_row(my_widget, &props, marked, LabelSide::Before, control)
 }

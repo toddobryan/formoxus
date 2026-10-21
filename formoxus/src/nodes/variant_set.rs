@@ -11,7 +11,7 @@ use crate::nodes::{
     qualify, variant_segment,
 };
 use crate::widgets::VariantSelect;
-use crate::widgets::label::required_marker;
+use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};

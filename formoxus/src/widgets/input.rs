@@ -8,8 +8,7 @@ use formoxus_spec::{
     Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement, InputType, RenderedInputType,
 };
 
-use super::errors::FieldErrors;
-use super::label::field_label;
+use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
 use crate::nodes::ValuesStore;
@@ -154,7 +153,7 @@ pub(crate) fn InputView(input_type: RenderedInputType, props: WidgetProps) -> El
     // (`Range` is the likely one) has to be routed here before it compiles.
     match input_type {
         RenderedInputType::Hidden => hidden(props.path, props.values),
-        RenderedInputType::Checkbox => checkbox(props),
+        RenderedInputType::Checkbox => checkbox(&props),
         RenderedInputType::Text
         | RenderedInputType::Password
         | RenderedInputType::Number
@@ -167,7 +166,7 @@ pub(crate) fn InputView(input_type: RenderedInputType, props: WidgetProps) -> El
         | RenderedInputType::Time
         | RenderedInputType::DatetimeLocal
         | RenderedInputType::Month
-        | RenderedInputType::Week => text_like(input_type, props),
+        | RenderedInputType::Week => text_like(input_type, &props),
     }
 }
 
@@ -208,98 +207,56 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // Withholding it cost more than it bought: a field nothing could CLEAR
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
-fn text_like(input_type: RenderedInputType, props: WidgetProps) -> Element {
+fn text_like(input_type: RenderedInputType, props: &WidgetProps) -> Element {
     let my_widget = BuiltinWidget::Input(input_type);
-    let field_attrs = &props.attrs;
     let values = props.values;
-    let is_invalid = props.is_invalid();
+    let path = props.path.clone();
+    let current = get_current(&path, values);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class: Option<String> =
-        field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let current = get_current(&props.path, values);
-
-    let label = field_label(
-        &props.id,
-        props.label,
-        field_attrs.contains(Attr::Required),
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    rsx! {
-        div {
-            class: field_class,
-            {label}
-            input {
-                class: class,
-                r#type: input_type.to_input_type().html_type(),
-                id: "{props.id}",
-                name: "{props.path}",
-                value: "{current}",
-                oninput: move |e: FormEvent| {
-                    let raw = e.value();
-                    write_value(&props.path, values, raw);
-                },
-                // Last, and it has to be: rsx! treats everything after a spread
-                // as children, so an attribute below this is a parse error.
-                ..attrs,
-            }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+    let control = rsx! {
+        input {
+            class: props.control_class(my_widget, "input"),
+            r#type: input_type.to_input_type().html_type(),
+            id: "{props.id}",
+            name: "{path}",
+            value: "{current}",
+            oninput: move |e: FormEvent| {
+                let raw = e.value();
+                write_value(&path, values, raw);
+            },
+            // Last, and it has to be: rsx! treats everything after a spread
+            // as children, so an attribute below this is a parse error.
+            ..attrs,
         }
-    }
+    };
+    let marked = props.attrs.contains(Attr::Required);
+    field_row(my_widget, props, marked, LabelSide::Before, control)
 }
 
-fn checkbox(props: WidgetProps) -> Element {
+fn checkbox(props: &WidgetProps) -> Element {
     let my_widget = BuiltinWidget::Input(RenderedInputType::Checkbox);
-    let field_attrs = &props.attrs;
     let values = props.values;
-    let is_invalid = props.is_invalid();
+    let path = props.path.clone();
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class = field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let label = field_label(
-        &props.id,
-        props.label,
-        field_attrs.contains(Attr::RequiredTrue),
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    // The wrapper is unconditional and the caption is not, exactly as for a
-    // text input. Until 2026-09-29 this widget wrapped an unclassed `<label>`
-    // only when it had text, and put that text in no span, so
-    // `.fx-form-field` and `.fx-field-label` both silently missed every
-    // checkbox on the page.
-    rsx! {
-        div {
-            class: field_class,
-            // The box comes BEFORE its text. Every other widget reads
-            // caption-then-control, but a checkbox reads "☐ I agree", not
-            // "I agree ☐": the label is what the box means, not what to type
-            // into it.
-            input {
-                class: class,
-                name: "{props.path}",
-                id: "{props.id}",
-                r#type: "checkbox",
-                checked: get_current(&props.path, values) == "true",
-                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
-                // Last: rsx! reads anything after a spread as children.
-                ..attrs,
-            }
-            // Marked by `required_true`, not `required`: on a bool, `required`
-            // is presence, which a checkbox always has.
-            {label}
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+    let control = rsx! {
+        input {
+            class: props.control_class(my_widget, "input"),
+            name: "{path}",
+            id: "{props.id}",
+            r#type: "checkbox",
+            checked: get_current(&path, values) == "true",
+            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            // Last: rsx! reads anything after a spread as children.
+            ..attrs,
         }
-    }
+    };
+    // Marked by `required_true`, not `required`: on a bool, `required` is
+    // presence, which a checkbox always has. Until 2026-09-29 this widget
+    // wrapped an unclassed `<label>` only when it had text, so
+    // `.fx-form-field` and `.fx-field-label` both silently missed every
+    // checkbox on the page; `field_row` is what keeps it in step now.
+    let marked = props.attrs.contains(Attr::RequiredTrue);
+    field_row(my_widget, props, marked, LabelSide::After, control)
 }

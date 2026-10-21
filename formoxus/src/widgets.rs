@@ -47,8 +47,8 @@
 //!   [`AnyWidget`], the form a field holds one in.
 //! - `widget_props` (re-exported as [`WidgetProps`]) — what a widget is handed
 //!   to render a field.
-//! - `label` (crate-private) — the caption and required marker every widget
-//!   shares.
+//! - `field_row` (crate-private) — the row a one-control widget renders
+//!   around its control: wrapper, caption and required marker, errors.
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
@@ -57,8 +57,8 @@
 //! - [`errors`] — the error list rendered under every widget.
 
 pub mod errors;
+pub(crate) mod field_row;
 pub mod input;
-pub(crate) mod label;
 pub mod radio_group;
 pub mod row_buttons;
 pub mod select;

@@ -3,8 +3,7 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
 
-use super::errors::FieldErrors;
-use super::label::field_label;
+use super::field_row::{LabelSide, field_row};
 use super::types::bool_choices;
 use super::values::{get_current, write_value};
 use crate::classes::Slot;
@@ -57,65 +56,47 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
     let my_widget = BuiltinWidget::Select;
-    let is_invalid = props.is_invalid();
-    let field_attrs = &props.attrs;
     let values = props.values;
-    let choices = props.choices.unwrap_or_else(bool_choices);
+    let path = props.path.clone();
+    let choices = props.choices.clone().unwrap_or_else(bool_choices);
+    let current = get_current(&path, values);
+    let required = props.attrs.contains(Attr::Required);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(props.extra_attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let current = get_current(&props.path, values);
-    let required = field_attrs.contains(Attr::Required);
-    let label = field_label(
-        &props.id,
-        props.label,
-        required,
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    rsx! {
-        div {
-            class: field_class,
-            {label}
-            select {
-                class: class,
-                id: props.id,
-                // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
-                // `name` or `distribute_form_values` would never see it.
-                name: "{props.path}",
-                // No branch on emptiness: the "no value" option's value is `""`,
-                // and `""` IS absence at both boundaries, so the same write does
-                // for every option.
-                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
-                // Last among attributes, before the options: rsx! reads
-                // anything after a spread as children, and the options ARE
-                // children, so this sits between the two.
-                ..attrs,
-                // Required and unanswered: an unselectable placeholder, so the
-                // browser's own validation blocks submit and the user can't
-                // choose their way back to "unanswered". Optional: a real
-                // selectable entry, because absent is a legitimate answer.
-                if required && current.is_empty() {
-                    option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
-                } else if !required {
-                    option { value: "", selected: current.is_empty(), "{ABSENT_DISPLAY}" }
-                }
-                for choice in choices {
-                    option {
-                        value: "{choice.value}",
-                        selected: choice.value == current,
-                        "{choice.display}"
-                    }
+    let control = rsx! {
+        select {
+            class: props.control_class(my_widget, "select"),
+            id: "{props.id}",
+            // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
+            // `name` or `distribute_form_values` would never see it.
+            name: "{path}",
+            // No branch on emptiness: the "no value" option's value is `""`,
+            // and `""` IS absence at both boundaries, so the same write does
+            // for every option.
+            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            // Last among attributes, before the options: rsx! reads
+            // anything after a spread as children, and the options ARE
+            // children, so this sits between the two.
+            ..attrs,
+            // Required and unanswered: an unselectable placeholder, so the
+            // browser's own validation blocks submit and the user can't
+            // choose their way back to "unanswered". Optional: a real
+            // selectable entry, because absent is a legitimate answer.
+            if required && current.is_empty() {
+                option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
+            } else if !required {
+                option { value: "", selected: current.is_empty(), "{ABSENT_DISPLAY}" }
+            }
+            for choice in choices {
+                option {
+                    value: "{choice.value}",
+                    selected: choice.value == current,
+                    "{choice.display}"
                 }
             }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
-    }
+    };
+    field_row(my_widget, &props, required, LabelSide::Before, control)
 }
 
 /// The "leave this out" entry in an optional enum's picker.

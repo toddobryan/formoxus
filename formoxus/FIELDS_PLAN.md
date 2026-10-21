@@ -767,9 +767,18 @@ widgets become ONE concept.
   `widget_props` is `pub(crate)`; the one public path is the re-export.
   9. [x] Line 36's table row above ("`FieldProps` + `WidgetProps` + …")
      and the memory index entries that name `FieldProps`.
-- [ ] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
+- [x] **The boilerplate** (4d's last box): a plain fn `field_row(…)` rendering
   wrapper, label and errors around the form control a widget builds; the radio
-  group keeps its own shape. Snapshot-guarded.
+  group keeps its own shape. Snapshot-guarded. DONE 2026-10-21:
+  `widgets/field_row.rs` (Todd renamed `label.rs`) holds `field_row(widget,
+  &props, marked, LabelSide, control)` beside `field_label` and
+  `required_marker`; `WidgetProps` gained crate-private `part_class` and
+  `control_class`, which supply `is_invalid()`. Used by `text_like`,
+  `checkbox` (`LabelSide::After`), `TextareaView`, `SelectView` and
+  `VariantSelect`; `hidden` and `RadioGroupView` keep their own shapes.
+  The five `tests/snapshots/` goldens unchanged, all 33 e2e green. Both stay
+  crate-private until `Classes` is keyed on `Widget::NAME`, since a dev's
+  widget has no `BuiltinWidget` to pass.
 - [ ] **OPEN (Todd): where the kind checks go once `BuiltinWidget` is
   deleted.** `renders`, `accepts_optional`, `takes_choices` and
   `default_for` are all `BuiltinWidget` methods today, read by `form!`'s

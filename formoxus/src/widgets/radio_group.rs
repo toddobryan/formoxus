@@ -5,7 +5,7 @@ use formoxus_spec::{Attr, AttrSet, BuiltinWidget, HtmlElement};
 
 use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
-use crate::widgets::label::required_marker;
+use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
 use crate::widgets::{FieldErrors, Widget, get_current, widget_props::WidgetProps, write_value};
 
