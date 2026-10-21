@@ -177,6 +177,11 @@ widgets this is derived from the element facts.
 > never having been built: a widget is a struct of props with `EXTENDS:
 > AttrSet`, and its `render` decides where every attribute goes. Per-element
 > classes per field become props (`RadioGroup`'s `group_class`/`input_class`).
+> **Those props were DROPPED 2026-10-20 (Todd)**, settling the class-placement
+> hold: a field's `class`/`class_plus` go on the radio group's `<fieldset>`
+> (where `EXTENDS` and the spread already pointed), inner slots are restyled
+> per app or form through `Classes`/`classes_plus:`, and per field by CSS from
+> the fieldset's class. Nothing addresses one inner element for one field.
 
 Todd floated it 2026-10-09: treat `RadioGroup` as the first multi-element
 widget (cf. Django's `MultiWidget`). Claude wrote it up 2026-10-10; Todd

@@ -308,17 +308,28 @@ fn a_quoted_attribute_on_an_enum_field_reaches_the_variant_select() {
     expect_that!(tag(&html, "select"), contains_substring(r#"data-x="1""#));
 }
 
-/// **On a radio group an author's `class` goes nowhere, for now.** Where it
-/// belongs (the `<fieldset>`, each radio, or a `group_class`/`input_class`
-/// pair) is on hold; meanwhile `RadioGroup` never calls `FieldAttrs::class`,
-/// and the spread no longer carries it. Pinned so the decision, when it comes,
-/// changes this on purpose.
+/// **On a radio group they go on the `<fieldset>`**, where its other
+/// attributes land, and nowhere else. The inner elements take their classes
+/// from `Classes` alone, so a field's class reaches them only through CSS.
 #[gtest]
-fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
-    let html = render!(form! {
+fn class_and_class_plus_on_the_radio_group() {
+    let replaced = render!(form! {
         Person { name => { widget: radio_group, choices: STATES, class: [wide] } }
     });
-    expect_that!(html, not(contains_substring("wide")));
+    expect_that!(
+        classes_of(tag(&replaced, "fieldset")),
+        elements_are![eq("wide")]
+    );
+    expect_that!(replaced.matches("wide").count(), eq(1));
+
+    let appended = render!(form! {
+        Person { name => { widget: radio_group, choices: STATES, class_plus: [wide] } }
+    });
+    expect_that!(
+        classes_of(tag(&appended, "fieldset")),
+        elements_are![eq("fx-form-field fx-radio-group wide")]
+    );
+    expect_that!(appended.matches("wide").count(), eq(1));
 }
 
 // ── style and style_plus ─────────────────────────────────────────────────
@@ -368,9 +379,8 @@ fn style_plus_renders_like_style_while_formoxus_has_none() {
 }
 
 /// **On a radio group, `style` lands on the `<fieldset>`**, because it rides
-/// the spread and that is where `RadioGroup` spreads. Unlike `class`, which
-/// goes nowhere there (above). If the `RadioGroup` hold settles on per-radio
-/// placement, this should change with it.
+/// the spread and that is where `RadioGroup` spreads, as `class` does
+/// (above).
 #[gtest]
 fn on_a_radio_group_style_lands_on_the_fieldset() {
     let html = render!(form! {

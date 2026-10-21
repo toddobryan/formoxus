@@ -318,8 +318,11 @@ widgets become ONE concept.
   - **Parts shrink to CLASS SLOTS.** Per-part attribute addressing (D0's
     points 3–5 in `ATTRIBUTES_PLAN.md`) was never built and is dropped; the
     widget decides where every attribute goes. `Classes` stays keyed by
-    (widget, slot), and a prop overrides one slot for one field: `RadioGroup`
-    gets `group_class`/`input_class` props, settling that hold.
+    (widget, slot). ~~A prop overrides one slot for one field: `RadioGroup`
+    gets `group_class`/`input_class` props.~~ DROPPED 2026-10-20 (Todd): a
+    field's `class`/`class_plus` go on the `<fieldset>`, the inner slots are
+    restyled per app or form through `Classes`, and per field by CSS from the
+    fieldset's class. That settles the hold.
   - **One dev-facing trait, the `dyn` one hidden.** Consts make a trait
     non-`dyn`, so the dev implements `Widget` (Sized, with the consts and
     `render`) and formoxus has a `#[doc(hidden)] DynWidget` with a blanket
@@ -516,7 +519,7 @@ widgets become ONE concept.
   as before. Keeps every step green: a field without `widget:` keeps the old
   path until the `default_widget` box. `builtin_widgets` already shows the
   two paths render alike.
-- [ ] **`form!`: props in the widget's braces**, a struct expression with
+- [x] **`form!`: props in the widget's braces** (DONE 2026-10-20), a struct expression with
   `..Default::default()` (today's "a widget takes no arguments" error goes,
   with NO special case for `choices` inside the braces: unreleased, so
   rustc's "no field `choices`" is enough, Todd 2026-10-20); a `const _`
@@ -525,10 +528,11 @@ widgets become ONE concept.
   built-in name, anything else a path. AFTER the built-in types (Todd,
   2026-10-20), since the struct expression and the asserts both name one.
   Goldens (Claude) once this lands: a misspelled prop, a prop of the wrong
-  type, an attribute not in `EXTENDS`. **Also here: `RadioGroup`'s
-  `group_class`/`input_class` props (W-A)**, deferred from the built-ins box
-  (Todd, 2026-10-20: "just don't forget about it") because this is where a
-  dev can first write one.
+  type, an attribute not in `EXTENDS`. ~~**Also here: `RadioGroup`'s
+  `group_class`/`input_class` props (W-A)**~~ DROPPED (Todd, 2026-10-20):
+  the passed-in `Classes` restyle its slots per app or form, and a field's
+  `class`/`class_plus` now go on its `<fieldset>`, which `EXTENDS` already
+  promised and `RadioGroupView` had been dropping.
   Decided 2026-10-20 (Todd): a capitalized `widget: Textarea` is a plain
   path, so it needs the dev's own `use` (rustc's "cannot find type" replaces
   today's lowercase hint); the "a custom widget supplies its own choices"

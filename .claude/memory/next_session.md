@@ -5,6 +5,14 @@ metadata:
   type: project
 ---
 
+**2026-10-20, EVENING (committed `c151c41`, NOT pushed): `form!`'s PROPS
+BOX ITEMS 1–17 DONE.** `widget:` takes a lowercase built-in name or a path,
+props in braces, emitted into `.with_widget`; `EXTENDS` asserts at the key;
+`respan` in `form.rs` put four `DefaultField` goldens back on the field.
+LATER: `RadioGroup`'s `group_class`/`input_class` props DROPPED (Todd); a
+field's `class`/`class_plus` now go on its `<fieldset>`. Box CLOSED. Next:
+the `Field::default_widget` box in `FIELDS_PLAN.md`.
+
 **2026-10-20, END OF DAY (pushed): THE BRIDGE IS DONE (`d854acb`); NEXT IS
 `form!`'s PROPS BOX, and its 17-item to-do list is written into that box in
 `formoxus/FIELDS_PLAN.md`.** Todd picks up items 1–12 from home (parse,

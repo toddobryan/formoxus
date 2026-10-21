@@ -16,9 +16,11 @@ use crate::widgets::{
 /// can't be un-picked. Over a `bool` without choices it offers true and
 /// false.
 ///
-/// Its class slots are the fieldset's parts. Per-field `group_class` and
-/// `input_class` props (W-A) come with `form!`'s props box, where a dev can
-/// first write one.
+/// Its class slots are the fieldset's parts. A field's own `class` and
+/// `class_plus` go on the `<fieldset>`, where its other attributes land; the
+/// inner elements are restyled for every radio group at once, through
+/// `Classes` or a form's `classes_plus:`, or per field by CSS from the
+/// fieldset's class.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct RadioGroup;
 
@@ -96,9 +98,6 @@ pub(crate) fn RadioGroupView(
     let my_widget = BuiltinWidget::RadioGroup;
     let is_invalid = props.is_invalid();
 
-    // TODO: figure out where to put the attributes. Currently in the fieldset,
-    //       but we might want people to be able to set attrs on each input
-
     // `required` and `aria-invalid` are both judgments about the GROUP, but each
     // spec puts its own in a different place. HTML has `required` only on an
     // `<input>`, never a `<fieldset>`, and one required radio makes the whole
@@ -108,7 +107,7 @@ pub(crate) fn RadioGroupView(
     let required = field_attrs.contains(Attr::Required);
     let attrs: Vec<Attribute> = field_attrs.without(Attr::Required).merge_with_attrs(attrs);
 
-    let field_class = props.classes.part_class(my_widget, "fieldset", is_invalid);
+    let field_class = field_attrs.class(props.classes.part(my_widget, "fieldset"), is_invalid);
 
     let current = get_current(&props.path, values);
 
