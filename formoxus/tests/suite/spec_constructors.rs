@@ -16,7 +16,7 @@ use formoxus::field_kind::choice_field_for;
 use formoxus::field_node::NodeCtor;
 use formoxus::nodes::Edit;
 use formoxus::prelude::*;
-use formoxus::widgets::AnyWidget;
+use formoxus::widgets::{AnyWidget, TextInput};
 use googletest::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Facet)]
@@ -62,9 +62,8 @@ impl Field for CapField {
         }
     }
 
-    #[expect(clippy::todo, reason = "no `Widget` can be built until Step 5")]
     fn default_widget(&self, _optional: bool) -> AnyWidget {
-        todo!()
+        TextInput.into()
     }
 }
 

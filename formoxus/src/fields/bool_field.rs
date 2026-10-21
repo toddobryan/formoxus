@@ -1,5 +1,6 @@
 use formoxus_spec::{Attr, AttrValue};
 
+use crate::widgets::{AnyWidget, CheckboxInput, Select};
 use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 /// A `bool`, parsed from `"true"`/`"false"` by facet's default `parse`.
@@ -19,6 +20,17 @@ impl Field for BoolField {
     type Value = bool;
 
     type Context = ();
+
+    /// A checkbox, or for an `Option<bool>` a select: a checkbox has two
+    /// states and an optional bool three, and the select's blank option is the
+    /// third.
+    fn default_widget(&self, optional: bool) -> AnyWidget {
+        if optional {
+            Select.into()
+        } else {
+            CheckboxInput.into()
+        }
+    }
 
     /// `required_true` as HTML `required`, which on a checkbox means "must be
     /// ticked". On a select or radio group it means something else, and the
@@ -72,5 +84,16 @@ mod tests {
             messages(&must_agree, false),
             elements_are![eq("this value must be true")]
         );
+    }
+
+    /// A checkbox has two states and an `Option<bool>` three.
+    #[gtest]
+    fn the_default_widget_is_a_checkbox_unless_optional() {
+        let field = BoolField::default();
+        expect_that!(
+            field.default_widget(false),
+            eq(&AnyWidget::from(CheckboxInput))
+        );
+        expect_that!(field.default_widget(true), eq(&AnyWidget::from(Select)));
     }
 }

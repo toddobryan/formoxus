@@ -91,6 +91,14 @@ impl PartialEq for NodeCtor {
     }
 }
 
+/// What renders a field during the bridge (`FIELDS_PLAN.md` Step 5): a
+/// widget that renders itself, or a hand-built spec's `WidgetType`, through
+/// `ScalarWidget`. Goes when `WidgetType` does.
+enum Renderer {
+    Widget(AnyWidget),
+    Scalar(WidgetType),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldNode<F: Field> {
     pub name: String,
@@ -156,34 +164,24 @@ impl<F: Field> FieldNode<F> {
         }
     }
 
-    /// What this field renders as absent any override.
-    ///
-    /// `optional` is the one input here that `F::Value` cannot supply: `Option`
-    /// peeling wraps rather than parameterizes, so `bool` and `Option<bool>`
-    /// both arrive as a `bool` field. A checkbox has two states and an
-    /// `Option<bool>` has three, which is the whole reason that flag has to
-    /// travel from the walk.
-    fn default_widget(&self) -> WidgetType {
-        if self.field.choices().is_some() {
-            WidgetType::Builtin(BuiltinWidget::Select)
-        } else {
-            WidgetType::Builtin(BuiltinWidget::default_for(self.field_type(), self.optional))
+    /// What renders this field, in order: the widget `form!` set
+    /// (`with_widget`), a hand-built spec's `WidgetType`
+    /// (`with_custom_widget`), else the field's own `default_widget`.
+    fn renderer(&self) -> Renderer {
+        match (&self.widget, self.custom_widget) {
+            (Some(widget), _) => Renderer::Widget(widget.clone()),
+            (None, Some(widget_type)) => Renderer::Scalar(widget_type),
+            (None, None) => Renderer::Widget(self.field.default_widget(self.optional)),
         }
     }
 
-    /// The widget to render: an override if one was set, else the derived default.
-    fn widget(&self) -> WidgetType {
-        self.custom_widget.unwrap_or_else(|| self.default_widget())
-    }
-
-    /// Whether this field renders as a checkbox: by its `AnyWidget`'s name
-    /// when it has one, else by the `WidgetType` it resolves to. The one
-    /// place either is asked, until the bridge's `WidgetType` path goes.
+    /// Whether this field renders as a checkbox. The one place that is asked,
+    /// until the bridge's `WidgetType` path goes.
     fn is_checkbox(&self) -> bool {
-        match &self.widget {
-            Some(widget) => widget.name() == CheckboxInput::NAME,
-            None => matches!(
-                self.widget(),
+        match self.renderer() {
+            Renderer::Widget(widget) => widget.name() == CheckboxInput::NAME,
+            Renderer::Scalar(widget_type) => matches!(
+                widget_type,
                 WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
             ),
         }
@@ -287,11 +285,11 @@ impl<F: Field> Node for FieldNode<F> {
         )
         .resolve_bounds(self.field_type());
 
-        // The bridge (`FIELDS_PLAN.md` Step 5): a widget set through
-        // `with_widget` renders itself; anything else still goes through
-        // `ScalarWidget` until `default_widget` returns an `AnyWidget`.
-        if let Some(widget) = &self.widget {
-            widget.render(WidgetProps {
+        // The bridge (`FIELDS_PLAN.md` Step 5): every widget renders itself
+        // but a hand-built spec's `WidgetType`, which still goes through
+        // `ScalarWidget` until `build.rs` resolves every widget once.
+        match self.renderer() {
+            Renderer::Widget(widget) => widget.render(WidgetProps {
                 id: ctx.id(&self.name),
                 path: ctx.path(&self.name),
                 label: self.label(ctx.label_case),
@@ -301,11 +299,8 @@ impl<F: Field> Node for FieldNode<F> {
                 choices: self.field.choices(),
                 attrs: field_attrs,
                 extra_attrs: Vec::new(),
-            })
-        } else {
-            let widget = self.widget();
-
-            rsx! {
+            }),
+            Renderer::Scalar(widget) => rsx! {
                 ScalarWidget {
                     field_type: self.field_type(),
                     field_attrs: field_attrs,
@@ -320,7 +315,7 @@ impl<F: Field> Node for FieldNode<F> {
                         errors: self.errors.clone(),
                     },
                 }
-            }
+            },
         }
     }
 

@@ -2,7 +2,11 @@ use std::fmt::Debug;
 
 use facet::{Facet, Peek};
 
-use crate::{ValidationMessage, field::Field, widgets::Choice};
+use crate::{
+    ValidationMessage,
+    field::Field,
+    widgets::{AnyWidget, Choice, Select},
+};
 
 /// A value that must be one of a fixed list, typed: a `ChoiceField<u8>`
 /// offers `u8`s, and membership compares `u8` to `u8`.
@@ -119,6 +123,12 @@ where
         }
     }
 
+    /// A select, optional or not. Its choices reach it through
+    /// `WidgetProps`, from [`Self::choices`], not as a prop.
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        Select.into()
+    }
+
     fn choices(&self) -> Option<Vec<Choice>> {
         Some(self.as_choices())
     }
@@ -187,5 +197,11 @@ mod tests {
     #[should_panic(expected = "reads as no answer at all")]
     fn a_value_that_displays_as_empty_is_refused() {
         let _ = ChoiceField::new([(String::new(), "Nothing"), ("x".to_string(), "X")]);
+    }
+
+    #[gtest]
+    fn the_default_widget_is_a_select_optional_or_not() {
+        expect_that!(sizes().default_widget(false), eq(&AnyWidget::from(Select)));
+        expect_that!(sizes().default_widget(true), eq(&AnyWidget::from(Select)));
     }
 }

@@ -1,6 +1,7 @@
 use formoxus_spec::{Attr, AttrValue};
 use regress::Regex;
 
+use crate::widgets::{AnyWidget, TextInput};
 use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -17,6 +18,11 @@ impl Field for StringField {
     type Value = String;
 
     type Context = ();
+
+    /// A text input, optional or not: an empty one is the absent value.
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        TextInput.into()
+    }
 
     /// `minlength`, `maxlength` and `pattern`, so the browser checks what
     /// `check` does. The pattern goes out unanchored: a browser anchors it.
@@ -164,5 +170,12 @@ mod tests {
                 eq(r"input should match the regular expression \d+"),
             ]
         );
+    }
+
+    #[gtest]
+    fn the_default_widget_is_a_text_input_optional_or_not() {
+        let field = StringField::default();
+        expect_that!(field.default_widget(false), eq(&AnyWidget::from(TextInput)));
+        expect_that!(field.default_widget(true), eq(&AnyWidget::from(TextInput)));
     }
 }

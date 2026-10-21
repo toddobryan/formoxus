@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use facet::Facet;
 use formoxus_spec::{Attr, AttrValue, Bound, FieldType};
 
+use crate::widgets::{AnyWidget, TextInput};
 use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 mod sealed {
@@ -96,6 +97,13 @@ impl<T: Number> Field for NumberField<T> {
     type Value = T;
 
     type Context = ();
+
+    /// A text input, not a number input: `type="number"` hands back `""` for
+    /// a half-typed value like `-` or `1e`, so `parse` could never say what
+    /// was wrong with it.
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        TextInput.into()
+    }
 
     /// `min` and `max`, so the browser checks what `check` does.
     fn widget_attrs(&self) -> FieldAttrs {
@@ -221,5 +229,20 @@ mod tests {
     fn kind_says_int_or_float() {
         expect_that!(<u8 as Number>::KIND, eq(FieldType::Int));
         expect_that!(<f32 as Number>::KIND, eq(FieldType::Float));
+    }
+
+    /// Not a number input, for an int or a float: see `default_widget`.
+    #[gtest]
+    fn the_default_widget_is_a_text_input_optional_or_not() {
+        for optional in [false, true] {
+            expect_that!(
+                between::<i32>(None, None).default_widget(optional),
+                eq(&AnyWidget::from(TextInput))
+            );
+            expect_that!(
+                between::<f64>(None, None).default_widget(optional),
+                eq(&AnyWidget::from(TextInput))
+            );
+        }
     }
 }

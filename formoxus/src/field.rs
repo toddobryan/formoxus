@@ -34,14 +34,15 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         FieldAttrs::default()
     }
 
-    #[expect(
-        clippy::todo,
-        reason = "no `Widget` can be built until Step 5 of `FIELDS_PLAN.md`; \
-        rendering still goes through `WidgetType`"
-    )]
-    fn default_widget(&self, _optional: bool) -> AnyWidget {
-        todo!("Step 5: rendering still goes through `WidgetType`")
-    }
+    /// The widget this field renders as when `form!` names none.
+    ///
+    /// `optional` is whether the model's field is an `Option`, which `Value`
+    /// cannot say: `Option` peeling wraps a field rather than parameterizing
+    /// it, so `bool` and `Option<bool>` both arrive as a `BoolField`.
+    ///
+    /// No default body, so a dev writing a `Field` chooses its widget rather
+    /// than inheriting a text input without noticing.
+    fn default_widget(&self, optional: bool) -> AnyWidget;
 
     fn check_on_server(
         &self,

@@ -646,9 +646,16 @@ widgets become ONE concept.
   1.98 had moved the `DefaultField` error for `Option<Enum>` onto the whole
   `form!`; three more goldens had been blessed that way. All four now point
   at the field.
-- [ ] **`Field::default_widget`** returns one; `ChoiceField` returns a
+- [x] **`Field::default_widget`** returns one; `ChoiceField` returns a
   `Select` (its choices reach it through `WidgetProps`, decision 4 above,
-  not as a prop).
+  not as a prop). DONE 2026-10-20: a REQUIRED method, no default body (Todd:
+  a dev's `Field` must choose its widget). `FieldNode::renderer()` resolves
+  `with_widget`, then `with_custom_widget`'s `WidgetType`, then
+  `default_widget`, so every `form!`-built field renders through
+  `AnyWidget` and `ScalarWidget` serves only `with_custom_widget` (nine
+  `specs.rs` tests and `widget_matrix`). `BuiltinWidget::default_for` is now
+  unused at run time; it waits for the delete box (Todd). Suite and all 33
+  e2e tests green.
 - [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
   AnyWidget`, never an `Option`.
 - [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
