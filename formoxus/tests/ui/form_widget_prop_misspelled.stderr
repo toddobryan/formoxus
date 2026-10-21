@@ -1,0 +1,7 @@
+error[E0560]: struct `Notes` has no field named `rwos`
+  --> tests/ui/form_widget_prop_misspelled.rs:37:43
+   |
+37 |             comments => { widget: Notes { rwos: 5 } },
+   |                                           ^^^^ `Notes` does not have this field
+   |
+   = note: all struct fields are already assigned

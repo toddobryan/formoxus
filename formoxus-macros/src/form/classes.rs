@@ -358,12 +358,13 @@ mod tests {
     }
 
     #[gtest]
-    fn a_misspelt_widget_gets_a_suggestion_and_no_custom() {
+    fn a_misspelt_widget_gets_a_suggestion_and_no_path_hint() {
         let msg = key_err(quote!(selct.select));
         expect_that!(msg, contains_substring("did you mean `select`"));
         let msg = key_err(quote!(fluorescent.input));
         expect_that!(msg, contains_substring("expected one of"));
-        expect_that!(msg, not(contains_substring("custom")));
+        // A selector names a built-in's slots; a dev's widget has none.
+        expect_that!(msg, not(contains_substring("path")));
     }
 
     #[gtest]

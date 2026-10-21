@@ -1,14 +1,8 @@
 error[E0277]: `Address` has no field that takes settings like `min` or `max_length`
-  --> tests/ui/form_constraint_on_a_struct.rs:17:33
+  --> tests/ui/form_constraint_on_a_struct.rs:19:13
    |
-17 |       let _ = empty_form::<Order>(form! {
-   |  _________________________________^
-18 | |         Order {
-19 | |             address => { max_length: 100 },
-   | |             ------- required by a bound introduced by this call
-20 | |         }
-21 | |     });
-   | |_____^ settings need a field formoxus knows
+19 |             address => { max_length: 100 },
+   |             ^^^^^^^ settings need a field formoxus knows
    |
 help: the trait `DefaultField` is not implemented for `Address`
   --> tests/ui/form_constraint_on_a_struct.rs:7:1

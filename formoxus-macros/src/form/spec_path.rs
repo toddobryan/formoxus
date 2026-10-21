@@ -317,7 +317,7 @@ mod tests {
         expect_that!(out, contains_substring("let _ = & __s . new_password ;"));
         // And the builder chain is still there beside it.
         expect_that!(out, contains_substring("with_title"));
-        expect_that!(out, contains_substring("with_custom_widget"));
+        expect_that!(out, contains_substring("with_widget"));
     }
 
     #[gtest]

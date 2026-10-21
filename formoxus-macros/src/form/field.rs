@@ -268,8 +268,9 @@ impl FieldBody {
     /// Free `const _` assertions that the field at `place` can take what this
     /// body declares: one per table attribute (two for `required_true`),
     /// `min <= max` and `min_length <= max_length`, a `step` above zero and
-    /// whole on an int field, and whether the widget can
-    /// render it (see `WidgetRef::checks`). Whether a bound fits the field's
+    /// whole on an int field, whether the widget can render it (see
+    /// `WidgetRef::checks`) and pass each attribute through (see
+    /// `extends_checks`). Whether a bound fits the field's
     /// type is rustc's question, since `settings_tokens` assigns it to the
     /// field's own setting.
     ///
@@ -384,7 +385,44 @@ impl FieldBody {
         }
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
+            checks.push(self.extends_checks(widget));
         }
+        quote! { #(#checks)* }
+    }
+}
+
+impl FieldBody {
+    /// One `const _` assertion per attribute the widget must pass through:
+    /// every table attribute but the validated ones, which are the field's
+    /// settings and never reach the widget. Spanned on the key, since the
+    /// value is not what is wrong.
+    ///
+    /// Only with a `widget:`. Without one the widget is
+    /// `Field::default_widget`'s, chosen at run time, so there is no type here
+    /// to ask; the table's `for:` check is what catches most of those.
+    fn extends_checks(&self, widget: &WidgetRef) -> TokenStream2 {
+        let ty = widget.type_tokens();
+        let written = widget.written();
+        let checks = self.attrs.0.iter().filter_map(|(attr_id, parsed_attr)| {
+            let AttrId::Std(attr) = attr_id else {
+                return None;
+            };
+            if attr.validated() {
+                return None;
+            }
+            let variant = Ident::new(attr.variant_name(), Span::call_site());
+            let msg = format!(
+                "`{}` is not an attribute `{written}` passes through",
+                attr.variant_name().to_snake_case(),
+            );
+            Some(quote_spanned! { parsed_attr.key_span=>
+                const _: () = ::core::assert!(
+                    <#ty as ::formoxus::widgets::Widget>::EXTENDS
+                        .contains(::formoxus::attrs::Attr::#variant),
+                    #msg
+                );
+            })
+        });
         quote! { #(#checks)* }
     }
 }
@@ -1024,12 +1062,9 @@ fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<
                     .join(", ")
             ),
         )),
-        // A custom widget receives `(values, props)` and nothing else, so a list
-        // handed to it here would go nowhere. Its own choices are its business.
-        WidgetKind::Custom(_) => Err(syn::Error::new_spanned(
-            key,
-            "a custom widget supplies its own choices",
-        )),
+        // Choices reach every widget through `WidgetProps`, so a dev's own
+        // widget may take them; whether it uses them is its business.
+        WidgetKind::Path(_) => Ok(()),
     }
 }
 
@@ -1624,6 +1659,69 @@ mod tests {
             err_of(quote! { Source { zip => { pattern: ZIP_RE } } }),
             contains_substring("expected string literal")
         );
+    }
+
+    // ── The widget must pass each attribute through ──────────────────────
+
+    /// One assert per pass-through attribute, asking the widget's own type,
+    /// with a message naming both as the dev wrote them.
+    #[gtest]
+    fn a_pass_through_attribute_is_checked_against_the_widgets_extends() {
+        let tokens = parse(quote! { Source { notes => { widget: textarea, rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring(
+                "< :: formoxus :: widgets :: Textarea as :: formoxus :: widgets :: Widget > \
+                 :: EXTENDS . contains (:: formoxus :: attrs :: Attr :: Rows)"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring("\"`rows` is not an attribute `textarea` passes through\"")
+        );
+    }
+
+    #[gtest]
+    fn a_path_widget_is_asked_by_its_path_and_named_by_its_last_segment() {
+        let tokens = parse(quote! { Source { notes => { widget: ui::Markdown, rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring("< ui :: Markdown as :: formoxus :: widgets :: Widget > :: EXTENDS")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("`rows` is not an attribute `Markdown` passes through")
+        );
+    }
+
+    /// Validated keys are the field's settings and never reach the widget, and
+    /// a quoted key is not in the table.
+    #[gtest]
+    fn settings_and_quoted_keys_are_not_asked() {
+        let tokens = parse(quote! {
+            Source { notes => { widget: textarea, max_length: 500, "data-x": "y" } }
+        })
+        .unwrap()
+        .expand()
+        .to_string();
+        expect_that!(tokens, not(contains_substring("EXTENDS")));
+    }
+
+    /// With no `widget:`, the widget is chosen at run time, so there is no type
+    /// to ask.
+    #[gtest]
+    fn no_widget_means_no_extends_check() {
+        let tokens = parse(quote! { Source { notes => { rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, not(contains_substring("EXTENDS")));
     }
 
     // ── A pattern must compile ───────────────────────────────────────────

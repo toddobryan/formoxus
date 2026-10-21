@@ -1,12 +1,15 @@
-//! `widget: <name>` and `widget: custom(…)` — the author-facing widget
-//! vocabulary.
+//! `widget: <name>` and `widget: path::To::MyWidget { prop: value }` — the
+//! author-facing widget vocabulary.
 
 use formoxus_spec::{BuiltinWidget, RenderedInputType};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{
-    Ident, Path, parenthesized,
+    Expr, ExprLit, ExprUnary, Ident, Lit, Path, Token, UnOp, braced,
     parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    spanned::Spanned,
+    token,
 };
 
 use super::suggest::{edit_distance, to_snake};
@@ -48,23 +51,48 @@ pub(crate) fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
     }
 }
 
-/// `widget`, as the `::formoxus::widgets::WidgetType` it renders as.
-fn widget_type_tokens(widget: BuiltinWidget) -> TokenStream2 {
-    let builtin = builtin_tokens(widget);
-    quote! { ::formoxus::widgets::WidgetType::Builtin(#builtin) }
+/// `widget`, as the type implementing `::formoxus::widgets::Widget` that
+/// renders it. Exhaustive, with no wildcard, so a new built-in cannot compile
+/// without a row here.
+fn builtin_type(widget: BuiltinWidget) -> TokenStream2 {
+    use RenderedInputType as T;
+    let name = match widget {
+        BuiltinWidget::Input(input_type) => match input_type {
+            T::Text => "TextInput",
+            T::Password => "PasswordInput",
+            T::Hidden => "HiddenInput",
+            T::Number => "NumberInput",
+            T::Email => "EmailInput",
+            T::Telephone => "TelInput",
+            T::Url => "UrlInput",
+            T::Search => "SearchInput",
+            T::Color => "ColorInput",
+            T::Date => "DateInput",
+            T::Time => "TimeInput",
+            T::DatetimeLocal => "DatetimeLocalInput",
+            T::Month => "MonthInput",
+            T::Week => "WeekInput",
+            T::Checkbox => "CheckboxInput",
+        },
+        BuiltinWidget::Textarea => "Textarea",
+        BuiltinWidget::Select => "Select",
+        BuiltinWidget::RadioGroup => "RadioGroup",
+        BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
+            unreachable!("parse rejects widgets that render nothing")
+        }
+    };
+    let name = format_ident!("{name}");
+    quote! { ::formoxus::widgets::#name }
 }
 
 fn rendered_input_ident(input_type: RenderedInputType) -> Ident {
     format_ident!("{input_type:?}")
 }
 
-mod widget_kw {
-    syn::custom_keyword!(custom);
-}
-
 #[derive(Debug)]
 pub(crate) struct WidgetRef {
     pub(crate) kind: WidgetKind,
+    pub(crate) props: Punctuated<syn::FieldValue, Token![,]>,
 }
 
 #[derive(Debug)]
@@ -73,35 +101,83 @@ pub(crate) enum WidgetKind {
     /// for messages) and what it resolved to. Never a widget that renders
     /// nothing yet: `parse` refuses those.
     Named { name: Ident, widget: BuiltinWidget },
-    /// `custom(MarkdownWidget)` — a `Path`, not an `Ident`, so that
-    /// `custom(inputs::MarkdownWidget)` works without importing the input.
-    Custom(Path),
+    /// `MarkdownWidget` — a `Path`, not an `Ident`, so that
+    /// `inputs::MarkdownWidget` works without importing the input.
+    Path(Path),
 }
 
 impl WidgetRef {
-    /// The `WidgetType` expression this names, fully qualified.
-    pub(crate) fn path(&self) -> TokenStream2 {
+    /// The widget's type: a built-in name through `builtin_type`, a path as
+    /// written.
+    pub(crate) fn type_tokens(&self) -> TokenStream2 {
         match &self.kind {
-            WidgetKind::Named { widget, .. } => widget_type_tokens(*widget),
-            // A NON-CAPTURING closure, which coerces to `fn(WidgetProps) ->
-            // Element`. The input goes inside `rsx!` rather than being called,
-            // so it gets a component scope of its own and may use hooks.
-            //
-            // The name is carried separately because `Debug` on a fn pointer
-            // prints an address, and panic messages and test assertions want
-            // "MarkdownWidget".
-            WidgetKind::Custom(component) => {
-                let name = last_segment_string(component);
-                quote! {
-                    ::formoxus::widgets::WidgetType::Custom {
-                        name: #name,
-                        render: |__p| ::dioxus::prelude::rsx! {
-                            #component { values: __p.values, props: __p.props }
-                        },
-                    }
-                }
-            }
+            WidgetKind::Named { widget, .. } => builtin_type(*widget),
+            WidgetKind::Path(path) => quote! { #path },
         }
+    }
+
+    /// The widget as the dev wrote it, for messages: the lowercase name, or
+    /// a path's last segment.
+    pub(crate) fn written(&self) -> String {
+        match &self.kind {
+            WidgetKind::Named { name, .. } => name.to_string(),
+            WidgetKind::Path(path) => path
+                .segments
+                .last()
+                .map(|s| s.ident.to_string())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The widget's value: a struct expression of its type, with the props
+    /// written in its braces and `Default` for the rest.
+    ///
+    /// With no props, `Default::default()` alone rather than `#ty {
+    /// ..Default::default() }` with nothing before the `..`, which trips
+    /// clippy's `needless_update` in the dev's crate.
+    pub(crate) fn expr(&self) -> TokenStream2 {
+        let ty = self.type_tokens();
+        if self.props.is_empty() {
+            return quote! { <#ty as ::core::default::Default>::default() };
+        }
+        let props = self.props.iter().map(|prop| {
+            let attrs = &prop.attrs;
+            let member = &prop.member;
+            let value = prop_value(&prop.expr);
+            quote! { #(#attrs)* #member: #value }
+        });
+        quote! { #ty { #(#props,)* ..::core::default::Default::default() } }
+    }
+}
+
+/// One prop's value as the struct expression gets it. A bare number literal
+/// goes in as written, so it takes the prop's type the way it would in
+/// hand-written Rust; `Into::into` would leave it an `i32`. Anything else goes
+/// through `Into::into`, so `placeholder: "Name"` fills a `String`. Fully
+/// qualified rather than `.into()` so precedence cannot bite (`a + b` then
+/// `.into()` would convert `b` alone), and spanned at the value so a wrong
+/// type points there.
+fn prop_value(expr: &Expr) -> TokenStream2 {
+    if is_number_literal(expr) {
+        quote! { #expr }
+    } else {
+        quote_spanned! { expr.span()=> ::core::convert::Into::into(#expr) }
+    }
+}
+
+/// `5`, `2.5`, and either negated.
+fn is_number_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(_) | Lit::Float(_),
+            ..
+        }) => true,
+        Expr::Unary(ExprUnary {
+            op: UnOp::Neg(_),
+            expr,
+            ..
+        }) => is_number_literal(expr),
+        _ => false,
     }
 }
 
@@ -147,7 +223,7 @@ impl WidgetRef {
     pub(crate) fn checks(&self, shape: &TokenStream2, has_choices: bool) -> TokenStream2 {
         let span = match &self.kind {
             WidgetKind::Named { name, .. } => name.span(),
-            WidgetKind::Custom(path) => path
+            WidgetKind::Path(path) => path
                 .segments
                 .last()
                 .map_or_else(proc_macro2::Span::call_site, |s| s.ident.span()),
@@ -185,47 +261,29 @@ impl WidgetRef {
     }
 }
 
-/// The last segment of a path, as a string — `"MarkdownWidget"` for
-/// `inputs::MarkdownWidget`.
-fn last_segment_string(path: &Path) -> String {
-    path.segments
-        .last()
-        .map(|s| s.ident.to_string())
-        .unwrap_or_default()
-}
-
 impl Parse for WidgetRef {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
         let kind = input.parse::<WidgetKind>()?;
-        // Braces were where `choices` went before it moved to the field. Said
-        // plainly, rather than left to syn's bare "expected `,`".
-        if input.peek(syn::token::Brace) {
-            return Err(input.error(
-                "a widget takes no arguments: write `choices:` beside `widget:`, \
-                 not inside its braces",
-            ));
+        let mut props = Punctuated::new();
+        if input.peek(token::Brace) {
+            let content;
+            braced!(content in input);
+            props = Punctuated::parse_terminated(&content)?;
         }
-        Ok(Self { kind })
+        Ok(Self { kind, props })
     }
 }
 
 impl Parse for WidgetKind {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
-        if input.peek(widget_kw::custom) {
-            let kw: widget_kw::custom = input.parse()?;
-            if !input.peek(syn::token::Paren) {
-                return Err(syn::Error::new(
-                    kw.span,
-                    "`custom` needs the widget it renders — write `custom(MyWidget)`",
-                ));
-            }
-            let inner;
-            parenthesized!(inner in input);
-            let component: Path = inner.parse()?;
-            if !inner.is_empty() {
-                return Err(inner.error("`custom` takes one component and nothing else"));
-            }
-            return Ok(Self::Custom(component));
+        let is_name = input.peek(Ident)
+            && !input.peek2(Token![::])
+            && input
+                .cursor()
+                .ident()
+                .is_some_and(|(id, _)| id.to_string().starts_with(char::is_lowercase));
+        if !is_name {
+            return Ok(Self::Path(Path::parse_mod_style(input)?));
         }
 
         let name: Ident = input.parse()?;
@@ -245,21 +303,16 @@ impl Parse for WidgetKind {
     }
 }
 
-/// `{ choices: STATES }` — the arguments one widget accepts.
-///
-/// Gated by widget rather than accepted everywhere, so `widget: text { choices:
-/// … }` is a compile error naming the widgets that would have worked, instead of
-/// a setting that is silently ignored at render.
 /// The message for a name that is not in the table.
 ///
 /// Three cases, in order of how likely the author is to have meant them: a name
-/// that IS in the table under a different case (`Password`, `DatetimeLocal` — the
-/// old `WidgetType`-shaped spelling), a near miss, and no idea.
+/// that IS in the table under a different case (`datetimeLocal`, or in a
+/// `classes_plus:` selector `Password`), a near miss, and no idea.
 ///
-/// `custom` is whether `custom(MyWidget)` is an option where the name was
-/// written: after `widget:` it is, in a `classes_plus:` selector it is not (a
-/// custom widget has no class slots).
-pub(crate) fn unknown_widget(name: &Ident, custom: bool) -> String {
+/// `path_ok` is whether a path to the dev's own widget type is an option where
+/// the name was written: after `widget:` it is, in a `classes_plus:` selector it
+/// is not (a custom widget has no class slots).
+pub(crate) fn unknown_widget(name: &Ident, path_ok: bool) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
     if lowered != written && BuiltinWidget::from_form_name(&lowered).is_some() {
@@ -275,8 +328,8 @@ pub(crate) fn unknown_widget(name: &Ident, custom: bool) -> String {
         None => format!(
             "unknown widget `{written}` — expected one of {}{}",
             widget_names().collect::<Vec<_>>().join(", "),
-            if custom {
-                ", or `custom(MyWidget)`"
+            if path_ok {
+                ", or a path to your own widget type"
             } else {
                 ""
             }
@@ -291,6 +344,7 @@ mod tests {
     use crate::form::{Entry, FormSpecInput};
     use googletest::prelude::*;
     use quote::quote;
+    use std::collections::HashSet;
 
     // ── The widget vocabulary ───────────────────────────────────────────
 
@@ -305,10 +359,19 @@ mod tests {
             .expect("a field with a widget")
     }
 
+    /// The widget type `widget: <written>` resolves to.
+    fn type_of(written: &proc_macro2::TokenStream) -> String {
+        let spec = parse(quote! { Source { f => { widget: #written } } })
+            .unwrap_or_else(|e| panic!("`{written}` should parse: {e}"));
+        widget_of(&spec).type_tokens().to_string()
+    }
+
     #[gtest]
-    fn every_name_in_the_table_parses_and_resolves() {
+    fn every_name_in_the_table_parses_and_resolves_to_its_own_type() {
         // Generated from `BuiltinWidget::ALL`, so every widget's name is tried.
         // A widget that renders nothing yet must instead be refused, by name.
+        // Distinct types, so a row copied without its name changed fails here.
+        let mut types = HashSet::new();
         for widget in BuiltinWidget::ALL {
             let name = widget.form_name();
             let id = Ident::new(name, proc_macro2::Span::call_site());
@@ -323,51 +386,46 @@ mod tests {
                 continue;
             }
             let spec = parsed.unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
-            let tokens = widget_of(&spec).path().to_string();
+            let tokens = widget_of(&spec).type_tokens().to_string();
             expect_that!(
                 &tokens,
-                contains_substring(":: formoxus :: widgets :: WidgetType ::"),
+                starts_with(":: formoxus :: widgets ::"),
                 "for widget `{name}`"
+            );
+            expect_that!(
+                types.insert(tokens.clone()),
+                eq(true),
+                "`{name}` resolves to `{tokens}`, as an earlier name did"
             );
         }
     }
 
     #[gtest]
-    fn a_name_resolves_to_the_qualified_two_level_path() {
+    fn a_name_resolves_to_its_widget_type() {
         // The whole point of the flat vocabulary: `password` on the outside,
-        // `Input(Password)` on the inside, and the author never sees the split.
-        let spec = parse(quote! { LoginForm { password => { widget: password } } }).unwrap();
-        let tokens = widget_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("WidgetType :: Builtin"));
-        expect_that!(tokens, contains_substring("BuiltinWidget :: Input"));
-        expect_that!(tokens, contains_substring("InputType :: Password"));
-    }
-
-    #[gtest]
-    fn a_non_input_name_resolves_to_a_bare_variant() {
-        let spec = parse(quote! { Source { notes => { widget: textarea } } }).unwrap();
-        let tokens = widget_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("BuiltinWidget :: Textarea"));
-        expect_that!(tokens, not(contains_substring("InputType")));
+        // `PasswordInput` on the inside, and the author never sees the type.
+        expect_that!(
+            type_of(&quote!(password)),
+            eq(":: formoxus :: widgets :: PasswordInput")
+        );
+        expect_that!(
+            type_of(&quote!(textarea)),
+            eq(":: formoxus :: widgets :: Textarea")
+        );
     }
 
     #[gtest]
     fn an_html_spelling_wins_over_the_enums() {
         // `tel` is HTML's name; the variant is `Telephone`. The divergence is the
         // decoupling working — an author writes what HTML calls it.
-        let spec = parse(quote! { Source { phone => { widget: tel } } }).unwrap();
-        expect_that!(
-            widget_of(&spec).path().to_string(),
-            contains_substring("InputType :: Telephone")
-        );
+        expect_that!(type_of(&quote!(tel)), ends_with(":: TelInput"));
     }
 
     #[gtest]
     fn a_hyphenated_html_name_is_snake_cased() {
-        let spec = parse(quote! { Source { at => { widget: datetime_local } } }).unwrap();
         expect_that!(
-            widget_of(&spec).path().to_string(),
-            contains_substring("InputType :: DatetimeLocal")
+            type_of(&quote!(datetime_local)),
+            ends_with(":: DatetimeLocalInput")
         );
     }
 
@@ -378,17 +436,13 @@ mod tests {
         expect_that!(msg, contains_substring("did you mean `password`"));
     }
 
+    /// A lowercase name in the wrong case is still named as a case error. A
+    /// capitalized one never reaches the table: it is a path.
     #[gtest]
-    fn the_enum_spelling_is_named_as_a_case_error() {
-        // Someone reading `WidgetType` will try `Password` and `DatetimeLocal`.
-        // Both are in the table under another case, so say so instead of guessing.
+    fn a_camel_cased_name_is_named_as_a_case_error() {
         expect_that!(
-            err_of(quote! { Source { p => { widget: Password } } }),
-            contains_substring("widget names are lowercase, write `password`")
-        );
-        expect_that!(
-            err_of(quote! { Source { p => { widget: DatetimeLocal } } }),
-            contains_substring("write `datetime_local`")
+            err_of(quote! { Source { p => { widget: datetimeLocal } } }),
+            contains_substring("widget names are lowercase, write `datetime_local`")
         );
     }
 
@@ -396,7 +450,7 @@ mod tests {
     fn a_nonsense_widget_lists_the_vocabulary() {
         let msg = err_of(quote! { Source { p => { widget: fluorescent } } });
         expect_that!(msg, contains_substring("textarea"));
-        expect_that!(msg, contains_substring("custom(MyWidget)"));
+        expect_that!(msg, contains_substring("or a path to your own widget type"));
     }
 
     #[gtest]
@@ -405,11 +459,7 @@ mod tests {
         // want the spinner. What is NOT there is `integer`/`float`: those were
         // `InputType` variant names, never HTML ones, and two spellings for one
         // attribute is the drift this table exists to prevent.
-        let spec = parse(quote! { Q { n => { widget: number } } }).unwrap();
-        expect_that!(
-            widget_of(&spec).path().to_string(),
-            contains_substring("InputType :: Number")
-        );
+        expect_that!(type_of(&quote!(number)), ends_with(":: NumberInput"));
         expect_that!(
             err_of(quote! { Q { n => { widget: integer } } }),
             contains_substring("unknown widget `integer`")
@@ -418,9 +468,8 @@ mod tests {
 
     #[gtest]
     fn the_old_two_level_spelling_is_rejected() {
-        // `Input(Password)` was the spelling before the table existed. It now
-        // fails on `Input`, which is not a name — and `input` is not one either,
-        // so the message falls through to the vocabulary list.
+        // `Input(Password)` was the spelling before the table existed. `Input`
+        // now parses as a path, and the parenthesis after it is a syntax error.
         expect_that!(
             err_of(quote! { Source { p => { widget: Input(Password) } } }).len(),
             gt(0)
@@ -461,7 +510,7 @@ mod tests {
             contains_substring(":: formoxus :: field_kind :: choice_field_for")
         );
         expect_that!(tokens, contains_substring("STATES"));
-        expect_that!(tokens, contains_substring("with_custom_widget"));
+        expect_that!(tokens, contains_substring("with_widget"));
         expect_that!(tokens, not(contains_substring("field_kind :: field_for")));
     }
 
@@ -471,7 +520,7 @@ mod tests {
         let spec = parse(quote! { Address { state => { choices: STATES } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(tokens, contains_substring("choice_field_for"));
-        expect_that!(tokens, not(contains_substring("with_custom_widget")));
+        expect_that!(tokens, not(contains_substring("with_widget")));
     }
 
     #[gtest]
@@ -502,13 +551,15 @@ mod tests {
         );
     }
 
+    /// Choices reach every widget through `WidgetProps`, so a dev's own widget
+    /// may take them.
     #[gtest]
-    fn a_custom_widget_is_told_to_manage_its_own() {
+    fn a_path_widget_takes_choices() {
+        let spec = parse(quote! { Source { notes => { widget: Picker, choices: STATES } } })
+            .expect("a dev's widget receives choices like any other");
         expect_that!(
-            parse(quote! { Source { notes => { widget: custom(Picker), choices: STATES } } })
-                .expect_err("a custom widget never receives them")
-                .to_string(),
-            contains_substring("supplies its own choices")
+            spec.expand().to_string(),
+            contains_substring("choice_field_for")
         );
     }
 
@@ -545,18 +596,6 @@ mod tests {
         );
     }
 
-    /// The old spelling, `widget: select { choices: X }`, gets told where
-    /// `choices` went, not syn's bare "expected `,`".
-    #[gtest]
-    fn braces_after_a_widget_point_to_the_new_spelling() {
-        expect_that!(
-            parse(quote! { Address { state => { widget: select { choices: STATES } } } })
-                .expect_err("widgets take no arguments now")
-                .to_string(),
-            contains_substring("write `choices:` beside `widget:`")
-        );
-    }
-
     #[gtest]
     fn a_widget_without_choices_makes_no_choice_field() {
         let spec = parse(quote! { Address { state => { widget: select } } }).unwrap();
@@ -567,65 +606,150 @@ mod tests {
         );
     }
 
-    // ── `custom(…)` ──────────────────────────────────────────────────────
+    // ── A path to the dev's own widget ───────────────────────────────────
 
     #[gtest]
-    fn a_custom_widget_parses() {
-        let spec = parse(quote! { Source { notes => { widget: custom(MarkdownWidget) } } })
-            .expect("custom(MarkdownWidget) should parse");
-        expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
+    fn a_capitalized_name_is_a_path() {
+        // Even one spelled like a built-in's variant: `Password` is a type the
+        // dev must have in scope, and rustc's "cannot find type" says so.
+        expect_that!(type_of(&quote!(MarkdownWidget)), eq("MarkdownWidget"));
+        expect_that!(type_of(&quote!(Password)), eq("Password"));
     }
 
     #[gtest]
-    fn a_custom_widget_may_be_module_qualified() {
+    fn a_path_may_be_module_qualified() {
         // The reason it is a `Path` and not an `Ident`: naming a widget should not
-        // require importing it.
-        let spec =
-            parse(quote! { Source { notes => { widget: custom(widgets::MarkdownWidget) } } })
-                .expect("a qualified component path should parse");
-        expect_that!(fields(&spec)[0].1, contains_substring("MarkdownWidget"));
-    }
-
-    #[gtest]
-    fn a_custom_widget_expands_to_a_non_capturing_closure() {
-        // Pins the whole contract: the input is placed INSIDE rsx! (so it gets a
-        // component scope and may use hooks) rather than called, the closure
-        // captures nothing (so it coerces to `fn(WidgetProps) -> Element`), and
-        // the readable name rides along because Debug on a fn pointer is an
-        // address.
-        let spec =
-            parse(quote! { Source { notes => { widget: custom(MarkdownWidget) } } }).unwrap();
-        let tokens = widget_of(&spec).path().to_string();
-        expect_that!(tokens, contains_substring("WidgetType :: Custom"));
-        expect_that!(tokens, contains_substring("name : \"MarkdownWidget\""));
-        expect_that!(tokens, contains_substring("render : | __p |"));
-        expect_that!(tokens, contains_substring("rsx !"));
-        expect_that!(tokens, contains_substring("values : __p . values"));
-    }
-
-    #[gtest]
-    fn a_qualified_custom_widget_keeps_only_the_last_segment_as_its_name() {
-        let spec =
-            parse(quote! { Source { notes => { widget: custom(a::b::MarkdownWidget) } } }).unwrap();
+        // require importing it. Lowercase throughout is still a path: the `::`
+        // after the first segment is what says so.
         expect_that!(
-            widget_of(&spec).path().to_string(),
-            contains_substring("name : \"MarkdownWidget\"")
+            type_of(&quote!(widgets::MarkdownWidget)),
+            eq("widgets :: MarkdownWidget")
+        );
+        expect_that!(
+            type_of(&quote!(widgets::markdown)),
+            eq("widgets :: markdown")
         );
     }
 
     #[gtest]
-    fn custom_without_a_widget_is_rejected() {
+    fn a_path_from_a_keyword_or_the_root_is_a_path() {
+        expect_that!(type_of(&quote!(crate::Markdown)), eq("crate :: Markdown"));
+        expect_that!(type_of(&quote!(self::Markdown)), eq("self :: Markdown"));
+        expect_that!(type_of(&quote!(::ui::Markdown)), eq(":: ui :: Markdown"));
+    }
+
+    #[gtest]
+    fn a_path_widget_is_the_last_segment_in_messages() {
+        let spec = parse(quote! { Source { notes => { widget: a::b::MarkdownWidget } } }).unwrap();
+        expect_that!(widget_of(&spec).written(), eq("MarkdownWidget"));
+        let spec = parse(quote! { Source { notes => { widget: textarea } } }).unwrap();
+        expect_that!(widget_of(&spec).written(), eq("textarea"));
+    }
+
+    // ── Props in the widget's braces ─────────────────────────────────────
+
+    /// The widget's value, `WidgetRef::expr`, for `widget: <written>`.
+    fn expr_of(written: &proc_macro2::TokenStream) -> String {
+        let spec = parse(quote! { Source { f => { widget: #written } } })
+            .unwrap_or_else(|e| panic!("`{written}` should parse: {e}"));
+        widget_of(&spec).expr().to_string()
+    }
+
+    /// Not `Textarea { ..Default::default() }`, which is clippy's
+    /// `needless_update` in the dev's crate.
+    #[gtest]
+    fn no_props_is_the_default_alone() {
         expect_that!(
-            err_of(quote! { Source { notes => { widget: custom } } }),
-            contains_substring("custom(MyWidget)")
+            expr_of(&quote!(textarea)),
+            eq(
+                "< :: formoxus :: widgets :: Textarea as :: core :: default :: Default > :: default ()"
+            )
+        );
+        expect_that!(
+            expr_of(&quote!(MarkdownWidget)),
+            eq("< MarkdownWidget as :: core :: default :: Default > :: default ()")
         );
     }
 
     #[gtest]
-    fn custom_with_two_widgets_is_rejected() {
+    fn empty_braces_are_no_props() {
         expect_that!(
-            err_of(quote! { Source { notes => { widget: custom(A, B) } } }),
-            contains_substring("one component")
+            expr_of(&quote!(textarea {})),
+            eq(&expr_of(&quote!(textarea)))
         );
+    }
+
+    #[gtest]
+    fn props_fill_a_struct_expression_and_default_the_rest() {
+        let expr = expr_of(&quote!(MarkdownWidget { rows: 5 }));
+        expect_that!(
+            expr,
+            eq("MarkdownWidget { rows : 5 , .. :: core :: default :: Default :: default () }")
+        );
+    }
+
+    /// A number literal takes the prop's type, as in hand-written Rust;
+    /// through `Into::into` it would be an `i32`.
+    #[gtest]
+    fn a_number_literal_goes_in_as_written() {
+        let expr = expr_of(&quote!(MarkdownWidget {
+            rows: 5,
+            scale: 2.5,
+            offset: -3
+        }));
+        expect_that!(expr, contains_substring("rows : 5 ,"));
+        expect_that!(expr, contains_substring("scale : 2.5 ,"));
+        expect_that!(expr, contains_substring("offset : - 3 ,"));
+    }
+
+    #[gtest]
+    fn anything_else_goes_through_into() {
+        let expr = expr_of(&quote!(MarkdownWidget {
+            hint: "Notes",
+            rows: ROWS,
+            wrap: a + b
+        }));
+        expect_that!(
+            expr,
+            contains_substring("hint : :: core :: convert :: Into :: into (\"Notes\")")
+        );
+        expect_that!(
+            expr,
+            contains_substring("rows : :: core :: convert :: Into :: into (ROWS)")
+        );
+        // The whole sum, not `b` alone, which `a + b.into()` would convert.
+        expect_that!(
+            expr,
+            contains_substring("wrap : :: core :: convert :: Into :: into (a + b)")
+        );
+    }
+
+    #[gtest]
+    fn a_shorthand_prop_is_its_own_variable() {
+        expect_that!(
+            expr_of(&quote!(MarkdownWidget { rows })),
+            contains_substring("rows : :: core :: convert :: Into :: into (rows)")
+        );
+    }
+
+    #[gtest]
+    fn the_dev_does_not_write_the_rest_themselves() {
+        expect_that!(
+            err_of(quote! { Source { f => { widget: MarkdownWidget { ..Default::default() } } } })
+                .len(),
+            gt(0)
+        );
+    }
+
+    #[gtest]
+    fn the_widget_reaches_the_builder_through_with_widget() {
+        let spec =
+            parse(quote! { Source { notes => { widget: MarkdownWidget { rows: 5 } } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring(". with_widget (\"notes\" , MarkdownWidget { rows : 5 ,")
+        );
+        expect_that!(tokens, not(contains_substring("with_custom_widget")));
     }
 }

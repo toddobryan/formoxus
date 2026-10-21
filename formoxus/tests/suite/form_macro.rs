@@ -614,31 +614,43 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
     );
 }
 
-// ── `custom(Widget)` ─────────────────────────────────────────────────────
+// ── A dev's own widget ───────────────────────────────────────────────────
 //
-// The escape hatch for a value kind no built-in widget can serve. These are
+// `widget: ShoutyWidget`, a path to a type implementing `Widget`. These are
 // here, and not as an inline `mod tests`, for the usual reason: a custom
-// widget is a component in the CONSUMING crate, which is exactly what the
-// macro has to expand against.
+// widget is a type in the CONSUMING crate, which is exactly what the macro has
+// to expand against.
 
-/// Stands in for `ui::MarkdownInput` and the source picker — a component taking
-/// the `(values, props)` pair every built-in widget gets.
+/// Stands in for `ui::MarkdownInput` and the source picker.
 ///
-/// It reads `props` to prove the boundary arrives intact, and calls `use_hook`
-/// to prove the widget gets a component scope of its own. That second part is
-/// the load-bearing one: the real widgets need `use_resource` (to fetch a
-/// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
-/// function call from `render_widget` could not provide.
+/// It reads `props` to prove the boundary arrives intact, and its view calls
+/// `use_hook` to prove a widget can reach a component scope of its own. That
+/// second part is the load-bearing one: the real widgets need `use_resource`
+/// (to fetch a picker's choices) and `use_signal` (to hold a preview toggle),
+/// which `Widget::render`, a plain method, may not call itself.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ShoutyWidget;
+
+impl formoxus::widgets::Widget for ShoutyWidget {
+    const NAME: &'static str = "shouty";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+
+    /// `render` may not call hooks, so it hands off to a component that does.
+    fn render(&self, props: formoxus::widgets::widget_props::WidgetProps) -> Element {
+        let label = props.label.unwrap_or_default();
+        rsx! { ShoutyView { path: props.path, label } }
+    }
+
+    fn default_classes() -> Vec<(&'static str, formoxus::classes::Slot)> {
+        Vec::new()
+    }
+}
+
 #[component]
-fn ShoutyWidget(
-    values: formoxus::widgets::ValuesStore,
-    props: formoxus::widgets::FieldProps,
-) -> Element {
-    let _ = values;
+fn ShoutyView(path: String, label: String) -> Element {
     let marker = use_hook(|| "scope-ok");
-    let label = props.label.clone().unwrap_or_default();
     rsx! {
-        div { class: "shouty", "data-marker": "{marker}", "data-path": "{props.path}",
+        div { class: "shouty", "data-marker": "{marker}", "data-path": "{path}",
             "{label.to_uppercase()}"
         }
     }
@@ -651,7 +663,7 @@ fn CustomSecret() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    secret => { widget: custom(ShoutyWidget) },
+                    secret => { widget: ShoutyWidget },
                 }
             },
         )

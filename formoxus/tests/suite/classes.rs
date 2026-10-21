@@ -13,8 +13,10 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::attrs::AttrSet;
 use formoxus::classes::{FixedKey, Slot};
-use formoxus::widgets::{BuiltinWidget, FieldProps, RenderedInputType, ValuesStore};
+use formoxus::widgets::widget_props::WidgetProps;
+use formoxus::widgets::{BuiltinWidget, RenderedInputType, Widget};
 use formoxus::{Classes, Form, FormSpec, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
@@ -199,19 +201,29 @@ fn classes_plus_values_are_normalised_as_a_fields_are() {
 
 /// A custom widget that shows what it was handed: the form slot and the
 /// select's, from `props.classes`.
-#[component]
-fn ClassProbe(values: ValuesStore, props: FieldProps) -> Element {
-    let _ = values;
-    let form = props
-        .classes
-        .fixed_class(FixedKey::Form, false)
-        .unwrap_or_default();
-    let select = props
-        .classes
-        .part_class(BuiltinWidget::Select, "select", false)
-        .unwrap_or_default();
-    rsx! {
-        span { "probe form=[{form}] select=[{select}]" }
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ClassProbe;
+
+impl Widget for ClassProbe {
+    const NAME: &'static str = "class_probe";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        let form = props
+            .classes
+            .fixed_class(FixedKey::Form, false)
+            .unwrap_or_default();
+        let select = props
+            .classes
+            .part_class(BuiltinWidget::Select, "select", false)
+            .unwrap_or_default();
+        rsx! {
+            span { "probe form=[{form}] select=[{select}]" }
+        }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        Vec::new()
     }
 }
 
@@ -226,7 +238,7 @@ fn a_custom_widget_receives_the_forms_resolved_classes() {
         let form = use_form(|| {
             empty_form(form! {
                 Signup {
-                    name => { widget: custom(ClassProbe) },
+                    name => { widget: ClassProbe },
                     classes_plus: { form: + [mine] },
                 }
             })

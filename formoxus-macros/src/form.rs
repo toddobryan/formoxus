@@ -483,6 +483,29 @@ where
     input.peek(kw) && input.peek2(Token![:])
 }
 
+/// `tokens` with every span, inside groups too, set to `span`.
+///
+/// For the projection in `field_for(|__m: &M| &__m.a.b, …)`. `project` builds
+/// it with call-site spans, and when the field's type fails `DefaultField`
+/// through another impl (`Option<Shipping>` needs `Shipping`), rustc reports
+/// at the closure, whose span then runs from the field to the call site: the
+/// whole `form!`. On the field throughout, the caret lands on the field.
+fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
+    tokens
+        .into_iter()
+        .map(|mut tt| {
+            if let proc_macro2::TokenTree::Group(g) = &tt {
+                let mut inner = proc_macro2::Group::new(g.delimiter(), respan(g.stream(), span));
+                inner.set_span(span);
+                tt = proc_macro2::TokenTree::Group(inner);
+            } else {
+                tt.set_span(span);
+            }
+            tt
+        })
+        .collect()
+}
+
 impl FieldSpec {
     /// The `FormSpec` builder calls one field body contributes, in order:
     /// label, widget, choices, the field's settings (`with_node`), and the
@@ -495,11 +518,10 @@ impl FieldSpec {
             .label
             .as_ref()
             .map(|l| quote! { .with_label(#key, &#l) });
-        let widget = self.body.widget.as_ref().map(|c| {
-            let c = c.path();
-            quote! { .with_custom_widget(#key, #c) }
+        let widget = self.body.widget.as_ref().map(|w| {
+            let w = w.expr();
+            quote! { .with_widget(#key, #w) }
         });
-        let place = project(&self.path.segments);
         // Spanned onto the field's path, so a field with no default
         // field (a struct, an enum, a newtype) is reported at
         // `address`, not across the whole `form!`.
@@ -508,6 +530,7 @@ impl FieldSpec {
             .segments
             .last()
             .map_or_else(Span::call_site, |s| s.ident.span());
+        let place = respan(project(&self.path.segments), span);
         // At most one constructor: `FieldBody::parse` refuses `choices` beside a
         // validated key, so a field never needs both.
         let node = match &self.body.choices {
@@ -560,8 +583,8 @@ pub(crate) mod tests {
     }
 
     /// Field entries as `("dotted.path", "widget", "label")`, with `""` for an
-    /// absent widget or label. The widget is rendered the way `expand` will
-    /// have to, so this also pins that `Input(Password)` keeps both idents.
+    /// absent widget or label. The widget is the name as written, or a path's
+    /// tokens (`widgets :: Markdown`).
     pub(crate) fn fields(spec: &FormSpecInput) -> Vec<(String, String, String)> {
         spec.entries
             .iter()
@@ -571,9 +594,7 @@ pub(crate) mod tests {
                     match body.widget.as_ref().map(|w| &w.kind) {
                         None => String::new(),
                         Some(WidgetKind::Named { name, .. }) => name.to_string(),
-                        Some(WidgetKind::Custom(w)) => {
-                            format!("custom({})", quote!(#w))
-                        }
+                        Some(WidgetKind::Path(w)) => quote!(#w).to_string(),
                     },
                     match &body.label {
                         None => String::new(),

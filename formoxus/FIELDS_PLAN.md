@@ -550,32 +550,32 @@ widgets become ONE concept.
   checkpoints where it compiles. Todd: 1–12; Claude: 13–17.
 
   *A. Parse* (`formoxus-macros/src/form/widget.rs`)
-  1. `WidgetKind` keeps `Named { name, widget }`; `Custom(Path)` becomes
+  1. [x] `WidgetKind` keeps `Named { name, widget }`; `Custom(Path)` becomes
      `Path(Path)`. `WidgetRef` gains `props: Punctuated<syn::FieldValue,
      Token![,]>`, empty without braces.
-  2. Name or path: a single ident, not followed by `::`, starting lowercase
+  2. [x] Name or path: a single ident, not followed by `::`, starting lowercase
      is a built-in name, looked up as today (same "unknown widget" and "not
      supported yet" errors). Anything else is a path, parsed with
      `Path::parse_mod_style` so a stray `<` is not read as generics.
-  3. Optional braces: `if input.peek(token::Brace) { let content;
+  3. [x] Optional braces: `if input.peek(token::Brace) { let content;
      braced!(content in input); props =
      Punctuated::parse_terminated(&content)?; }`. `FieldValue` is Rust's
      `member: expr` (shorthand `{ rows }` too) and keeps each key's span. A
      dev's own `..Default::default()` inside is a syn error, which is fine.
-  4. Delete the `custom` keyword module, its two errors, and the "a widget
+  4. [x] Delete the `custom` keyword module, its two errors, and the "a widget
      takes no arguments" braces error.
-  5. `unknown_widget`'s "or `custom(MyWidget)`" hint becomes "or a path to
+  5. [x] `unknown_widget`'s "or `custom(MyWidget)`" hint becomes "or a path to
      your own widget type". `classes.rs` still passes `false`.
 
   *B. Emit*
-  6. `fn builtin_type(widget: BuiltinWidget) -> TokenStream2`:
+  6. [x] `fn builtin_type(widget: BuiltinWidget) -> TokenStream2`:
      `::formoxus::widgets::TextInput` and the rest, an exhaustive `match`
      with no wildcard so a new built-in cannot compile without a row.
      `SelectMultiple`, `CheckboxMultiple`, `File` are `unreachable!` (parse
      refuses them).
-  7. `WidgetRef::type_tokens()`: a name through the table, a path as
+  7. [x] `WidgetRef::type_tokens()`: a name through the table, a path as
      written.
-  8. `WidgetRef::expr()`:
+  8. [x] `WidgetRef::expr()`:
      - no props: `<#ty as ::core::default::Default>::default()`. NOT
        `#ty { ..Default::default() }` with nothing before the `..`, which
        trips clippy's `needless_update` in the dev's crate;
@@ -586,18 +586,20 @@ widgets become ONE concept.
        than `.into()` so precedence cannot bite (`a + b` then `.into()`
        would apply to `b` alone), `quote_spanned!` at the value so a wrong
        type points there.
-  9. `form.rs`'s `builder_calls`: `.with_widget(#key, #expr)` instead of
+  9. [x] `form.rs`'s `builder_calls`: `.with_widget(#key, #expr)` instead of
      `.with_custom_widget(#key, #path)`.
 
   *C. Check*
-  10. `WidgetRef::checks`: `Named` keeps its three `BuiltinWidget` checks,
+  10. [x] `WidgetRef::checks`: `Named` keeps its three `BuiltinWidget` checks,
       `Path` only `is_single_value`, spanned on the last segment as today.
-  11. `reject_choices_unless_chooser` (`field.rs`): drop the `Custom` arm; a
+      (Already so; no change needed.)
+  11. [x] `reject_choices_unless_chooser` (`field.rs`): drop the `Custom` arm; a
       path is `Ok`, as choices reach any widget through `WidgetProps`.
 
-  **Checkpoint 1: it compiles; the suite says what broke.**
+  **Checkpoint 1: it compiles; the suite says what broke.** Reached
+  2026-10-20: only the two custom widgets (item 15) broke.
 
-  12. `EXTENDS` asserts, in `FieldBody::type_checks` (`field.rs`), which
+  12. [x] `EXTENDS` asserts, in `FieldBody::type_checks` (`field.rs`), which
       already loops over `self.attrs` and has `self.widget`. Only when there
       is a widget: per `AttrId::Std(attr)` with `!attr.validated()`, emit
       `const _: () = ::core::assert!(<#ty as
@@ -610,20 +612,36 @@ widgets become ONE concept.
       field is now refused (`HiddenInput::EXTENDS` is empty), which is right,
       since hidden drops it. Can be a second commit after checkpoint 1.
 
-  **Checkpoint 2.**
+  **Checkpoint 2.** Reached 2026-10-20: nothing in the suite, examples or
+  e2e forms tripped an `EXTENDS` assert.
 
   *D. Fallout (Claude, from checkpoint 1)*
-  13. `widget.rs` unit tests: drop the `custom(…)` and braces tests; add a
+  13. [x] `widget.rs` unit tests: drop the `custom(…)` and braces tests; add a
       path, a qualified path, props, a number literal as written, a string
       through `Into::into`, no props through `Default::default()`.
-  14. `form.rs`'s test helper `fields()`: its `Custom` arm prints the path.
-  15. The suite's two custom widgets, `ClassProbe` (`classes.rs`) and
+  14. [x] `form.rs`'s test helper `fields()`: its `Custom` arm prints the path.
+      (`formoxus-macros/src/form.rs`, not under `form/`. Also fixed: a
+      `spec_path.rs` test checking for `with_custom_widget`, and a `classes.rs`
+      test whose "no `custom`" check had gone vacuous, now "no path hint".)
+  15. [x] The suite's two custom widgets, `ClassProbe` (`classes.rs`) and
       `ShoutyWidget` (`form_macro.rs`), are components today: rewritten as
       `Widget` impls, the first end-to-end proof of a custom widget.
-  16. trybuild: re-bless what moves; new goldens for a misspelled prop, a
+  16. [x] trybuild: re-bless what moves; new goldens for a misspelled prop, a
       prop of the wrong type, an attribute not in `EXTENDS`, and a prop on a
       widget with none.
-  17. The README's `custom(MyWidget)` section (line 141, both copies).
+      (2026-10-20: nothing moved; the four goldens are
+      `form_widget_prop_misspelled`, `form_widget_prop_wrong_type`,
+      `form_attribute_not_in_extends`, `form_widget_prop_on_a_widget_with_none`.
+      A misspelled prop gets no "did you mean": the `..Default::default()`
+      counts as assigning every field.)
+  17. [x] The README's `custom(MyWidget)` section (line 141, both copies).
+      (One file: `formoxus/README.md` is a symlink to the root one.)
+
+  Done beside D (2026-10-20): `builder_calls` re-spans the projection in
+  `field_for(|__m| &__m.a, …)` onto the field (`respan` in `form.rs`). rustc
+  1.98 had moved the `DefaultField` error for `Option<Enum>` onto the whole
+  `form!`; three more goldens had been blessed that way. All four now point
+  at the field.
 - [ ] **`Field::default_widget`** returns one; `ChoiceField` returns a
   `Select` (its choices reach it through `WidgetProps`, decision 4 above,
   not as a prop).

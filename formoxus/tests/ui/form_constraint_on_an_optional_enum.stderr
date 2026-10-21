@@ -21,6 +21,11 @@ help: the trait `DefaultField` is not implemented for `Shipping`
              std::option::Option<T>
            and $N others
    = note: required for `std::option::Option<Shipping>` to implement `DefaultField`
+note: required by a bound in `formoxus::field_kind::field_for`
+  --> src/field_kind.rs
+   |
+   | pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor {
+   |                        ^^^^^^^^^^^^ required by this bound in `field_for`
 
 error[E0080]: evaluation panicked: `min_length` cannot go on an enum field: it renders a variant picker, which submits no value to check
   --> tests/ui/form_constraint_on_an_optional_enum.rs:21:39

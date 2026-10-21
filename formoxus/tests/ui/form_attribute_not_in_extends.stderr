@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `rows` is not an attribute `text` passes through
+  --> tests/ui/form_attribute_not_in_extends.rs:15:41
+   |
+15 |             comments => { widget: text, rows: 5 },
+   |                                         ^^^^ evaluation of `main::_` failed here
