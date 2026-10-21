@@ -1,9 +1,10 @@
 //! Which `(value kind, widget)` pairs actually render, and which panic.
 //!
-//! Whether a pair *renders* is `BuiltinWidget::renders`. `form!` checks it at
-//! compile time and `ScalarWidget` asserts it at runtime; this tool builds its
-//! forms with `FormSpec` directly, bypassing `form!`, so it shows what the
-//! runtime actually does with every pair.
+//! Whether `form!` accepts a pair is `BuiltinWidget::renders`, checked at
+//! compile time. Nothing checks it at runtime since the widget types replaced
+//! `ScalarWidget`, which asserted it. This tool builds its forms with
+//! `FormSpec` directly, bypassing `form!`, so it shows both: what the runtime
+//! actually does with every pair, and where that differs from `form!`.
 //!
 //! This prints it. Run with:
 //!
@@ -23,8 +24,13 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::attrs::FieldType;
 use formoxus::using_fns;
-use formoxus::widgets::{BuiltinWidget, WidgetType};
+use formoxus::widgets::{
+    AnyWidget, BuiltinWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput,
+    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
+    TextInput, Textarea, TimeInput, UrlInput, WeekInput,
+};
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
 
@@ -40,21 +46,53 @@ struct Sampler {
     flag: bool,
 }
 
-const FIELDS: [&str; 4] = ["text", "int", "float", "flag"];
+const FIELDS: [(&str, FieldType); 4] = [
+    ("text", FieldType::Text),
+    ("int", FieldType::Int),
+    ("float", FieldType::Float),
+    ("flag", FieldType::Bool),
+];
 
 #[component]
-fn OneField(path: String, widget: WidgetType) -> Element {
+fn OneField(path: String, widget: AnyWidget) -> Element {
     let form =
-        use_form(move || empty_form(FormSpec::<Sampler>::new().with_custom_widget(&path, widget)));
+        use_form(move || empty_form(FormSpec::<Sampler>::new().with_widget(&path, widget.clone())));
     form.render(using_fns! {})
 }
 
-/// Every built-in widget a consumer can name, by its `form!` name, in
-/// `BuiltinWidget::ALL`'s order.
-fn every_widget() -> Vec<(&'static str, WidgetType)> {
+/// Every built-in widget type, by its `form!` name, in `BuiltinWidget::ALL`'s
+/// order.
+fn every_widget() -> Vec<(&'static str, AnyWidget)> {
+    let widgets: [AnyWidget; 18] = [
+        TextInput.into(),
+        PasswordInput.into(),
+        HiddenInput.into(),
+        NumberInput.into(),
+        EmailInput.into(),
+        TelInput.into(),
+        UrlInput.into(),
+        SearchInput.into(),
+        ColorInput.into(),
+        DateInput.into(),
+        TimeInput.into(),
+        DatetimeLocalInput.into(),
+        MonthInput.into(),
+        WeekInput.into(),
+        CheckboxInput.into(),
+        Textarea.into(),
+        Select.into(),
+        RadioGroup.into(),
+    ];
+    widgets.into_iter().map(|w| (w.name(), w)).collect()
+}
+
+/// The names in `BuiltinWidget::ALL` that `every_widget` has no type for:
+/// the widgets `form!` accepts but nothing can render yet.
+fn without_a_type(widgets: &[(&'static str, AnyWidget)]) -> Vec<&'static str> {
     BuiltinWidget::ALL
         .iter()
-        .map(|&w| (w.form_name(), WidgetType::Builtin(w)))
+        .map(BuiltinWidget::form_name)
+        .filter(|name| widgets.iter().all(|(n, _)| n != name))
         .collect()
 }
 
@@ -68,7 +106,7 @@ fn every_widget() -> Vec<(&'static str, WidgetType)> {
 /// a user would hit, and is why this looks for the field's own label in the
 /// output instead.
 #[cfg(not(target_arch = "wasm32"))]
-fn renders(path: &str, widget: WidgetType) -> bool {
+fn renders(path: &str, widget: AnyWidget) -> bool {
     let mut dom = VirtualDom::new_with_props(
         OneField,
         OneFieldProps {
@@ -106,31 +144,49 @@ fn main() {
 
     println!("\nformoxus widget matrix — which (value kind, widget) pairs render\n");
     print!("{:width$}", "widget", width = width);
-    for p in FIELDS {
+    for (p, _) in FIELDS {
         print!("  {p:>7}");
     }
     println!();
     println!("{}", "─".repeat(width + FIELDS.len() * 9));
 
-    let (mut ok, mut bad) = (0, 0);
+    // What `form!` would say about each pair, beside what the runtime does.
+    let (mut ok, mut unchecked, mut bad) = (0, 0, 0);
     for (name, widget) in &widgets {
+        let builtin = BuiltinWidget::from_form_name(name).expect("a built-in widget's name");
         print!("{name:width$}");
-        for path in FIELDS {
-            if renders(path, *widget) {
-                ok += 1;
-                print!("  {:>7}", "ok");
-            } else {
-                bad += 1;
-                print!("  {:>7}", "PANIC");
-            }
+        for (path, field_type) in FIELDS {
+            let cell = match (
+                renders(path, widget.clone()),
+                builtin.renders(field_type, false),
+            ) {
+                (true, true) => {
+                    ok += 1;
+                    "ok"
+                }
+                (true, false) => {
+                    unchecked += 1;
+                    "ok*"
+                }
+                (false, _) => {
+                    bad += 1;
+                    "PANIC"
+                }
+            };
+            print!("  {cell:>7}");
         }
         println!();
     }
 
     panic::set_hook(previous);
-    let total = ok + bad;
+    let total = ok + unchecked + bad;
     println!(
-        "\n{ok}/{total} pairs render; {bad} panic.\n\
-         `form!` rejects every panicking pair at compile time.\n"
+        "\n{ok}/{total} pairs render and `form!` accepts them; {bad} panic.\n\
+         ok* = {unchecked} more render, but `form!` rejects them at compile time,\n\
+         so only a hand-built `FormSpec` reaches one.\n"
     );
+    let missing = without_a_type(&widgets);
+    if !missing.is_empty() {
+        println!("No widget type yet: {}.\n", missing.join(", "));
+    }
 }

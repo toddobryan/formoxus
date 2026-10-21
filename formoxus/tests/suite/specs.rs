@@ -11,7 +11,6 @@ use super::models::{EventForCreate, Location};
 use super::{render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::RenderedInputType;
 use formoxus::field_kind::field_for;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
@@ -106,10 +105,7 @@ fn the_derived_widgets_are_what_the_override_has_to_beat() {
 #[component]
 fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| {
-        empty_form(FormSpec::<Flags>::default().with_custom_widget(
-            "subscribed",
-            WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-        ))
+        empty_form(FormSpec::<Flags>::default().with_widget("subscribed", CheckboxInput))
     });
     form.render(using_fns! {})
 }
@@ -130,12 +126,7 @@ fn an_override_beats_a_derived_widget() {
 
 #[component]
 fn BoolForcedToSelect() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<Flags>::default()
-                .with_custom_widget("enabled", WidgetType::Builtin(BuiltinWidget::Select)),
-        )
-    });
+    let form = use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", Select)));
     form.render(using_fns! {})
 }
 
@@ -143,15 +134,15 @@ fn BoolForcedToSelect() -> Element {
 fn an_override_works_in_the_other_direction_too() {
     let html = render_to_html(BoolForcedToSelect);
     expect_that!(html.matches("<select").count(), eq(2));
+    // A bool's true/false reach a `Select` with no choices of its own.
+    expect_that!(html, contains_substring(r#"value="true""#));
     expect_that!(html.matches(r#"type="checkbox""#).count(), eq(0));
 }
 
-// ── `with_widget`: the Step 5 bridge ────────────────────────────────────
+// ── `with_widget`: a widget type set on a field ─────────────────────────
 //
-// A widget TYPE set through `with_widget` renders itself through
-// `Widget::render`, while every other field still goes through
-// `ScalarWidget`. Each pair below renders a field both ways and expects the
-// same markup, so the bridge is shown to change the route and nothing else.
+// Naming the widget a field would have chosen anyway must change nothing, so
+// the pairs below expect the same markup as the untouched form.
 
 /// Each render mints its own form id, so the comparisons ignore it.
 fn rendered(app: fn() -> Element) -> String {
@@ -188,23 +179,17 @@ fn TitleThroughTextarea() -> Element {
     form.render(using_fns! {})
 }
 
-#[component]
-fn TitleThroughOldTextarea() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<EventForCreate>::default()
-                .with_custom_widget("title", WidgetType::Builtin(BuiltinWidget::Textarea)),
-        )
-    });
-    form.render(using_fns! {})
-}
-
 /// An override, not just the default by another route.
 #[gtest]
-fn a_widget_type_overrides_like_a_widget_type_override() {
+fn a_widget_type_overrides_the_default() {
     let html = rendered(TitleThroughTextarea);
     expect_that!(html, contains_substring("<textarea"));
-    expect_that!(html, eq(&rendered(TitleThroughOldTextarea)));
+    // In place of the title's text input, not beside it.
+    let text_inputs = |h: &str| h.matches(r#"type="text""#).count();
+    expect_that!(
+        text_inputs(&html),
+        eq(text_inputs(&rendered(UntouchedEvent)) - 1)
+    );
 }
 
 #[component]
@@ -238,44 +223,12 @@ fn an_unticked_checkbox_widget_type_validates() {
     );
 }
 
-#[component]
-fn EnabledThroughSelect() -> Element {
-    let form = use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", Select)));
-    form.render(using_fns! {})
-}
-
-/// A bool's true/false reach a `Select` with no choices of its own.
-#[gtest]
-fn a_select_widget_type_over_a_bool_matches_the_override() {
-    expect_that!(
-        rendered(EnabledThroughSelect),
-        eq(&rendered(BoolForcedToSelect))
-    );
-}
-
-#[component]
-fn BothWidgetsSet() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<EventForCreate>::default()
-                .with_custom_widget("title", WidgetType::Builtin(BuiltinWidget::Textarea))
-                .with_widget("title", TextInput),
-        )
-    });
-    form.render(using_fns! {})
-}
-
-/// While both exist, the widget type wins over the `WidgetType`.
-#[gtest]
-fn a_widget_type_beats_a_widget_type_override() {
-    let html = rendered(BothWidgetsSet);
-    expect_that!(html, not(contains_substring("<textarea")));
-    expect_that!(html, eq(&rendered(UntouchedEvent)));
-}
-
 #[gtest]
 #[should_panic(expected = "location is a field set")]
 fn a_widget_type_on_a_field_set_is_rejected() {
+    // A field set has no single widget to be, and silently ignoring the entry
+    // would leave the author with no thread to pull. The message names the path
+    // because a nested form has more than one candidate.
     let _ = empty_form(FormSpec::<EventForCreate>::default().with_widget("location", Textarea));
 }
 
@@ -298,30 +251,9 @@ fn an_unmatched_path_is_a_no_op() {
     expect_that!(form.collect_values().len(), gt(0));
 }
 
-#[gtest]
-#[should_panic(expected = "location is a field set")]
-fn a_widget_on_a_field_set_is_rejected() {
-    // A field set has no single widget to be, and silently ignoring the entry
-    // would leave the author with no thread to pull. The message names the path
-    // because a nested form has more than one candidate.
-    let _ = empty_form(
-        FormSpec::<EventForCreate>::default()
-            .with_custom_widget("location", WidgetType::Builtin(BuiltinWidget::Textarea)),
-    );
-}
-
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct WithRows {
     venues: Vec<Location>,
-}
-
-#[gtest]
-#[should_panic(expected = "venues is a list")]
-fn a_widget_on_a_list_is_rejected() {
-    let _ = empty_form(
-        FormSpec::<WithRows>::default()
-            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
-    );
 }
 
 /// The chooser has to be a FIELD, not the whole model: a bare-enum `T` has no
@@ -470,8 +402,7 @@ fn RowWidgetsOverridden() -> Element {
             &Answers {
                 correct: vec![true, false],
             },
-            FormSpec::<Answers>::default()
-                .with_custom_widget("correct[]", WidgetType::Builtin(BuiltinWidget::Select)),
+            FormSpec::<Answers>::default().with_widget("correct[]", Select),
         )
     });
     form.render(using_fns! {})
@@ -493,8 +424,7 @@ fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     // The rejection still stands, but it can name the fix now.
     let _ = form_for(
         &trip(),
-        FormSpec::<Trip>::default()
-            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
+        FormSpec::<Trip>::default().with_widget("venues", Select),
     );
 }
 

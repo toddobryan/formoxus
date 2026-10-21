@@ -657,7 +657,48 @@ widgets become ONE concept.
   unused at run time; it waits for the delete box (Todd). Suite and all 33
   e2e tests green.
 - [ ] **`build.rs` resolves the widget once**; `FieldNode` holds `widget:
-  AnyWidget`, never an `Option`.
+  AnyWidget`, never an `Option`. Option A (Todd, 2026-10-21): move every
+  caller off `with_custom_widget` on a LEAF first, rather than adapting a
+  `WidgetType` into an `AnyWidget`; `FieldSpec::custom_widget` stays only for
+  the variant chooser (`enum_node`) until the `VariantSelect` box.
+  Line numbers are as of `74d00e2`.
+  Claude, first:
+  1. [x] `tests/suite/specs.rs`: the `with_custom_widget(…, WidgetType::Builtin(…))`
+     at 109, 136, 474 → `with_widget`; the bridge pairs that compared the two
+     routes (`TitleThroughOldTextarea` 192, `BothWidgetsSet` 257 and their
+     tests) go; the rejections at 309 and 323 already have `with_widget`
+     twins at 271–281 and go; 497 → `with_widget`. 339
+     (`ChooserWithAWidget`, the variant chooser) STAYS.
+  2. [x] `tests/suite/author_attrs.rs:157` `spreading_widget`, the one
+     `WidgetType::Custom` fn pointer, → an `impl Widget` struct (used at 176).
+  3. [x] `tests/suite/widgets.rs`: `rendered_with`/`WIDGET` (438–456) hold an
+     `AnyWidget`, so the 13-type loop at 461 lists widget types; the
+     password at 535 → `with_widget(…, PasswordInput)`.
+  4. [x] `examples/src/bin/widget_matrix.rs`: `OneField` (46),
+     `every_widget` (54) and `renders` (71) take an `AnyWidget`.
+  Done 2026-10-21. Found doing 4: no widget type checks the field's type,
+  so a hand-built `FormSpec` renders all 72 pairs (26 that `form!` refuses,
+  shown as `ok*`); `ScalarWidget` asserted `renders`. Feeds the OPEN
+  kind-checks box below.
+  Todd, then:
+  5. [ ] `src/field_node.rs:42` `LeafArgs::node` resolves `spec.widget`,
+     else `field.default_widget(self.optional)`; the struct's `widget` (109)
+     becomes `AnyWidget` and `custom_widget` (111) goes.
+  6. [ ] A leaf spec with `custom_widget` panics, naming `with_widget`, so it
+     is never silently ignored. In `LeafArgs::node` (42) rather than
+     `src/build.rs:374` `scalar_node`, since a spec's constructor also
+     builds through `node`.
+  7. [ ] `src/field_node.rs`: the `Renderer` enum (97) and `renderer()` (170)
+     go; `is_checkbox` (180) is one line; `render`'s match (291) keeps only
+     the `AnyWidget` arm, and the imports at 15 shrink. `ScalarWidget` loses
+     its last caller (delete `src/widgets/scalar.rs`, or leave it for the
+     One-`WidgetProps` box; `FieldProps` stays, the `*View`s use it).
+     Deleting it also takes `tests/suite/widgets.rs`'s tests that drive
+     `ScalarWidget` directly (from 166, and `PasswordWithEcho`); those are
+     Claude's to move.
+  8. [ ] `src/field_node.rs` tests: the `node()` helper (451) and
+     `a_bool_field` (516) take an `AnyWidget`, so the select tests at 569 and
+     582 pass `Select.into()`.
 - [ ] **One `WidgetProps`** (`id, path, label, attrs, extra_attrs, values,
   errors, classes, choices`) replaces `FieldProps`, the old `WidgetProps`, and
   `ScalarWidget`'s props. `ScalarWidget` itself goes: `FieldNode::render`

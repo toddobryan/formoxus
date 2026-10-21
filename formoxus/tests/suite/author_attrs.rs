@@ -1,5 +1,5 @@
-//! Author attributes (C6): written in `form!`, through `Field::render` and
-//! `ScalarWidget`, onto the element each widget puts them on.
+//! Author attributes (C6): written in `form!`, through `FieldNode::render`
+//! and the field's widget, onto the element each widget puts them on.
 //!
 //! These go through `form!`, the way an author writes them. A few stay on
 //! `FormSpec::with_attrs`, each saying why: what `form!` refuses (a quoted key
@@ -15,12 +15,15 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::attrs::AttrSet;
 use formoxus::attrs::{AttrKey, AttrValue};
+use formoxus::classes::Slot;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::WidgetType;
+use formoxus::widgets::Widget;
+use formoxus::widgets::widget_props::WidgetProps;
 use googletest::prelude::*;
 
 use super::models::Shape;
@@ -150,17 +153,22 @@ fn a_hidden_input_gets_no_author_attributes() {
 
 /// A custom widget that spreads whatever it is handed onto one `<input>`.
 ///
-/// Hand-built rather than `custom(…)` in `form!`, because the macro's closure
-/// passes only `values` and `props` today: attributes reaching a `form!`
-/// custom widget is step 4 of `ATTRIBUTES_PLAN.md`. This pins the runtime
-/// half, `ScalarWidget`'s `Custom` arm, on its own.
-fn spreading_widget() -> WidgetType {
-    WidgetType::Custom {
-        name: "Spreading",
-        render: |p| {
-            let attrs = p.attrs;
-            rsx! { input { class: "spreading", ..attrs } }
-        },
+/// Hand-built rather than named in `form!`, so this pins the runtime half on
+/// its own: what `FieldNode::render` hands a widget in `WidgetProps`.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Spreading;
+
+impl Widget for Spreading {
+    const NAME: &'static str = "spreading";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        let attrs = props.attrs.merge_with_attrs(props.extra_attrs);
+        rsx! { input { class: "spreading", ..attrs } }
+    }
+
+    fn default_classes() -> Vec<(&'static str, Slot)> {
+        Vec::new()
     }
 }
 
@@ -173,7 +181,7 @@ fn spreading_widget() -> WidgetType {
 fn a_custom_widget_receives_the_fields_attributes() {
     let html = render!(
         FormSpec::<Person>::new()
-            .with_custom_widget("name", spreading_widget())
+            .with_widget("name", Spreading)
             .with_node(
                 "name",
                 field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
@@ -397,7 +405,7 @@ fn on_a_radio_group_style_lands_on_the_fieldset() {
 
 /// **A quoted attribute overrides a table attribute of the same HTML name,
 /// when it comes later.** Both are in the one map under different keys, so
-/// both are emitted, and `ScalarWidget`'s merge, keyed by HTML name, keeps the
+/// both are emitted, and `FieldAttrs::merge_with_attrs`, keyed by HTML name, keeps the
 /// later. So a raw `maxlength` replaces `max_length`'s, and the browser then
 /// allows 99 characters while `check` still rejects more than 10.
 ///
