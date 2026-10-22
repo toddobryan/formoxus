@@ -3,8 +3,7 @@
 //! with the generic message naming it.
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{AttrSet, FieldType, FieldTypeSet};
-use formoxus::classes::Slot;
+use formoxus::attrs::{AttrSet, FieldType, FieldTypeSet, Tag};
 use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
 use formoxus::{empty_form, form};
@@ -20,14 +19,12 @@ struct Notes;
 
 impl Widget for Notes {
     const NAME: &'static str = "notes";
+    const PARTS: &'static [Tag] = &[];
     const EXTENDS: AttrSet = AttrSet::EMPTY;
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text);
     const TAKES_CHOICES: bool = false;
     fn render(&self, _props: WidgetProps) -> Element {
         rsx! {}
-    }
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 

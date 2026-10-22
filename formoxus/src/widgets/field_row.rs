@@ -3,10 +3,10 @@
 //! class, in one place.
 
 use dioxus::prelude::*;
-use formoxus_spec::{BuiltinWidget, FixedKey};
+use formoxus_spec::{BuiltinWidget, FixedKey, Tag};
 
 use crate::classes::Classes;
-use crate::widgets::{FieldErrors, WidgetProps};
+use crate::widgets::{FieldErrors, Widget, WidgetProps};
 
 /// Which side of its form control a field's caption goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,20 +28,18 @@ pub(crate) enum LabelSide {
 /// marker, which is `required` for most widgets but `required_true` for a
 /// checkbox. A hidden input (bare) and a radio group (`fieldset`/`legend`)
 /// do not use it.
-pub(crate) fn field_row(
-    widget: BuiltinWidget,
+pub(crate) fn field_row<W: Widget>(
     props: &WidgetProps,
     marked: bool,
     side: LabelSide,
     control: Element,
 ) -> Element {
-    let label = field_label(
+    let label = field_label::<W>(
         &props.id,
         props.label.clone(),
         marked,
         &props.classes,
         props.is_invalid(),
-        widget,
     );
     let (before, after) = match side {
         LabelSide::Before => (label, rsx! {}),
@@ -49,7 +47,7 @@ pub(crate) fn field_row(
     };
     rsx! {
         div {
-            class: props.part_class(widget, "div"),
+            class: props.part_class::<W>(Tag::Div),
             {before}
             {control}
             {after}
@@ -69,15 +67,14 @@ pub(crate) fn field_row(
 /// The marker is INSIDE the label, not a sibling: a consumer who makes
 /// `.fx-field-label` a block (the natural choice above an input) would
 /// otherwise push a lone asterisk onto its own line.
-pub(crate) fn field_label(
+pub(crate) fn field_label<W: Widget>(
     id: &str,
     text: Option<String>,
     marked: bool,
     classes: &Classes,
     invalid: bool,
-    widget: BuiltinWidget,
 ) -> Element {
-    let label_class = classes.part_class(widget, "label", invalid);
+    let label_class = classes.part_class::<W>(Tag::Label, invalid);
     rsx! {
         if let Some(text) = text {
             label {

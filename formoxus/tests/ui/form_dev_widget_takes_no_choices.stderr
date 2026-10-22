@@ -1,5 +1,5 @@
 error[E0080]: evaluation panicked: `Notes` takes no `choices`
-  --> tests/ui/form_dev_widget_takes_no_choices.rs:38:42
+  --> tests/ui/form_dev_widget_takes_no_choices.rs:35:42
    |
-38 |             comments => { widget: Notes, choices: MOODS },
+35 |             comments => { widget: Notes, choices: MOODS },
    |                                          ^^^^^^^ evaluation of `main::_` failed here

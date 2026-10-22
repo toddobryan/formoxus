@@ -2,12 +2,11 @@
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement,
+    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag,
 };
 
 use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
-use crate::classes::Slot;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<textarea>`, a multi-line text input. For a `String` field only.
@@ -19,6 +18,8 @@ impl Widget for Textarea {
 
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Textarea));
 
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Textarea];
+
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text);
 
     const ACCEPTS_OPTIONAL: bool = true;
@@ -29,14 +30,6 @@ impl Widget for Textarea {
         rsx! {
             TextareaView { widget_props: props }
         }
-    }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        vec![
-            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
-            ("label", Slot::new("fx-field-label")),
-            ("textarea", Slot::new("fx-control fx-textarea")),
-        ]
     }
 }
 

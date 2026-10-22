@@ -5,6 +5,17 @@ metadata:
   type: project
 ---
 
+**2026-10-22, END OF SCHOOL DAY (pushed, build RED on purpose):
+deleting `BuiltinWidget`, checkpoints 1–2 DONE (`281f5c1`, `ad1449c`);
+checkpoint 3 redesigned (Todd: widgets declare `PARTS: &[Tag]`, presets own
+classes, no `default_classes()`; see
+[[widgets-declare-parts-presets-own-classes]]) and MID item 11.** The
+"WHERE THIS STOPPED" note under item 11 in `formoxus/FIELDS_PLAN.md` lists
+the 20 remaining lib errors as 11a–11f. Start at 11a: `control_class`
+lost `self.attrs.class(…)`, which would drop a field's `class:`. Todd is
+building checkpoint 3 himself, walked through step by step; offer to probe
+11d (a generic `#[component]`) if he hits it.
+
 **2026-10-21, LATER: STEP 5's boxes through `field_row` DONE and pushed
 (`7b37772`). NEXT: delete `BuiltinWidget`, TODD BUILDS IT** ("I'm losing
 track of how things work"), from the 17-item list in `FIELDS_PLAN.md`'s

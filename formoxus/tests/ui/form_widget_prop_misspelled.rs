@@ -3,8 +3,7 @@
 //! every field, and rustc suggests only unassigned ones.
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::AttrSet;
-use formoxus::classes::Slot;
+use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
 use formoxus::{empty_form, form};
@@ -22,12 +21,10 @@ struct Notes {
 
 impl Widget for Notes {
     const NAME: &'static str = "notes";
+    const PARTS: &'static [Tag] = &[];
     const EXTENDS: AttrSet = AttrSet::EMPTY;
     fn render(&self, _props: WidgetProps) -> Element {
         rsx! {}
-    }
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 

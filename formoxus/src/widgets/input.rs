@@ -6,12 +6,11 @@
 use dioxus::prelude::*;
 use formoxus_spec::{
     Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
-    RenderedInputType,
+    RenderedInputType, Tag,
 };
 
 use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
-use crate::classes::Slot;
 use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
@@ -34,6 +33,8 @@ macro_rules! text_like_inputs {
                 const NAME: &'static str =
                     BuiltinWidget::Input(RenderedInputType::$variant).form_name();
 
+                const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
+
                 const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(
                     FieldControl::Input(InputType::$variant),
                 ));
@@ -48,10 +49,6 @@ macro_rules! text_like_inputs {
 
                 fn render(&self, props: WidgetProps) -> Element {
                     render_input(RenderedInputType::$variant, props)
-                }
-
-                fn default_classes() -> Vec<(&'static str, Slot)> {
-                    text_like_classes()
                 }
             }
         )+
@@ -102,6 +99,8 @@ impl Widget for HiddenInput {
 
     const EXTENDS: AttrSet = AttrSet::EMPTY;
 
+    const PARTS: &'static [Tag] = &[];
+
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
         .with(FieldType::Text)
         .with(FieldType::Int)
@@ -113,11 +112,6 @@ impl Widget for HiddenInput {
 
     fn render(&self, props: WidgetProps) -> Element {
         render_input(RenderedInputType::Hidden, props)
-    }
-
-    /// None: `Classes::fx()` gives a hidden input no class.
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 
@@ -133,6 +127,8 @@ impl Widget for CheckboxInput {
         InputType::Checkbox,
     )));
 
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Input, Tag::Label];
+
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
 
     /// Two states, and an `Option<bool>` has three.
@@ -143,14 +139,6 @@ impl Widget for CheckboxInput {
     fn render(&self, props: WidgetProps) -> Element {
         render_input(RenderedInputType::Checkbox, props)
     }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        vec![
-            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
-            ("input", Slot::new("fx-control fx-checkbox")),
-            ("label", Slot::new("fx-field-label")),
-        ]
-    }
 }
 
 /// Every `<input>` widget's `render`: `props` split into what `InputView`
@@ -159,17 +147,6 @@ fn render_input(input_type: RenderedInputType, props: WidgetProps) -> Element {
     rsx! {
         InputView { input_type, props }
     }
-}
-
-/// The slots `Classes::fx()` gives every text-like input, repeated until
-/// `Classes` is keyed on `Widget::NAME` (`tests/suite/builtin_widgets.rs`
-/// checks the two agree).
-fn text_like_classes() -> Vec<(&'static str, Slot)> {
-    vec![
-        ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
-        ("label", Slot::new("fx-field-label")),
-        ("input", Slot::new("fx-control fx-input")),
-    ]
 }
 
 #[component]

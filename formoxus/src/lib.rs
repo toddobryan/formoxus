@@ -59,7 +59,7 @@ pub mod attrs {
     pub use formoxus_spec::{
         Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, BuiltinWidget, FieldControl, FieldType,
         FieldTypeSet, FieldTypeWithOptional, HtmlElement, InputType, Owner, Part,
-        RenderedInputType, Step,
+        RenderedInputType, Step, Tag,
     };
 }
 

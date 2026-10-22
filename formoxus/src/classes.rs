@@ -10,10 +10,28 @@
 
 use std::borrow::Cow;
 
-use formoxus_spec::{BuiltinWidget, SlotKey};
+use formoxus_spec::Tag;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonType;
+use crate::widgets::{
+    CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
+    NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput, Textarea,
+    TimeInput, UrlInput, WeekInput, Widget,
+};
+
+/// Which slot a class is for: one part of one widget, by the widget's
+/// `NAME` and the part's [`Tag`], or an element no widget renders.
+///
+/// Crate-private, and built only by [`Classes::key`] from a `W: Widget`, so a
+/// widget's slot is never named by a string a caller wrote, and every part is
+/// checked against `W::PARTS`. Here rather than in `formoxus-spec`: `form!`
+/// no longer builds one while parsing, it emits [`ClassEdit::part`] instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum SlotKey {
+    Part(&'static str, Tag),
+    Fixed(FixedKey),
+}
 
 /// One change a form makes to the classes it inherits: what a `form!`
 /// `classes_plus:` entry becomes, applied on top of the app's [`Classes`] at
@@ -23,13 +41,13 @@ use crate::buttons::ButtonType;
 /// replacing or appending:
 ///
 /// ```ignore
-/// ClassEdit::part(BuiltinWidget::Input(RenderedInputType::Text), "input")
+/// ClassEdit::part::<TextInput>(Tag::Input)
 ///     .replace_base("form-control")
 ///     .append_invalid("is-invalid")
 /// ```
 ///
 /// A piece the edit does not mention is left as it was. Opaque, so the slot
-/// key inside stays an implementation detail and every part name is checked.
+/// key inside stays an implementation detail and every part is checked.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassEdit {
     key: SlotKey,
@@ -46,11 +64,11 @@ enum Change {
 }
 
 impl ClassEdit {
-    /// An edit of `widget`'s `part` slot, changing nothing until a
-    /// `replace_*`/`append_*` says what. Panics, listing the parts `widget`
-    /// has, if it has none called `part`, as [`Classes::with_part`] does.
-    pub fn part(widget: BuiltinWidget, part: &str) -> Self {
-        Self::of(SlotKey::Part(widget, Classes::part_name(widget, part)))
+    /// An edit of `W`'s `tag` slot, changing nothing until a
+    /// `replace_*`/`append_*` says what. Panics, listing `W::PARTS`, if `W`
+    /// has no such part, as [`Classes::with_part`] does.
+    pub fn part<W: Widget>(tag: Tag) -> Self {
+        Self::of(Classes::key::<W>(tag))
     }
 
     /// An edit of the slot for `key`, changing nothing until told what.
@@ -192,13 +210,16 @@ impl Slot {
 /// address.
 pub use formoxus_spec::FixedKey;
 
-/// Every class formoxus emits, one [`Slot`] per element: a part of a built-in
-/// widget, or a [`FixedKey`] for what no widget renders.
+/// Every class formoxus emits, one [`Slot`] per element: a part of a widget,
+/// or a [`FixedKey`] for what no widget renders.
 ///
-/// Start from a preset and change what differs:
+/// A preset, one CSS vocabulary among possible others: a widget says only
+/// WHERE classes can go (`Widget::PARTS`), and a `Classes` says what they are.
+/// So a dev's own widget has no slots in [`Classes::fx`] until the app gives
+/// it some. Start from a preset and change what differs:
 ///
 /// ```ignore
-/// Classes::fx().with_part(BuiltinWidget::Select, "select", Slot::new("form-select"))
+/// Classes::fx().with_part::<Select>(Tag::Select, Slot::new("form-select"))
 /// ```
 ///
 /// A slot that is absent renders no `class` attribute, which is all
@@ -211,15 +232,30 @@ pub struct Classes {
 }
 
 impl Classes {
-    /// The slot for one part of one built-in widget, or `None` if it has
-    /// none (it then renders no `class`).
-    ///
-    /// Panics if `widget` has no part named `part`, as [`Self::with_part`]
-    /// does. At a lookup that is a formoxus bug, not an author's: the call
-    /// sites name parts as literals.
-    pub fn part(&self, widget: BuiltinWidget, part: &str) -> Option<&Slot> {
-        self.slots
-            .get(&SlotKey::Part(widget, Classes::part_name(widget, part)))
+    /// The slot for `W`'s `tag` part, or `None` if it has none (it then
+    /// renders no `class`). Panics if `W` has no such part, as
+    /// [`Self::with_part`] does; at a lookup that is a bug in the widget.
+    pub fn part<W: Widget>(&self, tag: Tag) -> Option<&Slot> {
+        self.slots.get(&Classes::key::<W>(tag))
+    }
+
+    /// The key for `W`'s `tag` slot, the one way a part's key is built.
+    /// Panics, listing `W::PARTS`, if `W` has no such part: a tag the widget
+    /// never renders a class on is a typo, and ignoring it would leave the
+    /// class silently missing.
+    fn key<W: Widget>(tag: Tag) -> SlotKey {
+        assert!(
+            W::PARTS.contains(&tag),
+            "`{}` has no part `{}` (it has {})",
+            W::NAME,
+            tag.as_str(),
+            W::PARTS
+                .iter()
+                .map(Tag::as_str)
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        SlotKey::Part(W::NAME, tag)
     }
 
     /// The slot for an element no widget renders, or `None` if it has none.
@@ -227,14 +263,14 @@ impl Classes {
         self.slots.get(&SlotKey::Fixed(key))
     }
 
-    /// The `class` value for one part of one built-in widget in this state,
-    /// or `None` to render no `class` at all: [`Self::part`], then
-    /// [`Slot::value`]. `invalid` is whether the field has errors.
+    /// The `class` value for `W`'s `tag` part in this state, or `None` to
+    /// render no `class` at all: [`Self::part`], then [`Slot::value`].
+    /// `invalid` is whether the field has errors.
     ///
     /// `Option` so a call site can write `class: classes.part_class(…)` and
     /// let `rsx!` omit the attribute on `None`.
-    pub fn part_class(&self, widget: BuiltinWidget, part: &str, invalid: bool) -> Option<String> {
-        self.part(widget, part).and_then(|s| s.value(invalid))
+    pub fn part_class<W: Widget>(&self, tag: Tag, invalid: bool) -> Option<String> {
+        self.part::<W>(tag).and_then(|s| s.value(invalid))
     }
 
     /// The `class` value for an element no widget renders, as
@@ -243,74 +279,12 @@ impl Classes {
         self.fixed(key).and_then(|s| s.value(invalid))
     }
 
-    /// `slot` on one `part` of one built-in widget, replacing whatever was
-    /// there: `Classes::fx().with_part(BuiltinWidget::Select, "select",
-    /// Slot::new("form-select"))`.
-    ///
-    /// Panics if `widget` has no part named `part`, listing the parts it does
-    /// have: a name no widget renders is probably a typo, and ignoring it
-    /// would leave the class silently missing.
-    pub fn with_part(mut self, widget: BuiltinWidget, part: &str, slot: Slot) -> Self {
-        self.slots.insert(
-            SlotKey::Part(widget, Classes::part_name(widget, part)),
-            slot,
-        );
-        self
-    }
-
-    /// `part`, as the `&'static str` that `widget.parts()` names it by, which
-    /// is what a `SlotKey` holds. Panics, listing the parts `widget` has,
-    /// if it has none called `part`.
-    fn part_name(widget: BuiltinWidget, part: &str) -> &'static str {
-        widget.parts().iter().find(|p| p.name == part).map_or_else(
-            || {
-                let names: Vec<&str> = widget.parts().iter().map(|p| p.name).collect();
-                panic!(
-                    "unknown part `{part}` for widget {widget:?} (it has {})",
-                    names.join(", ")
-                )
-            },
-            |p| p.name,
-        )
-    }
-
-    /// `slot` on the `part` of every built-in widget `filter` keeps that has
-    /// one, for a preset that classes a whole family alike:
-    ///
-    /// ```ignore
-    /// // Bootstrap's `form-control` on every input but the checkbox.
-    /// Classes::bare().with_parts(
-    ///     |w| matches!(w, BuiltinWidget::Input(t) if t != RenderedInputType::Checkbox),
-    ///     "input",
-    ///     Slot::new("form-control"),
-    /// )
-    /// ```
-    ///
-    /// A kept widget without the part is skipped, so `|_| true` with
-    /// `"legend"` reaches only the widgets that have a legend. Panics if NO
-    /// kept widget has it: like [`Self::with_part`], that is probably a typo.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "by value like `with_part`'s, so the two builders read alike"
-    )]
-    pub fn with_parts(
-        mut self,
-        filter: impl Fn(BuiltinWidget) -> bool,
-        part: &str,
-        slot: Slot,
-    ) -> Self {
-        let mut matched = false;
-        for &widget in BuiltinWidget::ALL.iter().filter(|&&w| filter(w)) {
-            if let Some(p) = widget.parts().iter().find(|p| p.name == part) {
-                self.slots
-                    .insert(SlotKey::Part(widget, p.name), slot.clone());
-                matched = true;
-            }
-        }
-        assert!(
-            matched,
-            "no widget the filter keeps has a part named `{part}`"
-        );
+    /// `slot` on `W`'s `tag` part, replacing whatever was there:
+    /// `Classes::fx().with_part::<Select>(Tag::Select, Slot::new("form-select"))`.
+    /// How an app classes a dev's own widget, too. Panics, listing
+    /// `W::PARTS`, if `W` has no such part.
+    pub fn with_part<W: Widget>(mut self, tag: Tag, slot: Slot) -> Self {
+        self.slots.insert(Classes::key::<W>(tag), slot);
         self
     }
 
@@ -341,15 +315,41 @@ impl Classes {
     /// were configurable, byte for byte (`tests/snapshots/` pins that). The
     /// default, so an app that says nothing gets these.
     ///
-    /// The widget parts come from a loop over every rendered widget's
-    /// [`BuiltinWidget::parts`], so a widget or part added later panics here
-    /// until it is given a class, instead of silently rendering unclassed.
+    /// The widget parts come from a loop over every built-in widget's
+    /// `Widget::PARTS`, asking [`fx_part`] for each, so a built-in or a part
+    /// added later panics here until it is given a class, instead of silently
+    /// rendering unclassed. A dev's own widget is not in the list: a preset
+    /// classes only the widgets it knows.
     pub fn fx() -> Self {
+        // Named one by one, since nothing can iterate "every type that
+        // implements `Widget`"; the array's length makes the compiler count.
+        let builtins: [(&'static str, &'static [Tag]); 18] = [
+            parts_of::<TextInput>(),
+            parts_of::<PasswordInput>(),
+            parts_of::<NumberInput>(),
+            parts_of::<EmailInput>(),
+            parts_of::<TelInput>(),
+            parts_of::<UrlInput>(),
+            parts_of::<SearchInput>(),
+            parts_of::<ColorInput>(),
+            parts_of::<DateInput>(),
+            parts_of::<TimeInput>(),
+            parts_of::<DatetimeLocalInput>(),
+            parts_of::<MonthInput>(),
+            parts_of::<WeekInput>(),
+            parts_of::<HiddenInput>(),
+            parts_of::<CheckboxInput>(),
+            parts_of::<Textarea>(),
+            parts_of::<Select>(),
+            parts_of::<RadioGroup>(),
+        ];
         let mut slots = IndexMap::new();
-        for &widget in BuiltinWidget::ALL.iter().filter(|w| w.is_rendered()) {
-            for part in widget.parts() {
-                if let Some(slot) = fx_part(widget, part.name) {
-                    slots.insert(SlotKey::Part(widget, part.name), slot);
+        for (name, parts) in builtins {
+            for &tag in parts {
+                // Built directly, not through `key::<W>`: the name is all
+                // there is here, and the tag comes from `W::PARTS` itself.
+                if let Some(slot) = fx_part(name, tag) {
+                    slots.insert(SlotKey::Part(name, tag), slot);
                 }
             }
         }
@@ -436,35 +436,40 @@ impl Default for Classes {
     }
 }
 
-/// `fx()`'s class for one part of one rendered widget, or `None` for a part
-/// it leaves bare (only a hidden input, which nobody sees).
+/// A widget's `NAME` and `PARTS`, the pair [`Classes::fx`] loops over.
+const fn parts_of<W: Widget>() -> (&'static str, &'static [Tag]) {
+    (W::NAME, W::PARTS)
+}
+
+/// `fx()`'s class for one part of one built-in widget, or `None` for a part
+/// it leaves bare. (None does today: a hidden input, the one bare widget,
+/// has no `PARTS` to ask about.)
 ///
-/// Panics on a pair it does not know, which is a widget or a part added
-/// without saying what `fx()` gives it. The widgets not rendered yet are
-/// never asked: they get their classes when they ship.
-fn fx_part(widget: BuiltinWidget, part: &str) -> Option<Slot> {
-    use BuiltinWidget::{Input, RadioGroup, Select, Textarea};
-    use formoxus_spec::RenderedInputType::{Checkbox, Hidden};
-    let slot = match (widget, part) {
-        (Input(Hidden), "input") => return None,
+/// Panics on a pair it does not know, which is a built-in or a part added
+/// without saying what `fx()` gives it.
+fn fx_part(widget_name: &'static str, tag: Tag) -> Option<Slot> {
+    let slot = match (widget_name, tag) {
         // A radio group is a fieldset of choices, so its parts are named
         // apart from a single control's.
-        (RadioGroup, "fieldset") => {
+        (RadioGroup::NAME, Tag::Fieldset) => {
             Slot::new("fx-form-field fx-radio-group").with_invalid("fx-invalid")
         }
-        (RadioGroup, "legend") => Slot::new("fx-legend fx-field-label"),
-        (RadioGroup, "div") => Slot::new("fx-choice"),
-        (RadioGroup, "input") => Slot::new("fx-control fx-radio"),
-        (RadioGroup, "label") => Slot::new("fx-choice-label"),
+        (RadioGroup::NAME, Tag::Legend) => Slot::new("fx-legend fx-field-label"),
+        (RadioGroup::NAME, Tag::Div) => Slot::new("fx-choice"),
+        (RadioGroup::NAME, Tag::Input) => Slot::new("fx-control fx-radio"),
+        (RadioGroup::NAME, Tag::Label) => Slot::new("fx-choice-label"),
         // Every other widget: the wrapper carries the invalid mark, the label
         // and the control do not.
-        (_, "div") => Slot::new("fx-form-field").with_invalid("fx-invalid"),
-        (_, "label") => Slot::new("fx-field-label"),
-        (Input(Checkbox), "input") => Slot::new("fx-control fx-checkbox"),
-        (Input(_), "input") => Slot::new("fx-control fx-input"),
-        (Textarea, "textarea") => Slot::new("fx-control fx-textarea"),
-        (Select, "select") => Slot::new("fx-control fx-select"),
-        (widget, part) => panic!("`Classes::fx()` has no class for {widget:?}'s `{part}`"),
+        (_, Tag::Div) => Slot::new("fx-form-field").with_invalid("fx-invalid"),
+        (_, Tag::Label) => Slot::new("fx-field-label"),
+        (CheckboxInput::NAME, Tag::Input) => Slot::new("fx-control fx-checkbox"),
+        (_, Tag::Input) => Slot::new("fx-control fx-input"),
+        (Textarea::NAME, Tag::Textarea) => Slot::new("fx-control fx-textarea"),
+        (Select::NAME, Tag::Select) => Slot::new("fx-control fx-select"),
+        (widget, tag) => panic!(
+            "`Classes::fx()` has no class for {widget}'s `{}`",
+            tag.as_str()
+        ),
     };
     Some(slot)
 }

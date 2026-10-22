@@ -1,5 +1,5 @@
 error[E0080]: evaluation panicked: `Notes` cannot render this field
-  --> tests/ui/form_dev_widget_narrowed_accepts.rs:37:32
+  --> tests/ui/form_dev_widget_narrowed_accepts.rs:34:32
    |
-37 |             score => { widget: Notes },
+34 |             score => { widget: Notes },
    |                                ^^^^^ evaluation of `main::_` failed here

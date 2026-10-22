@@ -6,9 +6,9 @@ use std::{any::Any, fmt::Debug};
 // Dioxus's `Element`, what `render` returns. The attribute table's is
 // `formoxus_spec::HtmlElement`, named apart so the two never need an alias.
 use dioxus::prelude::Element;
-use formoxus_spec::{AttrSet, FieldTypeSet};
+use formoxus_spec::{AttrSet, FieldTypeSet, Tag};
 
-use crate::{classes::Slot, widgets::widget_props::WidgetProps};
+use crate::widgets::widget_props::WidgetProps;
 
 /// What renders a field: a struct whose `pub` fields are its props, the way a
 /// Dioxus component's are. `form!` sets them in the widget's braces
@@ -22,6 +22,9 @@ use crate::{classes::Slot, widgets::widget_props::WidgetProps};
 pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     /// Keys this widget's class slots in `Classes`. Unique per widget.
     const NAME: &'static str;
+
+    /// A list of the HTML tags in this widget that classes can be attached to.
+    const PARTS: &'static [Tag];
 
     /// The HTML attributes this widget passes through: the ones `form!`
     /// accepts on a field it renders, beyond the field's own settings. Read
@@ -60,10 +63,6 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     /// join that component's hooks. A widget that needs state renders a
     /// `#[component]` of its own and passes `props` on to it.
     fn render(&self, props: WidgetProps) -> Element;
-
-    /// Each class slot this widget has, by name, with its default classes.
-    /// A fn rather than a const because `Slot::with_invalid` is not `const`.
-    fn default_classes() -> Vec<(&'static str, Slot)>;
 }
 
 /// `Widget` without its consts, which is what lets it be `dyn`; the blanket
@@ -72,7 +71,6 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
 pub(crate) trait DynWidget: Debug + Send + Sync {
     fn render(&self, props: WidgetProps) -> Element;
     fn name(&self) -> &'static str;
-    fn default_classes(&self) -> Vec<(&'static str, Slot)>;
     fn clone_box(&self) -> Box<dyn DynWidget>;
     fn as_any(&self) -> &dyn Any;
     fn eq_dyn(&self, other: &dyn DynWidget) -> bool;
@@ -84,9 +82,6 @@ impl<W: Widget> DynWidget for W {
     }
     fn name(&self) -> &'static str {
         W::NAME
-    }
-    fn default_classes(&self) -> Vec<(&'static str, Slot)> {
-        W::default_classes()
     }
     fn clone_box(&self) -> Box<dyn DynWidget> {
         Box::new(self.clone())
@@ -117,9 +112,6 @@ impl AnyWidget {
     }
     pub fn name(&self) -> &'static str {
         self.0.name()
-    }
-    pub fn default_classes(&self) -> Vec<(&'static str, Slot)> {
-        self.0.default_classes()
     }
 }
 impl<W: Widget> From<W> for AnyWidget {
@@ -158,26 +150,19 @@ mod tests {
 
     impl Widget for Notes {
         const NAME: &'static str = "notes";
+        const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
         const EXTENDS: AttrSet = AttrSet::EMPTY;
         fn render(&self, _props: WidgetProps) -> Element {
             rsx! {}
-        }
-        fn default_classes() -> Vec<(&'static str, Slot)> {
-            vec![
-                ("div", Slot::new("notes").with_invalid("bad")),
-                ("textarea", Slot::new("notes-box")),
-            ]
         }
     }
 
     impl Widget for Markdown {
         const NAME: &'static str = "markdown";
+        const PARTS: &'static [Tag] = &[];
         const EXTENDS: AttrSet = AttrSet::EMPTY;
         fn render(&self, _props: WidgetProps) -> Element {
             rsx! {}
-        }
-        fn default_classes() -> Vec<(&'static str, Slot)> {
-            Vec::new()
         }
     }
 
@@ -213,16 +198,8 @@ mod tests {
     }
 
     #[gtest]
-    fn name_and_default_classes_reach_through_any_widget() {
-        let widget = notes(4);
-        expect_that!(widget.name(), eq("notes"));
-        expect_that!(
-            widget.default_classes(),
-            elements_are![
-                eq(&("div", Slot::new("notes").with_invalid("bad"))),
-                eq(&("textarea", Slot::new("notes-box"))),
-            ]
-        );
+    fn the_name_reaches_through_any_widget() {
+        expect_that!(notes(4).name(), eq("notes"));
         expect_that!(AnyWidget::from(Markdown::default()).name(), eq("markdown"));
     }
 

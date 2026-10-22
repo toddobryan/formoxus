@@ -2,8 +2,7 @@
 //! `Option<_>` field, at the widget, with the generic message naming it.
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::AttrSet;
-use formoxus::classes::Slot;
+use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
 use formoxus::{empty_form, form};
@@ -19,13 +18,11 @@ struct Stars;
 
 impl Widget for Stars {
     const NAME: &'static str = "stars";
+    const PARTS: &'static [Tag] = &[];
     const EXTENDS: AttrSet = AttrSet::EMPTY;
     const ACCEPTS_OPTIONAL: bool = false;
     fn render(&self, _props: WidgetProps) -> Element {
         rsx! {}
-    }
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 

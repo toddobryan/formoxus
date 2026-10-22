@@ -1,4 +1,4 @@
-use formoxus_spec::{BuiltinWidget, FixedKey, SlotKey};
+use formoxus_spec::{BuiltinWidget, FixedKey};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{Ident, Result, Token, braced, parse::ParseStream, token};
@@ -13,11 +13,20 @@ use super::{Entry, kw};
 /// while parsing, so expanding it cannot fail. Becomes one `ClassEdit`.
 #[derive(Debug)]
 pub(crate) struct ClassEntry {
-    pub(crate) key: SlotKey,
+    pub(crate) key: ClassKey,
     /// What happens to the slot's base; `None` leaves it as it was.
     pub(crate) base: Option<Change>,
     /// What happens to the slot's invalid class; `None` leaves it as it was.
     pub(crate) invalid: Option<Change>,
+}
+
+/// Which slot an entry edits, resolved while parsing: a built-in widget's
+/// part, or a fixed slot. The macro's own key; `formoxus`'s `SlotKey` is
+/// what the emitted `ClassEdit` builds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ClassKey {
+    Part(BuiltinWidget, &'static str),
+    Fixed(FixedKey),
 }
 
 impl ClassEntry {
@@ -26,11 +35,11 @@ impl ClassEntry {
     /// `replace_*`/`append_*` per piece the entry changes.
     pub(crate) fn tokens(&self) -> TokenStream2 {
         let edit = match self.key {
-            SlotKey::Part(widget, part) => {
+            ClassKey::Part(widget, part) => {
                 let widget = builtin_tokens(widget);
                 quote! { ::formoxus::classes::ClassEdit::part(#widget, #part) }
             }
-            SlotKey::Fixed(key) => {
+            ClassKey::Fixed(key) => {
                 let key = fixed_key_tokens(key);
                 quote! { ::formoxus::classes::ClassEdit::fixed(#key) }
             }
@@ -117,14 +126,14 @@ pub(crate) fn parse_classes_plus(input: ParseStream<'_>) -> Result<Entry> {
 
 /// `key` as an author writes it: `select.select`, `button.submit`,
 /// `button_row`.
-fn selector(key: SlotKey) -> String {
+fn selector(key: ClassKey) -> String {
     match key {
-        SlotKey::Part(widget, part) => format!("{}.{part}", widget.form_name()),
-        SlotKey::Fixed(key) => key.form_name().to_string(),
+        ClassKey::Part(widget, part) => format!("{}.{part}", widget.form_name()),
+        ClassKey::Fixed(key) => key.form_name().to_string(),
     }
 }
 
-/// A selector: which slot an entry edits, as a `SlotKey`. One of
+/// A selector: which slot an entry edits, as a `ClassKey`. One of
 ///
 /// - `widget.part` (`select.select`, `text.input`): a part of a built-in
 ///   widget, by its `form!` name and its `parts()` name;
@@ -135,7 +144,7 @@ fn selector(key: SlotKey) -> String {
 /// Every name is checked here, with the caret on the token at fault, so a
 /// selector that parses names a slot that exists. Also returns the tokens as
 /// written, so a later error about the whole selector can underline all of it.
-fn parse_slot_key(input: ParseStream<'_>) -> Result<(SlotKey, TokenStream2)> {
+fn parse_slot_key(input: ParseStream<'_>) -> Result<(ClassKey, TokenStream2)> {
     let first: Ident = input.parse()?;
     if !input.peek(Token![.]) {
         return Ok((fixed_key(&first)?, quote! { #first }));
@@ -151,15 +160,15 @@ fn parse_slot_key(input: ParseStream<'_>) -> Result<(SlotKey, TokenStream2)> {
 }
 
 /// `button.<type>`, with `type` checked as `buttons:` checks it.
-fn button_key(ty: &Ident) -> Result<SlotKey> {
+fn button_key(ty: &Ident) -> Result<ClassKey> {
     FixedKey::from_form_name(&format!("button.{ty}"))
-        .map(SlotKey::Fixed)
+        .map(ClassKey::Fixed)
         .ok_or_else(|| syn::Error::new(ty.span(), unknown_button_type(ty)))
 }
 
 /// `widget.part`: a widget `widget:` would accept, that renders, and has a
 /// part by that name.
-fn part_key(widget: &Ident, part: &Ident) -> Result<SlotKey> {
+fn part_key(widget: &Ident, part: &Ident) -> Result<ClassKey> {
     let Some(builtin) = BuiltinWidget::from_form_name(&widget.to_string()) else {
         return Err(syn::Error::new(
             widget.span(),
@@ -172,25 +181,29 @@ fn part_key(widget: &Ident, part: &Ident) -> Result<SlotKey> {
             format!("`{widget}` is not supported yet — nothing renders it, so it has no classes"),
         ));
     }
-    SlotKey::part(builtin, &part.to_string()).ok_or_else(|| {
-        let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
-        syn::Error::new(
-            part.span(),
-            format!(
-                "`{widget}` has no part `{part}` — it has {}",
-                parts.join(", ")
-            ),
-        )
-    })
+    let written = part.to_string();
+    let found = builtin.parts().iter().find(|p| p.name == written);
+    found
+        .map(|p| ClassKey::Part(builtin, p.name))
+        .ok_or_else(|| {
+            let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
+            syn::Error::new(
+                part.span(),
+                format!(
+                    "`{widget}` has no part `{part}` — it has {}",
+                    parts.join(", ")
+                ),
+            )
+        })
 }
 
 /// A lone name: a `FixedKey`. Failing that, the message guesses what was
 /// meant: a widget written without its part, `button` without its type, or
 /// a near miss.
-fn fixed_key(name: &Ident) -> Result<SlotKey> {
+fn fixed_key(name: &Ident) -> Result<ClassKey> {
     let written = name.to_string();
     if let Some(key) = FixedKey::from_form_name(&written) {
-        return Ok(SlotKey::Fixed(key));
+        return Ok(ClassKey::Fixed(key));
     }
     let message = if let Some(widget) = BuiltinWidget::from_form_name(&written) {
         let parts: Vec<String> = widget
@@ -305,16 +318,16 @@ fn parse_change(input: ParseStream<'_>) -> Result<Change> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Change, ClassEntry, parse_class_value, parse_slot_key};
+    use super::{Change, ClassEntry, ClassKey, parse_class_value, parse_slot_key};
     use crate::form::Entry;
     use crate::form::tests::{err_of, parse};
-    use formoxus_spec::{BuiltinWidget, ButtonType, FixedKey, RenderedInputType, SlotKey};
+    use formoxus_spec::{BuiltinWidget, ButtonType, FixedKey, RenderedInputType};
     use googletest::prelude::*;
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use syn::parse::Parser;
 
-    fn key(tokens: TokenStream2) -> syn::Result<SlotKey> {
+    fn key(tokens: TokenStream2) -> syn::Result<ClassKey> {
         parse_slot_key.parse2(tokens).map(|(key, _)| key)
     }
 
@@ -326,11 +339,11 @@ mod tests {
     fn a_widget_part_is_its_form_name_and_part_name() {
         expect_that!(
             key(quote!(select.select)),
-            ok(eq(&SlotKey::Part(BuiltinWidget::Select, "select")))
+            ok(eq(&ClassKey::Part(BuiltinWidget::Select, "select")))
         );
         expect_that!(
             key(quote!(tel.input)),
-            ok(eq(&SlotKey::Part(
+            ok(eq(&ClassKey::Part(
                 BuiltinWidget::Input(RenderedInputType::Telephone),
                 "input"
             )))
@@ -341,7 +354,7 @@ mod tests {
     fn a_button_is_named_by_its_type_keyword() {
         expect_that!(
             key(quote!(button.submit)),
-            ok(eq(&SlotKey::Fixed(FixedKey::Button(ButtonType::Submit))))
+            ok(eq(&ClassKey::Fixed(FixedKey::Button(ButtonType::Submit))))
         );
     }
 
@@ -349,11 +362,11 @@ mod tests {
     fn a_fixed_key_is_its_snake_case_name() {
         expect_that!(
             key(quote!(button_row)),
-            ok(eq(&SlotKey::Fixed(FixedKey::ButtonRow)))
+            ok(eq(&ClassKey::Fixed(FixedKey::ButtonRow)))
         );
         expect_that!(
             key(quote!(required_marker)),
-            ok(eq(&SlotKey::Fixed(FixedKey::RequiredMarker)))
+            ok(eq(&ClassKey::Fixed(FixedKey::RequiredMarker)))
         );
     }
 
@@ -531,7 +544,7 @@ mod tests {
 
     /// The entries of the one `classes_plus:` block, as `(key, base,
     /// invalid)`.
-    fn block(tokens: TokenStream2) -> Vec<(SlotKey, Option<Change>, Option<Change>)> {
+    fn block(tokens: TokenStream2) -> Vec<(ClassKey, Option<Change>, Option<Change>)> {
         let spec = parse(tokens).expect("should parse");
         spec.entries
             .into_iter()
@@ -560,13 +573,17 @@ mod tests {
             entries,
             elements_are![
                 eq(&(
-                    SlotKey::Part(BuiltinWidget::Select, "select"),
+                    ClassKey::Part(BuiltinWidget::Select, "select"),
                     replace("form-select"),
                     None
                 )),
-                eq(&(SlotKey::Fixed(FixedKey::ButtonRow), append("actions"), None)),
                 eq(&(
-                    SlotKey::Part(BuiltinWidget::Input(RenderedInputType::Text), "input"),
+                    ClassKey::Fixed(FixedKey::ButtonRow),
+                    append("actions"),
+                    None
+                )),
+                eq(&(
+                    ClassKey::Part(BuiltinWidget::Input(RenderedInputType::Text), "input"),
                     None,
                     replace("is-invalid")
                 )),

@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `bool: From<&str>` is not satisfied
-  --> tests/ui/form_widget_prop_wrong_type.rs:37:49
+  --> tests/ui/form_widget_prop_wrong_type.rs:34:49
    |
-37 |             comments => { widget: Notes { wrap: "yes" } },
+34 |             comments => { widget: Notes { wrap: "yes" } },
    |                                                 ^^^^^ the trait `From<&str>` is not implemented for `bool`
    |
    = note: required for `&str` to implement `Into<bool>`

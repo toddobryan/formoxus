@@ -13,7 +13,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::AttrSet;
+use formoxus::attrs::{AttrSet, Tag};
 use formoxus::classes::{FixedKey, Slot};
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{BuiltinWidget, RenderedInputType, Widget};
@@ -207,6 +207,7 @@ struct ClassProbe;
 impl Widget for ClassProbe {
     const NAME: &'static str = "class_probe";
     const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
 
     fn render(&self, props: WidgetProps) -> Element {
         let form = props
@@ -220,10 +221,6 @@ impl Widget for ClassProbe {
         rsx! {
             span { "probe form=[{form}] select=[{select}]" }
         }
-    }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 

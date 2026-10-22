@@ -44,6 +44,7 @@
 - [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; `step` never emitted, but a dev may write one (2026-10-19)
 - [Shrink FieldProps idea](shrink_fieldprops_idea.md) — HISTORY: `FieldProps` gone 2026-10-21, into one `WidgetProps`. 2026-10-08: `required`/`aria_invalid` DO move into the typed map (3d); `path`/`choices`/`errors` stay props; RadioGroup hard-places aria-invalid
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
+- [Widgets declare parts, presets own classes](widgets_declare_parts_presets_own_classes.md) — DECIDED 2026-10-22: `PARTS: &[Tag]`, no `default_classes()`, slots keyed `(W::NAME, Tag)`, generic lookups only
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`
 - [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade
 - [Attribute rules design](attribute_rules_design.md) — build order in `formoxus/ATTRIBUTES_PLAN.md`; ONE table in `formoxus-attrs`; custom widgets are a trait declaring ATTRS + default classes (2026-10-08, fn vs const open); DECIDED 2026-10-10: widget PARTS named by element

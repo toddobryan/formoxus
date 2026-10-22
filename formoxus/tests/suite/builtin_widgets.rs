@@ -183,37 +183,6 @@ fn checkbox_and_textarea_render_every_prop() {
     }
 }
 
-/// `default_classes` repeats `Classes::fx()`'s slots until `Classes` is keyed
-/// on `Widget::NAME`; this catches the two drifting.
-///
-/// Part by part, so a part `fx()` gives no class (a hidden input's) must have
-/// no slot either, and a slot for a part the widget lacks fails too.
-#[gtest]
-fn each_builtins_default_classes_match_classes_fx() {
-    let fx = Classes::fx();
-    for (widget, builtin) in builtins() {
-        let slots = widget.default_classes();
-        let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
-        for part in &parts {
-            let mine = slots.iter().find(|(p, _)| p == part).map(|(_, s)| s);
-            expect_that!(
-                mine,
-                eq(fx.part(builtin, part)),
-                "{}'s `{part}`",
-                widget.name()
-            );
-        }
-        for (part, _) in &slots {
-            expect_that!(
-                parts,
-                contains(eq(part)),
-                "{} has no `{part}`",
-                widget.name()
-            );
-        }
-    }
-}
-
 /// `NAME` is `form!`'s spelling, so a `classes_plus:` selector keeps working
 /// once `Classes` is keyed on it.
 #[gtest]

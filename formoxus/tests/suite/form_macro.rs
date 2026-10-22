@@ -6,6 +6,7 @@
 //! the expansion is exercised end to end rather than as tokens.
 
 use facet::Facet;
+use formoxus::attrs::Tag;
 use formoxus::form;
 use formoxus::nodes::ValuesByPath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
@@ -634,15 +635,12 @@ struct ShoutyWidget;
 impl formoxus::widgets::Widget for ShoutyWidget {
     const NAME: &'static str = "shouty";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
 
     /// `render` may not call hooks, so it hands off to a component that does.
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         let label = props.label.unwrap_or_default();
         rsx! { ShoutyView { path: props.path, label } }
-    }
-
-    fn default_classes() -> Vec<(&'static str, formoxus::classes::Slot)> {
-        Vec::new()
     }
 }
 

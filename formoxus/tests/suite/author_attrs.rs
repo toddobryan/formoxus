@@ -16,8 +16,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::AttrSet;
-use formoxus::attrs::{AttrKey, AttrValue};
-use formoxus::classes::Slot;
+use formoxus::attrs::{AttrKey, AttrValue, Tag};
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
@@ -161,14 +160,11 @@ struct Spreading;
 impl Widget for Spreading {
     const NAME: &'static str = "spreading";
     const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
 
     fn render(&self, props: WidgetProps) -> Element {
         let attrs = props.attrs.merge_with_attrs(props.extra_attrs);
         rsx! { input { class: "spreading", ..attrs } }
-    }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        Vec::new()
     }
 }
 

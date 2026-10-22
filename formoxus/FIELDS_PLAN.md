@@ -852,28 +852,130 @@ widgets become ONE concept.
      re-exported from `formoxus::attrs`, without which a dev could not set
      `ACCEPTS`.
 
-  **Checkpoint 3: class slots keyed on `Widget::NAME`.**
+  **Checkpoint 3: a widget says WHERE classes go; a preset says WHAT they
+  are.** Redesigned 2026-10-22 (Todd). A widget declares its `PARTS`, as
+  `Tag`s; a `Classes` preset (`fx()`, `bare()`, a future Bootstrap one) is
+  a table of slots keyed by `(W::NAME, Tag)`. Widgets lose
+  `default_classes()`: nothing read it at run time, and a preset cannot know
+  a widget it has never seen, so a dev's widget renders unclassed under
+  `fx()` until the app adds `with_part::<MyWidget>(…)` or the widget borrows
+  a built-in's slots. Every lookup and builder is generic over `W: Widget`,
+  so a slot is never named by a string literal. Expect one red build
+  between 9 and 11; the compiler errors are the to-do list.
 
-  - [ ] **9.** `SlotKey::Part(&'static str, &'static str)`, widget name then part
-     (`slot_key.rs:20`). `SlotKey::part` (27) checks the part against
-     what? See 10.
-  - [ ] **10.** A `PARTS: &'static [Part]` const on `Widget` (no default: every
-      widget states its parts), replacing `BuiltinWidget::parts`. Then the
-      part list exists at compile time, so `classes_plus: { select: {
-      lable: … } }` is refused by a `const _` assert in the dev's crate
-      instead of by the macro reading `parts()` (`classes.rs:162`
-      `part_key`). The suggestion text for a misspelled part may get
-      plainer; Claude re-blesses.
-  - [ ] **11.** `formoxus/src/classes.rs`: `part`/`part_class`/`with_part` (220,
-      236, 253) take a widget name (or `W: Widget`) instead of a
-      `BuiltinWidget`; `fx()` (347) is built by asking each built-in's
-      `default_classes()`, which removes the second copy and the test that
-      kept the two in step (`builtin_widgets.rs`
-      `each_builtins_default_classes_match_classes_fx`).
-  - [ ] **12.** The Views, `field_row` and `WidgetProps::part_class`/
-      `control_class` pass `Self::NAME` (or the widget's `NAME`) where they
-      pass `BuiltinWidget::…` now. That also makes `field_row` and the two
-      helpers safe to make `pub` for a dev's widget (decide then).
+  - [x] **9.** **`Tag`**, its own enum, in `formoxus-spec/src/elements.rs`
+     beside `HtmlElement` (4): `Div | Fieldset | Label | Legend | Input |
+     Textarea | Select`, every element a widget renders a class on. No input
+     type: within one widget the `input` part is just the `<input>`, and
+     `HtmlElement` keeps the input type for attribute validity. Give it
+     `const fn as_str()` (the tag, for messages and `form!`), `const fn
+     from_str(&str) -> Option<Tag>` (for `form!`'s parse), `ALL`, and a
+     `const fn same(self, other) -> bool` comparing `as u8`, because a
+     derived `==` cannot be called in a `const fn`. Re-export from
+     `formoxus::attrs` (`lib.rs:60`). When item 15 flattens `HtmlElement`,
+     its `tag()` (13) can return a `Tag`.
+  - [x] **10.** **`PARTS` replaces `default_classes()` on `Widget`**
+     (`widget.rs:22`): `const PARTS: &'static [Tag];`, no default. Remove
+     `default_classes` from `Widget` (42), `DynWidget` (51, 64) and
+     `AnyWidget` (97, 122), from each built-in, and `text_like_classes()`
+     from `input.rs`. The built-ins' parts, from `BuiltinWidget::parts()`
+     (`formoxus-spec/src/widgets.rs:148`): text-likes, `Textarea`, `Select`
+     `[Div, Label, <control>]`; checkbox `[Div, Input, Label]`; hidden
+     `[]` (Todd: `hidden()` renders no `class` at all, so nothing in it can carry one); radio group `[Fieldset, Legend, Div, Input, Label]`. The
+     test widgets (`widget.rs` 136, 150; `tests/suite/classes.rs`
+     `ClassProbe`; the UI tests) swap `default_classes` for a one-line
+     `PARTS`.
+  - [ ] **11.** **`Classes` keyed on `(W::NAME, Tag)`**, `formoxus/src/classes.rs`.
+     - `SlotKey` moves here from `formoxus-spec/src/slot_key.rs` (delete
+       that file and `SlotKey::part`), as `Part(&'static str, Tag) |
+       Fixed(FixedKey)`. It was in the spec only because `form!` built
+       `SlotKey`s while parsing; after 12 it does not. `FixedKey` stays in
+       the spec, since `form!` still parses fixed names.
+     - Generic over `W: Widget`, checked against `W::PARTS` (panic, listing
+       them, on a tag the widget lacks): `part::<W>(tag)` (220),
+       `part_class::<W>(tag, invalid)` (236), `with_part::<W>(tag, slot)`
+       (253), `ClassEdit::part::<W>(tag)` (52). `part_name` (264) becomes
+       the check.
+     - `with_parts` (296) and its three tests go (Todd).
+     - `fx()` (347) stays a table: `fx_part` (445) keyed on `(&'static str,
+       Tag)` by `RadioGroup::NAME` and so on instead of `BuiltinWidget`
+       patterns, and `fx()` loops over a list of the 18 built-ins'
+       `(W::NAME, W::PARTS)`, asking `fx_part` for each, as it loops over
+       `BuiltinWidget::ALL` now.
+     - The Views pass their type: `field_row::<W>`, `field_label::<W>`,
+       `WidgetProps::part_class::<W>(tag)`/`control_class::<W>(tag)`;
+       `text_like::<W>` and `render_input::<W>`, with `text_like_inputs!`
+       passing `Self`; `VariantSelect` borrows `Select`'s slots, so
+       `::<Select>`; `RadioGroupView` (`radio_group.rs:108–115`).
+     **WHERE THIS STOPPED (2026-10-22, end of school day; build RED on
+     purpose, committed so it travels home).** Done: `SlotKey` lives in
+     `classes.rs`; `Classes` is NOT generic, its methods are; `key::<W>`
+     is the one checked constructor; `part`/`part_class`/`with_part`/
+     `ClassEdit::part` take `::<W>(tag)`; `part_name` and `with_parts` are
+     gone; `fx()` loops over the 18 built-ins' `parts_of::<W>()` and
+     `fx_part` matches `(RadioGroup::NAME, Tag::Fieldset)` (a concrete
+     type's `NAME` IS a legal pattern; only a generic `W::NAME` is not).
+     `field_row::<W>`, `field_label::<W>` and `WidgetProps::part_class::<W>`
+     are converted. The macro compiles on a stand-in (`ClassKey` in
+     `formoxus-macros/src/form/classes.rs`, still emitting the OLD
+     `ClassEdit::part(BuiltinWidget, "part")`; item 12 fixes that).
+     `cargo build -p formoxus` lists exactly what is left, 20 errors:
+
+     - [ ] **11a.** `WidgetProps::control_class` (`widget_props.rs`) now
+       returns `Option<&Slot>` and dropped `self.attrs.class(…)`. Put it
+       back: `-> Option<String> { self.attrs.class(self.classes.part::<W>(tag),
+       self.is_invalid()) }`. `attrs.class` is what lays a field's own
+       `class:`/`class_plus:` over the slot; without it they vanish. The
+       five "`Option<&Slot>: IntoAttributeValue` is not satisfied" errors
+       are this one line. Drop the `classes::Slot` import it needed.
+     - [ ] **11b.** Unused `BuiltinWidget` imports: `field_row.rs:6`,
+       `widget_props.rs:4`.
+     - [ ] **11c.** Each View's two calls: `props.control_class::<W>(Tag::…)`
+       and `field_row::<W>(&props, marked, side, control)`, the widget
+       argument gone (the "takes 4 arguments but 5" errors).
+       `textarea.rs` 56, 69 → `::<Textarea>`; `select.rs` 71, 102 →
+       `::<Select>`; `variant_select.rs` 38, 67 → `::<Select>` (it borrows
+       the select's slots); `input.rs` 221, 236 (`text_like`) and 247, 263
+       (`checkbox` → `::<CheckboxInput>`). Delete each `let my_widget`.
+     - [ ] **11d.** `text_like` serves 13 types, so it needs `W`: `fn
+       text_like<W: Widget>(input_type, props)`. It is reached through
+       `InputView`, a `#[component]`. Try making the component generic,
+       `fn InputView<W: Widget>(…)` called as `InputView::<W> { … }` from
+       `render_input::<W>`, with `text_like_inputs!` passing `Self`. If
+       Dioxus refuses a props struct whose `W` no field uses, add a
+       `_widget: PhantomData<W>` prop. Fallback: resolve the three class
+       strings in `render_input::<W>` (class lookups read no store, so
+       they need no scope) and pass them in. Claude can probe which works.
+     - [ ] **11e.** `radio_group.rs` 96–103: `part::<RadioGroup>(Tag::Fieldset)`
+       and `part_class::<RadioGroup>(Tag::Div, is_invalid)` and so on;
+       delete `my_widget`.
+     - [ ] **11f.** Then `cargo build -p formoxus` is green and the suite and
+       examples go red where they use the old `Classes` API or
+       `classes_plus:`. Those are 12 (the macro) and 12a (tests, Claude).
+  - [ ] **12.** **`form!`'s `classes_plus:`**, `formoxus-macros/src/form/classes.rs`.
+     `ClassEntry.key` (17) becomes a macro-side enum, `Part { widget:
+     Ident, tag: Tag, spans } | Fixed(FixedKey)`. `part_key` (162) keeps
+     refusing an unknown or not-yet widget name at parse time, and now
+     maps the part through `Tag::from_str`, so `lable` is still a parse
+     error, with an edit-distance suggestion. Whether the widget HAS that
+     tag becomes a `const _` assert, spanned on the part, on a new `const
+     fn has_part::<W: Widget>(tag) -> bool` in `formoxus`, which also
+     covers a dev's widget. `tokens()` (27) emits
+     `ClassEdit::part::<#ty>(::formoxus::attrs::Tag::#tag)`, `#ty` from
+     the name mapping `builtin_type` uses; `builtin_tokens` then has no
+     caller and goes. A built-in's "has no part" message can still list its
+     parts from `BuiltinWidget::parts()` until checkpoint 4; so can
+     `fixed_key`'s "set part by part" (195).
+  - [ ] **12a.** (Claude) Tests: `classes.rs`'s own (680–880) and
+     `tests/suite/classes.rs` (33, 59, 262) on the new API; drop
+     `each_builtins_default_classes_match_classes_fx`; add that every slot
+     `fx()` sets names a part in its widget's `PARTS`, and every built-in
+     part but the hidden input's has an `fx()` slot (what `fx_part`'s panic
+     guarded).
+  - [ ] **12b.** (Claude) Goldens: the `classes_plus` ones for a part the
+     widget lacks move to `E0080`; read each diff. The five
+     `tests/snapshots/` files must come out byte for byte: they are what
+     proves `fx()` did not move.
 
   **Checkpoint 4: delete.**
 

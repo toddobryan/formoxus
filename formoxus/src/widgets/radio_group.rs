@@ -1,9 +1,8 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldType, FieldTypeSet, HtmlElement};
+use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldType, FieldTypeSet, HtmlElement, Tag};
 
-use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
@@ -27,6 +26,8 @@ impl Widget for RadioGroup {
     /// The `<fieldset>`'s, where the spread lands.
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Fieldset);
 
+    const PARTS: &'static [Tag] = &[Tag::Fieldset, Tag::Legend, Tag::Div, Tag::Input, Tag::Label];
+
     /// `Bool` on its own, offering true and false; any other type only with
     /// `choices`.
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
@@ -42,19 +43,6 @@ impl Widget for RadioGroup {
         rsx! {
             RadioGroupView { widget_props: props }
         }
-    }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        vec![
-            (
-                "fieldset",
-                Slot::new("fx-form-field fx-radio-group").with_invalid("fx-invalid"),
-            ),
-            ("legend", Slot::new("fx-legend fx-field-label")),
-            ("div", Slot::new("fx-choice")),
-            ("input", Slot::new("fx-control fx-radio")),
-            ("label", Slot::new("fx-choice-label")),
-        ]
     }
 }
 

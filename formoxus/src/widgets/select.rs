@@ -2,13 +2,12 @@
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement,
+    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag,
 };
 
 use super::field_row::{LabelSide, field_row};
 use super::types::bool_choices;
 use super::values::{get_current, write_value};
-use crate::classes::Slot;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<select>`, the default for an optional `bool` and for a field with
@@ -20,6 +19,8 @@ impl Widget for Select {
     const NAME: &'static str = BuiltinWidget::Select.form_name();
 
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Select));
+
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Select];
 
     /// `Bool` on its own, offering true and false; any other type only with
     /// `choices`.
@@ -33,14 +34,6 @@ impl Widget for Select {
         rsx! {
             SelectView { widget_props: props }
         }
-    }
-
-    fn default_classes() -> Vec<(&'static str, Slot)> {
-        vec![
-            ("div", Slot::new("fx-form-field").with_invalid("fx-invalid")),
-            ("label", Slot::new("fx-field-label")),
-            ("select", Slot::new("fx-control fx-select")),
-        ]
     }
 }
 

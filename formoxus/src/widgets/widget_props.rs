@@ -1,10 +1,14 @@
 use std::rc::Rc;
 
 use dioxus::core::Attribute;
-use formoxus_spec::BuiltinWidget;
+use formoxus_spec::{BuiltinWidget, Tag};
 
 use crate::{
-    Classes, ValidationMessage, field_attrs::FieldAttrs, nodes::ValuesStore, widgets::Choice,
+    Classes, ValidationMessage,
+    classes::Slot,
+    field_attrs::FieldAttrs,
+    nodes::ValuesStore,
+    widgets::{Choice, Widget},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,14 +49,13 @@ impl WidgetProps {
     /// Crate-private, as `field_row` is, while a part is keyed by
     /// `BuiltinWidget`: a dev's widget has none until `Classes` is keyed on
     /// `Widget::NAME`.
-    pub(crate) fn part_class(&self, widget: BuiltinWidget, part: &str) -> Option<String> {
-        self.classes.part_class(widget, part, self.is_invalid())
+    pub(crate) fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
+        self.classes.part_class::<W>(tag, self.is_invalid())
     }
 
     /// The form control's `class`: `part`'s slot, as the field's own `class`
     /// and `class_plus` replace or extend it.
-    pub(crate) fn control_class(&self, widget: BuiltinWidget, part: &str) -> Option<String> {
-        self.attrs
-            .class(self.classes.part(widget, part), self.is_invalid())
+    pub(crate) fn control_class<W: Widget>(&self, tag: Tag) -> Option<&Slot> {
+        self.classes.part::<W>(tag)
     }
 }
