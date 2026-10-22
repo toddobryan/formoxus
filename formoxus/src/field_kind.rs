@@ -22,11 +22,12 @@
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_spec::{Attr, BuiltinWidget, FieldControl, FieldType, HtmlElement};
+use formoxus_spec::{Attr, FieldControl, FieldType, HtmlElement};
 
 use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
+use crate::widgets::Widget;
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -152,15 +153,19 @@ pub const fn is_single_value(shape: &Shape) -> bool {
     !matches!(kind(shape), Kind::Other | Kind::Enum)
 }
 
-/// Whether `widget` can render a single-value field of this type. `has_choices`
-/// is whether `form!` was given `choices` for it.
+/// Whether the widget `W` can render a single-value field of this type.
+/// `has_choices` is whether `form!` was given `choices` for it.
 ///
 /// `true` for anything [`is_single_value`] rejects, so a widget on a struct
 /// reports once, from there. `true` for a newtype whose inside is out of reach,
 /// for the reason `Kind::Unknown` gives. Everything else is the field's
-/// `FieldType`, and the rule is [`BuiltinWidget::renders`]; only the shape side
-/// lives here, because `formoxus-spec` has no facet.
-pub const fn renders(shape: &Shape, widget: BuiltinWidget, has_choices: bool) -> bool {
+/// `FieldType`, judged by `W`'s own consts: in [`Widget::ACCEPTS`], or any type
+/// at all when it has choices and [`Widget::TAKES_CHOICES`].
+///
+/// Generic rather than taking a widget value, so `form!` can ask it in a free
+/// `const _` in the dev's crate, where `W`'s consts are visible: a `const fn`
+/// can read a trait's consts but not call its methods.
+pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
         Kind::Enum | Kind::Other | Kind::Unknown => return true,
         Kind::Text => FieldType::Text,
@@ -168,11 +173,19 @@ pub const fn renders(shape: &Shape, widget: BuiltinWidget, has_choices: bool) ->
         Kind::Float => FieldType::Float,
         Kind::Bool => FieldType::Bool,
     };
-    widget.renders(field_type, has_choices)
+    W::ACCEPTS.contains(field_type) || (W::TAKES_CHOICES && has_choices)
 }
 
 pub const fn is_optional(shape: &Shape) -> bool {
     matches!(shape.def, Def::Option(_))
+}
+
+/// Whether the widget `W` can render this field as far as optionality goes:
+/// `true` for a field that is not an `Option`, and for one that is when
+/// [`Widget::ACCEPTS_OPTIONAL`]. `form!` asserts it beside [`renders`], so a
+/// checkbox or a radio group on an `Option<_>` is refused at compile time.
+pub const fn optional_is_okay<W: Widget>(shape: &Shape) -> bool {
+    !is_optional(shape) || W::ACCEPTS_OPTIONAL
 }
 
 pub const fn is_enum(shape: &Shape) -> bool {
@@ -289,16 +302,15 @@ const fn str_eq(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::widgets::{CheckboxInput, Select, TextInput, Textarea};
+
     use super::{
         applies, is_enum, is_optional, is_single_value, renders, required_is_not_optional,
         takes_bound, takes_length, takes_pattern, takes_required,
     };
     use facet::Facet;
-    use formoxus_spec::{Attr, BuiltinWidget, RenderedInputType};
+    use formoxus_spec::Attr;
     use googletest::prelude::*;
-
-    const TEXT: BuiltinWidget = BuiltinWidget::Input(RenderedInputType::Text);
-    const CHECKBOX: BuiltinWidget = BuiltinWidget::Input(RenderedInputType::Checkbox);
 
     #[derive(Facet)]
     struct Markdown(std::string::String);
@@ -373,44 +385,41 @@ mod tests {
     #[gtest]
     fn an_input_renders_text_and_numbers_but_not_a_bool() {
         for shape in [std::string::String::SHAPE, u32::SHAPE, f64::SHAPE] {
-            expect_that!(renders(shape, TEXT, false), eq(true), "{shape}");
+            expect_that!(renders::<TextInput>(shape, false), eq(true), "{shape}");
         }
-        expect_that!(renders(bool::SHAPE, TEXT, false), eq(false));
+        expect_that!(renders::<TextInput>(bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_textarea_renders_only_text() {
         expect_that!(
-            renders(std::string::String::SHAPE, BuiltinWidget::Textarea, false),
+            renders::<Textarea>(std::string::String::SHAPE, false),
             eq(true)
         );
-        expect_that!(
-            renders(u32::SHAPE, BuiltinWidget::Textarea, false),
-            eq(false)
-        );
-        expect_that!(
-            renders(bool::SHAPE, BuiltinWidget::Textarea, false),
-            eq(false)
-        );
+        expect_that!(renders::<Textarea>(u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Textarea>(bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_checkbox_renders_only_a_bool_optional_or_not() {
-        expect_that!(renders(bool::SHAPE, CHECKBOX, false), eq(true));
-        expect_that!(renders(<Option<bool>>::SHAPE, CHECKBOX, false), eq(true));
+        expect_that!(renders::<CheckboxInput>(bool::SHAPE, false), eq(true));
         expect_that!(
-            renders(std::string::String::SHAPE, CHECKBOX, false),
+            renders::<CheckboxInput>(<Option<bool>>::SHAPE, false),
+            eq(true)
+        );
+        expect_that!(
+            renders::<CheckboxInput>(std::string::String::SHAPE, false),
             eq(false)
         );
     }
 
     #[gtest]
     fn a_chooser_needs_choices_except_for_a_bool() {
-        expect_that!(renders(bool::SHAPE, BuiltinWidget::Select, false), eq(true));
-        expect_that!(renders(u32::SHAPE, BuiltinWidget::Select, false), eq(false));
-        expect_that!(renders(u32::SHAPE, BuiltinWidget::Select, true), eq(true));
+        expect_that!(renders::<Select>(bool::SHAPE, false), eq(true));
+        expect_that!(renders::<Select>(u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Select>(u32::SHAPE, true), eq(true));
         expect_that!(
-            renders(std::string::String::SHAPE, BuiltinWidget::Select, true),
+            renders::<Select>(std::string::String::SHAPE, true),
             eq(true)
         );
     }
@@ -441,8 +450,8 @@ mod tests {
     #[gtest]
     fn renders_leaves_structs_and_opaque_newtypes_to_other_checks() {
         let list = <Vec<std::string::String>>::SHAPE;
-        expect_that!(renders(list, BuiltinWidget::Textarea, false), eq(true));
-        expect_that!(renders(Markdown::SHAPE, CHECKBOX, false), eq(true));
+        expect_that!(renders::<Textarea>(list, false), eq(true));
+        expect_that!(renders::<CheckboxInput>(Markdown::SHAPE, false), eq(true));
     }
 
     #[gtest]
@@ -557,13 +566,16 @@ mod tests {
     fn an_enum_still_takes_no_widget() {
         for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
             expect_that!(is_single_value(shape), eq(false), "{shape}");
-            for widget in [BuiltinWidget::Textarea, CHECKBOX] {
-                expect_that!(
-                    renders(shape, widget, false),
-                    eq(true),
-                    "{widget:?} on {shape}"
-                );
-            }
+            expect_that!(
+                renders::<Textarea>(shape, false),
+                eq(true),
+                "Textarea on {shape}"
+            );
+            expect_that!(
+                renders::<CheckboxInput>(shape, false),
+                eq(true),
+                "CheckboxInput on {shape}"
+            );
         }
     }
 

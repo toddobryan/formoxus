@@ -182,7 +182,7 @@ fn is_number_literal(expr: &Expr) -> bool {
 }
 
 /// Why `widget` cannot render an optional field, for the widgets whose
-/// `accepts_optional` is `false`. A `select` can say "no answer", with its
+/// `ACCEPTS_OPTIONAL` is `false`. A `select` can say "no answer", with its
 /// blank option, which is why it is the default for an `Option<bool>`.
 fn optional_refusal(widget: BuiltinWidget) -> &'static str {
     match widget {
@@ -192,7 +192,9 @@ fn optional_refusal(widget: BuiltinWidget) -> &'static str {
         BuiltinWidget::Input(RenderedInputType::Checkbox) => {
             "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`"
         }
-        other => unreachable!("`{other:?}` accepts an optional field; give it a refusal here"),
+        // Asserted for every widget, so one that accepts an optional field
+        // needs a message too, though its assert always holds.
+        _ => "this widget cannot render an optional field",
     }
 }
 
@@ -217,10 +219,39 @@ fn cannot_render(widget: BuiltinWidget) -> &'static str {
 }
 
 impl WidgetRef {
+    /// A free `const _` assertion that this widget takes the `choices` written
+    /// at `key`, with the caret on the key: `W::TAKES_CHOICES`, read by rustc
+    /// in the dev's crate, so a dev's widget that sets it to `false` is
+    /// refused like `text` is. A built-in's message names the widgets that do
+    /// take them.
+    pub(crate) fn choices_check(&self, key: &Ident) -> TokenStream2 {
+        let ty = self.type_tokens();
+        let message = match &self.kind {
+            WidgetKind::Named { name, .. } => format!(
+                "`{name}` takes no `choices` — they apply to {}",
+                BuiltinWidget::ALL
+                    .iter()
+                    .filter(|w| w.takes_choices() && w.is_rendered())
+                    .map(|w| format!("`{}`", w.form_name()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            WidgetKind::Path(_) => format!("`{}` takes no `choices`", self.written()),
+        };
+        quote_spanned! { key.span()=>
+            #[allow(clippy::assertions_on_constants)]
+            const _: () = ::core::assert!(
+                <#ty as ::formoxus::widgets::Widget>::TAKES_CHOICES,
+                #message
+            );
+        }
+    }
+
     /// Free `const _` assertions that the field at `shape` can be rendered by
     /// this widget, with the caret on the widget's name. `shape` is a
     /// `field_kind::shape_of(…)` expression; see `FieldBody::type_checks`.
     pub(crate) fn checks(&self, shape: &TokenStream2, has_choices: bool) -> TokenStream2 {
+        let ty = self.type_tokens();
         let span = match &self.kind {
             WidgetKind::Named { name, .. } => name.span(),
             WidgetKind::Path(path) => path
@@ -234,28 +265,31 @@ impl WidgetRef {
                 "a widget applies only to a single-value field, not a struct, list or enum"
             );
         };
-        let WidgetKind::Named { widget, .. } = &self.kind else {
-            return single;
-        };
-        let not_optional = if widget.accepts_optional() {
-            TokenStream2::new()
-        } else {
-            let message = optional_refusal(*widget);
-            quote_spanned! { span =>
-                const _: () = ::core::assert!(
-                    !::formoxus::field_kind::is_optional(#shape),
-                    #message
-                );
+        // The same asserts for a built-in and a dev's widget: rustc reads
+        // `W`'s consts in the dev's crate. Only the wording differs, since a
+        // built-in's says why and what to use instead.
+        let (cannot_render, optional_refusal) = match &self.kind {
+            WidgetKind::Named { widget, .. } => (
+                cannot_render(*widget).to_string(),
+                optional_refusal(*widget).to_string(),
+            ),
+            WidgetKind::Path(_) => {
+                let written = self.written();
+                (
+                    format!("`{written}` cannot render this field"),
+                    format!("`{written}` cannot render an optional field"),
+                )
             }
         };
-        let message = cannot_render(*widget);
-        let builtin = builtin_tokens(*widget);
         quote_spanned! { span=>
             #single
-            #not_optional
             const _: () = ::core::assert!(
-                ::formoxus::field_kind::renders(#shape, #builtin, #has_choices),
-                #message
+                ::formoxus::field_kind::optional_is_okay::<#ty>(#shape),
+                #optional_refusal
+            );
+            const _: () = ::core::assert!(
+                ::formoxus::field_kind::renders::<#ty>(#shape, #has_choices),
+                #cannot_render
             );
         }
     }
@@ -530,23 +564,33 @@ mod tests {
         expect_that!(spec.expand().to_string(), contains_substring("states ()"));
     }
 
+    /// Not a parse error: `form!` emits a `const _` on the widget's
+    /// `TAKES_CHOICES`, which rustc evaluates in the dev's crate. The goldens
+    /// (`form_choices_on_a_non_chooser`) pin what the dev sees.
     #[gtest]
     fn a_non_chooser_is_told_which_widgets_take_choices() {
-        let msg = parse(quote! { Address { state => { widget: text, choices: STATES } } })
-            .expect_err("`text` has nothing to choose from")
-            .to_string();
-        expect_that!(msg, contains_substring("`text` takes no `choices`"));
-        expect_that!(msg, contains_substring("`select`"));
-        expect_that!(msg, contains_substring("`radio_group`"));
+        let spec =
+            parse(quote! { Address { state => { widget: text, choices: STATES } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring(
+                "< :: formoxus :: widgets :: TextInput as :: formoxus :: widgets :: Widget > :: TAKES_CHOICES"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring("`text` takes no `choices` — they apply to `select`, `radio_group`")
+        );
     }
 
-    /// Either order: the check runs once both keys are known.
+    /// Either order: the check is emitted once both keys are known.
     #[gtest]
     fn the_widget_check_does_not_depend_on_the_order_written() {
+        let spec =
+            parse(quote! { Address { state => { choices: STATES, widget: text } } }).unwrap();
         expect_that!(
-            parse(quote! { Address { state => { choices: STATES, widget: text } } })
-                .expect_err("`text` has nothing to choose from")
-                .to_string(),
+            spec.expand().to_string(),
             contains_substring("`text` takes no `choices`")
         );
     }

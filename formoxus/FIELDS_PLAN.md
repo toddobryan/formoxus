@@ -825,25 +825,32 @@ widgets become ONE concept.
      `BuiltinWidget`'s answers for every `FieldType`, so checkpoint 2 can
      switch over knowing nothing moved.
 
-  **Checkpoint 2: `form!` asks the consts.**
+  **Checkpoint 2: `form!` asks the consts.** DONE 2026-10-22.
 
-  - [ ] **5.** `formoxus/src/field_kind.rs:163` `renders(shape, widget:
+  - [x] **5.** `formoxus/src/field_kind.rs:163` `renders(shape, widget:
      BuiltinWidget, …)` becomes `renders::<W: Widget>(shape, has_choices)`,
      reading `W::ACCEPTS`/`W::TAKES_CHOICES`, plus `accepts_optional::<W>`.
      A `const fn` may have a trait bound and read associated consts; it
      may not call trait METHODS, which is why these are consts and not fns.
-  - [ ] **6.** `formoxus-macros/src/form/widget.rs:223` `WidgetRef::checks` emits
+  - [x] **6.** `formoxus-macros/src/form/widget.rs:223` `WidgetRef::checks` emits
      those for BOTH kinds: a built-in as `::formoxus::widgets::Textarea`
      (`builtin_type`, 57, already maps the name), a path as written. Today
      the `let … else { return single; }` at 237 skips a path widget
      entirely. The messages: `cannot_render` (201) and `optional_refusal`
      (187) for a built-in, a generic one naming the type for a path.
-  - [ ] **7.** `reject_choices_unless_chooser` (`field.rs:1050`) can stay
+  - [x] **7.** `reject_choices_unless_chooser` (`field.rs:1050`) can stay
      macro-side for built-ins (`takes_choices` via the name table) or move
      to a `const _` on `W::TAKES_CHOICES`. The second also covers a dev's
      widget that sets `TAKES_CHOICES = false`.
-  - [ ] **8.** (Claude) Goldens: built-in messages should be unchanged; new
+     DONE 2026-10-22 (Todd: the assert): `WidgetRef::choices_check`, on
+     the `choices` key. Built-in wording unchanged; the error is now
+     rustc's `E0080` const evaluation rather than a macro error.
+  - [x] **8.** (Claude) Goldens: built-in messages should be unchanged; new
      goldens for a dev's widget with narrowed consts.
+     DONE 2026-10-22: all 55 unchanged; `form_dev_widget_narrowed_accepts`
+     and `form_dev_widget_refuses_optional` added. `FieldTypeSet` is now
+     re-exported from `formoxus::attrs`, without which a dev could not set
+     `ACCEPTS`.
 
   **Checkpoint 3: class slots keyed on `Widget::NAME`.**
 

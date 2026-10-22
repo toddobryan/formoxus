@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_spec::{Attr, AttrType, BuiltinWidget, FieldControl, FieldType, HtmlElement, Owner};
+use formoxus_spec::{Attr, AttrType, FieldControl, FieldType, HtmlElement, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -14,8 +14,6 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
 };
-
-use crate::form::widget::WidgetKind;
 
 use super::{SpecPath, WidgetRef, suggest::edit_distance};
 
@@ -386,6 +384,9 @@ impl FieldBody {
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
+            if let Some((key, _)) = &self.choices {
+                checks.push(widget.choices_check(key));
+            }
         }
         quote! { #(#checks)* }
     }
@@ -460,10 +461,6 @@ impl Parse for FieldBody {
                 ),
             ));
         }
-        if let (Some((key, _)), Some(widget)) = (&fb.choices, &fb.widget) {
-            reject_choices_unless_chooser(key, &widget.kind)?;
-        }
-
         Ok(fb)
     }
 }
@@ -1044,27 +1041,6 @@ fn conflicting(attr: Attr) -> Option<Attr> {
         Attr::Style => Some(Attr::StylePlus),
         Attr::StylePlus => Some(Attr::Style),
         _ => None,
-    }
-}
-
-fn reject_choices_unless_chooser(key: &Ident, kind: &WidgetKind) -> syn::Result<()> {
-    match kind {
-        WidgetKind::Named { widget, .. } if widget.takes_choices() => Ok(()),
-        WidgetKind::Named { name, .. } => Err(syn::Error::new_spanned(
-            key,
-            format!(
-                "`{name}` takes no `choices` — they apply to {}",
-                BuiltinWidget::ALL
-                    .iter()
-                    .filter(|w| w.takes_choices() && w.is_rendered())
-                    .map(|w| format!("`{}`", w.form_name()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        )),
-        // Choices reach every widget through `WidgetProps`, so a dev's own
-        // widget may take them; whether it uses them is its business.
-        WidgetKind::Path(_) => Ok(()),
     }
 }
 
