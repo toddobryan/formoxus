@@ -959,7 +959,7 @@ widgets become ONE concept.
      - [x] **11f.** Then `cargo build -p formoxus` is green and the suite and
        examples go red where they use the old `Classes` API or
        `classes_plus:`. Those are 12 (the macro) and 12a (tests, Claude).
-  - [ ] **12.** **`form!`'s `classes_plus:`**, `formoxus-macros/src/form/classes.rs`.
+  - [x] **12.** **`form!`'s `classes_plus:`**, `formoxus-macros/src/form/classes.rs`.
      `ClassEntry.key` (17) becomes a macro-side enum, `Part { widget:
      Ident, tag: Tag, spans } | Fixed(FixedKey)`. `part_key` (162) keeps
      refusing an unknown or not-yet widget name at parse time, and now
@@ -973,6 +973,16 @@ widgets become ONE concept.
      caller and goes. A built-in's "has no part" message can still list its
      parts from `BuiltinWidget::parts()` until checkpoint 4; so can
      `fixed_key`'s "set part by part" (195).
+     DONE 2026-10-22 (Todd), SMALLER than written: `ClassKey::Part` is
+     `(BuiltinWidget, Tag)`, and the has-a-part check stays at parse time
+     from `BuiltinWidget::parts()`. `classes_plus:` takes only built-in
+     names, so that check is complete, and it keeps the caret on the part
+     and the list of parts. `tokens()` emits `ClassEdit::part::<#ty>(Tag::…)`
+     through `builtin_type`, now `pub(crate)`; `builtin_tokens` is gone.
+     MOVED TO CHECKPOINT 4 (item 13): the name table, and with it
+     `has_part::<W>` as a `const _` assert. Without `BuiltinWidget` the
+     macro cannot list a widget's parts, so the "has no part" and "set part
+     by part" messages lose their lists (a const panic message is a literal).
   - [x] **12a.** (Claude) Tests: `classes.rs`'s own (680–880) and
      `tests/suite/classes.rs` (33, 59, 262) on the new API; drop
      `each_builtins_default_classes_match_classes_fx`; add that every slot
@@ -986,10 +996,13 @@ widgets become ONE concept.
      (suite) `an_app_classes_a_devs_widget_by_its_type` end to end. The
      suite's four `classes_plus:` tests need no edit and wait on 12; with
      them switched off the suite was 390/390.
-  - [ ] **12b.** (Claude) Goldens: the `classes_plus` ones for a part the
+  - [x] **12b.** (Claude) Goldens: the `classes_plus` ones for a part the
      widget lacks move to `E0080`; read each diff. The five
      `tests/snapshots/` files must come out byte for byte: they are what
      proves `fx()` did not move.
+     DONE 2026-10-22: nothing moved, since 12 kept the parse-time check.
+     trybuild passes unchanged and so do the snapshots; workspace tests,
+     `clippy -D warnings` and fmt all clean. CHECKPOINT 3 DONE.
 
   **Checkpoint 4: delete.**
 

@@ -1,4 +1,4 @@
-use formoxus_spec::{BuiltinWidget, FixedKey};
+use formoxus_spec::{BuiltinWidget, FixedKey, Tag};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{Ident, Result, Token, braced, parse::ParseStream, token};
@@ -6,7 +6,7 @@ use syn::{Ident, Result, Token, braced, parse::ParseStream, token};
 use super::button::unknown_button_type;
 use super::field::class_list;
 use super::suggest::edit_distance;
-use super::widget::{builtin_tokens, unknown_widget};
+use super::widget::{builtin_type, unknown_widget};
 use super::{Entry, kw};
 
 /// One `selector: value` line of `classes_plus: { … }`, resolved and checked
@@ -25,7 +25,7 @@ pub(crate) struct ClassEntry {
 /// what the emitted `ClassEdit` builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ClassKey {
-    Part(BuiltinWidget, &'static str),
+    Part(BuiltinWidget, Tag),
     Fixed(FixedKey),
 }
 
@@ -35,9 +35,10 @@ impl ClassEntry {
     /// `replace_*`/`append_*` per piece the entry changes.
     pub(crate) fn tokens(&self) -> TokenStream2 {
         let edit = match self.key {
-            ClassKey::Part(widget, part) => {
-                let widget = builtin_tokens(widget);
-                quote! { ::formoxus::classes::ClassEdit::part(#widget, #part) }
+            ClassKey::Part(widget, tag) => {
+                let ty = builtin_type(widget);
+                let tag = format_ident!("{tag:?}");
+                quote! { ::formoxus::classes::ClassEdit::part::<#ty>(::formoxus::attrs::Tag::#tag) }
             }
             ClassKey::Fixed(key) => {
                 let key = fixed_key_tokens(key);
@@ -128,7 +129,7 @@ pub(crate) fn parse_classes_plus(input: ParseStream<'_>) -> Result<Entry> {
 /// `button_row`.
 fn selector(key: ClassKey) -> String {
     match key {
-        ClassKey::Part(widget, part) => format!("{}.{part}", widget.form_name()),
+        ClassKey::Part(widget, tag) => format!("{}.{}", widget.form_name(), tag.as_str()),
         ClassKey::Fixed(key) => key.form_name().to_string(),
     }
 }
@@ -184,7 +185,7 @@ fn part_key(widget: &Ident, part: &Ident) -> Result<ClassKey> {
     let written = part.to_string();
     let found = builtin.parts().iter().find(|p| p.name == written);
     found
-        .map(|p| ClassKey::Part(builtin, p.name))
+        .map(|p| ClassKey::Part(builtin, Tag::from_str(p.name).expect("every part is a Tag")))
         .ok_or_else(|| {
             let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
             syn::Error::new(
@@ -321,7 +322,7 @@ mod tests {
     use super::{Change, ClassEntry, ClassKey, parse_class_value, parse_slot_key};
     use crate::form::Entry;
     use crate::form::tests::{err_of, parse};
-    use formoxus_spec::{BuiltinWidget, ButtonType, FixedKey, RenderedInputType};
+    use formoxus_spec::{BuiltinWidget, ButtonType, FixedKey, RenderedInputType, Tag};
     use googletest::prelude::*;
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
@@ -339,13 +340,13 @@ mod tests {
     fn a_widget_part_is_its_form_name_and_part_name() {
         expect_that!(
             key(quote!(select.select)),
-            ok(eq(&ClassKey::Part(BuiltinWidget::Select, "select")))
+            ok(eq(&ClassKey::Part(BuiltinWidget::Select, Tag::Select)))
         );
         expect_that!(
             key(quote!(tel.input)),
             ok(eq(&ClassKey::Part(
                 BuiltinWidget::Input(RenderedInputType::Telephone),
-                "input"
+                Tag::Input
             )))
         );
     }
@@ -573,7 +574,7 @@ mod tests {
             entries,
             elements_are![
                 eq(&(
-                    ClassKey::Part(BuiltinWidget::Select, "select"),
+                    ClassKey::Part(BuiltinWidget::Select, Tag::Select),
                     replace("form-select"),
                     None
                 )),
@@ -583,7 +584,7 @@ mod tests {
                     None
                 )),
                 eq(&(
-                    ClassKey::Part(BuiltinWidget::Input(RenderedInputType::Text), "input"),
+                    ClassKey::Part(BuiltinWidget::Input(RenderedInputType::Text), Tag::Input),
                     None,
                     replace("is-invalid")
                 )),
@@ -665,20 +666,20 @@ mod tests {
                 }
             }),
             contains_substring(
-                ". with_class_edit (:: formoxus :: classes :: ClassEdit :: part \
-                 (:: formoxus :: attrs :: BuiltinWidget :: Select , \"select\") \
+                ". with_class_edit (:: formoxus :: classes :: ClassEdit :: part :: \
+                 < :: formoxus :: widgets :: Select > (:: formoxus :: attrs :: Tag :: Select) \
                  . replace_base (\"form-select\") . append_invalid (\"is-invalid\"))"
             )
         );
     }
 
     #[gtest]
-    fn an_input_part_names_its_input_type() {
+    fn an_input_part_names_its_widget_type() {
         expect_that!(
             expansion(quote! { Signup { classes_plus: { tel.input: + [phone] } } }),
             contains_substring(
-                ":: formoxus :: attrs :: BuiltinWidget :: Input \
-                 (:: formoxus :: attrs :: RenderedInputType :: Telephone) , \"input\") \
+                "ClassEdit :: part :: < :: formoxus :: widgets :: TelInput > \
+                 (:: formoxus :: attrs :: Tag :: Input) \
                  . append_base (\"phone\")"
             )
         );

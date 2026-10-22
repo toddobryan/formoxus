@@ -30,31 +30,10 @@ fn widget_names() -> impl Iterator<Item = &'static str> {
     BuiltinWidget::ALL.iter().map(BuiltinWidget::form_name)
 }
 
-/// `widget`, as the expression `::formoxus::attrs::BuiltinWidget::…`.
-///
-/// The variant idents come from `Debug`, which for a unit variant is exactly
-/// its name; `formoxus-spec` tests the same about `RenderedInputType`.
-pub(crate) fn builtin_tokens(widget: BuiltinWidget) -> TokenStream2 {
-    match widget {
-        BuiltinWidget::Input(input_type) => {
-            let input_type = rendered_input_ident(input_type);
-            quote! {
-                ::formoxus::attrs::BuiltinWidget::Input(
-                    ::formoxus::attrs::RenderedInputType::#input_type
-                )
-            }
-        }
-        other => {
-            let variant = format_ident!("{other:?}");
-            quote! { ::formoxus::attrs::BuiltinWidget::#variant }
-        }
-    }
-}
-
 /// `widget`, as the type implementing `::formoxus::widgets::Widget` that
 /// renders it. Exhaustive, with no wildcard, so a new built-in cannot compile
 /// without a row here.
-fn builtin_type(widget: BuiltinWidget) -> TokenStream2 {
+pub(crate) fn builtin_type(widget: BuiltinWidget) -> TokenStream2 {
     use RenderedInputType as T;
     let name = match widget {
         BuiltinWidget::Input(input_type) => match input_type {
@@ -83,10 +62,6 @@ fn builtin_type(widget: BuiltinWidget) -> TokenStream2 {
     };
     let name = format_ident!("{name}");
     quote! { ::formoxus::widgets::#name }
-}
-
-fn rendered_input_ident(input_type: RenderedInputType) -> Ident {
-    format_ident!("{input_type:?}")
 }
 
 #[derive(Debug)]
