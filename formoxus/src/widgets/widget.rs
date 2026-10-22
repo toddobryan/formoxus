@@ -6,7 +6,7 @@ use std::{any::Any, fmt::Debug};
 // Dioxus's `Element`, what `render` returns. The attribute table's is
 // `formoxus_spec::HtmlElement`, named apart so the two never need an alias.
 use dioxus::prelude::Element;
-use formoxus_spec::AttrSet;
+use formoxus_spec::{AttrSet, FieldTypeSet};
 
 use crate::{classes::Slot, widgets::widget_props::WidgetProps};
 
@@ -27,6 +27,30 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     /// accepts on a field it renders, beyond the field's own settings. Read
     /// only at compile time, by `form!`'s checks.
     const EXTENDS: AttrSet;
+
+    /// The field types this widget renders without `choices`. It renders a
+    /// field of type `t` when `ACCEPTS.contains(t) || (TAKES_CHOICES &&
+    /// has_choices)`: a `Select` accepts only `Bool` on its own, but any type
+    /// it is given choices for. Read only at compile time, by `form!`'s
+    /// checks, which is why it is a const and not a method: a `const fn` can
+    /// read a trait's consts but cannot call its methods.
+    ///
+    /// Defaults to every type, so a widget that declares nothing is checked
+    /// for nothing.
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::ALL;
+
+    /// Whether this widget can render an `Option<_>` field, which needs a way
+    /// to say "no value". `false` for a checkbox (two states, where an
+    /// `Option<bool>` has three) and a radio group (a picked radio cannot be
+    /// un-picked); `select`, with its blank option, is the way out for both.
+    /// Defaults to `true`.
+    const ACCEPTS_OPTIONAL: bool = true;
+
+    /// Whether `form!` may give this widget `choices`, and so whether a field
+    /// outside `ACCEPTS` is still renderable when it has them. Defaults to
+    /// `true`: choices reach every widget through `WidgetProps`, and whether
+    /// one uses them is its own business.
+    const TAKES_CHOICES: bool = true;
 
     /// Renders the field from `props`, which are built fresh for each render
     /// and so are the widget's to move out of.

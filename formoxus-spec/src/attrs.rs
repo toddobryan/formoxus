@@ -44,6 +44,46 @@ pub enum FieldType {
     Bool,
 }
 
+impl FieldType {
+    /// This type's bit in a [`FieldTypeSet`]: one per variant, by
+    /// declaration order.
+    pub const fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+}
+
+/// A set of [`FieldType`]s, built and read in `const` context: what a widget
+/// declares it can render (`Widget::ACCEPTS`), for `form!`'s compile-time
+/// checks to read. A bitset, like [`AttrSet`], so that every operation is a
+/// `const fn`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldTypeSet(u8);
+
+impl FieldTypeSet {
+    /// No field type at all.
+    pub const EMPTY: Self = Self(0);
+
+    /// Every field type: the default `Widget::ACCEPTS`, so a widget that
+    /// says nothing is offered every field.
+    pub const ALL: Self = Self::EMPTY
+        .with(FieldType::Text)
+        .with(FieldType::Int)
+        .with(FieldType::Float)
+        .with(FieldType::Bool);
+
+    /// This set with `field_type` added. Chained, it builds a set in a
+    /// `const`: `FieldTypeSet::EMPTY.with(FieldType::Text).with(FieldType::Int)`.
+    pub const fn with(mut self, field_type: FieldType) -> Self {
+        self.0 |= field_type.bit();
+        self
+    }
+
+    /// Whether `field_type` is in this set.
+    pub const fn contains(&self, field_type: FieldType) -> bool {
+        self.0 & field_type.bit() != 0
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FieldTypeWithOptional {
     field_type: FieldType,

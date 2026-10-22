@@ -29,7 +29,8 @@ mod slot_key;
 mod widgets;
 
 pub use attrs::{
-    Attr, AttrKey, AttrSet, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner,
+    Attr, AttrKey, AttrSet, AttrType, AttrValue, FieldType, FieldTypeSet, FieldTypeWithOptional,
+    Owner,
 };
 pub use bound::{Bound, Step};
 pub use buttons::{ButtonType, Invocation};

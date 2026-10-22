@@ -6,7 +6,7 @@ use dioxus::core::Attribute;
 use dioxus::prelude::*;
 use formoxus::ValidationMessage;
 use formoxus::attrs::AttrSet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, RenderedInputType as R};
+use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, FieldType, RenderedInputType as R};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::widgets::Choice;
@@ -320,4 +320,122 @@ fn the_choosers_extend_their_own_elements() {
     // The spread lands on the fieldset, so a radio's attributes are not here.
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Disabled), eq(true));
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Checked), eq(false));
+}
+
+// ── The kind consts agree with `BuiltinWidget` ───────────────────────────
+//
+// Checkpoint 1 of `FIELDS_PLAN.md`'s "Delete `BuiltinWidget`": the consts
+// each widget declares must answer what `BuiltinWidget`'s methods answer
+// today, so that `form!` can switch from one to the other in checkpoint 2
+// with nothing moving. Goes with `BuiltinWidget`, in checkpoint 4.
+
+const FIELD_TYPES: [FieldType; 4] = [
+    FieldType::Text,
+    FieldType::Int,
+    FieldType::Float,
+    FieldType::Bool,
+];
+
+/// Everything `W`'s consts and `builtin`'s methods disagree on; empty when
+/// they agree. The `renders` rule is checked for every field type, with and
+/// without choices, since `TAKES_CHOICES` changes the answer.
+fn disagreements<W: Widget>(builtin: BuiltinWidget) -> Vec<String> {
+    let mut found = Vec::new();
+    if W::ACCEPTS_OPTIONAL != builtin.accepts_optional() {
+        found.push(format!("ACCEPTS_OPTIONAL is {}", W::ACCEPTS_OPTIONAL));
+    }
+    if W::TAKES_CHOICES != builtin.takes_choices() {
+        found.push(format!("TAKES_CHOICES is {}", W::TAKES_CHOICES));
+    }
+    for field_type in FIELD_TYPES {
+        for has_choices in [false, true] {
+            let mine = W::ACCEPTS.contains(field_type) || (W::TAKES_CHOICES && has_choices);
+            if mine != builtin.renders(field_type, has_choices) {
+                found.push(format!(
+                    "renders {field_type:?} (choices: {has_choices}) is {mine}"
+                ));
+            }
+        }
+    }
+    found
+}
+
+#[gtest]
+fn each_builtins_kind_consts_agree_with_builtin_widget() {
+    let found = [
+        (
+            TextInput::NAME,
+            disagreements::<TextInput>(BuiltinWidget::Input(R::Text)),
+        ),
+        (
+            PasswordInput::NAME,
+            disagreements::<PasswordInput>(BuiltinWidget::Input(R::Password)),
+        ),
+        (
+            NumberInput::NAME,
+            disagreements::<NumberInput>(BuiltinWidget::Input(R::Number)),
+        ),
+        (
+            EmailInput::NAME,
+            disagreements::<EmailInput>(BuiltinWidget::Input(R::Email)),
+        ),
+        (
+            TelInput::NAME,
+            disagreements::<TelInput>(BuiltinWidget::Input(R::Telephone)),
+        ),
+        (
+            UrlInput::NAME,
+            disagreements::<UrlInput>(BuiltinWidget::Input(R::Url)),
+        ),
+        (
+            SearchInput::NAME,
+            disagreements::<SearchInput>(BuiltinWidget::Input(R::Search)),
+        ),
+        (
+            ColorInput::NAME,
+            disagreements::<ColorInput>(BuiltinWidget::Input(R::Color)),
+        ),
+        (
+            DateInput::NAME,
+            disagreements::<DateInput>(BuiltinWidget::Input(R::Date)),
+        ),
+        (
+            TimeInput::NAME,
+            disagreements::<TimeInput>(BuiltinWidget::Input(R::Time)),
+        ),
+        (
+            DatetimeLocalInput::NAME,
+            disagreements::<DatetimeLocalInput>(BuiltinWidget::Input(R::DatetimeLocal)),
+        ),
+        (
+            MonthInput::NAME,
+            disagreements::<MonthInput>(BuiltinWidget::Input(R::Month)),
+        ),
+        (
+            WeekInput::NAME,
+            disagreements::<WeekInput>(BuiltinWidget::Input(R::Week)),
+        ),
+        (
+            HiddenInput::NAME,
+            disagreements::<HiddenInput>(BuiltinWidget::Input(R::Hidden)),
+        ),
+        (
+            CheckboxInput::NAME,
+            disagreements::<CheckboxInput>(BuiltinWidget::Input(R::Checkbox)),
+        ),
+        (
+            Textarea::NAME,
+            disagreements::<Textarea>(BuiltinWidget::Textarea),
+        ),
+        (Select::NAME, disagreements::<Select>(BuiltinWidget::Select)),
+        (
+            RadioGroup::NAME,
+            disagreements::<RadioGroup>(BuiltinWidget::RadioGroup),
+        ),
+    ];
+    // Every widget type, so one added later and left out of this list fails.
+    expect_that!(found.len(), eq(builtins().len()));
+    for (name, disagreements) in found {
+        expect_that!(disagreements, is_empty(), "{name}");
+    }
 }

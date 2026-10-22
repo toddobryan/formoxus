@@ -1,7 +1,9 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement};
+use formoxus_spec::{
+    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement,
+};
 
 use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
@@ -16,6 +18,12 @@ impl Widget for Textarea {
     const NAME: &'static str = BuiltinWidget::Textarea.form_name();
 
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Textarea));
+
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text);
+
+    const ACCEPTS_OPTIONAL: bool = true;
+
+    const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
         rsx! {

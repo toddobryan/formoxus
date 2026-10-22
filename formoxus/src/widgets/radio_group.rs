@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, AttrSet, BuiltinWidget, HtmlElement};
+use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldType, FieldTypeSet, HtmlElement};
 
 use crate::classes::Slot;
 use crate::field_attrs::FieldAttrs;
@@ -26,6 +26,16 @@ impl Widget for RadioGroup {
 
     /// The `<fieldset>`'s, where the spread lands.
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Fieldset);
+
+    /// `Bool` on its own, offering true and false; any other type only with
+    /// `choices`.
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
+
+    /// A picked radio cannot be un-picked, so there is no way back to "no
+    /// value". Also enforced at render, by `reject_if_not_required`.
+    const ACCEPTS_OPTIONAL: bool = false;
+
+    const TAKES_CHOICES: bool = true;
 
     fn render(&self, props: WidgetProps) -> Element {
         reject_if_not_required(&props.attrs, &props.path);

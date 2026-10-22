@@ -5,7 +5,8 @@
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, FieldControl, HtmlElement, InputType, RenderedInputType,
+    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
+    RenderedInputType,
 };
 
 use super::field_row::{LabelSide, field_row};
@@ -36,6 +37,14 @@ macro_rules! text_like_inputs {
                 const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(
                     FieldControl::Input(InputType::$variant),
                 ));
+
+                /// Never `Bool`: a text box cannot say true or false. A number
+                /// is accepted, since the field parses the text back.
+                const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text).with(FieldType::Int).with(FieldType::Float);
+
+                const ACCEPTS_OPTIONAL: bool = true;
+
+                const TAKES_CHOICES: bool = false;
 
                 fn render(&self, props: WidgetProps) -> Element {
                     render_input(RenderedInputType::$variant, props)
@@ -93,6 +102,15 @@ impl Widget for HiddenInput {
 
     const EXTENDS: AttrSet = AttrSet::EMPTY;
 
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
+        .with(FieldType::Text)
+        .with(FieldType::Int)
+        .with(FieldType::Float);
+
+    const ACCEPTS_OPTIONAL: bool = true;
+
+    const TAKES_CHOICES: bool = false;
+
     fn render(&self, props: WidgetProps) -> Element {
         render_input(RenderedInputType::Hidden, props)
     }
@@ -114,6 +132,13 @@ impl Widget for CheckboxInput {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(
         InputType::Checkbox,
     )));
+
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
+
+    /// Two states, and an `Option<bool>` has three.
+    const ACCEPTS_OPTIONAL: bool = false;
+
+    const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
         render_input(RenderedInputType::Checkbox, props)
