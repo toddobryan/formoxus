@@ -76,7 +76,6 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let my_widget = BuiltinWidget::RadioGroup;
     let is_invalid = props.is_invalid();
     let field_attrs = &props.attrs;
     let values = props.values;
@@ -93,14 +92,21 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
         .without(Attr::Required)
         .merge_with_attrs(props.extra_attrs);
 
-    let field_class = field_attrs.class(props.classes.part(my_widget, "fieldset"), is_invalid);
+    let field_class =
+        field_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
 
     let current = get_current(&props.path, values);
 
-    let div_class = props.classes.part_class(my_widget, "div", is_invalid);
-    let input_class = props.classes.part_class(my_widget, "input", is_invalid);
-    let label_class = props.classes.part_class(my_widget, "label", is_invalid);
-    let legend_class = props.classes.part_class(my_widget, "legend", is_invalid);
+    let div_class = props.classes.part_class::<RadioGroup>(Tag::Div, is_invalid);
+    let input_class = props
+        .classes
+        .part_class::<RadioGroup>(Tag::Input, is_invalid);
+    let label_class = props
+        .classes
+        .part_class::<RadioGroup>(Tag::Label, is_invalid);
+    let legend_class = props
+        .classes
+        .part_class::<RadioGroup>(Tag::Legend, is_invalid);
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
     // radio needs its OWN `path` to move into its own `onchange` and an rsx

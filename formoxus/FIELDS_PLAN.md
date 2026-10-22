@@ -885,7 +885,7 @@ widgets become ONE concept.
      test widgets (`widget.rs` 136, 150; `tests/suite/classes.rs`
      `ClassProbe`; the UI tests) swap `default_classes` for a one-line
      `PARTS`.
-  - [ ] **11.** **`Classes` keyed on `(W::NAME, Tag)`**, `formoxus/src/classes.rs`.
+  - [x] **11.** **`Classes` keyed on `(W::NAME, Tag)`**, `formoxus/src/classes.rs`.
      - `SlotKey` moves here from `formoxus-spec/src/slot_key.rs` (delete
        that file and `SlotKey::part`), as `Part(&'static str, Tag) |
        Fixed(FixedKey)`. It was in the spec only because `form!` built
@@ -907,8 +907,10 @@ widgets become ONE concept.
        `text_like::<W>` and `render_input::<W>`, with `text_like_inputs!`
        passing `Self`; `VariantSelect` borrows `Select`'s slots, so
        `::<Select>`; `RadioGroupView` (`radio_group.rs:108–115`).
-     **WHERE THIS STOPPED (2026-10-22, end of school day; build RED on
-     purpose, committed so it travels home).** Done: `SlotKey` lives in
+     DONE 2026-10-22 (Todd): `cargo build -p formoxus` green, no warnings;
+     the suite's `classes.rs` and `classes.rs`'s own tests are what is left
+     red (12, 12a). What stood at the end of the first school-day session,
+     for the record: Done: `SlotKey` lives in
      `classes.rs`; `Classes` is NOT generic, its methods are; `key::<W>`
      is the one checked constructor; `part`/`part_class`/`with_part`/
      `ClassEdit::part` take `::<W>(tag)`; `part_name` and `with_parts` are
@@ -921,23 +923,23 @@ widgets become ONE concept.
      `ClassEdit::part(BuiltinWidget, "part")`; item 12 fixes that).
      `cargo build -p formoxus` lists exactly what is left, 20 errors:
 
-     - [ ] **11a.** `WidgetProps::control_class` (`widget_props.rs`) now
+     - [x] **11a.** `WidgetProps::control_class` (`widget_props.rs`) now
        returns `Option<&Slot>` and dropped `self.attrs.class(…)`. Put it
        back: `-> Option<String> { self.attrs.class(self.classes.part::<W>(tag),
        self.is_invalid()) }`. `attrs.class` is what lays a field's own
        `class:`/`class_plus:` over the slot; without it they vanish. The
        five "`Option<&Slot>: IntoAttributeValue` is not satisfied" errors
        are this one line. Drop the `classes::Slot` import it needed.
-     - [ ] **11b.** Unused `BuiltinWidget` imports: `field_row.rs:6`,
+     - [x] **11b.** Unused `BuiltinWidget` imports: `field_row.rs:6`,
        `widget_props.rs:4`.
-     - [ ] **11c.** Each View's two calls: `props.control_class::<W>(Tag::…)`
+     - [x] **11c.** Each View's two calls: `props.control_class::<W>(Tag::…)`
        and `field_row::<W>(&props, marked, side, control)`, the widget
        argument gone (the "takes 4 arguments but 5" errors).
        `textarea.rs` 56, 69 → `::<Textarea>`; `select.rs` 71, 102 →
        `::<Select>`; `variant_select.rs` 38, 67 → `::<Select>` (it borrows
        the select's slots); `input.rs` 221, 236 (`text_like`) and 247, 263
        (`checkbox` → `::<CheckboxInput>`). Delete each `let my_widget`.
-     - [ ] **11d.** `text_like` serves 13 types, so it needs `W`: `fn
+     - [x] **11d.** `text_like` serves 13 types, so it needs `W`: `fn
        text_like<W: Widget>(input_type, props)`. It is reached through
        `InputView`, a `#[component]`. Try making the component generic,
        `fn InputView<W: Widget>(…)` called as `InputView::<W> { … }` from
@@ -946,10 +948,15 @@ widgets become ONE concept.
        `_widget: PhantomData<W>` prop. Fallback: resolve the three class
        strings in `render_input::<W>` (class lookups read no store, so
        they need no scope) and pass them in. Claude can probe which works.
-     - [ ] **11e.** `radio_group.rs` 96–103: `part::<RadioGroup>(Tag::Fieldset)`
+       PROBED AND DONE: a bare generic component fails (E0392: Dioxus's
+       generated `InputViewProps<W>` never uses `W`); `#[props(default)]
+       _widget: PhantomData<W>` works, adds no bounds `Widget` lacks, and all
+       18 built-ins render byte for byte as at `ad1449c`, valid and invalid,
+       with and without a field's own `class_plus`.
+     - [x] **11e.** `radio_group.rs` 96–103: `part::<RadioGroup>(Tag::Fieldset)`
        and `part_class::<RadioGroup>(Tag::Div, is_invalid)` and so on;
        delete `my_widget`.
-     - [ ] **11f.** Then `cargo build -p formoxus` is green and the suite and
+     - [x] **11f.** Then `cargo build -p formoxus` is green and the suite and
        examples go red where they use the old `Classes` API or
        `classes_plus:`. Those are 12 (the macro) and 12a (tests, Claude).
   - [ ] **12.** **`form!`'s `classes_plus:`**, `formoxus-macros/src/form/classes.rs`.

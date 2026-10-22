@@ -3,7 +3,7 @@
 //! class, in one place.
 
 use dioxus::prelude::*;
-use formoxus_spec::{BuiltinWidget, FixedKey, Tag};
+use formoxus_spec::{FixedKey, Tag};
 
 use crate::classes::Classes;
 use crate::widgets::{FieldErrors, Widget, WidgetProps};

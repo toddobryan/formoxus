@@ -3,6 +3,8 @@
 //! the DOM hands back as plain text) read caption-then-input; a checkbox
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
+use std::marker::PhantomData;
+
 use dioxus::prelude::*;
 use formoxus_spec::{
     Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
@@ -19,7 +21,7 @@ use crate::widgets::{Widget, widget_props::WidgetProps};
 /// Everything a type needs follows from its `RenderedInputType` variant:
 /// `NAME` is `form!`'s spelling of it (`BuiltinWidget::form_name`, so the two
 /// cannot drift), `EXTENDS` is what HTML allows on that `<input>`, and
-/// `render` and `default_classes` are shared. The variant names one in both
+/// `PARTS`, `ACCEPTS` and `render` are shared. The variant names one in both
 /// `RenderedInputType` and `InputType`, which spell them alike. Hidden and
 /// checkbox render differently, so they are written by hand.
 macro_rules! text_like_inputs {
@@ -48,7 +50,7 @@ macro_rules! text_like_inputs {
                 const TAKES_CHOICES: bool = false;
 
                 fn render(&self, props: WidgetProps) -> Element {
-                    render_input(RenderedInputType::$variant, props)
+                    render_input::<Self>(RenderedInputType::$variant, props)
                 }
             }
         )+
@@ -111,7 +113,7 @@ impl Widget for HiddenInput {
     const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
-        render_input(RenderedInputType::Hidden, props)
+        render_input::<Self>(RenderedInputType::Hidden, props)
     }
 }
 
@@ -137,20 +139,24 @@ impl Widget for CheckboxInput {
     const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
-        render_input(RenderedInputType::Checkbox, props)
+        render_input::<Self>(RenderedInputType::Checkbox, props)
     }
 }
 
 /// Every `<input>` widget's `render`: `props` split into what `InputView`
 /// takes. A plain fn, called from `render`, so it must not call hooks either.
-fn render_input(input_type: RenderedInputType, props: WidgetProps) -> Element {
+fn render_input<W: Widget>(input_type: RenderedInputType, props: WidgetProps) -> Element {
     rsx! {
-        InputView { input_type, props }
+        InputView::<W> { input_type, props }
     }
 }
 
 #[component]
-pub(crate) fn InputView(input_type: RenderedInputType, props: WidgetProps) -> Element {
+pub(crate) fn InputView<W: Widget>(
+    input_type: RenderedInputType,
+    props: WidgetProps,
+    #[props(default)] _widget: PhantomData<W>,
+) -> Element {
     // No wildcard arm, on purpose: a type that joins `RenderedInputType`
     // (`Range` is the likely one) has to be routed here before it compiles.
     match input_type {
@@ -168,7 +174,7 @@ pub(crate) fn InputView(input_type: RenderedInputType, props: WidgetProps) -> El
         | RenderedInputType::Time
         | RenderedInputType::DatetimeLocal
         | RenderedInputType::Month
-        | RenderedInputType::Week => text_like(input_type, &props),
+        | RenderedInputType::Week => text_like::<W>(input_type, &props),
     }
 }
 
@@ -209,8 +215,7 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // Withholding it cost more than it bought: a field nothing could CLEAR
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
-fn text_like(input_type: RenderedInputType, props: &WidgetProps) -> Element {
-    let my_widget = BuiltinWidget::Input(input_type);
+fn text_like<W: Widget>(input_type: RenderedInputType, props: &WidgetProps) -> Element {
     let values = props.values;
     let path = props.path.clone();
     let current = get_current(&path, values);
@@ -218,7 +223,7 @@ fn text_like(input_type: RenderedInputType, props: &WidgetProps) -> Element {
 
     let control = rsx! {
         input {
-            class: props.control_class(my_widget, "input"),
+            class: props.control_class::<W>(Tag::Input),
             r#type: input_type.to_input_type().html_type(),
             id: "{props.id}",
             name: "{path}",
@@ -233,18 +238,17 @@ fn text_like(input_type: RenderedInputType, props: &WidgetProps) -> Element {
         }
     };
     let marked = props.attrs.contains(Attr::Required);
-    field_row(my_widget, props, marked, LabelSide::Before, control)
+    field_row::<W>(props, marked, LabelSide::Before, control)
 }
 
 fn checkbox(props: &WidgetProps) -> Element {
-    let my_widget = BuiltinWidget::Input(RenderedInputType::Checkbox);
     let values = props.values;
     let path = props.path.clone();
     let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         input {
-            class: props.control_class(my_widget, "input"),
+            class: props.control_class::<CheckboxInput>(Tag::Input),
             name: "{path}",
             id: "{props.id}",
             r#type: "checkbox",
@@ -260,5 +264,5 @@ fn checkbox(props: &WidgetProps) -> Element {
     // `.fx-form-field` and `.fx-field-label` both silently missed every
     // checkbox on the page; `field_row` is what keeps it in step now.
     let marked = props.attrs.contains(Attr::RequiredTrue);
-    field_row(my_widget, props, marked, LabelSide::After, control)
+    field_row::<CheckboxInput>(props, marked, LabelSide::After, control)
 }

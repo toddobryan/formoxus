@@ -1,10 +1,11 @@
 //! The `<select>` that chooses which enum variant a value takes.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget};
+use formoxus_spec::{Attr, Tag};
 
 use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::Edit;
+use crate::widgets::Select;
 use crate::widgets::widget_props::WidgetProps;
 
 use super::field_row::{LabelSide, field_row};
@@ -28,14 +29,13 @@ pub fn VariantSelect(
     label_case: LabelCase,
     props: WidgetProps,
 ) -> Element {
-    let my_widget = BuiltinWidget::Select;
     let required = props.attrs.contains(Attr::Required);
     let path = props.path.clone();
     let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         select {
-            class: props.control_class(my_widget, "select"),
+            class: props.control_class::<Select>(Tag::Select),
             id: "{props.id}",
             onchange: move |e: FormEvent| {
                 let v = e.value();
@@ -64,5 +64,5 @@ pub fn VariantSelect(
     // Rendered inside a `VariantSet`'s fieldset there isn't: the legend
     // carries both, and a lone `*` floating in front of the select reads as
     // belonging to nothing.
-    field_row(my_widget, &props, required, LabelSide::Before, control)
+    field_row::<Select>(&props, required, LabelSide::Before, control)
 }

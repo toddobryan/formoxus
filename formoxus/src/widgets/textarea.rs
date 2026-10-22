@@ -45,7 +45,6 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let my_widget = BuiltinWidget::Textarea;
     let values = props.values;
     let path = props.path.clone();
     let current = get_current(&path, values);
@@ -53,7 +52,7 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
 
     let control = rsx! {
         textarea {
-            class: props.control_class(my_widget, "textarea"),
+            class: props.control_class::<Textarea>(Tag::Textarea),
             id: "{props.id}",
             name: "{path}",
             value: "{current}",
@@ -66,5 +65,5 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
         }
     };
     let marked = props.attrs.contains(Attr::Required);
-    field_row(my_widget, &props, marked, LabelSide::Before, control)
+    field_row::<Textarea>(&props, marked, LabelSide::Before, control)
 }

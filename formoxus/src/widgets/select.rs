@@ -58,7 +58,6 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let my_widget = BuiltinWidget::Select;
     let values = props.values;
     let path = props.path.clone();
     let choices = props.choices.clone().unwrap_or_else(bool_choices);
@@ -68,7 +67,7 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
 
     let control = rsx! {
         select {
-            class: props.control_class(my_widget, "select"),
+            class: props.control_class::<Select>(Tag::Select),
             id: "{props.id}",
             // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
             // `name` or `distribute_form_values` would never see it.
@@ -99,7 +98,7 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
             }
         }
     };
-    field_row(my_widget, &props, required, LabelSide::Before, control)
+    field_row::<Select>(&props, required, LabelSide::Before, control)
 }
 
 /// The "leave this out" entry in an optional enum's picker.
