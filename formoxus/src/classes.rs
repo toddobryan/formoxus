@@ -476,9 +476,15 @@ fn fx_part(widget_name: &'static str, tag: Tag) -> Option<Slot> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ClassEdit, Classes, FixedKey, Slot, SlotKey};
+    use super::{ClassEdit, Classes, FixedKey, Slot, SlotKey, parts_of};
     use crate::buttons::ButtonType;
-    use formoxus_spec::{BuiltinWidget, RenderedInputType};
+    use crate::widgets::{
+        CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
+        MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
+        TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetProps,
+    };
+    use dioxus::prelude::*;
+    use formoxus_spec::{AttrSet, Tag};
     use googletest::prelude::*;
     use std::borrow::Cow;
 
@@ -546,22 +552,68 @@ mod tests {
             .map(|s| (&*s.base, s.invalid.as_deref()))
     }
 
-    /// Every part a rendered widget has gets an `fx()` class, except a hidden
-    /// input, and nothing else does. The widgets not rendered yet get none.
+    /// The 18 built-ins, as `fx()` lists them. Its own list is local to it;
+    /// the two tests below catch either one gaining a widget the other lacks.
+    fn builtins() -> [(&'static str, &'static [Tag]); 18] {
+        [
+            parts_of::<TextInput>(),
+            parts_of::<PasswordInput>(),
+            parts_of::<NumberInput>(),
+            parts_of::<EmailInput>(),
+            parts_of::<TelInput>(),
+            parts_of::<UrlInput>(),
+            parts_of::<SearchInput>(),
+            parts_of::<ColorInput>(),
+            parts_of::<DateInput>(),
+            parts_of::<TimeInput>(),
+            parts_of::<DatetimeLocalInput>(),
+            parts_of::<MonthInput>(),
+            parts_of::<WeekInput>(),
+            parts_of::<HiddenInput>(),
+            parts_of::<CheckboxInput>(),
+            parts_of::<Textarea>(),
+            parts_of::<Select>(),
+            parts_of::<RadioGroup>(),
+        ]
+    }
+
+    /// Every part every built-in declares gets an `fx()` class. A hidden
+    /// input declares none, so it gets none.
     #[gtest]
-    fn fx_classes_every_part_of_every_rendered_widget_but_hidden() {
+    fn fx_classes_every_part_of_every_builtin() {
         let fx = Classes::fx();
-        let hidden = BuiltinWidget::Input(RenderedInputType::Hidden);
-        for &widget in BuiltinWidget::ALL {
-            for part in widget.parts() {
-                let expected = widget.is_rendered() && widget != hidden;
+        for (name, parts) in builtins() {
+            for &tag in parts {
                 expect_that!(
-                    fx.slots.contains_key(&SlotKey::Part(widget, part.name)),
-                    eq(expected),
-                    "{widget:?}'s `{}`",
-                    part.name
+                    fx.slots.contains_key(&SlotKey::Part(name, tag)),
+                    eq(true),
+                    "{name}'s `{}`",
+                    tag.as_str()
                 );
             }
+        }
+    }
+
+    /// And the other way: every part slot `fx()` sets is a part its widget
+    /// declares, so `fx()` never classes an element nothing renders. What
+    /// `fx_part`'s panic guarded when parts were strings.
+    #[gtest]
+    fn every_part_fx_classes_is_one_its_widget_declares() {
+        let builtins = builtins();
+        for key in Classes::fx().slots.keys() {
+            let SlotKey::Part(name, tag) = *key else {
+                continue;
+            };
+            let parts = builtins
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, parts)| *parts);
+            expect_that!(
+                parts,
+                some(contains(eq(&tag))),
+                "{name}'s `{}`",
+                tag.as_str()
+            );
         }
     }
 
@@ -570,51 +622,58 @@ mod tests {
     /// text-like input the same classes.
     #[gtest]
     fn fx_gives_each_part_its_old_literal() {
-        use BuiltinWidget::{Input, RadioGroup, Select, Textarea};
-        use RenderedInputType::{Checkbox, Email, Text};
         let fx = Classes::fx();
-        let part = |w, p| base_of(&fx, SlotKey::Part(w, p));
+        let part = |name, tag| base_of(&fx, SlotKey::Part(name, tag));
         let wrapper = Some(("fx-form-field", Some("fx-invalid")));
         let label = Some(("fx-field-label", None));
-        for w in [Input(Text), Input(Email), Input(Checkbox), Textarea, Select] {
-            expect_that!(part(w, "div"), eq(wrapper), "{w:?}");
-            expect_that!(part(w, "label"), eq(label), "{w:?}");
+        for name in [
+            TextInput::NAME,
+            EmailInput::NAME,
+            CheckboxInput::NAME,
+            Textarea::NAME,
+            Select::NAME,
+        ] {
+            expect_that!(part(name, Tag::Div), eq(wrapper), "{name}");
+            expect_that!(part(name, Tag::Label), eq(label), "{name}");
         }
         expect_that!(
-            part(Input(Text), "input"),
+            part(TextInput::NAME, Tag::Input),
             eq(Some(("fx-control fx-input", None)))
         );
         expect_that!(
-            part(Input(Email), "input"),
+            part(EmailInput::NAME, Tag::Input),
             eq(Some(("fx-control fx-input", None)))
         );
         expect_that!(
-            part(Input(Checkbox), "input"),
+            part(CheckboxInput::NAME, Tag::Input),
             eq(Some(("fx-control fx-checkbox", None)))
         );
         expect_that!(
-            part(Textarea, "textarea"),
+            part(Textarea::NAME, Tag::Textarea),
             eq(Some(("fx-control fx-textarea", None)))
         );
         expect_that!(
-            part(Select, "select"),
+            part(Select::NAME, Tag::Select),
             eq(Some(("fx-control fx-select", None)))
         );
         expect_that!(
-            part(RadioGroup, "fieldset"),
+            part(RadioGroup::NAME, Tag::Fieldset),
             eq(Some(("fx-form-field fx-radio-group", Some("fx-invalid"))))
         );
         expect_that!(
-            part(RadioGroup, "legend"),
+            part(RadioGroup::NAME, Tag::Legend),
             eq(Some(("fx-legend fx-field-label", None)))
         );
-        expect_that!(part(RadioGroup, "div"), eq(Some(("fx-choice", None))));
         expect_that!(
-            part(RadioGroup, "input"),
+            part(RadioGroup::NAME, Tag::Div),
+            eq(Some(("fx-choice", None)))
+        );
+        expect_that!(
+            part(RadioGroup::NAME, Tag::Input),
             eq(Some(("fx-control fx-radio", None)))
         );
         expect_that!(
-            part(RadioGroup, "label"),
+            part(RadioGroup::NAME, Tag::Label),
             eq(Some(("fx-choice-label", None)))
         );
     }
@@ -685,30 +744,68 @@ mod tests {
         expect_that!(Classes::default(), eq(&Classes::fx()));
     }
 
+    // ── A dev's widget ───────────────────────────────────────────────────
+
+    /// A widget no preset has heard of, with two parts.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    struct Notes;
+
+    impl Widget for Notes {
+        const NAME: &'static str = "notes";
+        const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
+        const EXTENDS: AttrSet = AttrSet::EMPTY;
+        fn render(&self, _props: WidgetProps) -> Element {
+            rsx! {}
+        }
+    }
+
+    /// `fx()` classes only the widgets it knows, so a dev's renders bare
+    /// until the app says otherwise.
+    #[gtest]
+    fn fx_leaves_a_devs_widget_unclassed() {
+        expect_that!(Classes::fx().part::<Notes>(Tag::Div), none());
+        expect_that!(Classes::fx().part_class::<Notes>(Tag::Div, true), none());
+    }
+
+    #[gtest]
+    fn with_part_classes_a_devs_widget() {
+        let classes = Classes::fx().with_part::<Notes>(Tag::Textarea, Slot::new("notes-box"));
+        expect_that!(
+            classes.part_class::<Notes>(Tag::Textarea, false),
+            some(eq("notes-box"))
+        );
+        expect_that!(classes.part::<Notes>(Tag::Div), none());
+    }
+
+    /// Two widgets with the same tag are two slots: the key is the widget's
+    /// `NAME` as well as the tag.
+    #[gtest]
+    fn the_same_tag_on_two_widgets_is_two_slots() {
+        let classes = Classes::fx().with_part::<Notes>(Tag::Textarea, Slot::new("notes-box"));
+        expect_that!(
+            classes.part_class::<Textarea>(Tag::Textarea, false),
+            some(eq("fx-control fx-textarea"))
+        );
+    }
+
     // ── The builders ─────────────────────────────────────────────────────
 
     #[gtest]
     fn with_part_replaces_one_slot_and_nothing_else() {
-        let select = BuiltinWidget::Select;
-        let changed = Classes::fx().with_part(select, "select", Slot::new("form-select"));
-        expect_that!(
-            base_of(&changed, SlotKey::Part(select, "select")),
-            eq(Some(("form-select", None)))
-        );
+        let key = SlotKey::Part(Select::NAME, Tag::Select);
+        let changed = Classes::fx().with_part::<Select>(Tag::Select, Slot::new("form-select"));
+        expect_that!(base_of(&changed, key), eq(Some(("form-select", None))));
         let mut unchanged = changed.clone();
-        unchanged.slots.insert(
-            SlotKey::Part(select, "select"),
-            Slot::new("fx-control fx-select"),
-        );
+        unchanged
+            .slots
+            .insert(key, Slot::new("fx-control fx-select"));
         expect_that!(unchanged, eq(&Classes::fx()));
     }
 
     #[gtest]
-    #[should_panic(
-        expected = "unknown part `lable` for widget Textarea (it has div, label, textarea)"
-    )]
+    #[should_panic(expected = "`textarea` has no part `legend` (it has div, label, textarea)")]
     fn with_part_panics_on_a_part_the_widget_lacks_naming_the_ones_it_has() {
-        let _ = Classes::fx().with_part(BuiltinWidget::Textarea, "lable", Slot::new("x"));
+        let _ = Classes::fx().with_part::<Textarea>(Tag::Legend, Slot::new("x"));
     }
 
     #[gtest]
@@ -738,84 +835,29 @@ mod tests {
         );
     }
 
-    #[gtest]
-    fn with_parts_classes_every_kept_widget_that_has_the_part() {
-        use RenderedInputType::{Checkbox, Hidden, Password, Text};
-        let text_like = |w| matches!(w, BuiltinWidget::Input(t) if t != Checkbox && t != Hidden);
-        let classes = Classes::bare().with_parts(text_like, "input", Slot::new("form-control"));
-        for w in [BuiltinWidget::Input(Text), BuiltinWidget::Input(Password)] {
-            expect_that!(
-                base_of(&classes, SlotKey::Part(w, "input")),
-                eq(Some(("form-control", None))),
-                "{w:?}"
-            );
-        }
-        for w in [BuiltinWidget::Input(Checkbox), BuiltinWidget::Input(Hidden)] {
-            expect_that!(
-                base_of(&classes, SlotKey::Part(w, "input")),
-                none(),
-                "{w:?}"
-            );
-        }
-        // 13 rendered text-like types; nothing else was touched.
-        expect_that!(classes.slots.len(), eq(13));
-    }
-
-    /// `|_| true` keeps every widget, and only the ones with a legend get one.
-    #[gtest]
-    fn with_parts_skips_a_kept_widget_without_the_part() {
-        let classes = Classes::bare().with_parts(|_| true, "legend", Slot::new("x"));
-        let with_legend: Vec<BuiltinWidget> = classes
-            .slots
-            .keys()
-            .map(|k| match k {
-                SlotKey::Part(w, _) => *w,
-                SlotKey::Fixed(f) => panic!("a fixed slot appeared: {f:?}"),
-            })
-            .collect();
-        expect_that!(
-            with_legend,
-            unordered_elements_are![
-                eq(&BuiltinWidget::RadioGroup),
-                eq(&BuiltinWidget::CheckboxMultiple)
-            ]
-        );
-    }
-
-    #[gtest]
-    #[should_panic(expected = "no widget the filter keeps has a part named `textarea`")]
-    fn with_parts_panics_when_no_kept_widget_has_the_part() {
-        let _ = Classes::bare().with_parts(
-            |w| matches!(w, BuiltinWidget::Input(_)),
-            "textarea",
-            Slot::new("x"),
-        );
-    }
-
     // ── The lookups ──────────────────────────────────────────────────────
 
     #[gtest]
     fn part_finds_a_slot_and_bare_has_none() {
-        let select = BuiltinWidget::Select;
         expect_that!(
-            Classes::fx().part(select, "select"),
+            Classes::fx().part::<Select>(Tag::Select),
             some(eq(&Slot::new("fx-control fx-select")))
         );
-        expect_that!(Classes::bare().part(select, "select"), none());
+        expect_that!(Classes::bare().part::<Select>(Tag::Select), none());
     }
 
     #[gtest]
-    #[should_panic(expected = "unknown part `selct` for widget Select (it has div, label, select)")]
+    #[should_panic(expected = "`select` has no part `input` (it has div, label, select)")]
     fn part_panics_on_a_part_the_widget_lacks() {
-        let _ = Classes::fx().part(BuiltinWidget::Select, "selct");
+        let _ = Classes::fx().part::<Select>(Tag::Input);
     }
 
-    /// A part the widget HAS but `fx()` leaves bare is `None`, not a panic.
+    /// A hidden input declares no parts, so asking for one is the widget's
+    /// bug, not an unclassed part.
     #[gtest]
-    fn a_real_part_with_no_slot_is_none() {
-        let hidden = BuiltinWidget::Input(RenderedInputType::Hidden);
-        expect_that!(Classes::fx().part(hidden, "input"), none());
-        expect_that!(Classes::fx().part_class(hidden, "input", true), none());
+    #[should_panic(expected = "`hidden` has no part `input` (it has )")]
+    fn a_hidden_input_has_no_part_to_ask_for() {
+        let _ = Classes::fx().part::<HiddenInput>(Tag::Input);
     }
 
     #[gtest]
@@ -831,18 +873,23 @@ mod tests {
     /// control, which has no invalid class, does not change.
     #[gtest]
     fn part_class_follows_the_fields_state() {
-        let text = BuiltinWidget::Input(RenderedInputType::Text);
         let fx = Classes::fx();
-        expect_that!(fx.part_class(text, "div", false), some(eq("fx-form-field")));
         expect_that!(
-            fx.part_class(text, "div", true),
+            fx.part_class::<TextInput>(Tag::Div, false),
+            some(eq("fx-form-field"))
+        );
+        expect_that!(
+            fx.part_class::<TextInput>(Tag::Div, true),
             some(eq("fx-form-field fx-invalid"))
         );
         expect_that!(
-            fx.part_class(text, "input", true),
+            fx.part_class::<TextInput>(Tag::Input, true),
             some(eq("fx-control fx-input"))
         );
-        expect_that!(Classes::bare().part_class(text, "div", true), none());
+        expect_that!(
+            Classes::bare().part_class::<TextInput>(Tag::Div, true),
+            none()
+        );
     }
 
     #[gtest]
@@ -869,21 +916,21 @@ mod tests {
     // ── ClassEdit ────────────────────────────────────────────────────────
 
     #[gtest]
-    fn a_class_edit_keys_its_part_by_the_parts_own_name_and_changes_nothing_yet() {
-        let edit = ClassEdit::part(BuiltinWidget::Select, "select");
-        expect_that!(edit.key, eq(SlotKey::Part(BuiltinWidget::Select, "select")));
+    fn a_class_edit_keys_its_part_by_the_widgets_name_and_changes_nothing_yet() {
+        let edit = ClassEdit::part::<Select>(Tag::Select);
+        expect_that!(edit.key, eq(SlotKey::Part(Select::NAME, Tag::Select)));
         expect_that!(edit.base, none());
         expect_that!(edit.invalid, none());
     }
 
     #[gtest]
-    #[should_panic(expected = "unknown part `lable` for widget Select (it has div, label, select)")]
+    #[should_panic(expected = "`select` has no part `legend` (it has div, label, select)")]
     fn a_class_edit_panics_on_a_part_the_widget_lacks() {
-        let _ = ClassEdit::part(BuiltinWidget::Select, "lable");
+        let _ = ClassEdit::part::<Select>(Tag::Legend);
     }
 
     fn select(classes: &Classes) -> Option<(&str, Option<&str>)> {
-        base_of(classes, SlotKey::Part(BuiltinWidget::Select, "select"))
+        base_of(classes, SlotKey::Part(Select::NAME, Tag::Select))
     }
 
     fn edited(edit: &ClassEdit) -> Classes {
@@ -892,20 +939,16 @@ mod tests {
 
     #[gtest]
     fn replacing_the_base_keeps_the_invalid_class() {
-        let start = Classes::fx().with_part(
-            BuiltinWidget::Select,
-            "select",
-            Slot::new("a").with_invalid("bad"),
-        );
-        let classes = start.with_edit(
-            &ClassEdit::part(BuiltinWidget::Select, "select").replace_base("form-select"),
-        );
+        let start =
+            Classes::fx().with_part::<Select>(Tag::Select, Slot::new("a").with_invalid("bad"));
+        let classes =
+            start.with_edit(&ClassEdit::part::<Select>(Tag::Select).replace_base("form-select"));
         expect_that!(select(&classes), eq(Some(("form-select", Some("bad")))));
     }
 
     #[gtest]
     fn appending_to_the_base_joins_with_a_space() {
-        let classes = edited(&ClassEdit::part(BuiltinWidget::Select, "select").append_base("mine"));
+        let classes = edited(&ClassEdit::part::<Select>(Tag::Select).append_base("mine"));
         expect_that!(
             select(&classes),
             eq(Some(("fx-control fx-select mine", None)))
@@ -916,8 +959,7 @@ mod tests {
     /// input without restating the input's base.
     #[gtest]
     fn an_invalid_only_edit_leaves_the_base_alone() {
-        let classes =
-            edited(&ClassEdit::part(BuiltinWidget::Select, "select").append_invalid("is-invalid"));
+        let classes = edited(&ClassEdit::part::<Select>(Tag::Select).append_invalid("is-invalid"));
         expect_that!(
             select(&classes),
             eq(Some(("fx-control fx-select", Some("is-invalid"))))
@@ -926,9 +968,9 @@ mod tests {
 
     #[gtest]
     fn each_piece_may_be_replaced_or_appended_independently() {
-        let wrapper = SlotKey::Part(BuiltinWidget::Select, "div");
+        let wrapper = SlotKey::Part(Select::NAME, Tag::Div);
         let classes = edited(
-            &ClassEdit::part(BuiltinWidget::Select, "div")
+            &ClassEdit::part::<Select>(Tag::Div)
                 .replace_base("mb-3")
                 .append_invalid("has-error"),
         );
@@ -940,8 +982,8 @@ mod tests {
 
     #[gtest]
     fn replacing_the_invalid_class_with_nothing_removes_it() {
-        let wrapper = SlotKey::Part(BuiltinWidget::Select, "div");
-        let classes = edited(&ClassEdit::part(BuiltinWidget::Select, "div").replace_invalid(""));
+        let wrapper = SlotKey::Part(Select::NAME, Tag::Div);
+        let classes = edited(&ClassEdit::part::<Select>(Tag::Div).replace_invalid(""));
         expect_that!(
             base_of(&classes, wrapper),
             eq(Some(("fx-form-field", None)))

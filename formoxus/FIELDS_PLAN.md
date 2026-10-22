@@ -973,12 +973,19 @@ widgets become ONE concept.
      caller and goes. A built-in's "has no part" message can still list its
      parts from `BuiltinWidget::parts()` until checkpoint 4; so can
      `fixed_key`'s "set part by part" (195).
-  - [ ] **12a.** (Claude) Tests: `classes.rs`'s own (680–880) and
+  - [x] **12a.** (Claude) Tests: `classes.rs`'s own (680–880) and
      `tests/suite/classes.rs` (33, 59, 262) on the new API; drop
      `each_builtins_default_classes_match_classes_fx`; add that every slot
      `fx()` sets names a part in its widget's `PARTS`, and every built-in
      part but the hidden input's has an `fx()` slot (what `fx_part`'s panic
      guarded).
+     DONE 2026-10-22: the three `with_parts` tests went with it; the
+     "unknown part" panics now name a real `Tag` the widget lacks (`lable`
+     cannot be written). New: `fx()` leaves a dev's widget unclassed,
+     `with_part::<W>` classes it, one tag on two widgets is two slots, and
+     (suite) `an_app_classes_a_devs_widget_by_its_type` end to end. The
+     suite's four `classes_plus:` tests need no edit and wait on 12; with
+     them switched off the suite was 390/390.
   - [ ] **12b.** (Claude) Goldens: the `classes_plus` ones for a part the
      widget lacks move to `E0080`; read each diff. The five
      `tests/snapshots/` files must come out byte for byte: they are what
