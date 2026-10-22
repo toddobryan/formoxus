@@ -249,11 +249,15 @@ impl Classes {
             "`{}` has no part `{}` (it has {})",
             W::NAME,
             tag.as_str(),
-            W::PARTS
-                .iter()
-                .map(Tag::as_str)
-                .collect::<Vec<_>>()
-                .join(", "),
+            if W::PARTS.is_empty() {
+                "none".to_string()
+            } else {
+                W::PARTS
+                    .iter()
+                    .map(Tag::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            },
         );
         SlotKey::Part(W::NAME, tag)
     }
@@ -321,36 +325,13 @@ impl Classes {
     /// rendering unclassed. A dev's own widget is not in the list: a preset
     /// classes only the widgets it knows.
     pub fn fx() -> Self {
-        // Named one by one, since nothing can iterate "every type that
-        // implements `Widget`"; the array's length makes the compiler count.
-        let builtins: [(&'static str, &'static [Tag]); 18] = [
-            parts_of::<TextInput>(),
-            parts_of::<PasswordInput>(),
-            parts_of::<NumberInput>(),
-            parts_of::<EmailInput>(),
-            parts_of::<TelInput>(),
-            parts_of::<UrlInput>(),
-            parts_of::<SearchInput>(),
-            parts_of::<ColorInput>(),
-            parts_of::<DateInput>(),
-            parts_of::<TimeInput>(),
-            parts_of::<DatetimeLocalInput>(),
-            parts_of::<MonthInput>(),
-            parts_of::<WeekInput>(),
-            parts_of::<HiddenInput>(),
-            parts_of::<CheckboxInput>(),
-            parts_of::<Textarea>(),
-            parts_of::<Select>(),
-            parts_of::<RadioGroup>(),
-        ];
         let mut slots = IndexMap::new();
-        for (name, parts) in builtins {
+        for (name, parts) in BUILTINS {
             for &tag in parts {
                 // Built directly, not through `key::<W>`: the name is all
                 // there is here, and the tag comes from `W::PARTS` itself.
-                if let Some(slot) = fx_part(name, tag) {
-                    slots.insert(SlotKey::Part(name, tag), slot);
-                }
+                let slot = fx_part(name, tag);
+                slots.insert(SlotKey::Part(name, tag), slot);
             }
         }
         let fixed = [
@@ -436,19 +417,41 @@ impl Default for Classes {
     }
 }
 
-/// A widget's `NAME` and `PARTS`, the pair [`Classes::fx`] loops over.
+/// Every built-in widget's `NAME` and `PARTS`, what [`Classes::fx`] loops
+/// over. Named one by one, since nothing can iterate "every type that
+/// implements `Widget`"; the array's length makes the compiler count.
+const BUILTINS: [(&str, &[Tag]); 18] = [
+    parts_of::<TextInput>(),
+    parts_of::<PasswordInput>(),
+    parts_of::<NumberInput>(),
+    parts_of::<EmailInput>(),
+    parts_of::<TelInput>(),
+    parts_of::<UrlInput>(),
+    parts_of::<SearchInput>(),
+    parts_of::<ColorInput>(),
+    parts_of::<DateInput>(),
+    parts_of::<TimeInput>(),
+    parts_of::<DatetimeLocalInput>(),
+    parts_of::<MonthInput>(),
+    parts_of::<WeekInput>(),
+    parts_of::<HiddenInput>(),
+    parts_of::<CheckboxInput>(),
+    parts_of::<Textarea>(),
+    parts_of::<Select>(),
+    parts_of::<RadioGroup>(),
+];
+
+/// A widget's `NAME` and `PARTS`, one row of [`BUILTINS`].
 const fn parts_of<W: Widget>() -> (&'static str, &'static [Tag]) {
     (W::NAME, W::PARTS)
 }
 
-/// `fx()`'s class for one part of one built-in widget, or `None` for a part
-/// it leaves bare. (None does today: a hidden input, the one bare widget,
-/// has no `PARTS` to ask about.)
+/// `fx()`'s class for one part of one built-in widget.
 ///
-/// Panics on a pair it does not know, which is a built-in or a part added
+/// Panics on a pair it does not know, which is a widget/part added
 /// without saying what `fx()` gives it.
-fn fx_part(widget_name: &'static str, tag: Tag) -> Option<Slot> {
-    let slot = match (widget_name, tag) {
+fn fx_part(widget_name: &'static str, tag: Tag) -> Slot {
+    match (widget_name, tag) {
         // A radio group is a fieldset of choices, so its parts are named
         // apart from a single control's.
         (RadioGroup::NAME, Tag::Fieldset) => {
@@ -470,18 +473,16 @@ fn fx_part(widget_name: &'static str, tag: Tag) -> Option<Slot> {
             "`Classes::fx()` has no class for {widget}'s `{}`",
             tag.as_str()
         ),
-    };
-    Some(slot)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ClassEdit, Classes, FixedKey, Slot, SlotKey, parts_of};
+    use super::{BUILTINS, ClassEdit, Classes, FixedKey, Slot, SlotKey};
     use crate::buttons::ButtonType;
     use crate::widgets::{
-        CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
-        MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
-        TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget, WidgetProps,
+        CheckboxInput, EmailInput, HiddenInput, RadioGroup, Select, TextInput, Textarea, Widget,
+        WidgetProps,
     };
     use dioxus::prelude::*;
     use formoxus_spec::{AttrSet, Tag};
@@ -552,37 +553,12 @@ mod tests {
             .map(|s| (&*s.base, s.invalid.as_deref()))
     }
 
-    /// The 18 built-ins, as `fx()` lists them. Its own list is local to it;
-    /// the two tests below catch either one gaining a widget the other lacks.
-    fn builtins() -> [(&'static str, &'static [Tag]); 18] {
-        [
-            parts_of::<TextInput>(),
-            parts_of::<PasswordInput>(),
-            parts_of::<NumberInput>(),
-            parts_of::<EmailInput>(),
-            parts_of::<TelInput>(),
-            parts_of::<UrlInput>(),
-            parts_of::<SearchInput>(),
-            parts_of::<ColorInput>(),
-            parts_of::<DateInput>(),
-            parts_of::<TimeInput>(),
-            parts_of::<DatetimeLocalInput>(),
-            parts_of::<MonthInput>(),
-            parts_of::<WeekInput>(),
-            parts_of::<HiddenInput>(),
-            parts_of::<CheckboxInput>(),
-            parts_of::<Textarea>(),
-            parts_of::<Select>(),
-            parts_of::<RadioGroup>(),
-        ]
-    }
-
     /// Every part every built-in declares gets an `fx()` class. A hidden
     /// input declares none, so it gets none.
     #[gtest]
     fn fx_classes_every_part_of_every_builtin() {
         let fx = Classes::fx();
-        for (name, parts) in builtins() {
+        for (name, parts) in BUILTINS {
             for &tag in parts {
                 expect_that!(
                     fx.slots.contains_key(&SlotKey::Part(name, tag)),
@@ -599,12 +575,11 @@ mod tests {
     /// `fx_part`'s panic guarded when parts were strings.
     #[gtest]
     fn every_part_fx_classes_is_one_its_widget_declares() {
-        let builtins = builtins();
         for key in Classes::fx().slots.keys() {
             let SlotKey::Part(name, tag) = *key else {
                 continue;
             };
-            let parts = builtins
+            let parts = BUILTINS
                 .iter()
                 .find(|(n, _)| *n == name)
                 .map(|(_, parts)| *parts);
@@ -855,7 +830,7 @@ mod tests {
     /// A hidden input declares no parts, so asking for one is the widget's
     /// bug, not an unclassed part.
     #[gtest]
-    #[should_panic(expected = "`hidden` has no part `input` (it has )")]
+    #[should_panic(expected = "`hidden` has no part `input` (it has none)")]
     fn a_hidden_input_has_no_part_to_ask_for() {
         let _ = Classes::fx().part::<HiddenInput>(Tag::Input);
     }

@@ -155,7 +155,7 @@ fn render_input<W: Widget>(input_type: RenderedInputType, props: WidgetProps) ->
 pub(crate) fn InputView<W: Widget>(
     input_type: RenderedInputType,
     props: WidgetProps,
-    #[props(default)] _widget: PhantomData<W>,
+    #[props(default)] widget: PhantomData<W>,
 ) -> Element {
     // No wildcard arm, on purpose: a type that joins `RenderedInputType`
     // (`Range` is the likely one) has to be routed here before it compiles.
