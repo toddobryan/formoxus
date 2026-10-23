@@ -6,7 +6,8 @@
 /// This is a set of FACTS, not a list of what formoxus can draw. The attribute
 /// table needs every type, so that a row can say where `checked` is valid
 /// (`Checkbox | Radio`) or that `accept` belongs to `File`. Which of these a
-/// field can actually be rendered as is the separate `RenderedInputType` below.
+/// field can actually be rendered as is up to the widgets: each `<input>`
+/// widget in `formoxus` names its own type.
 ///
 /// Here rather than in `formoxus`, because which attributes are valid on an
 /// `<input>` depends on its type (`placeholder` on `text` but not `date`, `min`
@@ -55,7 +56,7 @@ impl InputType {
             Self::Password => "password",
             Self::Hidden => "hidden",
             // Selectable, but NOT the default for a numeric field — see
-            // `FormField::default_widget`. `type="number"` hands back `""` for
+            // `Field::default_widget`. `type="number"` hands back `""` for
             // anything the browser dislikes, so a half-typed value vanishes
             // mid-keystroke. A numeric renders as text and formoxus parses it.
             // Anyone who wants the spinner and the mobile keypad can ask.
@@ -82,61 +83,9 @@ impl InputType {
     }
 }
 
-/// A list of the input types that formoxus actually uses to render
-/// fields.
-///
-/// A separate enum rather than a check on [`InputType`], so that a field
-/// rendered as `Radio` or `Submit` cannot even be written, and the `Input`
-/// widget's `match` is exhaustive with no `unreachable!` arm (decision 6 in
-/// `.claude/memory/attribute_rules_design.md`). The seven types left out are
-/// not field values an `Input` can hold: a lone radio is meaningless outside a
-/// group (that is `RadioGroup`'s job), a file is a different kind of value
-/// with its own widget to come, and `range`, `submit`, `image`, `reset` and
-/// `button` are a slider and four buttons. `Range` is the one likely to join.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RenderedInputType {
-    Text,
-    Password,
-    Hidden,
-    Number,
-    Email,
-    Telephone,
-    Url,
-    Search,
-    Color,
-    Date,
-    Time,
-    DatetimeLocal,
-    Month,
-    Week,
-    Checkbox,
-}
-
-impl RenderedInputType {
-    pub const fn to_input_type(&self) -> InputType {
-        match self {
-            RenderedInputType::Text => InputType::Text,
-            RenderedInputType::Password => InputType::Password,
-            RenderedInputType::Hidden => InputType::Hidden,
-            RenderedInputType::Number => InputType::Number,
-            RenderedInputType::Email => InputType::Email,
-            RenderedInputType::Telephone => InputType::Telephone,
-            RenderedInputType::Url => InputType::Url,
-            RenderedInputType::Search => InputType::Search,
-            RenderedInputType::Color => InputType::Color,
-            RenderedInputType::Date => InputType::Date,
-            RenderedInputType::Time => InputType::Time,
-            RenderedInputType::DatetimeLocal => InputType::DatetimeLocal,
-            RenderedInputType::Month => InputType::Month,
-            RenderedInputType::Week => InputType::Week,
-            RenderedInputType::Checkbox => InputType::Checkbox,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{InputType, RenderedInputType};
+    use super::InputType;
     use googletest::prelude::*;
 
     const ALL: [InputType; 22] = [
@@ -245,56 +194,5 @@ mod tests {
         seen.sort_unstable();
         seen.dedup();
         expect_that!(seen.len(), eq(ALL.len()));
-    }
-
-    const RENDERED: [RenderedInputType; 15] = [
-        RenderedInputType::Text,
-        RenderedInputType::Password,
-        RenderedInputType::Hidden,
-        RenderedInputType::Number,
-        RenderedInputType::Email,
-        RenderedInputType::Telephone,
-        RenderedInputType::Url,
-        RenderedInputType::Search,
-        RenderedInputType::Color,
-        RenderedInputType::Date,
-        RenderedInputType::Time,
-        RenderedInputType::DatetimeLocal,
-        RenderedInputType::Month,
-        RenderedInputType::Week,
-        RenderedInputType::Checkbox,
-    ];
-
-    /// Each rendered type converts to the `InputType` of the same name, so a
-    /// slip in the conversion's arms (`Month => InputType::Week`) cannot look
-    /// up the wrong row of the attribute table. Same names also means no two
-    /// convert to the same type. The `match` has no wildcard, so a new
-    /// variant stops this from compiling until it is added to `RENDERED`.
-    #[gtest]
-    fn each_rendered_type_converts_to_the_input_type_of_the_same_name() {
-        for r in RENDERED {
-            match r {
-                RenderedInputType::Text
-                | RenderedInputType::Password
-                | RenderedInputType::Hidden
-                | RenderedInputType::Number
-                | RenderedInputType::Email
-                | RenderedInputType::Telephone
-                | RenderedInputType::Url
-                | RenderedInputType::Search
-                | RenderedInputType::Color
-                | RenderedInputType::Date
-                | RenderedInputType::Time
-                | RenderedInputType::DatetimeLocal
-                | RenderedInputType::Month
-                | RenderedInputType::Week
-                | RenderedInputType::Checkbox => {}
-            }
-            expect_that!(
-                format!("{:?}", r.to_input_type()),
-                eq(&format!("{r:?}")),
-                "{r:?}"
-            );
-        }
     }
 }

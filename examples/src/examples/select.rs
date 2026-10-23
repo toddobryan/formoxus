@@ -89,14 +89,13 @@ fn address() -> FormSpec<Address> {
     form! {
         Address {
             label_case: "label-case",
-            state => {
-                widget: select {
-                    choices: STATES,
-                },
-            },
+            state => { choices: STATES },
             telephone_number => { widget: tel },
             email => { widget: email },
-            gender => { widget: radio_group { choices: GENDERS } },
+            gender => {
+                widget: radio_group,
+                choices: GENDERS,
+            },
             zip => { pattern: r"\d{5}(-\d{4})?" },
             buttons: {
                 reset: { type: reset, },

@@ -1,4 +1,4 @@
-//! Value choices: `widget: select { choices: … }`.
+//! Value choices: `widget: select, choices: …`.
 //!
 //! Distinct from the *shape* choice a `VariantSelect` offers — that picks which
 //! fields exist, this picks a value for one field that already exists. See
@@ -42,7 +42,7 @@ fn a_choice_renders_its_value_and_its_display_separately() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: select { choices: STATES } } }
+                Address { state => { widget: select, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -65,7 +65,7 @@ fn the_current_value_is_the_selected_option() {
         let form = use_form(move || {
             form_for(
                 &address,
-                form! { Address { state => { widget: select { choices: STATES } } } },
+                form! { Address { state => { widget: select, choices: STATES } } },
             )
         });
         form.render(using_fns! {})
@@ -85,7 +85,7 @@ fn a_sibling_without_choices_is_still_an_input() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: select { choices: STATES } } }
+                Address { state => { widget: select, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -110,7 +110,7 @@ fn an_optional_choice_field_offers_the_absent_entry() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Optional { state => { widget: select { choices: STATES } } }
+                Optional { state => { widget: select, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -127,7 +127,7 @@ fn a_required_choice_field_gets_an_unselectable_placeholder() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: select { choices: STATES } } }
+                Address { state => { widget: select, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -143,7 +143,7 @@ fn an_explicit_list_overrides_a_bools_derived_one() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Flagged { agreed => { widget: select { choices: &[("true", "Yes"), ("false", "No")] } } }
+                Flagged { agreed => { widget: select, choices: [(true, "Yes"), (false, "No")] } }
             })
         });
         form.render(using_fns! {})
@@ -186,7 +186,7 @@ fn a_bare_string_is_its_own_display() {
 #[gtest]
 fn a_chosen_value_validates_into_the_model() {
     let spec = || {
-        form! { Address { state => { widget: select { choices: STATES } } } }
+        form! { Address { state => { widget: select, choices: STATES } } }
     };
     let values = [("state", "AK"), ("zip", "99501")]
         .into_iter()
@@ -211,7 +211,7 @@ fn a_radio_group_renders_one_radio_per_choice() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -258,7 +258,7 @@ fn every_radio_shares_the_fields_name() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -275,7 +275,7 @@ fn no_radio_is_checked_before_the_user_picks() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -294,7 +294,7 @@ fn the_stored_value_is_the_checked_radio() {
         let form = use_form(move || {
             form_for(
                 &address,
-                form! { Address { state => { widget: radio_group { choices: STATES } } } },
+                form! { Address { state => { widget: radio_group, choices: STATES } } },
             )
         });
         form.render(using_fns! {})
@@ -331,7 +331,7 @@ fn every_radio_is_required_and_nothing_offers_absence() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -355,7 +355,7 @@ fn the_group_label_is_a_legend() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -381,7 +381,7 @@ fn the_group_is_a_field_and_a_radio_group() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Address { state => { widget: radio_group { choices: STATES } } }
+                Address { state => { widget: radio_group, choices: STATES } }
             })
         });
         form.render(using_fns! {})
@@ -402,7 +402,7 @@ fn an_invalid_radio_group_marks_the_group_not_the_radios() {
     #[component]
     fn App() -> Element {
         let mut state = empty_form(form! {
-            Address { state => { widget: radio_group { choices: STATES } } }
+            Address { state => { widget: radio_group, choices: STATES } }
         });
         // Nothing picked, so `validate` gives `state` its required error.
         let _ = state.validate();

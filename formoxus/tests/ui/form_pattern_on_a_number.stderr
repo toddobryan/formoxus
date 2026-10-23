@@ -1,3 +1,11 @@
+error[E0609]: no field `pattern` on type `&mut NumberField<u32>`
+  --> tests/ui/form_pattern_on_a_number.rs:15:27
+   |
+15 |             quantity => { pattern: r"\d+" },
+   |                           ^^^^^^^ unknown field
+   |
+   = note: available fields are: `min`, `max`
+
 error[E0080]: evaluation panicked: `pattern` applies only to a String field
   --> tests/ui/form_pattern_on_a_number.rs:15:36
    |

@@ -1,16 +1,16 @@
-//! A list-typed member. Rows are members named by a `#`-prefixed KEY, which is
+//! A list-typed node. Rows are nodes named by a `#`-prefixed KEY, which is
 //! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
 //! nesting — and, because a key is an identity rather than a position, what lets
 //! a row be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `row_segment` for why renaming would be a data hazard.
 
-use crate::build::{FormMode, member_for_shape};
+use crate::build::{FormMode, Walk, node_for_shape};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::members::RenderCtx;
-use crate::members::{
-    Edit, FormMember, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+use crate::nodes::NodeContext;
+use crate::nodes::{
+    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, row_segment,
 };
 use crate::widgets::{AddRowButton, RemoveRowButton};
@@ -24,7 +24,7 @@ pub struct ListSet {
     pub label: Option<String>,
     pub shape: &'static Shape,
     pub optional: bool,
-    pub rows: Vec<Box<dyn FormMember>>,
+    pub rows: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
     pub next_key: usize,
 }
@@ -34,7 +34,7 @@ impl ListSet {
     ///
     /// `None` peek and `FormMode::Blank`: a new row has no value to read, the
     /// same pair `VariantSet::set_variant` passes when it rebuilds a variant's
-    /// members. The row's prefix has to match what `list_member` produces at
+    /// nodes. The row's prefix has to match what `list_node` produces at
     /// construction, or the row would render fine and write to store keys
     /// nobody reads.
     fn add_row(
@@ -42,6 +42,7 @@ impl ListSet {
         my_path: &str,
         before: Option<usize>,
         optional: bool,
+        specs: &SpecsByPath,
     ) -> Result<(), FormAccessError> {
         let at = before.unwrap_or(self.rows.len());
         if at > self.rows.len() {
@@ -52,11 +53,14 @@ impl ListSet {
         }
         let name = row_segment(self.next_key);
         self.next_key += 1;
-        let row = member_for_shape(
+        let row = node_for_shape(
             self.shape,
             &name,
             None,
-            FormMode::Blank,
+            Walk {
+                mode: FormMode::Blank,
+                specs,
+            },
             &qualify(my_path, &name),
             optional,
         );
@@ -83,7 +87,7 @@ impl ListSet {
     }
 }
 
-impl FormMember for ListSet {
+impl Node for ListSet {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -94,7 +98,7 @@ impl FormMember for ListSet {
             .or_else(|| default_label(&self.name, case))
     }
 
-    fn render(&self, ctx: &RenderCtx) -> Element {
+    fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
         // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on a row.
@@ -180,7 +184,7 @@ impl FormMember for ListSet {
         !self.errors.is_empty()
     }
 
-    fn clone_box(&self) -> Box<dyn FormMember> {
+    fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
     }
 
@@ -198,13 +202,20 @@ impl FormMember for ListSet {
         !self.rows.is_empty() && self.rows.iter().any(|fm| fm.is_present())
     }
 
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError> {
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError> {
         let path = edit.path();
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path == my_path {
             return match edit {
-                Edit::AddRow { before, .. } => self.add_row(&my_path, *before, self.optional),
+                Edit::AddRow { before, .. } => {
+                    self.add_row(&my_path, *before, self.optional, specs)
+                }
                 Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a list, not an enum")))
@@ -216,12 +227,12 @@ impl FormMember for ListSet {
         // containment rather than trying each in turn is what lets a row's real
         // error reach the caller intact.
         // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
-        // member's own name, which the member qualifies on itself. Passing
+        // node's own name, which the node qualifies on itself. Passing
         // the row's full path double-qualifies it into `shapes.#1.#1` — the
         // same trap `FieldSet::choose_variant` fell into.
         for m in &mut self.rows {
             if owns(&qualify(&my_path, &m.name()), path) {
-                return m.edit(&my_path, edit);
+                return m.edit(&my_path, edit, specs);
             }
         }
 
@@ -232,43 +243,6 @@ impl FormMember for ListSet {
         self.errors.clear();
         for r in &mut self.rows {
             r.clear_errors();
-        }
-    }
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath) {
-        let my_path = qualify(prefix, &self.name);
-        if let Some(spec) = fields.get(&my_path) {
-            // Checked before anything is written — see `FieldSet::apply_specs`.
-            assert!(
-                spec.custom_widget.is_none(),
-                "{my_path} is a list, which has no single widget to override — \
-                 write `{}[]` to give every ROW a widget, or did you mean `label`?",
-                self.name
-            );
-            self.label = spec.label.clone().or(self.label.take());
-        }
-
-        // `venues[]` and `venues[].city` name every row and every row's field.
-        // They are resolved HERE, by substituting each row's actual segment, so
-        // the rows themselves are then visited by the ordinary traversal and need
-        // to know nothing about `[]`.
-        //
-        // Substitution rather than a second lookup path because it composes:
-        // `rows[].cells[]` rewrites one bracket per level as the recursion
-        // descends, and a nested `ListSet` resolves its own without special
-        // casing. Unrelated keys pass through untouched.
-        let marker = format!("{my_path}[]");
-        for m in &mut self.rows {
-            // `my_path`, NOT the row's own path: a row qualifies its own name
-            // onto whatever prefix it is handed, so passing the full path
-            // double-qualifies it into `shapes.#1.#1` — the trap `edit`
-            // documents above.
-            let row_path = qualify(&my_path, &m.name());
-            let row_fields: SpecsByPath = fields
-                .iter()
-                .map(|(k, v)| (k.replace(&marker, &row_path), v.clone()))
-                .collect();
-            m.distribute_specs(&my_path, &row_fields);
         }
     }
 }

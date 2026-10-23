@@ -1,6 +1,6 @@
 ---
 name: choice-fields-design
-description: "Design for VALUE-choice fields (Select/RadioGroup/SelectMultiple/CheckboxMultiple). TIER 1 (STATIC) IS BUILT as of 2026-09-21: `widget: select { choices: EXPR }` -> FieldSpec.choices -> FormField -> ScalarWidget. Tiers 2 and 3 (render-time and reactive) are still open, and so is the Box<dyn Fn>-cannot-live-on-WidgetType problem they run into"
+description: "Design for VALUE-choice fields. SUPERSEDED 2026-10-18 for tier 1: `choices:` is now a FIELD-level key building a typed `ChoiceField<T>` (FIELDS_PLAN.md Step 4); `widget: select { choices }` is gone. Tiers 2-3 (runtime, reactive) remain open; runtime = Step 8 `Context`. The Box<dyn Fn> wall below no longer applies (NodeCtor is an Arc<dyn Fn>)"
 metadata:
   type: project
 ---

@@ -18,17 +18,57 @@
 //! inside the item, and the projection closure is what lets the field's type be
 //! inferred rather than named.
 //!
-//! Classification mirrors `build::member_for_shape`, except that it compares
+//! Classification mirrors `build::node_for_shape`, except that it compares
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
-use formoxus_spec::{Attr, BuiltinWidget, Element, FieldControl, FieldType};
+use formoxus_spec::{Attr, FieldType, HtmlElement};
+
+use crate::field::Field;
+use crate::field_node::NodeCtor;
+use crate::fields::{ChoiceField, DefaultField, IntoChoice};
+use crate::widgets::Widget;
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
 pub const fn shape_of<M, F: for<'a> Facet<'a>>(_: fn(&M) -> &F) -> &'static Shape {
     F::SHAPE
 }
+
+/// The leaf constructor for a field `form!` gives settings to (`min: 13`).
+///
+/// `form!` sees no types, so it never names the field: the projection pins the
+/// model field's type `P`, [`DefaultField`] picks the field for it, and `set`
+/// is the settings as assignments (`|f| { f.min = Some(13); }`), each typed by
+/// that field. So `min: 300` on a `u8` is rustc's own out-of-range error, and a
+/// setting the field lacks does not compile.
+pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor {
+    let mut field = P::Field::default();
+    set(&mut field);
+    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+}
+
+/// The leaf constructor for a field `form!` gives `choices:`: a
+/// [`ChoiceField`] over the model field's own type, so `(1, "Small")` is a
+/// `u8` on a `u8` field and an `Option<u8>` field chooses among `u8`s.
+///
+/// Not a setting on the default field, as `min` is, because choices change
+/// WHICH field it is: a `String` with choices is a `ChoiceField<String>`, not
+/// a `StringField`. `form!` refuses `choices` beside a validated key, so the
+/// two constructors never meet on one field.
+pub fn choice_field_for<M, P, C>(_: fn(&M) -> &P, choices: impl IntoIterator<Item = C>) -> NodeCtor
+where
+    P: DefaultField,
+    C: IntoChoice<ValueOf<P>>,
+    ValueOf<P>: Send + Sync,
+{
+    let field = ChoiceField::<ValueOf<P>>::new(choices);
+    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+}
+
+/// The value type of a model field's default field: `u8` for a `u8` or an
+/// `Option<u8>`. What a choice field over that model field chooses among.
+type ValueOf<P> = <<P as DefaultField>::Field as Field>::Value;
 
 /// One row of a list, for a `[]` path segment in a projection.
 ///
@@ -50,7 +90,7 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
 pub const fn applies(attr: Attr, shape: &Shape) -> bool {
     match kind(shape) {
         // no need to check Attr::Multiple since it's owned by Formoxus
-        Kind::Enum => !attr.validated() && attr.is_valid_on(Element::Control(FieldControl::Select)),
+        Kind::Enum => !attr.validated() && attr.is_valid_on(HtmlElement::Select),
         Kind::Unknown => true,
         Kind::Other => false,
         _ => match field_type(shape) {
@@ -95,73 +135,14 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
     !is_optional(shape) || !takes_required(shape)
 }
 
-// ── Does a bound fit the field's type? ──────────────────────────────────
-//
-// `form!` passes each `min`/`max` twice, as `(e) as f64` and `(e) as i128`,
-// because a const fn cannot be generic over "some number". Between them the
-// two casts answer every question below, whatever type the bound was written
-// in. Each check is `true` for a field that is not a number, so a bound on the
-// wrong kind of field reports once, from `takes_bound`, not four times.
-
-/// Whether the bound lies within the values the field's type can hold. One
-/// outside it either excludes nothing (`min: -1000` on an `i8`) or excludes
-/// everything (`min: 1000` on an `i8`), and either way it is a mistake. A bound
-/// AT the limit, like `min: 0` on a `u32`, is fine: that is ordinary.
-///
-/// For a float field this is also what catches `max: 1e50` on an `f32`. Parsing
-/// saturates, so `1e39` arrives as `inf` and is refused by a bound it is visibly
-/// inside.
-pub const fn bound_in_range(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
-    if as_f64.is_nan() {
-        return !is_number(shape);
-    }
-    match kind(shape) {
-        // `as i128` saturates, so a float bound far outside `i128` still lands
-        // outside every integer type's range.
-        Kind::Int { min, max } => min <= as_i128 && as_i128 <= max,
-        Kind::Float { max } => -max <= as_f64 && as_f64 <= max,
-        _ => true,
-    }
-}
-
-/// Whether a bound on an integer field is a whole number. `min: 2.0` is, and
-/// the runtime accepts it; `min: 1.5` would have to be rounded, and rounding
-/// either way changes which values pass.
-pub const fn bound_is_whole(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
-    match kind(shape) {
-        #[expect(
-            clippy::cast_precision_loss,
-            clippy::float_cmp,
-            reason = "exact equality is the question: both sides round the same way, so \
-            an integer bound compares equal and a fractional one cannot"
-        )]
-        Kind::Int { .. } => as_f64 == as_i128 as f64,
-        _ => true,
-    }
-}
-
-/// Whether a bound on a float field survives the runtime's widening to `f64`.
-/// An integer above 2^53 does not: `min: 9_007_199_254_740_993` is stored as
-/// ...992, and the value one below the stated minimum gets in. A bound written
-/// as a float is already an `f64`, and both casts truncate it alike.
-pub const fn bound_is_exact(shape: &Shape, as_f64: f64, as_i128: i128) -> bool {
-    match kind(shape) {
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "truncation is the comparison: it matches `as_i128` exactly when nothing was rounded"
-        )]
-        Kind::Float { .. } => as_f64 as i128 == as_i128,
-        _ => true,
-    }
-}
-
 // ── Can this widget render this field? ──────────────────────────────────
 //
-// Which (field type, widget) pairs render is `BuiltinWidget::renders`.
-// `widgets::scalar::ScalarWidget` asserts it, and Dioxus contains that panic to
-// the one component, so the field silently vanishes from the form. These
-// checks, called from `form!`'s `const _` items, turn that into a build error
-// instead. Both ask the same function, so they cannot disagree.
+// Which (field type, widget) pairs render is each widget's `ACCEPTS`,
+// `ACCEPTS_OPTIONAL` and `TAKES_CHOICES`. These checks, called from `form!`'s
+// `const _` items, are the only place it is enforced: no widget type checks
+// its field's type at runtime, so a pair
+// `form!` refuses still renders from a hand-built `FormSpec` (`widget_matrix`
+// marks those `ok*`).
 
 /// Whether the field is one value, and so can have a widget at all. A struct,
 /// list or enum is several, and a widget on one is either rejected at runtime
@@ -171,49 +152,55 @@ pub const fn is_single_value(shape: &Shape) -> bool {
     !matches!(kind(shape), Kind::Other | Kind::Enum)
 }
 
-/// Whether `widget` can render a single-value field of this type. `has_choices`
-/// is whether `form!` was given `choices` for it.
+/// Whether the widget `W` can render a single-value field of this type.
+/// `has_choices` is whether `form!` was given `choices` for it.
 ///
 /// `true` for anything [`is_single_value`] rejects, so a widget on a struct
 /// reports once, from there. `true` for a newtype whose inside is out of reach,
 /// for the reason `Kind::Unknown` gives. Everything else is the field's
-/// `FieldType`, and the rule is [`BuiltinWidget::renders`]; only the shape side
-/// lives here, because `formoxus-spec` has no facet.
-pub const fn renders(shape: &Shape, widget: BuiltinWidget, has_choices: bool) -> bool {
+/// `FieldType`, judged by `W`'s own consts: in [`Widget::ACCEPTS`], or any type
+/// at all when it has choices and [`Widget::TAKES_CHOICES`].
+///
+/// Generic rather than taking a widget value, so `form!` can ask it in a free
+/// `const _` in the dev's crate, where `W`'s consts are visible: a `const fn`
+/// can read a trait's consts but not call its methods.
+pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
         Kind::Enum | Kind::Other | Kind::Unknown => return true,
         Kind::Text => FieldType::Text,
-        Kind::Int { .. } => FieldType::Int,
-        Kind::Float { .. } => FieldType::Float,
+        Kind::Int => FieldType::Int,
+        Kind::Float => FieldType::Float,
         Kind::Bool => FieldType::Bool,
     };
-    widget.renders(field_type, has_choices)
-}
-
-const fn is_number(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Int { .. } | Kind::Float { .. })
+    W::ACCEPTS.contains(field_type) || (W::TAKES_CHOICES && has_choices)
 }
 
 pub const fn is_optional(shape: &Shape) -> bool {
     matches!(shape.def, Def::Option(_))
 }
 
+/// Whether the widget `W` can render this field as far as optionality goes:
+/// `true` for a field that is not an `Option`, and for one that is when
+/// [`Widget::ACCEPTS_OPTIONAL`]. `form!` asserts it beside [`renders`], so a
+/// checkbox or a radio group on an `Option<_>` is refused at compile time.
+pub const fn optional_is_okay<W: Widget>(shape: &Shape) -> bool {
+    !is_optional(shape) || W::ACCEPTS_OPTIONAL
+}
+
 pub const fn is_enum(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Enum)
 }
 
+/// Whether this field holds an integer, `Option` peeled: what refuses a
+/// fractional `step` on one.
+pub const fn is_int(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Int)
+}
+
 enum Kind {
     Text,
-    /// The range of the integer type, widened to `i128` since every supported
-    /// integer fits.
-    Int {
-        min: i128,
-        max: i128,
-    },
-    /// The largest finite value of the float type, as an `f64`.
-    Float {
-        max: f64,
-    },
+    Int,
+    Float,
     Bool,
     /// An enum, which renders a `<select>` for the variants
     Enum,
@@ -229,7 +216,7 @@ enum Kind {
 
 const fn kind(shape: &Shape) -> Kind {
     // `OptionDef::t` is a plain `&'static Shape`, not a `ShapeRef`, so the
-    // `Option` layer can be peeled here exactly as `option_member` does.
+    // `Option` layer can be peeled here exactly as `option_node` does.
     if let Def::Option(option) = &shape.def {
         return kind(option.t);
     }
@@ -255,35 +242,19 @@ const fn kind(shape: &Shape) -> Kind {
     }
 }
 
-/// The scalars `build::scalar_member` supports, with their limits.
-/// `usize`/`isize` are absent there on purpose, so they are absent here too.
+/// The scalars `build::scalar_node` supports. `usize`/`isize` are absent there
+/// on purpose, so they are absent here too.
 const fn primitive(name: &str) -> Kind {
-    // `i128::from` is not const, and every one of these widens losslessly.
-    const INTS: [(&str, i128, i128); 8] = [
-        ("i8", i8::MIN as i128, i8::MAX as i128),
-        ("i16", i16::MIN as i128, i16::MAX as i128),
-        ("i32", i32::MIN as i128, i32::MAX as i128),
-        ("i64", i64::MIN as i128, i64::MAX as i128),
-        ("u8", 0, u8::MAX as i128),
-        ("u16", 0, u16::MAX as i128),
-        ("u32", 0, u32::MAX as i128),
-        ("u64", 0, u64::MAX as i128),
-    ];
+    const INTS: [&str; 8] = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"];
     let mut i = 0;
     while i < INTS.len() {
-        let (int, min, max) = INTS[i];
-        if str_eq(name, int) {
-            return Kind::Int { min, max };
+        if str_eq(name, INTS[i]) {
+            return Kind::Int;
         }
         i += 1;
     }
-    if str_eq(name, "f32") {
-        return Kind::Float {
-            max: f32::MAX as f64,
-        };
-    }
-    if str_eq(name, "f64") {
-        return Kind::Float { max: f64::MAX };
+    if str_eq(name, "f32") || str_eq(name, "f64") {
+        return Kind::Float;
     }
     if str_eq(name, "bool") {
         return Kind::Bool;
@@ -305,8 +276,8 @@ const fn is_newtype(shape: &Shape) -> bool {
 const fn field_type(shape: &Shape) -> Option<FieldType> {
     match kind(shape) {
         Kind::Text => Some(FieldType::Text),
-        Kind::Int { .. } => Some(FieldType::Int),
-        Kind::Float { .. } => Some(FieldType::Float),
+        Kind::Int => Some(FieldType::Int),
+        Kind::Float => Some(FieldType::Float),
         Kind::Bool => Some(FieldType::Bool),
         Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
@@ -330,17 +301,15 @@ const fn str_eq(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::widgets::{CheckboxInput, Select, TextInput, Textarea};
+
     use super::{
-        applies, bound_in_range, bound_is_exact, bound_is_whole, is_enum, is_optional,
-        is_single_value, renders, required_is_not_optional, takes_bound, takes_length,
-        takes_pattern, takes_required,
+        applies, is_enum, is_optional, is_single_value, renders, required_is_not_optional,
+        takes_bound, takes_length, takes_pattern, takes_required,
     };
     use facet::Facet;
-    use formoxus_spec::{Attr, BuiltinWidget, RenderedInputType};
+    use formoxus_spec::Attr;
     use googletest::prelude::*;
-
-    const TEXT: BuiltinWidget = BuiltinWidget::Input(RenderedInputType::Text);
-    const CHECKBOX: BuiltinWidget = BuiltinWidget::Input(RenderedInputType::Checkbox);
 
     #[derive(Facet)]
     struct Markdown(std::string::String);
@@ -410,130 +379,46 @@ mod tests {
         }
     }
 
-    // ── Bounds ───────────────────────────────────────────────────────────
-
-    /// What `form!` passes: the bound cast both ways.
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "this is the cast form! emits"
-    )]
-    fn casts(bound: f64) -> (f64, i128) {
-        (bound, bound as i128)
-    }
-
-    #[gtest]
-    fn a_bound_at_the_limit_of_the_type_fits() {
-        expect_that!(bound_in_range(u32::SHAPE, 0.0, 0), eq(true));
-        expect_that!(bound_in_range(i8::SHAPE, -128.0, -128), eq(true));
-        expect_that!(
-            bound_in_range(std::primitive::u8::SHAPE, 255.0, 255),
-            eq(true)
-        );
-    }
-
-    #[gtest]
-    fn a_bound_past_the_limit_of_the_type_does_not() {
-        expect_that!(bound_in_range(i8::SHAPE, -1000.0, -1000), eq(false));
-        expect_that!(bound_in_range(u32::SHAPE, -1.0, -1), eq(false));
-        expect_that!(
-            bound_in_range(std::primitive::u8::SHAPE, 256.0, 256),
-            eq(false)
-        );
-        let (f, i) = casts(1e30);
-        expect_that!(bound_in_range(i32::SHAPE, f, i), eq(false));
-    }
-
-    #[gtest]
-    fn a_float_bound_must_be_finite_within_the_float_type() {
-        let (f, i) = casts(1e50);
-        expect_that!(bound_in_range(f32::SHAPE, f, i), eq(false));
-        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(true));
-        let (f, i) = casts(f64::INFINITY);
-        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(false));
-        let (f, i) = casts(f64::NAN);
-        expect_that!(bound_in_range(f64::SHAPE, f, i), eq(false));
-    }
-
-    #[gtest]
-    fn a_bound_on_an_integer_must_be_whole() {
-        let (f, i) = casts(2.0);
-        expect_that!(bound_is_whole(u32::SHAPE, f, i), eq(true));
-        let (f, i) = casts(1.5);
-        expect_that!(bound_is_whole(u32::SHAPE, f, i), eq(false));
-        expect_that!(bound_is_whole(f64::SHAPE, f, i), eq(true));
-    }
-
-    /// 2^53 + 1 is the first integer an `f64` cannot hold.
-    #[expect(clippy::cast_precision_loss, reason = "the rounding is the point")]
-    #[gtest]
-    fn an_integer_bound_on_a_float_must_survive_the_widening() {
-        let exact: i128 = 1 << 53;
-        let inexact = exact + 1;
-        expect_that!(bound_is_exact(f64::SHAPE, exact as f64, exact), eq(true));
-        expect_that!(
-            bound_is_exact(f64::SHAPE, inexact as f64, inexact),
-            eq(false)
-        );
-        expect_that!(
-            bound_is_exact(i64::SHAPE, inexact as f64, inexact),
-            eq(true)
-        );
-    }
-
-    /// Every bound check passes on a field that is not a number, so a bound on
-    /// the wrong kind of field reports once, from `takes_bound`.
-    #[gtest]
-    fn the_bound_checks_leave_a_non_number_to_takes_bound() {
-        let (f, i) = casts(f64::NAN);
-        let text = std::string::String::SHAPE;
-        expect_that!(bound_in_range(text, f, i), eq(true));
-        expect_that!(bound_is_whole(text, 1.5, 1), eq(true));
-        expect_that!(bound_is_exact(text, 0.0, 1), eq(true));
-    }
-
     // ── Widgets ──────────────────────────────────────────────────────────
 
     #[gtest]
     fn an_input_renders_text_and_numbers_but_not_a_bool() {
         for shape in [std::string::String::SHAPE, u32::SHAPE, f64::SHAPE] {
-            expect_that!(renders(shape, TEXT, false), eq(true), "{shape}");
+            expect_that!(renders::<TextInput>(shape, false), eq(true), "{shape}");
         }
-        expect_that!(renders(bool::SHAPE, TEXT, false), eq(false));
+        expect_that!(renders::<TextInput>(bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_textarea_renders_only_text() {
         expect_that!(
-            renders(std::string::String::SHAPE, BuiltinWidget::Textarea, false),
+            renders::<Textarea>(std::string::String::SHAPE, false),
             eq(true)
         );
-        expect_that!(
-            renders(u32::SHAPE, BuiltinWidget::Textarea, false),
-            eq(false)
-        );
-        expect_that!(
-            renders(bool::SHAPE, BuiltinWidget::Textarea, false),
-            eq(false)
-        );
+        expect_that!(renders::<Textarea>(u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Textarea>(bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_checkbox_renders_only_a_bool_optional_or_not() {
-        expect_that!(renders(bool::SHAPE, CHECKBOX, false), eq(true));
-        expect_that!(renders(<Option<bool>>::SHAPE, CHECKBOX, false), eq(true));
+        expect_that!(renders::<CheckboxInput>(bool::SHAPE, false), eq(true));
         expect_that!(
-            renders(std::string::String::SHAPE, CHECKBOX, false),
+            renders::<CheckboxInput>(<Option<bool>>::SHAPE, false),
+            eq(true)
+        );
+        expect_that!(
+            renders::<CheckboxInput>(std::string::String::SHAPE, false),
             eq(false)
         );
     }
 
     #[gtest]
     fn a_chooser_needs_choices_except_for_a_bool() {
-        expect_that!(renders(bool::SHAPE, BuiltinWidget::Select, false), eq(true));
-        expect_that!(renders(u32::SHAPE, BuiltinWidget::Select, false), eq(false));
-        expect_that!(renders(u32::SHAPE, BuiltinWidget::Select, true), eq(true));
+        expect_that!(renders::<Select>(bool::SHAPE, false), eq(true));
+        expect_that!(renders::<Select>(u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Select>(u32::SHAPE, true), eq(true));
         expect_that!(
-            renders(std::string::String::SHAPE, BuiltinWidget::Select, true),
+            renders::<Select>(std::string::String::SHAPE, true),
             eq(true)
         );
     }
@@ -564,8 +449,8 @@ mod tests {
     #[gtest]
     fn renders_leaves_structs_and_opaque_newtypes_to_other_checks() {
         let list = <Vec<std::string::String>>::SHAPE;
-        expect_that!(renders(list, BuiltinWidget::Textarea, false), eq(true));
-        expect_that!(renders(Markdown::SHAPE, CHECKBOX, false), eq(true));
+        expect_that!(renders::<Textarea>(list, false), eq(true));
+        expect_that!(renders::<CheckboxInput>(Markdown::SHAPE, false), eq(true));
     }
 
     #[gtest]
@@ -605,7 +490,7 @@ mod tests {
         expect_that!(required_is_not_optional(maybe), eq(true));
     }
 
-    /// Unsupported by `scalar_member`, so a constraint on one could only ever be
+    /// Unsupported by `scalar_node`, so a constraint on one could only ever be
     /// dropped or panic.
     #[gtest]
     fn unsupported_scalars_take_nothing() {
@@ -680,13 +565,16 @@ mod tests {
     fn an_enum_still_takes_no_widget() {
         for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
             expect_that!(is_single_value(shape), eq(false), "{shape}");
-            for widget in [BuiltinWidget::Textarea, CHECKBOX] {
-                expect_that!(
-                    renders(shape, widget, false),
-                    eq(true),
-                    "{widget:?} on {shape}"
-                );
-            }
+            expect_that!(
+                renders::<Textarea>(shape, false),
+                eq(true),
+                "Textarea on {shape}"
+            );
+            expect_that!(
+                renders::<CheckboxInput>(shape, false),
+                eq(true),
+                "CheckboxInput on {shape}"
+            );
         }
     }
 

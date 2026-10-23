@@ -1,47 +1,169 @@
 //! The `<input>` family: every `type=` formoxus renders, routed by
-//! [`RenderedInputType`] to one of three bodies. Text-like types (whose value
+//! its `InputBody` to one of three bodies. Text-like types (whose value
 //! the DOM hands back as plain text) read caption-then-input; a checkbox
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
-use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType, RenderedInputType};
+use std::marker::PhantomData;
 
-use super::errors::FieldErrors;
-use super::label::field_label;
-use super::types::FieldProps;
+use dioxus::prelude::*;
+use formoxus_spec::{
+    Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
+};
+
+use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
-use crate::fields::FieldAttrs;
-use crate::members::ValuesStore;
+use crate::nodes::ValuesStore;
+use crate::widgets::{Widget, widget_props::WidgetProps};
+
+/// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
+///
+/// Everything a type needs follows from its name and its `InputType`
+/// variant. `NAME` is `form!`'s spelling, read from the `WidgetName` variant
+/// of the same name, so the two cannot drift. `EXTENDS` is what HTML allows on
+/// that `<input>`, and `PARTS`, `ACCEPTS` and `render` are shared. Hidden and
+/// checkbox render differently, so they are written by hand.
+macro_rules! text_like_inputs {
+    ($( $(#[$doc:meta])* $widget:ident => $variant:ident, )+) => {
+        $(
+            $(#[$doc])*
+            #[derive(Clone, Debug, PartialEq, Default)]
+            pub struct $widget;
+
+            impl Widget for $widget {
+                const NAME: &'static str =
+                    WidgetName::$widget.form_name();
+
+                const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
+
+                const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::$variant));
+
+                /// Never `Bool`: a text box cannot say true or false. A number
+                /// is accepted, since the field parses the text back.
+                const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text).with(FieldType::Int).with(FieldType::Float);
+
+                const ACCEPTS_OPTIONAL: bool = true;
+
+                const TAKES_CHOICES: bool = false;
+
+                fn render(&self, props: WidgetProps) -> Element {
+                    render_input::<Self>(InputBody::TextLike(InputType::$variant), props)
+                }
+            }
+        )+
+    };
+}
+
+text_like_inputs! {
+    /// `<input type="text">`, the default for a `String` or a number.
+    TextInput => Text,
+    /// `<input type="password">`. Echoes its value back, like the rest.
+    PasswordInput => Password,
+    /// `<input type="number">`. Never a default: a half-typed number reads as
+    /// `""`, so a dev chooses it.
+    NumberInput => Number,
+    /// `<input type="email">`.
+    EmailInput => Email,
+    /// `<input type="tel">`.
+    TelInput => Telephone,
+    /// `<input type="url">`.
+    UrlInput => Url,
+    /// `<input type="search">`.
+    SearchInput => Search,
+    /// `<input type="color">`.
+    ColorInput => Color,
+    /// `<input type="date">`.
+    DateInput => Date,
+    /// `<input type="time">`.
+    TimeInput => Time,
+    /// `<input type="datetime-local">`.
+    DatetimeLocalInput => DatetimeLocal,
+    /// `<input type="month">`.
+    MonthInput => Month,
+    /// `<input type="week">`.
+    WeekInput => Week,
+}
+
+/// `<input type="hidden">`: bare, with no label, caption or errors, since
+/// nothing is shown to wrap.
+///
+/// `EXTENDS` is EMPTY, not what HTML allows on a hidden input: `InputView`
+/// renders it without spreading any attribute, so one written for it would
+/// be dropped. Empty makes `form!` refuse it instead (the props box).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct HiddenInput;
+
+impl Widget for HiddenInput {
+    const NAME: &'static str = WidgetName::HiddenInput.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+
+    const PARTS: &'static [Tag] = &[];
+
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
+        .with(FieldType::Text)
+        .with(FieldType::Int)
+        .with(FieldType::Float);
+
+    const ACCEPTS_OPTIONAL: bool = true;
+
+    const TAKES_CHOICES: bool = false;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        render_input::<Self>(InputBody::Hidden, props)
+    }
+}
+
+/// `<input type="checkbox">`, the default for a `bool`: box first, then its
+/// caption.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct CheckboxInput;
+
+impl Widget for CheckboxInput {
+    const NAME: &'static str = WidgetName::CheckboxInput.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Checkbox));
+
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Input, Tag::Label];
+
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
+
+    /// Two states, and an `Option<bool>` has three.
+    const ACCEPTS_OPTIONAL: bool = false;
+
+    const TAKES_CHOICES: bool = false;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        render_input::<Self>(InputBody::Checkbox, props)
+    }
+}
+
+/// Which of `InputView`'s three bodies a widget renders. Each widget names
+/// its own, so a new `<input>` widget is routed where it is declared.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum InputBody {
+    Hidden,
+    Checkbox,
+    TextLike(InputType),
+}
+
+/// Every `<input>` widget's `render`: `props` split into what `InputView`
+/// takes. A plain fn, called from `render`, so it must not call hooks either.
+fn render_input<W: Widget>(body: InputBody, props: WidgetProps) -> Element {
+    rsx! {
+        InputView::<W> { body, props }
+    }
+}
 
 #[component]
-pub fn Input(
-    input_type: RenderedInputType,
-    field_type: FieldType,
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    #[props(extends = input)] attrs: Vec<Attribute>,
+pub(crate) fn InputView<W: Widget>(
+    body: InputBody,
+    props: WidgetProps,
+    #[props(default)] widget: PhantomData<W>,
 ) -> Element {
-    // No wildcard arm, on purpose: a type that joins `RenderedInputType`
-    // (`Range` is the likely one) has to be routed here before it compiles.
-    match input_type {
-        RenderedInputType::Hidden => hidden(props.path, values),
-        RenderedInputType::Checkbox => checkbox(field_type, &field_attrs, values, props, attrs),
-        RenderedInputType::Text
-        | RenderedInputType::Password
-        | RenderedInputType::Number
-        | RenderedInputType::Email
-        | RenderedInputType::Telephone
-        | RenderedInputType::Url
-        | RenderedInputType::Search
-        | RenderedInputType::Color
-        | RenderedInputType::Date
-        | RenderedInputType::Time
-        | RenderedInputType::DatetimeLocal
-        | RenderedInputType::Month
-        | RenderedInputType::Week => {
-            text_like(input_type, field_type, &field_attrs, values, props, attrs)
-        }
+    match body {
+        InputBody::Hidden => hidden(props.path, props.values),
+        InputBody::Checkbox => checkbox(&props),
+        InputBody::TextLike(input_type) => text_like::<W>(input_type, &props),
     }
 }
 
@@ -82,107 +204,54 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // Withholding it cost more than it bought: a field nothing could CLEAR
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
-fn text_like(
-    input_type: RenderedInputType,
-    field_type: FieldType,
-    field_attrs: &FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    attrs: Vec<Attribute>,
-) -> Element {
-    let my_widget = BuiltinWidget::Input(input_type);
-    let is_invalid = props.is_invalid();
+fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
+    let values = props.values;
+    let path = props.path.clone();
+    let current = get_current(&path, values);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class: Option<String> =
-        field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let current = get_current(&props.path, values);
-
-    let label = field_label(
-        &props.id,
-        props.label,
-        field_attrs.contains(Attr::Required),
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    rsx! {
-        div {
-            class: field_class,
-            {label}
-            input {
-                class: class,
-                r#type: input_type.to_input_type().html_type(),
-                id: "{props.id}",
-                name: "{props.path}",
-                value: "{current}",
-                oninput: move |e: FormEvent| {
-                    let raw = e.value();
-                    write_value(&props.path, values, raw);
-                },
-                // Last, and it has to be: rsx! treats everything after a spread
-                // as children, so an attribute below this is a parse error.
-                ..attrs,
-            }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+    let control = rsx! {
+        input {
+            class: props.control_class::<W>(Tag::Input),
+            r#type: input_type.html_type(),
+            id: "{props.id}",
+            name: "{path}",
+            value: "{current}",
+            oninput: move |e: FormEvent| {
+                let raw = e.value();
+                write_value(&path, values, raw);
+            },
+            // Last, and it has to be: rsx! treats everything after a spread
+            // as children, so an attribute below this is a parse error.
+            ..attrs,
         }
-    }
+    };
+    let marked = props.attrs.contains(Attr::Required);
+    field_row::<W>(props, marked, LabelSide::Before, control)
 }
 
-fn checkbox(
-    field_type: FieldType,
-    field_attrs: &FieldAttrs,
-    values: ValuesStore,
-    props: FieldProps,
-    attrs: Vec<Attribute>,
-) -> Element {
-    let my_widget = BuiltinWidget::Input(RenderedInputType::Checkbox);
-    let is_invalid = props.is_invalid();
+fn checkbox(props: &WidgetProps) -> Element {
+    let values = props.values;
+    let path = props.path.clone();
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class = field_attrs.class(props.classes.part(my_widget, "input"), props.is_invalid());
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let label = field_label(
-        &props.id,
-        props.label,
-        field_attrs.contains(Attr::RequiredTrue),
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    // The wrapper is unconditional and the caption is not, exactly as for a
-    // text input. Until 2026-09-29 this widget wrapped an unclassed `<label>`
-    // only when it had text, and put that text in no span, so
-    // `.fx-form-field` and `.fx-field-label` both silently missed every
-    // checkbox on the page.
-    rsx! {
-        div {
-            class: field_class,
-            // The box comes BEFORE its text. Every other widget reads
-            // caption-then-control, but a checkbox reads "☐ I agree", not
-            // "I agree ☐": the label is what the box means, not what to type
-            // into it.
-            input {
-                class: class,
-                name: "{props.path}",
-                id: "{props.id}",
-                r#type: "checkbox",
-                checked: get_current(&props.path, values) == "true",
-                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
-                // Last: rsx! reads anything after a spread as children.
-                ..attrs,
-            }
-            // Marked by `required_true`, not `required`: on a bool, `required`
-            // is presence, which a checkbox always has.
-            {label}
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+    let control = rsx! {
+        input {
+            class: props.control_class::<CheckboxInput>(Tag::Input),
+            name: "{path}",
+            id: "{props.id}",
+            r#type: "checkbox",
+            checked: get_current(&path, values) == "true",
+            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            // Last: rsx! reads anything after a spread as children.
+            ..attrs,
         }
-    }
+    };
+    // Marked by `required_true`, not `required`: on a bool, `required` is
+    // presence, which a checkbox always has. Until 2026-09-29 this widget
+    // wrapped an unclassed `<label>` only when it had text, so
+    // `.fx-form-field` and `.fx-field-label` both silently missed every
+    // checkbox on the page; `field_row` is what keeps it in step now.
+    let marked = props.attrs.contains(Attr::RequiredTrue);
+    field_row::<CheckboxInput>(props, marked, LabelSide::After, control)
 }

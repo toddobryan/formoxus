@@ -1,7 +1,7 @@
 //! Newtype wrappers as leaves.
 //!
 //! `struct Markdown(String)` is one input, not a fieldset around a field called
-//! `"0"`. The wrapper can't be the `FormField`'s own type parameter — a
+//! `"0"`. The wrapper can't be the `Field`'s own type parameter — a
 //! concrete `T` is unrecoverable from a runtime `&'static Shape` — so the field
 //! carries the INNER scalar and remembers what to re-wrap it in. These pin both
 //! halves of that: the string-facing side behaves exactly like the bare scalar,

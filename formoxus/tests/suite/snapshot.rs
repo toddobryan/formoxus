@@ -26,7 +26,7 @@ use formoxus::{
 };
 use googletest::prelude::*;
 
-use super::render_to_html;
+use super::{render_to_html, without_form_id};
 
 const SIZES: &[(&str, &str)] = &[("s", "Small"), ("l", "Large")];
 const STATES: &[(&str, &str)] = &[("AL", "Alabama"), ("AK", "Alaska")];
@@ -106,8 +106,8 @@ fn spec() -> FormSpec<Everything> {
             week => { widget: week },
             agreed => { required_true },
             bio => { widget: textarea },
-            state => { widget: select { choices: STATES } },
-            size => { widget: radio_group { choices: SIZES } },
+            state => { widget: select, choices: STATES },
+            size => { widget: radio_group, choices: SIZES },
             flag => { widget: radio_group },
             yes => { widget: select },
             buttons: {
@@ -297,25 +297,10 @@ fn check(name: &str, html: &str) {
     assert_that!(actual, eq(&expected));
 }
 
-/// The form's random id replaced by `FORMID`, so the snapshot is the same on
-/// every run, and a newline before every tag, so a change is a line diff.
-///
-/// The id is read off the first `id="…"` that starts with one: 8 characters
-/// and a `-`, as `RenderCtx::id` builds them. Replacing that exact string,
-/// rather than anything id-shaped, cannot touch a class or a value.
+/// The form's random id replaced by `FORMID` (`without_form_id`), so the
+/// snapshot is the same on every run, and a newline before every tag, so a
+/// change is a line diff.
 fn normalized(html: &str) -> String {
-    let form_id = html.split("id=\"").skip(1).find_map(|rest| {
-        let candidate = rest.get(..9)?;
-        let (id, dash) = candidate.split_at(8);
-        let mut chars = id.chars();
-        let looks_like_one = dash == "-"
-            && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
-            && chars.all(|c| c.is_ascii_alphanumeric());
-        looks_like_one.then(|| id.to_string())
-    });
-    let html = match form_id {
-        Some(id) => html.replace(&id, "FORMID"),
-        None => html.to_string(),
-    };
+    let html = without_form_id(html);
     format!("{}\n", html.replace('<', "\n<").trim_start())
 }

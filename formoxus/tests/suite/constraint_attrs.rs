@@ -1,9 +1,9 @@
 //! Constraints reaching the BROWSER, not just Rust.
 //!
-//! `FormField::check` enforces every constraint server-side; these pin the
+//! `Field::check` enforces every constraint server-side; these pin the
 //! other half, that the same constraint is handed to the browser so it can
 //! give instant feedback and block submit. The mapping itself is unit-tested
-//! beside `attrs` in `fields.rs`; this is the end-to-end view from `form!`.
+//! beside `FieldAttrs` in `field_attrs.rs`; this is the end-to-end view from `form!`.
 //!
 //! **Numeric attributes render UNQUOTED** (`maxlength=10`), because they are
 //! `AttributeValue::Int`. A `pattern` is text and does get quotes.
@@ -55,7 +55,7 @@ fn each_text_constraint_reaches_the_input() {
 }
 
 /// **The pattern reaches the DOM unanchored.** HTML wraps a `pattern` as
-/// `^(?:…)$` implicitly, and `FormField::check` wraps it Rust-side to match —
+/// `^(?:…)$` implicitly, and `Field::check` wraps it Rust-side to match —
 /// so handing the browser an already-wrapped pattern would anchor it twice and
 /// the two would stop agreeing. Agreement is the whole reason `regress` is a
 /// dependency.
@@ -95,7 +95,7 @@ fn a_numeric_bound_reaches_the_input() {
 /// `step=1` and would reject `0.5` — but formoxus never defaults a float to
 /// `type="number"` (`Int`/`Float` default to `Text`), so the only way to meet
 /// that is an explicit `widget: number`, and then supplying `step` is the
-/// author's job. See the note on `FormField::constraint_attributes`.
+/// author's job. See the note on `Field::constraint_attributes`.
 #[gtest]
 fn no_step_is_emitted_for_a_float() {
     #[component]
@@ -108,6 +108,45 @@ fn no_step_is_emitted_for_a_float() {
     expect_that!(html, contains_substring("min=0.5"));
     expect_that!(html, contains_substring("max=9.5"));
     expect_that!(html, not(contains_substring("step")));
+}
+
+/// What a dev writes instead: `step` is a pass-through attribute, emitted as
+/// written. `"any"` is what a float on `type="number"` usually wants.
+#[gtest]
+fn a_dev_step_of_any_reaches_the_number_input() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! { Counts { fraction => { widget: number, step: "any" } } })
+        });
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring(r#"step="any""#));
+}
+
+#[gtest]
+fn a_dev_numeric_step_reaches_the_number_input() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| {
+            empty_form(form! { Counts { fraction => { widget: number, step: 0.25 } } })
+        });
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring("step=0.25"));
+}
+
+/// A whole float literal is still a whole step: only a fractional one is
+/// refused on an int field (`tests/ui/form_fractional_step_on_an_integer.rs`).
+#[gtest]
+fn an_int_field_takes_a_whole_float_step() {
+    #[component]
+    fn App() -> Element {
+        let form =
+            use_form(|| empty_form(form! { Counts { whole => { widget: number, step: 2.0 } } }));
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), contains_substring("step=2"));
 }
 
 /// A hidden input is not user-editable and browsers do not validate it. It is
@@ -158,37 +197,10 @@ fn a_textarea_gets_pattern_although_html_has_no_such_attribute() {
     expect_that!(html, contains_substring(r#"pattern="\w+""#));
 }
 
-/// A chooser is not an `<input>` at all, and `Select`/`RadioGroup` both accept
-/// a `Text` value kind — so a constrained `String` carries its attributes onto
-/// a `<select>` or a `<fieldset>`. Which is why issue #4 cannot be fixed by
-/// gating on `InputType` alone.
-#[gtest]
-fn a_chooser_carries_them_onto_a_select_or_fieldset() {
-    const STATES: &[(&str, &str)] = &[("AL", "Alabama")];
-
-    #[component]
-    fn AsSelect() -> Element {
-        let form = use_form(|| {
-            empty_form(form! {
-                Zip { code => { max_length: 10, widget: select { choices: STATES } } }
-            })
-        });
-        form.render(using_fns! {})
-    }
-    #[component]
-    fn AsRadios() -> Element {
-        let form = use_form(|| {
-            empty_form(form! {
-                Zip { code => { max_length: 10, widget: radio_group { choices: STATES } } }
-            })
-        });
-        form.render(using_fns! {})
-    }
-    expect_that!(render(AsSelect), contains_substring("<select"));
-    expect_that!(render(AsSelect), contains_substring("maxlength=10"));
-    expect_that!(render(AsRadios), contains_substring("<fieldset"));
-    expect_that!(render(AsRadios), contains_substring("maxlength=10"));
-}
+// A constraint beside `choices` used to be tested here, rendering `maxlength`
+// onto a `<select>` and a `<fieldset>`. `form!` now refuses the pair (the
+// choices fix the values, so the dev makes each one meet the constraint), so
+// the case lives in `tests/ui/form_choices_with_a_constraint.rs`.
 
 // ── The map's invariant, end to end ──────────────────────────────────────
 

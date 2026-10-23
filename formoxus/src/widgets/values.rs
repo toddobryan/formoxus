@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::members::ValuesStore;
+use crate::nodes::ValuesStore;
 
 /// This path's current raw value, or `""` if the map has no entry for it.
 ///

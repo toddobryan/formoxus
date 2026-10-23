@@ -1,21 +1,21 @@
-//! `FormSpec` overrides reaching the built tree, via `FormMember::apply_specs`.
+//! `FormSpec` overrides reaching the built tree, which the shape walk applies
+//! as it builds each node.
 //!
-//! These go through `render_to_html` rather than inspecting members, because the
+//! These go through `render_to_html` rather than inspecting nodes, because the
 //! question is whether an override *arrives* — and the DOM is the only place that
 //! answer is unambiguous. Nothing here constructs a spec through `form!`; the
 //! builder is the contract between the macro and the tree, so testing the builder
 //! keeps these honest about which half is being exercised.
 
 use super::models::{EventForCreate, Location};
-use super::render_to_html;
+use super::{render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue, RenderedInputType};
-use formoxus::fields::FieldAttrs;
-use formoxus::members::Edit;
-use formoxus::members::ValuesByPath;
+use formoxus::field_kind::field_for;
+use formoxus::nodes::Edit;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::{BuiltinWidget, WidgetType};
+use formoxus::widgets::{CheckboxInput, Select, TextInput, Textarea};
 use googletest::prelude::*;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
@@ -77,7 +77,7 @@ fn RelabelledFieldSet() -> Element {
 #[gtest]
 fn a_field_sets_own_label_becomes_its_legend() {
     // A container is addressable in its own right, not just as a prefix — so
-    // `apply_specs` has to consult the map about itself before recursing.
+    // the walk has to look the container itself up, not only its leaves.
     let html = render_to_html(RelabelledFieldSet);
     expect_that!(
         html,
@@ -105,10 +105,7 @@ fn the_derived_widgets_are_what_the_override_has_to_beat() {
 #[component]
 fn OptionalBoolForcedToCheckbox() -> Element {
     let form = use_form(|| {
-        empty_form(FormSpec::<Flags>::default().with_custom_widget(
-            "subscribed",
-            WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Checkbox)),
-        ))
+        empty_form(FormSpec::<Flags>::default().with_widget("subscribed", CheckboxInput))
     });
     form.render(using_fns! {})
 }
@@ -129,12 +126,7 @@ fn an_override_beats_a_derived_widget() {
 
 #[component]
 fn BoolForcedToSelect() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<Flags>::default()
-                .with_custom_widget("enabled", WidgetType::Builtin(BuiltinWidget::Select)),
-        )
-    });
+    let form = use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", Select)));
     form.render(using_fns! {})
 }
 
@@ -142,7 +134,108 @@ fn BoolForcedToSelect() -> Element {
 fn an_override_works_in_the_other_direction_too() {
     let html = render_to_html(BoolForcedToSelect);
     expect_that!(html.matches("<select").count(), eq(2));
+    // A bool's true/false reach a `Select` with no choices of its own.
+    expect_that!(html, contains_substring(r#"value="true""#));
     expect_that!(html.matches(r#"type="checkbox""#).count(), eq(0));
+}
+
+// ── `with_widget`: a widget type set on a field ─────────────────────────
+//
+// Naming the widget a field would have chosen anyway must change nothing, so
+// the pairs below expect the same markup as the untouched form.
+
+/// Each render mints its own form id, so the comparisons ignore it.
+fn rendered(app: fn() -> Element) -> String {
+    without_form_id(&render_to_html(app))
+}
+
+#[component]
+fn TitleThroughTextInput() -> Element {
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_widget("title", TextInput))
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn UntouchedEvent() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<EventForCreate>::default()));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_widget_type_renders_what_the_derived_widget_renders() {
+    expect_that!(
+        rendered(TitleThroughTextInput),
+        eq(&rendered(UntouchedEvent))
+    );
+}
+
+#[component]
+fn TitleThroughTextarea() -> Element {
+    let form = use_form(|| {
+        empty_form(FormSpec::<EventForCreate>::default().with_widget("title", Textarea))
+    });
+    form.render(using_fns! {})
+}
+
+/// An override, not just the default by another route.
+#[gtest]
+fn a_widget_type_overrides_the_default() {
+    let html = rendered(TitleThroughTextarea);
+    expect_that!(html, contains_substring("<textarea"));
+    // In place of the title's text input, not beside it.
+    let text_inputs = |h: &str| h.matches(r#"type="text""#).count();
+    expect_that!(
+        text_inputs(&html),
+        eq(text_inputs(&rendered(UntouchedEvent)) - 1)
+    );
+}
+
+#[component]
+fn EnabledThroughCheckboxInput() -> Element {
+    let form =
+        use_form(|| empty_form(FormSpec::<Flags>::default().with_widget("enabled", CheckboxInput)));
+    form.render(using_fns! {})
+}
+
+/// Same markup as the derived checkbox, so in particular no `required` on
+/// it: `FieldNode::is_checkbox` reads the widget type's name.
+#[gtest]
+fn a_checkbox_widget_type_renders_as_the_derived_checkbox() {
+    expect_that!(
+        rendered(EnabledThroughCheckboxInput),
+        eq(&rendered(UntouchedFlags))
+    );
+}
+
+/// An unticked box is a complete `false`, not a missing value, for a
+/// checkbox set through `with_widget` as for the derived one.
+#[gtest]
+fn an_unticked_checkbox_widget_type_validates() {
+    let mut form = empty_form(FormSpec::<Flags>::default().with_widget("enabled", CheckboxInput));
+    expect_that!(
+        form.validate(),
+        some(eq(&Flags {
+            enabled: false,
+            subscribed: None,
+        }))
+    );
+}
+
+#[gtest]
+#[should_panic(expected = "location is a field set")]
+fn a_widget_type_on_a_field_set_is_rejected() {
+    // A field set has no single widget to be, and silently ignoring the entry
+    // would leave the author with no thread to pull. The message names the path
+    // because a nested form has more than one candidate.
+    let _ = empty_form(FormSpec::<EventForCreate>::default().with_widget("location", Textarea));
+}
+
+#[gtest]
+#[should_panic(expected = "venues is a list")]
+fn a_widget_type_on_a_list_is_rejected() {
+    let _ = empty_form(FormSpec::<WithRows>::default().with_widget("venues", Select));
 }
 
 // ── Rejections and no-ops ────────────────────────────────────────────────
@@ -150,69 +243,17 @@ fn an_override_works_in_the_other_direction_too() {
 #[gtest]
 fn an_unmatched_path_is_a_no_op() {
     // The witness fn makes this unreachable through `form!`, but the builder is
-    // public and `apply_specs` must not panic on a path it simply doesn't find —
-    // a spec is a set of statements about members, not an assertion that each
+    // public and the walk must not panic on a path it simply doesn't find —
+    // a spec is a set of statements about nodes, not an assertion that each
     // exists.
     let form =
         empty_form(FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"));
     expect_that!(form.collect_values().len(), gt(0));
 }
 
-#[gtest]
-#[should_panic(expected = "location is a field set")]
-fn a_widget_on_a_field_set_is_rejected() {
-    // A field set has no single widget to be, and silently ignoring the entry
-    // would leave the author with no thread to pull. The message names the path
-    // because a nested form has more than one candidate.
-    let _ = empty_form(
-        FormSpec::<EventForCreate>::default()
-            .with_custom_widget("location", WidgetType::Builtin(BuiltinWidget::Textarea)),
-    );
-}
-
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct WithRows {
     venues: Vec<Location>,
-}
-
-#[gtest]
-#[should_panic(expected = "venues is a list")]
-fn a_widget_on_a_list_is_rejected() {
-    let _ = empty_form(
-        FormSpec::<WithRows>::default()
-            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
-    );
-}
-
-/// The chooser has to be a FIELD, not the whole model: a bare-enum `T` has no
-/// variant chosen in blank mode, and `fields_from_enum` refuses to build one.
-#[derive(Facet, Clone, Debug, PartialEq)]
-struct Drawing {
-    shape: super::models::Shape,
-}
-
-#[component]
-fn ChooserWithAWidget() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<Drawing>::default()
-                .with_custom_widget("shape", WidgetType::Builtin(BuiltinWidget::RadioGroup)),
-        )
-    });
-    form.render(using_fns! {})
-}
-
-#[gtest]
-fn a_widget_on_a_variant_chooser_is_accepted() {
-    // The one container that DOES own a widget — the `<select>` that picks the
-    // variant. The asymmetry with the two rejections above is deliberate.
-    //
-    // Nothing renders a radio group yet, so what this pins is that the override
-    // is STORED and ignored rather than refused: construction succeeds and the
-    // select still renders. It starts failing the day `RadioGroup` is honoured,
-    // which is the right moment to be told.
-    let html = render_to_html(ChooserWithAWidget);
-    expect_that!(html.matches("<select").count(), eq(1));
 }
 
 // ── `[]` — selecting every row of a list ─────────────────────────────────
@@ -330,8 +371,7 @@ fn RowWidgetsOverridden() -> Element {
             &Answers {
                 correct: vec![true, false],
             },
-            FormSpec::<Answers>::default()
-                .with_custom_widget("correct[]", WidgetType::Builtin(BuiltinWidget::Select)),
+            FormSpec::<Answers>::default().with_widget("correct[]", Select),
         )
     });
     form.render(using_fns! {})
@@ -353,12 +393,11 @@ fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     // The rejection still stands, but it can name the fix now.
     let _ = form_for(
         &trip(),
-        FormSpec::<Trip>::default()
-            .with_custom_widget("venues", WidgetType::Builtin(BuiltinWidget::Select)),
+        FormSpec::<Trip>::default().with_widget("venues", Select),
     );
 }
 
-// ── Members that arrive AFTER the spec was applied ───────────────────────
+// ── Nodes that arrive AFTER the spec was applied ───────────────────────
 
 #[component]
 fn RowAddedAfterTheSpec() -> Element {
@@ -440,15 +479,16 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 /// DOM: a constraint has no markup of its own yet, so validation is the only
 /// place its arrival shows.
 ///
-/// Every other constraint test sets constraints straight onto a `FormField`,
-/// which means this is the only one that would notice `apply_specs` dropping
-/// them on the floor.
+/// Every other constraint test sets constraints straight onto a field, which
+/// means this is the only one that would notice the walk dropping a spec's
+/// settings on the floor. A validated setting is the field's, so it goes
+/// through `with_node`, as `form!` emits it.
 #[gtest]
 fn a_constraint_from_the_spec_reaches_validation() {
     let spec = || {
-        FormSpec::<EventForCreate>::default().with_attrs(
+        FormSpec::<EventForCreate>::default().with_node(
             "title",
-            FieldAttrs::from([(AttrKey::Std(Attr::MaxLength), AttrValue::Int(5))]),
+            field_for(|m: &EventForCreate| &m.title, |f| f.max_length = Some(5)),
         )
     };
 
@@ -463,14 +503,19 @@ fn a_constraint_from_the_spec_reaches_validation() {
     expect_that!(failing_paths(&errors), elements_are![eq("title")]);
 }
 
-/// `apply_specs` looks itself up by QUALIFIED path, so a constraint on a nested
+/// The walk looks a node up by its QUALIFIED path, so a constraint on a nested
 /// leaf has to survive `qualify(prefix, name)`. The flat case above would pass
 /// even if the prefix were being dropped.
 #[gtest]
 fn a_constraint_reaches_a_nested_leaf() {
-    let spec = FormSpec::<EventForCreate>::default().with_attrs(
+    let spec = FormSpec::<EventForCreate>::default().with_node(
         "location.zip",
-        FieldAttrs::from([(AttrKey::Std(Attr::Pattern), AttrValue::Regex(r"\d{5}"))]),
+        field_for(
+            |m: &EventForCreate| &m.location.zip,
+            |f| {
+                f.pattern = Some(r"\d{5}");
+            },
+        ),
     );
 
     let mut values = full_event("Fine");
@@ -478,4 +523,21 @@ fn a_constraint_reaches_a_nested_leaf() {
 
     let errors = Submission::accept(spec, &values).expect_err("NW1 is not five digits");
     expect_that!(failing_paths(&errors), elements_are![eq("location.zip")]);
+}
+
+/// A validated key in `with_attrs` would render and never be checked, so the
+/// browser and the server would disagree; it is refused instead. The message
+/// names the key as `form!` spells it (`max_length`), not as HTML does
+/// (`maxlength`), since that is what the dev wrote and what the setting is
+/// called.
+#[gtest]
+#[should_panic(expected = "title: `max_length` is validated, so it is a setting of the field")]
+fn a_validated_key_in_with_attrs_is_refused_by_its_form_name() {
+    let _ = FormSpec::<EventForCreate>::default().with_attrs(
+        "title",
+        formoxus::field_attrs::FieldAttrs::from([(
+            formoxus::attrs::AttrKey::Std(formoxus::attrs::Attr::MaxLength),
+            formoxus::attrs::AttrValue::Int(5),
+        )]),
+    );
 }

@@ -5,6 +5,257 @@ metadata:
   type: project
 ---
 
+**2026-10-23 (pushed as `555ebf2`, `just ci` GREEN): CHECKPOINT 4 DONE, `BuiltinWidget`
+IS GONE.** Items 14–18 landed today: `InputView` routes on a private
+`InputBody`, `FieldControl` is flattened into `HtmlElement` and `true_and_on`
+deleted (15), and `BuiltinWidget`, `Part` and `RenderedInputType` are deleted
+from `formoxus-spec` with their re-exports, tests and the transition test
+(16–18, one commit; 18 was a box I added, since no box deleted the types).
+`widget_matrix` now reads each widget's `ACCEPTS` through `entry::<W>()`
+and no longer lists not-yet widgets (it cannot see `WidgetName::NOT_YET`).
+STEP 5 IS DONE. Two boxes DEFERRED (Todd, 2026-10-23), surveys kept in
+the plan: the variant picker (a bare enum already renders and
+round-trips; V1–V3 open) and `#[derive(Widget)]` (DW1, where `render`
+goes, open). Todd wants to USE formoxus for a while before committing to
+either, so expect feedback from real use rather than a next plan step.
+**`widget` was MERGED into `main` the same day (Todd), and work happens on
+`main` from here.** The `widget` branch stays on origin as history. Todd builds step by step from a
+to-do list with LINE NUMBERS (he asked for them on 15), and hands me whole
+items or sub-steps.
+
+**2026-10-22, NIGHT (pushed, `just ci` GREEN): CHECKPOINT 3 DONE and
+ITEM 13 DONE; NEXT IS ITEM 14** (`RenderedInputType`: `InputView` routes on
+`InputType` directly), then 15 (flatten `FieldControl` into `HtmlElement`),
+16 (re-exports), 17 (mine: `widget_matrix`, `tests/suite/builtin_widgets.rs`,
+`formoxus-spec`'s own tests, the transition test in `widget_names.rs`,
+README, memory). The plan's item 13 note lists exactly what still reads
+`BuiltinWidget`. Item 13 became an ENUM, `formoxus_spec::WidgetName` (Todd:
+"a Java enum"), one `macro_rules!` row per widget, variant = type name; the
+macro matches on it exhaustively for its messages. `classes_plus:` checks a
+part with a `const _` on `formoxus::classes::has_part::<W>`; its error no
+longer lists the parts (accepted). Todd is still building, step by step,
+and asked me to take whole items when he steps away.
+
+**2026-10-22, END OF SCHOOL DAY (pushed, build RED on purpose):
+deleting `BuiltinWidget`, checkpoints 1–2 DONE (`281f5c1`, `ad1449c`);
+checkpoint 3 redesigned (Todd: widgets declare `PARTS: &[Tag]`, presets own
+classes, no `default_classes()`; see
+[[widgets-declare-parts-presets-own-classes]]) and MID item 11.** The
+"WHERE THIS STOPPED" note under item 11 in `formoxus/FIELDS_PLAN.md` lists
+the 20 remaining lib errors as 11a–11f. Start at 11a: `control_class`
+lost `self.attrs.class(…)`, which would drop a field's `class:`. Todd is
+building checkpoint 3 himself, walked through step by step; offer to probe
+11d (a generic `#[component]`) if he hits it.
+
+**2026-10-21, LATER: STEP 5's boxes through `field_row` DONE and pushed
+(`7b37772`). NEXT: delete `BuiltinWidget`, TODD BUILDS IT** ("I'm losing
+track of how things work"), from the 17-item list in `FIELDS_PLAN.md`'s
+"Delete `BuiltinWidget`" box, which opens with how the four jobs fit
+together. Mine: items 4, 8, 17 and goldens. Give hints and reasons when he
+asks, not finished code ([[user-role]]).
+
+**2026-10-21: "`build.rs` RESOLVES THE WIDGET ONCE", OPTION A (Todd).**
+Callers move off `with_custom_widget` on a leaf rather than adapting
+`WidgetType`. My items 1–4 DONE (`cdbcaea`, not pushed); Todd's 5–8 are
+in the box in `formoxus/FIELDS_PLAN.md` with file:line refs. Found: no
+widget type checks field type at runtime (`widget_matrix` `ok*`).
+LATER: box DONE (Todd deleted `ScalarWidget` and `custom_widget`). Golden
+flip was the toolchain: pinned 1.99.1 + rust-src ([[toolchain-pin-and-goldens]]).
+
+**2026-10-20, EVENING (committed `c151c41`, NOT pushed): `form!`'s PROPS
+BOX ITEMS 1–17 DONE.** `widget:` takes a lowercase built-in name or a path,
+props in braces, emitted into `.with_widget`; `EXTENDS` asserts at the key;
+`respan` in `form.rs` put four `DefaultField` goldens back on the field.
+LATER: `RadioGroup`'s `group_class`/`input_class` props DROPPED (Todd); a
+field's `class`/`class_plus` now go on its `<fieldset>`. Box CLOSED.
+LATER STILL: `Field::default_widget` box DONE (required method; every
+`form!` field renders through `AnyWidget`; `ScalarWidget` only for
+`with_custom_widget`). Next: "`build.rs` resolves the widget once".
+
+**2026-10-20, END OF DAY (pushed): THE BRIDGE IS DONE (`d854acb`); NEXT IS
+`form!`'s PROPS BOX, and its 17-item to-do list is written into that box in
+`formoxus/FIELDS_PLAN.md`.** Todd picks up items 1–12 from home (parse,
+emit, check); 13–17 are mine once he reaches checkpoint 1. `FormSpec::with_widget`
+exists, and `FieldNode` renders an `AnyWidget` when it has one, else
+`ScalarWidget`.
+
+**2026-10-20, AFTERNOON: STEP 5's BUILT-IN TYPES BOX DONE.**
+All 18 widget types exist and render what `ScalarWidget` renders
+(`tests/suite/builtin_widgets.rs`); nothing uses them yet. Todd wrote
+`TextInput`, I wrote the rest (13 text-likes from one `macro_rules!`).
+Components are `pub(crate)` `*View`s. Choices travel in `WidgetProps`
+(Todd: not a `Select { choices }` prop). `RadioGroup`'s class props are
+DEFERRED to the props box and written into it, "don't forget".
+`formoxus_spec::Element` is now `HtmlElement`. **Next: `form!` props in the
+widget's braces + `EXTENDS` asserts; then the goldens (mine).**
+
+**2026-10-20, LATER: BOX ORDER CHANGED (Todd).** The built-in widget types
+come BEFORE `form!`'s props-in-braces box, since the struct expression and the
+`EXTENDS` asserts both need a concrete type to name. No special case for
+`choices` written inside a widget's braces (unreleased; rustc's "no field"
+suffices). Goldens for the props box wait until it lands. Built-in box
+decided (see its entry in `FIELDS_PLAN.md`): components get a `View` suffix;
+`FieldNode` resolves bounds so `WidgetProps` has no `field_type`; `Classes`
+re-key deferred. `FieldControl` flattens into `Element` and `true_and_on`
+goes, both in the delete box. **Next: Todd writes the first few built-in
+widget types, then hands the rest to me.**
+
+**2026-10-20: STEP 5's `Widget` BOX DONE (pushed).** Todd wrote `trait
+Widget` (`NAME`, `EXTENDS`, `render(&self, props: WidgetProps)`,
+`default_classes()`), the `pub(crate) DynWidget` and `AnyWidget` in
+`formoxus/src/widgets/widget.rs`, from the fleshed-out box in
+`FIELDS_PLAN.md`; I wrote the inline tests and the docs (the no-hooks rule on
+`render`). `default_widget` returns `AnyWidget`, still `todo!()`. **Next:
+`form!` takes props in the widget's braces, plus the `EXTENDS` asserts.**
+Todd continues from his school computer.
+
+**2026-10-19, EVENING: STEP 5's `AttrSet` BOX DONE, plus `step`
+(two commits, `8183d4f` AttrSet then `step`; not pushed).** Todd wrote `AttrSet` (`EMPTY`, `ANY`, `valid_on(element)`,
+`with`/`without`/`contains`, all const) in `formoxus-spec`; I wrote its tests.
+It is exported from `formoxus::attrs`. `step` got a table row and its own
+`AttrType::Step` (`"any"` or a number); `form!` refuses a fractional one on an
+int field and one not above zero (see [[constraint-attributes-gap]]). Runtime
+attribute values filed as a Step 8 possibility. **Next: `trait Widget`.**
+
+**2026-10-19: W-B, W-C AND W-A's PROP QUESTION DECIDED** (in
+`formoxus/FIELDS_PLAN.md` Step 5). `BuiltinWidget` is retired; class slots key
+on a per-widget `const NAME`; lowercase `widget: textarea` stays as the
+built-ins' spelling, custom widgets are paths. Widget types use Django's names
+extended (`TextInput`, `TelInput`, …). Props are plain expressions, `.into()`.
+`.into()` on all but a bare number literal (emitted as written).
+The radio widget stays `RadioGroup`. Step 5's decisions are all made. **Next: Step 5's boxes, code only on Todd's say-so per piece.**
+Tablet page: republish when Todd says he is heading to the tablet.
+
+**2026-10-18, LATER: STEP 4 DONE (`38ea185`, 4 ahead of origin, not pushed);
+STEP 5's W-A DECIDED, written into `formoxus/FIELDS_PLAN.md`.** A widget is a
+struct of PROPS like a Dioxus component (`pub` fields, set in the widget's
+braces in `form!`, checked by rustc), `const EXTENDS: AttrSet` for pass-through
+HTML attributes, `#[derive(Widget)]` with `render` by hand (shape 1), a hidden
+`DynWidget` + `AnyWidget` newtype. Parts shrink to CLASS SLOTS; per-part
+attribute addressing (D0 3–5) dropped. Step 5 = single-control widgets only;
+multi-control (`ContactInfoWidget` set, `DateWidget` split) is new Step 10.
+Step 6 gained `Field::format` and "a named field wins over any shape".
+**Next: W-B and W-C.** Tablet page not yet republished with this.
+
+**2026-10-18: STEP 4's CONSTRAINT MOVE DONE (`a40278b`, 3 ahead of origin, not
+pushed).** Four fields in `fields/`; `form!` emits `with_node(…, field_for(proj,
+|__f| { … }))`; `DefaultField` maps model type → field; `check_attrs` gone;
+`with_attrs` refuses validated keys. Todd leans on me more, but I write library
+code ONLY when he asks for a specific piece (Todd, 2026-10-18: "Don't assume."). **Next in Step 4: wire
+`ChoiceField` (typed `choices:`, separate change, decision C).**
+
+**2026-10-17, END: STEP 3 DONE, S-b INTEGRATED.** The walk applies the
+whole spec as it builds; `apply_specs`/`distribute_specs` deleted; PR #12
+merged, `spike/s-b` and its worktree deleted. **Next: Step 4** (the four
+fields; decisions A-1 and B-1 come up there).
+
+**2026-10-17, LATER STILL: S-b SPIKED, IT HOLDS.** Branch `spike/s-b` in
+worktree `../formoxus-spike-sb` (uncommitted; build dir `target-spike`).
+Results and findings under Step 3 in `formoxus/FIELDS_PLAN.md`. Plan page
+for Todd's tablet: https://claude.ai/artifact/Nj88w7AgabvyTygAvVUFtV
+(republish from the scratchpad copy, or rebuild it, when the plan changes).
+
+**2026-10-17 (home), LATER: STEP 2 DONE AND COMMITTED.** `FieldNode<F>`
+(`field_node.rs`) + the `ScalarField<T>` stand-in; `fields.rs` deleted;
+its 52 inline tests ported (20 → `field_attrs.rs`, 32 → `field_node.rs`);
+`#[expect(clippy::todo)]` on `default_widget` until Step 5. **Next: Step 3,
+decision S (S-a vs S-b; I lean S-b, spike a nested `Vec` row first).**
+Todd wants to read the plan from the mobile app.
+
+**2026-10-17 (home): THE REFACTOR HAS A PLAN FILE: `formoxus/FIELDS_PLAN.md`.**
+Read it first; it supersedes the step list below and gathers the decisions,
+the open questions (F-A..F-C, S, A-1, B-1, W-A..W-C, E-1, review note C)
+and what it replaces in `ATTRIBUTES_PLAN.md`'s Step 4. Todd finished Step 1
+(uncommitted); the one remaining error is `dispatch!`'s old struct literal,
+which Step 2 fixes. Also decided today: compile-time field checks are
+EMITTED `const _` (not spec tables); `raw` in `FieldValue::Invalid` kept
+for now, queued for deletion (both in [[django-parallel-design]]).
+
+**2026-10-16 (school, ~5pm), END: WIP, BUILD BROKEN ON PURPOSE.** Committed
+with `--no-verify` (format hook). Todd is writing; I review. State:
+- `formoxus/src/field.rs` (new): `trait Field` with `type Value`,
+  `type Context`, `parse` (default `parse_scalar`, moved here), `check`,
+  `widget_attrs`, `default_widget(optional) -> Box<dyn Widget>`,
+  `async fn check_on_server`; a placeholder `trait Widget {}` (TODO: move).
+- `formoxus/src/field_attrs.rs` (new): ONLY the `FieldAttrs` struct so far.
+- `fields.rs` is ENTIRELY commented out (`/* … */`, including its tests);
+  the old `Field<T>` struct and impls are there for reference while
+  `FieldNode<F>` gets written.
+- The 10 errors are all one cause: `FieldAttrs`'s methods (`get`, `contains`,
+  `without`, `with_default`, `to_attributes`, `merge_with_attrs`, `class`,
+  `with_owned_attrs`, `From<[…; N]>`) and `populate`/`Field` are still inside
+  the commented-out `fields.rs`; importers point at `crate::fields::…`.
+**Review notes to raise with Todd (my first read, not yet discussed):**
+1. `async fn check_on_server` has no default, so every field must write
+   it; give it one returning no messages.
+2. `async fn` in a public trait: the future has no `Send` bound
+   (rustc's `async_fn_in_trait` lint), and server handlers need `Send`.
+   Likely `fn check_on_server(…) -> impl Future<Output = …> + Send`.
+3. `type Context` on `Field` is the big one: Context belongs to the FORM
+   (`FormDef::Context`), but a field like `ProgramSnippetField` is written
+   once and used in many forms, and one form mixes fields. Must a field's
+   `Context` equal its form's? Options: fields generic over the context
+   (`impl<C: HasDb> Field<C>`), a `FromRef`-style projection (axum), or
+   Context only reaches server checks through `FieldNode` by `&dyn Any`.
+4. Unused `value` in default `check` warns; `_value`.
+5. Next after the build: `FieldNode<F>` and `impl<F: Field> Node for FieldNode<F>`,
+   then `StringField`, `NumberField<T>`, `BoolField`, `ChoiceField<T>`,
+   then `build.rs`'s `dispatch!`.
+
+**2026-10-16 (school, end of day): FIELDS AND WIDGETS BOTH BECOME TRAITS.**
+Read "Decided, 2026-10-16 afternoon" in [[django-parallel-design]] first:
+`Widget` trait + Django-style widget types; `Field` trait + `NumberField<T>`,
+`TextField<T>`, typed `ChoiceField<T>`; `field:` in `form!` plus a type →
+field registry (subsumes the widget registry); async server-only validation
+IN scope. `FormField` → `Field` rename done (it is still the one generic
+struct; the trait will take the name, so the struct gets renamed or split).
+Todd's `WidgetProps` WIP is in `widgets/widget_props.rs`, not yet used.
+Todd is doing the code until he hands off.
+
+**2026-10-16 (school, later): THE REFACTOR HAS STARTED (uncommitted on
+`widget`).** Todd renamed `members` → `nodes`, `FormMember` → `Node`,
+`RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`; I swept the
+`*_member` builders, comments, README, CLAUDE.md and `ATTRIBUTES_PLAN.md`
+(historical plans and memory left as is; renames line in `MEMORY.md`). He
+deleted the `Field<T>` sketch and `contact_info` stub ON PURPOSE. Builds
+clean. **Next, one radical change ([[feedback-radical-refactors-on-a-branch]]):**
+fold `FieldProps` + `WidgetProps` + `FieldAttrs` + `ScalarWidget` props into
+ONE `WidgetProps` (`id, path, label, attrs, extra_attrs, values, errors,
+classes`); choices move onto the widget value (`Select { choices }`, Django
+style); fields write their own constraint attrs (so `FieldType` leaves the
+props); widget resolved once in `build.rs` (no `custom_widget: Option`);
+`ErrorsStore` IN SCOPE NOW (client projection, one writer, `FormState` stays
+the authority); variant picker = a choice widget that still fires
+`on_edit`. **Todd is doing ALL of it himself** (committed rename = `a8c3263`)
+until he hands off; stay out of library code unless asked. **Decided:**
+Django-style widget TYPES (`TextInput`, `HiddenInput`, `Textarea`, …)
+implementing a `Widget` trait with at least `render`, replacing the
+`WidgetType`/`BuiltinWidget` enum + `Custom` fn pointer. Raised to him:
+associated consts make a trait non-dyn (so likely a dyn `Widget` + a const
+`WidgetKind` for `form!`'s checks), `Send + Sync` + `clone_box` for
+`FormState`, class slots keyed by widget name, one type per input `type`,
+and that `formoxus-spec` must keep knowing built-ins for compile-time
+checks. Likely absorbs part of Step 4 (D0–D4).
+
+**2026-10-16 (school, day), DESIGN TALK, NO LIBRARY CODE.** Still on
+`widget`. The `Field<T>` sketch DOES build now (only an unused `FieldSpec`
+import warns); the "does not parse" claim below was stale. Todd answered
+A–F; see "Answers, 2026-10-16 day" in [[django-parallel-design]]. Open
+thread: whether to merge `FieldProps` + `WidgetProps` + `FieldAttrs` (+
+`choices`) into one `BoundField`, keeping `RenderCtx` as the tree-walk
+context. **Done:** the dev/user vocabulary is on `main` (`4d9db06`, pushed).
+**Still `widget`-only, ON PURPOSE (Todd: hold until the design settles):**
+`django_parallel_design.md` and its `MEMORY.md` line. Raise it if `widget`
+is merged, rebased or abandoned. An untracked 2-line stub
+`.claude/memory/django-parallel-design.md` (hyphens) appeared in the
+checkout; origin unknown, left alone; ask Todd before deleting.
+
+**2026-10-16 (home, late), END: DESIGN TALK ONLY, NO CODE.** Branch
+`widget` (not `main`), pushed. Todd is spit-balling a closer Django parallel;
+nothing is decided. **THE GOAL IS SIMPLIFICATION: fewer, combined concepts
+(see "THE GOAL" and the name inventory in that note).** Read
+[[django-parallel-design]] first.
+
 **2026-10-15 (school), END: P3 DONE (P3-7, P3-8, P3-9), #10 CLOSED, ALL
 PUSHED.** P3-8: rendered cascade tests in `tests/suite/classes.rs`, `bare()`
 tests in `snapshot.rs`. P3-9: `/t/bare` + `e2e/tests/bare.rs`. **Next: Step 4

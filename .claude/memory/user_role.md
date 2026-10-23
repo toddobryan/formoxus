@@ -18,6 +18,10 @@ constraint attributes and the e2e harness:
 - **He is often editing the same files at the same time.** Re-read before
   patching; several times a file had changed under me mid-task, including
   `buttons.rs`, `scalar.rs` and `main.rs`. A stale `git diff` is a real hazard.
+  **So is `git add -A`** (2026-10-20): it swept his half-made `pub(crate)
+  fn InputView` into my `TextInput` commit, which then did not compile.
+  Stage files BY NAME, and run `git diff` on anything he may be touching
+  right before committing.
 - **Investigation is welcome and wanted.** Reading the installed `dioxus-html`
   source, running a document through the W3C validator, probing `playwright-rs`'s
   API — those consistently landed better than reasoning from memory, and twice

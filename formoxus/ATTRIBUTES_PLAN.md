@@ -149,7 +149,7 @@ pass through, and the grammar change below has landed.
 > **Decided 2026-10-07** (Todd; reasoning in the design note, open question 2):
 >
 > - **Attributes become `Vec<Attribute>` inside the widget**, not in
->   `FormField::render`. Only the widget knows its own classes, and a spread
+>   `Field::render`. Only the widget knows its own classes, and a spread
 >   `class` is *duplicated*, not merged. Probed 2026-10-07: `class_plus:
 >   ["wide", "dark"]` rendered `<input class="fx-control fx-input" … class="wide dark"/>`.
 > - **No separate `TokenList`/`Declarations` values.** Both are
@@ -304,7 +304,7 @@ style: {
     step 7 deletes the literal. Something like
     `FieldAttrs::with_owned(required: bool, invalid: bool, rest: &FieldAttrs)`,
     inserting `Required` (`Flag`) and `AriaInvalid` (`String("true")`) FIRST,
-    then copying `rest`. Call it in `FormField::render` instead of
+    then copying `rest`. Call it in `Field::render` instead of
     `self.attrs.clone()`. Both are known only at render time (`ctx.required`,
     the errors), so the macro's map never holds them. First keeps `required`
     where the suite pins it (`choices.rs:318`, `enums.rs:208`).
@@ -355,11 +355,11 @@ style: {
     The first try passed `has_errors()`, which counts the chosen variant's
     fields too, so a bad `radius` marked the variant `<select>` invalid;
     pinned by `enums::a_bad_field_in_the_variant_does_not_mark_the_choice_invalid`.
-    That led to splitting `FormMember::has_errors` into `has_errors_within`
+    That led to splitting `Node::has_errors` into `has_errors_within`
     and `has_errors_here` (Claude, delegated; see
     `.claude/memory/errors_here_vs_within.md`).
     **`VariantSelect`** gets `field_attrs: FieldAttrs`, built in
-    `VariantSet` ([variant_set.rs:185](../formoxus/src/members/variant_set.rs#L185))
+    `VariantSet` ([variant_set.rs:185](../formoxus/src/nodes/variant_set.rs#L185))
     as in step 6; apply step 7 to it. It passes `FieldType::Text` to
     `to_attributes` (no bounds). Its legend marker keeps reading `ctx.required`.
   - [x] 10. **Delete the fields.** DONE 2026-10-09 (Todd, including item 6;
@@ -377,12 +377,12 @@ style: {
        key off `!self.errors.is_empty()`. That removes the contradictory
        hand-built case (errors but no `aria_invalid`, or the reverse).
        `field_class_plus` follows for free.
-    3. **The two builders:** `FormField::render`
+    3. **The two builders:** `Field::render`
        ([fields.rs:506–508](../formoxus/src/fields.rs#L506)) and
        `VariantSet::render`
-       ([variant_set.rs:200–202](../formoxus/src/members/variant_set.rs#L200)):
-       delete the `required:` and `aria_invalid:` lines. `RenderCtx::required`
-       (`members.rs`) is a different thing and STAYS: it is where
+       ([variant_set.rs:200–202](../formoxus/src/nodes/variant_set.rs#L200)):
+       delete the `required:` and `aria_invalid:` lines. `NodeContext::required`
+       (`nodes.rs`) is a different thing and STAYS: it is where
        `with_owned_attrs` and `VariantSet`'s legend marker get it from.
     4. **The six destructures:** delete `required: _,` and `aria_invalid: _,` in
        `input.rs:30–32`, `textarea.rs:36–37`, `checkbox.rs:29–30`,
@@ -576,8 +576,8 @@ Checklist:
 
 - [x] **The form id** (Todd, DONE 2026-10-11): `use_server_cached` in
   `use_form`, kept on `Form` as a `Signal<String>` (so `Form` stays `Copy`),
-  handed to `RenderCtx::root` as a plain `String` (resolved once, like
-  `label_case`), and `RenderCtx::id(name)` = `{form_id}-{path}` builds the
+  handed to `NodeContext::root` as a plain `String` (resolved once, like
+  `label_case`), and `NodeContext::id(name)` = `{form_id}-{path}` builds the
   element id in ONE place. `FieldProps` carries both: `path` is the field's
   name in the DATA (`name=`, the value store, `Edit`s, the server; identical
   for every copy of a form), `id` its name in the PAGE (different per copy).
@@ -635,7 +635,7 @@ crates now keep in parallel live in one place. The components and
 | takes `choices` | `CHOOSERS` ([widget.rs:104](../formoxus-macros/src/form/widget.rs#L104)) |
 | refuses an optional field | the `refusal` match in `WidgetRef::checks` ([widget.rs:230](../formoxus-macros/src/form/widget.rs#L230)), mirrored by `field_kind::is_optional` and `ScalarWidget`'s `reject_if_not_required` |
 | not rendered yet | `Rule::NotYet`: `select_multiple`, `checkbox_multiple`, `file` |
-| default per field type | `FormField::default_widget` ([fields.rs:406](src/fields.rs#L406)) |
+| default per field type | `Field::default_widget` ([fields.rs:406](src/fields.rs#L406)) |
 | its parts | nowhere; read off P1's markup (below) |
 
 **Parts, from the markup P1 shipped:**
@@ -784,7 +784,7 @@ crates now keep in parallel live in one place. The components and
     self.optional))`; its comments move to `default_for`, which already
     carries them. `with_owned_attrs` (:169) and `is_unticked_checkbox` (:434)
     match `Builtin(Input(Checkbox))`.
-  - [x] **R5. `VariantSet`** (DONE, Claude) ([variant_set.rs:196](src/members/variant_set.rs#L196)):
+  - [x] **R5. `VariantSet`** (DONE, Claude) ([variant_set.rs:196](src/nodes/variant_set.rs#L196)):
     `&WidgetType::Builtin(BuiltinWidget::Select)`.
   - [x] **R6. The macro** (DONE, Claude): `widget_type_tokens` becomes
     `WidgetType::Builtin(#builtin_tokens)`, so the two token functions
@@ -929,7 +929,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   by everything that component renders, and two forms in one component
   would overwrite each other's classes. Two ways that work:
   (1) context, provided by a small private component `Form` wraps its
-  output in; (2) threaded: `Rc<Classes>` on `RenderCtx` (which already
+  output in; (2) threaded: `Rc<Classes>` on `NodeContext` (which already
   carries `label_case`, the precedent) and on to the widgets as a prop.
   #10's objection to threading was cloning ~15 strings per field; an `Rc`
   answers that. Proposed: (2). It needs no hidden scope, and it hands a
@@ -1148,14 +1148,14 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
   class can REACH the form's resolved `Classes`. Nothing renders differently
   after this step: the literals stay until P3-7, so the snapshot must not
   move. Broken down 2026-10-14 (Claude), line numbers from `f36669f`.
-  **The rule (Todd, 2026-10-14):** a render FUNCTION takes `&RenderCtx`; a
+  **The rule (Todd, 2026-10-14):** a render FUNCTION takes `&NodeContext`; a
   COMPONENT takes props. A widget is a component and never sees a
-  `RenderCtx` (it carries `prefix`, `required`, `values`, `on_edit`, which a
+  `NodeContext` (it carries `prefix`, `required`, `values`, `on_edit`, which a
   leaf must not depend on, and a component's props need `PartialEq`, which
-  `RenderCtx` lacks), so a widget's classes reach it inside `FieldProps`, and
+  `NodeContext` lacks), so a widget's classes reach it inside `FieldProps`, and
   the helpers inside a widget take the `&Classes` from there.
-  - [x] **P3-6a. `RenderCtx` carries it.** DONE in part (Todd):
-    `classes: Rc<Classes>` ([members.rs:259](src/members.rs#L259)), and
+  - [x] **P3-6a. `NodeContext` carries it.** DONE in part (Todd):
+    `classes: Rc<Classes>` ([nodes.rs:259](src/nodes.rs#L259)), and
     `root` takes a `Classes` and wraps it itself, so callers never see the
     `Rc` and cannot pass one shared with anything else; `nested` and
     `optional` clone the `Rc` (a pointer copy). Those two list every field
@@ -1169,8 +1169,8 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     rebuilds a `FormState` with no renderer and a handler's future must be
     `Send`; one `Rc` there would break that path. They hold `Classes` and
     `ClassEdit`s by value (plain data, so `Send`); the `Rc` lives only in
-    `RenderCtx` and `FieldProps`, which exist only while rendering. Worth
-    saying in the doc comment on `RenderCtx::classes` too.
+    `NodeContext` and `FieldProps`, which exist only while rendering. Worth
+    saying in the doc comment on `NodeContext::classes` too.
   - [x] **P3-6b. One context, built at the top of `render`.** DONE in part
     (Todd): a private `Form::root_ctx()` (id, store, callback,
     `label_case()`, `classes()`). **`render` is now the ONLY public way to
@@ -1184,14 +1184,14 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     `render(using_fns! {})`; one test of `render_fragment` itself and three
     of the pieces' slicing were deleted, one rewritten through `render`.
     So the context is built once, in `render`, which passes it on to
-    `render_buttons` and the free `render_problems` as `&RenderCtx`, for
+    `render_buttons` and the free `render_problems` as `&NodeContext`, for
     the form wrapper, the button row, the buttons and the problems list.
-  - [x] **P3-6c. `FormState`'s pieces all take `&RenderCtx`.**
+  - [x] **P3-6c. `FormState`'s pieces all take `&NodeContext`.**
     `render_title` and `render_errors` take none today; they join
     `render_fields`, which does. All three are `pub(crate)`, called only
     from `render`.
-  - [x] **P3-6d. The members** (`FieldSet`, `ListSet`, `VariantSet`)
-    already render from `&RenderCtx`, so their own fieldsets and legends
+  - [x] **P3-6d. The nodes** (`FieldSet`, `ListSet`, `VariantSet`)
+    already render from `&NodeContext`, so their own fieldsets and legends
     need nothing new. `AddRowButton`/`RemoveRowButton` (`list_set.rs:124`,
     `:127`) are components, so `ListSet` passes them `ctx.classes.clone()`
     as a new `classes: Rc<Classes>` prop (P3-6-C).
@@ -1299,7 +1299,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
     `input`, `:83` `label`, `:101` `legend`).
   - [x] **P3-7e. `FieldErrors`** (DONE 2026-10-15, Todd) (`errors.rs:47` list, `:50` item) from its
     `classes` prop.
-  - [x] **P3-7f. The members** (DONE 2026-10-15, Todd): `field_set.rs:38`/`:40`,
+  - [x] **P3-7f. The nodes** (DONE 2026-10-15, Todd): `field_set.rs:38`/`:40`,
     `list_set.rs:111`/`:113`/`:122`, `variant_set.rs:203`/`:206`, each a
     `ctx.classes.fixed_class(…, false)`; the row buttons
     (`row_buttons.rs:25`, `:56`) from their `classes` prop.
@@ -1318,7 +1318,7 @@ An enum field's `VariantSelect` renders `Select`'s three parts with
 
 - [x] **After P3-7: the form title is a `div`, not an `<h2>`** (Todd's call,
   2026-10-15). The `<form>` gets `aria-labelledby` pointing at it
-  (`RenderCtx::title_id()`, `{form id}--title`), which makes the form a
+  (`NodeContext::title_id()`, `{form id}--title`), which makes the form a
   named landmark. formoxus cannot know the page's heading levels; the
   reasoning is on `FormState::render_title`. The `FormTitle` slot is
   unchanged.
@@ -1414,7 +1414,7 @@ failure the compile-time checks exist to prevent.
   Option<FieldControl>`: `Text`/`Int`/`Float` give `Input(Text)`, `bool`
   gives `Input(Checkbox)`, `Option<bool>` gives `Select`, an enum gives
   `Select`; `Unknown` and `Other` give `None` (nothing to check). It MIRRORS
-  `FormField::default_widget` ([fields.rs:390](src/fields.rs#L390)), so it
+  `Field::default_widget` ([fields.rs:390](src/fields.rs#L390)), so it
   gets a "keep in step" note on both, like `renders` and `ScalarWidget`.
 - [ ] Unit tests (Claude) for `default_control`, one per row above, beside the
   `field_kind` tests.
@@ -1518,7 +1518,7 @@ failure the compile-time checks exist to prevent.
    `<input>` (decision 5), and `WidgetType::Checkbox` goes away.
 2. **Reshape `FieldProps`**: `required` and `aria_invalid` MOVED INTO 3d
    (2026-10-08). What is left here: leave room for a blur-validation callback.
-3. **`form!` is the only door** (decision 7): builders, `FormField`'s fields and
+3. **`form!` is the only door** (decision 7): builders, `Field`'s fields and
    `ScalarWidget` behind `#[doc(hidden)] __private`; about 210 suite call
    sites move to `form!` or `__private`. Last, because it touches the most.
 4. **Split `fields.rs`**, if the value-kind half is still large (it mostly

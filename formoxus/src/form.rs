@@ -10,14 +10,14 @@
 //! [`use_form`], defined here.
 //!
 //! [`FormSpec<T>`] is the author's declaration — title, per-field overrides,
-//! validator, buttons — that `form!` builds and `FormState::apply_specs`
-//! lays onto the tree. Lives in `spec`.
+//! validator, buttons — that `form!` builds and the shape walk applies as it
+//! builds the tree. Lives in `spec`.
 
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::members::{Edit, RenderCtx};
+use crate::nodes::{Edit, NodeContext};
 use crate::path::Path;
 use crate::widgets::ValuesStore;
 use crate::wire::WireForm;
@@ -235,8 +235,8 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// survives a schema rebuild because paths are stable under one.
     values_store: ValuesStore,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
-    /// widget layer stay ignorant of `T` — [`RenderCtx`] can't be generic
-    /// without making every member type generic too.
+    /// widget layer stay ignorant of `T` — [`NodeContext`] can't be generic
+    /// without making every node type generic too.
     on_edit: Callback<Edit>,
     /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
     /// it, before any edit.
@@ -382,7 +382,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     /// The button row, in declaration order. Nothing at all when the form
     /// declares none, so a view that hand-writes its own buttons is unaffected.
-    fn render_buttons(&self, ctx: &RenderCtx, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
+    fn render_buttons(&self, ctx: &NodeContext, buttons: &[ButtonSpec], fns: &Fns<T>) -> Element {
         if buttons.is_empty() {
             return rsx! {};
         }
@@ -428,8 +428,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         }
     }
 
-    fn root_ctx(&self) -> RenderCtx {
-        RenderCtx::root(
+    fn root_ctx(&self) -> NodeContext {
+        NodeContext::root(
             self.id.peek().clone(),
             self.values_store,
             self.on_edit,
@@ -470,7 +470,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// **Cleared by the next [`validate`](Self::validate)**, same lifetime as
     /// `push_error` and for the same reason — inherited for free, not
-    /// special-cased here: `FormField::validate` already clears and rebuilds
+    /// special-cased here: `Field::validate` already clears and rebuilds
     /// every leaf's own `errors` on each call, so a stale server-pushed error
     /// cannot outlive the next submit.
     /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile
@@ -500,7 +500,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let unclaimed = {
             let mut state = state.write();
             state.errors.clone_from(&errors.form);
-            for m in &mut state.members {
+            for m in &mut state.nodes {
                 m.clear_errors();
             }
             state.distribute_errors(errors.fields.clone())
@@ -638,7 +638,7 @@ where
 /// Handler/spec mismatches, rendered beside the form's own errors and marked
 /// apart from them — these are a programming mistake, not something the person
 /// filling in the form did.
-fn render_problems(ctx: &RenderCtx, problems: &[String]) -> Element {
+fn render_problems(ctx: &NodeContext, problems: &[String]) -> Element {
     if problems.is_empty() {
         return rsx! {};
     }
@@ -661,7 +661,7 @@ fn render_problems(ctx: &RenderCtx, problems: &[String]) -> Element {
 /// ```
 ///
 /// **A thunk, not a value.** Building a `FormState` means walking `T`'s facet
-/// shape and allocating a `Vec<Box<dyn FormMember>>`, and `use_signal`'s
+/// shape and allocating a `Vec<Box<dyn Node>>`, and `use_signal`'s
 /// initializer runs exactly once — so a value argument would be constructed on
 /// every render of the calling component and thrown away every time but the
 /// first. Deferring it costs one `||` and means the walk happens once.

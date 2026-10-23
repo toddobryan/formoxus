@@ -1,4 +1,4 @@
-use crate::{Bound, Element, FieldControl};
+use crate::{Bound, HtmlElement, Step};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Owner {
@@ -12,6 +12,7 @@ pub enum AttrType {
     String,
     Int,
     Bound,
+    Step,
     Regex,
     Flag,
     TokenList,
@@ -29,6 +30,7 @@ pub enum AttrValue {
     String(String),
     Int(usize),
     Bound(Bound),
+    Step(Step),
     Regex(&'static str),
     Flag,
     List(&'static [&'static str]),
@@ -40,6 +42,46 @@ pub enum FieldType {
     Int,
     Float,
     Bool,
+}
+
+impl FieldType {
+    /// This type's bit in a [`FieldTypeSet`]: one per variant, by
+    /// declaration order.
+    pub const fn bit(self) -> u8 {
+        1 << (self as u8)
+    }
+}
+
+/// A set of [`FieldType`]s, built and read in `const` context: what a widget
+/// declares it can render (`Widget::ACCEPTS`), for `form!`'s compile-time
+/// checks to read. A bitset, like [`AttrSet`], so that every operation is a
+/// `const fn`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldTypeSet(u8);
+
+impl FieldTypeSet {
+    /// No field type at all.
+    pub const EMPTY: Self = Self(0);
+
+    /// Every field type: the default `Widget::ACCEPTS`, so a widget that
+    /// says nothing is offered every field.
+    pub const ALL: Self = Self::EMPTY
+        .with(FieldType::Text)
+        .with(FieldType::Int)
+        .with(FieldType::Float)
+        .with(FieldType::Bool);
+
+    /// This set with `field_type` added. Chained, it builds a set in a
+    /// `const`: `FieldTypeSet::EMPTY.with(FieldType::Text).with(FieldType::Int)`.
+    pub const fn with(mut self, field_type: FieldType) -> Self {
+        self.0 |= field_type.bit();
+        self
+    }
+
+    /// Whether `field_type` is in this set.
+    pub const fn contains(&self, field_type: FieldType) -> bool {
+        self.0 & field_type.bit() != 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -57,12 +99,9 @@ macro_rules! validated_flag {
     (true) => {
         true
     };
-    (true_and_on $also_on:pat) => {
-        true
-    };
     ($($other:tt)*) => {
         compile_error!(concat!(
-            "`validated:` takes `false`, `true` or `true_and_on(...)`, not `",
+            "`validated:` takes `false` or `true`, not `",
             stringify!($($other)*),
             "`"
         ))
@@ -80,14 +119,10 @@ macro_rules! validated_flag {
 /// - `type`: the type of the attribute's VALUE, which decides how `form!`
 ///   parses it.
 /// - `for`: the [`FieldType`]s it applies to.
-/// - `on`: the [`Element`]s it may be EMITTED on, straight from the spec.
+/// - `on`: the [`HtmlElement`]s it may be EMITTED on, straight from the spec.
 /// - `validated`: whether formoxus's own validation enforces it. `false`;
 ///   `true` (enforced, and the browser enforces it too wherever it is
-///   emitted); or `true_and_on(…)`, which is `true` PLUS these extra controls,
-///   where it is accepted and validated by formoxus but not emitted.
-///
-/// [`Attr::is_allowed`] combines `for`, `on` and `validated` into the rule
-/// `form!` applies.
+///   emitted).
 macro_rules! attributes {
     ($(
         $variant:ident {
@@ -96,7 +131,7 @@ macro_rules! attributes {
             type: $attr_type:ident,
             for: $field_type:pat,
             on: $on:pat,
-            validated: $validated:tt $( ( $also_on:pat ) )? $(,)?
+            validated: $validated:tt $(,)?
         }
     ),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -106,6 +141,10 @@ macro_rules! attributes {
 
         impl Attr {
             pub const ALL: &[Attr] = &[ $( Self::$variant ),+ ];
+
+            pub(crate) const fn bit(self) -> u128 {
+                1 << (self as u32)
+            }
 
             pub const fn name(self) -> &'static str {
                 match self {
@@ -136,9 +175,8 @@ macro_rules! attributes {
 
             /// Whether the attribute may be EMITTED on this element.
             #[deny(unused_variables)]
-            pub const fn is_valid_on(self, element: Element) -> bool {
-                use crate::Element::*;
-                use crate::FieldControl::*;
+            pub const fn is_valid_on(self, element: HtmlElement) -> bool {
+                use crate::HtmlElement::*;
                 use crate::InputType::*;
                 match (self, element) {
                     $( (Self::$variant, $on) => true, )+
@@ -149,19 +187,7 @@ macro_rules! attributes {
             /// Whether formoxus's own validation enforces it.
             pub const fn validated(self) -> bool {
                 match self {
-                    $( Self::$variant => validated_flag!($validated $($also_on)?), )+
-                }
-            }
-
-            /// The controls from `true_and_on(…)`: accepted and validated by
-            /// formoxus there, but not emitted, because HTML does not allow it.
-            #[deny(unused_variables)]
-            pub const fn is_also_validated_on(self, field_control: FieldControl) -> bool {
-                use crate::FieldControl::*;
-                use crate::InputType::*;
-                match (self, field_control) {
-                    $( $( (Self::$variant, $also_on) => true, )? )+
-                    _ => false,
+                    $( Self::$variant => validated_flag!($validated), )+
                 }
             }
 
@@ -195,28 +221,63 @@ macro_rules! attributes {
                 None
             }
         }
+
+
+        const _: () = assert!(
+            Attr::ALL.len() <= 128,
+            "`AttrSet` is a u128: one bit per `Attr`, and the table has outgrown it",
+        );
     }
 }
 
-impl Attr {
-    /// Whether `form!` should accept this attribute on a field of `field_type`
-    /// rendered as `field_control`:
-    ///
-    /// | `for` matches? | `on` matches? | `true_and_on` names it? | result   |
-    /// |----------------|---------------|-------------------------|----------|
-    /// | no             | —             | —                       | refused  |
-    /// | yes            | yes           | —                       | accepted |
-    /// | yes            | no            | yes                     | accepted |
-    /// | yes            | no            | no                      | refused  |
-    ///
-    /// Accepted where `on` matches means emitted (and validated if
-    /// [`Attr::validated`]); accepted only through `true_and_on` means
-    /// validated by formoxus but not emitted. Ownership is a separate check:
-    /// a [`Owner::Formoxus`] attribute is refused whatever this says.
-    pub const fn is_allowed(self, field_type: FieldType, field_control: FieldControl) -> bool {
-        self.applies_to(field_type)
-            && (self.is_valid_on(Element::Control(field_control))
-                || self.is_also_validated_on(field_control))
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct AttrSet(u128);
+
+impl AttrSet {
+    pub const EMPTY: Self = Self(0);
+
+    pub const ANY: Self = {
+        let mut set = Self::EMPTY;
+        let mut i = 0;
+        while i < Attr::ALL.len() {
+            let attr = Attr::ALL[i];
+            if !matches!(attr.owner(), Owner::Formoxus) {
+                set.0 |= attr.bit();
+            }
+            i += 1;
+        }
+        set
+    };
+
+    pub const fn valid_on(element: HtmlElement) -> Self {
+        let mut set = Self::EMPTY;
+        let mut i = 0;
+        while i < Attr::ALL.len() {
+            let attr = Attr::ALL[i];
+            if !matches!(attr.owner(), Owner::Formoxus) && attr.is_valid_on(element) {
+                set.0 |= attr.bit();
+            }
+            i += 1;
+        }
+        set
+    }
+
+    pub const fn with(mut self, attr: Attr) -> Self {
+        assert!(
+            !matches!(attr.owner(), Owner::Formoxus),
+            "`with` cannot be used with owned attributes"
+        );
+        self.0 |= attr.bit();
+        self
+    }
+
+    pub const fn without(mut self, attr: Attr) -> Self {
+        self.0 &= !attr.bit();
+        self
+    }
+
+    pub const fn contains(self, attr: Attr) -> bool {
+        self.0 & attr.bit() != 0
     }
 }
 
@@ -234,7 +295,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text,
-        on: Control(Input(Color)),
+        on: Input(Color),
         validated: false,
     },
     Autocapitalize {
@@ -250,7 +311,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Control(Input(Hidden | Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color) | Textarea | Select),
+        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color) | Textarea | Select,
         validated: false,
     },
     Autocorrect {
@@ -276,7 +337,7 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Control(Input(Checkbox | Radio)),
+        on: Input(Checkbox | Radio),
         validated: false,
     },
     // REPLACES formoxus's own classes (`fx-control` included); `ClassPlus` appends.
@@ -303,7 +364,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Control(Input(Color)),
+        on: Input(Color),
         validated: false,
     },
     Cols {
@@ -311,7 +372,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Control(Textarea),
+        on: Textarea,
         validated: false,
     },
     Dir {
@@ -328,7 +389,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Control(Input(Hidden | Text | Search | Telephone | Url | Email | Password | Submit) | Textarea),
+        on: Input(Hidden | Text | Search | Telephone | Url | Email | Password | Submit) | Textarea,
         validated: false,
     },
     // A disabled control is NOT submitted, so the server sees it as empty, and a
@@ -338,7 +399,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Control(_) | Fieldset,
+        on: Input(_) | Textarea | Select | Fieldset,
         validated: false,
     },
     Enterkeyhint {
@@ -355,7 +416,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Control(_) | Fieldset,
+        on: Input(_) | Textarea | Select | Fieldset,
         validated: false,
     },
     // Owned, reserved until issue #9 settles formoxus's id scheme (`<label for>`,
@@ -392,7 +453,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color)),
+        on: Input(Text | Search | Telephone | Url | Email | Date | Month | Week | Time | DatetimeLocal | Number | Range | Color),
         validated: false,
     },
     Max {
@@ -400,15 +461,15 @@ attributes! {
         owner: Author,
         type: Bound,
         for: Int | Float,
-        on: Control(Input(Number | Range | Date | Month | Week | Time | DatetimeLocal)),
-        validated: true_and_on(Input(Text)),
+        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        validated: true,
     },
     MaxLength {
         name: "maxlength",
         owner: Author,
         type: Int,
         for: Text,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Textarea),
+        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
         validated: true,
     },
     // Valid in HTML only on number, range and the date/time types. A number
@@ -419,15 +480,15 @@ attributes! {
         owner: Author,
         type: Bound,
         for: Int | Float,
-        on: Control(Input(Number | Range | Date | Month | Week | Time | DatetimeLocal)),
-        validated: true_and_on(Input(Text)),
+        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        validated: true,
     },
     MinLength {
         name: "minlength",
         owner: Author,
         type: Int,
         for: Text,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Textarea),
+        on: Input(Text | Search | Telephone | Url | Email | Password) | Textarea,
         validated: true,
     },
     // Owned: a leaf holds ONE string, so a multi-value control has nowhere to go.
@@ -436,7 +497,7 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Control(Input(Email | File) | Select),
+        on: Input(Email | File) | Select,
         validated: false,
     },
     // Owned by formoxus: the store key and the wire path.
@@ -445,7 +506,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Control(_) | Fieldset,
+        on: Input(_) | Textarea | Select | Fieldset,
         validated: false,
     },
     // No `Textarea`: HTML has no `pattern` on one, and Todd ruled it out
@@ -456,7 +517,7 @@ attributes! {
         owner: Author,
         type: Regex,
         for: Text,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password)),
+        on: Input(Text | Search | Telephone | Url | Email | Password),
         validated: true,
     },
     Placeholder {
@@ -464,7 +525,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text | Int | Float,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea),
+        on: Input(Text | Search | Telephone | Url | Email | Password | Number) | Textarea,
         validated: false,
     },
     // The browser skips its own validation on a read-only control; formoxus still
@@ -474,7 +535,7 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Text | Int | Float,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number) | Textarea),
+        on: Input(Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time | DatetimeLocal | Number) | Textarea,
         validated: false,
     },
     // The PRESENCE sense: formoxus emits it on every non-optional field, and
@@ -486,11 +547,11 @@ attributes! {
         owner: Formoxus,
         type: Flag,
         for: Text | Int | Float | Bool,
-        on: Control(Input(
+        on: Input(
             Text | Search | Telephone | Url | Email | Password | Date | Month | Week | Time
                 | DatetimeLocal | Number | Radio | File
         ) | Textarea
-            | Select),
+            | Select,
         validated: true,
     },
     // "I agree to the terms" (#6). Emits HTML `required`, but only a checkbox
@@ -501,8 +562,8 @@ attributes! {
         owner: Author,
         type: Flag,
         for: Bool,
-        on: Control(Input(Checkbox)),
-        validated: true_and_on(Select | Input(Radio)),
+        on: Input(Checkbox),
+        validated: true,
     },
     // Overrides the control's native role; ARIA, though not `aria-*`.
     Role {
@@ -518,7 +579,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text,
-        on: Control(Textarea),
+        on: Textarea,
         validated: false,
     },
     Size {
@@ -526,7 +587,7 @@ attributes! {
         owner: Author,
         type: Int,
         for: Text | Int | Float | Bool,
-        on: Control(Input(Text | Search | Telephone | Url | Email | Password) | Select),
+        on: Input(Text | Search | Telephone | Url | Email | Password) | Select,
         validated: false,
     },
     Spellcheck {
@@ -538,6 +599,14 @@ attributes! {
         validated: false,
     },
     // Like `Class`: `Style` replaces, `StylePlus` appends, only one per field.
+    Step {
+        name: "step",
+        owner: Author,
+        type: Step,
+        for: Int | Float,
+        on: Input(Number | Range | Date | Month | Week | Time | DatetimeLocal),
+        validated: false,
+    },
     Style {
         name: "style",
         owner: Merged,
@@ -585,7 +654,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Control(Input(_)),
+        on: Input(_),
         validated: false,
     },
     // Owned: comes from the store. `<textarea>` and `<select>` have no
@@ -595,7 +664,7 @@ attributes! {
         owner: Formoxus,
         type: String,
         for: Text | Int | Float | Bool,
-        on: Control(Input(_)),
+        on: Input(_),
         validated: false,
     },
     Wrap {
@@ -603,7 +672,7 @@ attributes! {
         owner: Author,
         type: String,
         for: Text,
-        on: Control(Textarea),
+        on: Textarea,
         validated: false,
     },
     Writingsuggestions {
@@ -1047,15 +1116,16 @@ pub(crate) const fn str_eq(a: &str, b: &str) -> bool {
     }
     true
 }
+
 #[cfg(test)]
 mod tests {
-    use super::{Attr, AttrType, FieldType, Owner};
-    use crate::{Element, FieldControl, InputType};
+    use super::{Attr, AttrSet, AttrType, FieldType, Owner};
+    use crate::{HtmlElement, InputType};
     use googletest::prelude::*;
 
-    const TEXTAREA: Element = Element::Control(FieldControl::Textarea);
-    const SELECT: Element = Element::Control(FieldControl::Select);
-    const FIELDSET: Element = Element::Fieldset;
+    const TEXTAREA: HtmlElement = HtmlElement::Textarea;
+    const SELECT: HtmlElement = HtmlElement::Select;
+    const FIELDSET: HtmlElement = HtmlElement::Fieldset;
 
     const INPUT_TYPES: [InputType; 22] = [
         InputType::Text,
@@ -1104,7 +1174,7 @@ mod tests {
     /// and which other elements (`<textarea>`, `<select>`, `<fieldset>`, …) it may appear on.
     struct Expected {
         inputs: Vec<&'static str>,
-        others: Vec<Element>,
+        others: Vec<HtmlElement>,
     }
 
     fn every_input_keyword() -> Vec<&'static str> {
@@ -1116,21 +1186,21 @@ mod tests {
     }
 
     /// Every element besides `<input>`, which is checked per input type.
-    fn every_other_element() -> Vec<Element> {
+    fn every_other_element() -> Vec<HtmlElement> {
         vec![
             TEXTAREA,
             SELECT,
             FIELDSET,
-            Element::Label,
-            Element::Legend,
-            Element::Div,
+            HtmlElement::Label,
+            HtmlElement::Legend,
+            HtmlElement::Div,
         ]
     }
 
     /// The spec's answer for `attr`, or `None` if this test has no statement
     /// for it, which `every_row_has_a_spec_expectation` turns into a failure.
     fn expected(attr: Attr) -> Option<Expected> {
-        let (inputs, others): (Vec<&'static str>, Vec<Element>) = match attr {
+        let (inputs, others): (Vec<&'static str>, Vec<HtmlElement>) = match attr {
             // Global attributes, `role` and `aria-*`: every element.
             _ if attr.name().starts_with("aria-") => (every_input_keyword(), every_other_element()),
             Attr::Accesskey
@@ -1162,7 +1232,9 @@ mod tests {
             Attr::MinLength | Attr::MaxLength => (TEXT_LIKE.to_vec(), vec![TEXTAREA]),
             // No `<textarea>`: HTML has no `pattern` on one.
             Attr::Pattern => (TEXT_LIKE.to_vec(), vec![]),
-            Attr::Min | Attr::Max => (keywords(&[DATE_LIKE, &["number", "range"]]), vec![]),
+            Attr::Min | Attr::Max | Attr::Step => {
+                (keywords(&[DATE_LIKE, &["number", "range"]]), vec![])
+            }
             // The spec also lists `checkbox` for `required`. That sense is
             // `RequiredTrue`, so the presence row leaves it out on purpose.
             Attr::Required => (
@@ -1223,7 +1295,7 @@ mod tests {
             for t in INPUT_TYPES {
                 let keyword = t.html_type();
                 expect_that!(
-                    attr.is_valid_on(Element::Control(FieldControl::Input(t))),
+                    attr.is_valid_on(HtmlElement::Input(t)),
                     eq(inputs.contains(&keyword)),
                     "{attr:?} on input type={keyword}"
                 );
@@ -1268,7 +1340,7 @@ mod tests {
             Attr::Autocorrect,
             Attr::Spellcheck,
         ];
-        let numbers = [Attr::Min, Attr::Max];
+        let numbers = [Attr::Min, Attr::Max, Attr::Step];
         let bools = [Attr::RequiredTrue];
         for &attr in Attr::ALL {
             let applies: &[FieldType] = if text_only.contains(&attr) {
@@ -1363,123 +1435,6 @@ mod tests {
         );
     }
 
-    // ── `true_and_on(…)` ─────────────────────────────────────────────────
-
-    /// Every control formoxus can be asked about.
-    fn all_controls() -> Vec<FieldControl> {
-        INPUT_TYPES
-            .iter()
-            .copied()
-            .map(FieldControl::Input)
-            .chain([FieldControl::Textarea, FieldControl::Select])
-            .collect()
-    }
-
-    /// The extra controls each row validates on without emitting. Only a
-    /// number rendered as text (formoxus's default for `Int`/`Float`) and a
-    /// bool rendered as a `select` or radios need one.
-    #[gtest]
-    fn only_three_rows_are_also_validated_off_their_on_controls() {
-        let cases: &[(Attr, &[FieldControl])] = &[
-            (Attr::Min, &[FieldControl::Input(InputType::Text)]),
-            (Attr::Max, &[FieldControl::Input(InputType::Text)]),
-            (
-                Attr::RequiredTrue,
-                &[FieldControl::Select, FieldControl::Input(InputType::Radio)],
-            ),
-        ];
-        for attr in Attr::ALL {
-            let expected: &[FieldControl] = cases
-                .iter()
-                .find(|(a, _)| a == attr)
-                .map_or(&[], |(_, controls)| controls);
-            for control in all_controls() {
-                expect_that!(
-                    attr.is_also_validated_on(control),
-                    eq(expected.contains(&control)),
-                    "{attr:?} also on {control:?}"
-                );
-            }
-        }
-    }
-
-    /// An extra control that is also in `on:` would be redundant, and would
-    /// hide the fact that the attribute IS emitted there.
-    #[gtest]
-    fn no_extra_control_is_also_an_on_control() {
-        for attr in Attr::ALL {
-            for control in all_controls() {
-                expect_that!(
-                    attr.is_also_validated_on(control)
-                        && attr.is_valid_on(Element::Control(control)),
-                    eq(false),
-                    "{attr:?} on {control:?}"
-                );
-            }
-        }
-    }
-
-    // ── The acceptance rule ──────────────────────────────────────────────
-
-    /// One case per row of `is_allowed`'s table, on the attributes that made
-    /// the rule necessary.
-    #[gtest]
-    fn is_allowed_follows_the_rule() {
-        use FieldControl::{Select, Textarea};
-        let text_input = FieldControl::Input(InputType::Text);
-        let number_input = FieldControl::Input(InputType::Number);
-        let checkbox = FieldControl::Input(InputType::Checkbox);
-        let cases = [
-            // `for` does not match: refused.
-            (Attr::Min, FieldType::Text, number_input, false),
-            (Attr::Placeholder, FieldType::Bool, checkbox, false),
-            (Attr::RequiredTrue, FieldType::Text, checkbox, false),
-            // `on` matches: accepted (and emitted).
-            (Attr::Min, FieldType::Int, number_input, true),
-            (
-                Attr::Pattern,
-                FieldType::Text,
-                FieldControl::Input(InputType::Email),
-                true,
-            ),
-            (Attr::Placeholder, FieldType::Int, text_input, true),
-            (Attr::RequiredTrue, FieldType::Bool, checkbox, true),
-            // Only `true_and_on` names it: accepted, validated, not emitted.
-            (Attr::Min, FieldType::Int, text_input, true),
-            (Attr::Max, FieldType::Float, text_input, true),
-            (Attr::RequiredTrue, FieldType::Bool, Select, true),
-            // Neither: refused.
-            (Attr::Pattern, FieldType::Text, Textarea, false),
-            (Attr::Min, FieldType::Int, Textarea, false),
-            (Attr::Placeholder, FieldType::Text, Select, false),
-        ];
-        for (attr, field_type, control, expected) in cases {
-            expect_that!(
-                attr.is_allowed(field_type, control),
-                eq(expected),
-                "{attr:?} for {field_type:?} on {control:?}"
-            );
-        }
-    }
-
-    /// The case `validated:` was redesigned for (2026-10-03): `min` on a
-    /// number rendered as text is accepted, `pattern` on a textarea is not,
-    /// although neither attribute can be emitted there.
-    #[gtest]
-    fn min_on_a_text_input_is_allowed_but_pattern_on_a_textarea_is_not() {
-        let text_input = FieldControl::Input(InputType::Text);
-        expect_that!(
-            Attr::Min.is_valid_on(Element::Control(text_input)),
-            eq(false)
-        );
-        expect_that!(Attr::Min.is_allowed(FieldType::Int, text_input), eq(true));
-        expect_that!(Attr::Pattern.is_valid_on(TEXTAREA), eq(false));
-        expect_that!(
-            Attr::Pattern.is_allowed(FieldType::Text, FieldControl::Textarea),
-            eq(false)
-        );
-    }
-
     #[gtest]
     fn each_attribute_takes_the_right_type_of_value() {
         let cases = [
@@ -1489,6 +1444,7 @@ mod tests {
             (Attr::Pattern, AttrType::Regex),
             (Attr::Min, AttrType::Bound),
             (Attr::Max, AttrType::Bound),
+            (Attr::Step, AttrType::Step),
             (Attr::Required, AttrType::Flag),
             (Attr::RequiredTrue, AttrType::Flag),
             (Attr::Checked, AttrType::Flag),
@@ -1543,5 +1499,95 @@ mod tests {
     #[gtest]
     fn looking_up_required_by_name_finds_the_presence_row() {
         expect_that!(Attr::from_name("required"), some(eq(Attr::Required)));
+    }
+
+    // ── `AttrSet` ────────────────────────────────────────────────────────
+
+    /// Every element a widget part can be: each `<input>` type, then the rest.
+    fn every_element() -> Vec<HtmlElement> {
+        INPUT_TYPES
+            .iter()
+            .map(|&t| HtmlElement::Input(t))
+            .chain(every_other_element())
+            .collect()
+    }
+
+    fn is_owned(attr: Attr) -> bool {
+        attr.owner() == Owner::Formoxus
+    }
+
+    #[gtest]
+    fn valid_on_a_textarea_takes_rows_but_not_step() {
+        let set = AttrSet::valid_on(TEXTAREA);
+        expect_that!(set.contains(Attr::Rows), eq(true));
+        expect_that!(set.contains(Attr::Step), eq(false));
+    }
+
+    /// `valid_on` restates the table's `on:` column as a set, minus the owned
+    /// rows, for every element; so it is also always a subset of `ANY`.
+    #[gtest]
+    fn valid_on_holds_exactly_the_unowned_rows_valid_on_that_element() {
+        for element in every_element() {
+            let set = AttrSet::valid_on(element);
+            for &attr in Attr::ALL {
+                let expected = !is_owned(attr) && attr.is_valid_on(element);
+                expect_that!(set.contains(attr), eq(expected), "{attr:?} on {element:?}");
+            }
+        }
+    }
+
+    #[gtest]
+    fn any_holds_every_unowned_row_and_no_owned_one() {
+        for &attr in Attr::ALL {
+            expect_that!(AttrSet::ANY.contains(attr), eq(!is_owned(attr)), "{attr:?}");
+        }
+    }
+
+    #[gtest]
+    fn empty_holds_nothing() {
+        for &attr in Attr::ALL {
+            expect_that!(AttrSet::EMPTY.contains(attr), eq(false), "{attr:?}");
+        }
+    }
+
+    #[gtest]
+    fn with_and_without_undo_each_other() {
+        expect_that!(
+            AttrSet::EMPTY.with(Attr::Rows).contains(Attr::Rows),
+            eq(true)
+        );
+        expect_that!(
+            AttrSet::EMPTY.with(Attr::Rows).without(Attr::Rows),
+            eq(AttrSet::EMPTY)
+        );
+        expect_that!(
+            AttrSet::ANY.without(Attr::Rows).contains(Attr::Rows),
+            eq(false)
+        );
+        expect_that!(
+            AttrSet::ANY.without(Attr::Rows).with(Attr::Rows),
+            eq(AttrSet::ANY)
+        );
+    }
+
+    /// Each touches its own attribute's bit and no other.
+    #[gtest]
+    fn with_and_without_leave_the_other_attributes_alone() {
+        let set = AttrSet::EMPTY.with(Attr::Rows).with(Attr::Cols);
+        expect_that!(set.without(Attr::Rows).contains(Attr::Cols), eq(true));
+        expect_that!(set.with(Attr::Step).contains(Attr::Rows), eq(true));
+    }
+
+    /// Nothing can put an owned row in a set, so taking one out of any set
+    /// changes nothing.
+    #[gtest]
+    fn without_an_owned_attribute_changes_nothing() {
+        expect_that!(AttrSet::ANY.without(Attr::Id), eq(AttrSet::ANY));
+    }
+
+    #[gtest]
+    #[should_panic(expected = "`with` cannot be used with owned attributes")]
+    fn with_an_owned_attribute_panics() {
+        let _ = AttrSet::EMPTY.with(Attr::Id);
     }
 }

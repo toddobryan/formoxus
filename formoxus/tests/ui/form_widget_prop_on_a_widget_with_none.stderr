@@ -1,0 +1,7 @@
+error[E0560]: struct `formoxus::widgets::Textarea` has no field named `rows`
+  --> tests/ui/form_widget_prop_on_a_widget_with_none.rs:14:46
+   |
+14 |             comments => { widget: textarea { rows: 5 } },
+   |                                              ^^^^ `formoxus::widgets::Textarea` does not have this field
+   |
+   = note: all struct fields are already assigned

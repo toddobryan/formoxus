@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `Stars` cannot render an optional field
+  --> tests/ui/form_dev_widget_refuses_optional.rs:32:35
+   |
+32 |             comments => { widget: Stars },
+   |                                   ^^^^^ evaluation of `main::_` failed here

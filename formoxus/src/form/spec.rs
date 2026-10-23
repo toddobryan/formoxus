@@ -5,17 +5,28 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use facet::Facet;
+use heck::ToSnakeCase;
 use indexmap::IndexMap;
 
 use crate::buttons::ButtonSpec;
 use crate::classes::ClassEdit;
 use crate::classes::Classes;
 use crate::error::ValidationError;
-use crate::fields::FieldAttrs;
+use crate::field_attrs::FieldAttrs;
 use crate::label_case::LabelCase;
-use crate::widgets::{Choice, WidgetType};
+use crate::widgets::AnyWidget;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FieldSpec {
+    pub label: Option<String>,
+    pub attrs: FieldAttrs,
+    pub widget: Option<AnyWidget>,
+    /// Builds this leaf during the shape walk, instead of the default field
+    /// for its type. What `field:` and a typed field's settings expand to.
+    pub node: Option<crate::field_node::NodeCtor>,
+}
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
@@ -43,25 +54,6 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self.edits.push(edit);
         self
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct FieldSpec {
-    pub label: Option<String>,
-    pub attrs: FieldAttrs,
-    pub custom_widget: Option<WidgetType>,
-    /// What a `<select>` (or another chooser) offers.
-    ///
-    /// **On the field, not on [`WidgetType`].** A widget type is the dispatch
-    /// discriminant and is compared for equality all over the tree; two selects
-    /// offering different lists are still the same *kind* of widget. Keeping the
-    /// list here also means `ScalarWidget`'s match arms do not have to bind or
-    /// ignore a payload that dispatch never reads.
-    ///
-    /// **Not in the field's constraints either** — choices are presentation, so swapping a
-    /// select for a radio group must not change what the value parses as. See
-    /// `.claude/memory/choice_fields_design.md`.
-    pub choices: Option<Vec<Choice>>,
 }
 
 impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
@@ -94,32 +86,15 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_custom_widget(mut self, path: &str, c: WidgetType) -> Self {
-        self.field(path).custom_widget = Some(c);
+    pub fn with_widget(mut self, path: &str, widget: impl Into<AnyWidget>) -> Self {
+        self.field(path).widget = Some(widget.into());
         self
     }
 
-    /// Offer `path` a fixed set of choices.
-    ///
-    /// Takes anything iterable of anything convertible, so a `const` table of
-    /// pairs is as good as a built `Vec`:
-    ///
-    /// ```ignore
-    /// const STATES: &[(&str, &str)] = &[("AL", "Alabama"), ("AK", "Alaska")];
-    /// spec.with_choices("state", STATES)
-    /// ```
-    ///
-    /// A choice's `value` is written into the value map verbatim, so it has to
-    /// be exactly what this field's type parses from — and it may never be
-    /// `""`, which IS absence. The "no value" entry is `Select`'s own, and
-    /// offering a second one would make an answered field indistinguishable
-    /// from an unanswered one.
-    pub fn with_choices(
-        mut self,
-        path: &str,
-        choices: impl IntoIterator<Item = impl Into<Choice>>,
-    ) -> Self {
-        self.field(path).choices = Some(choices.into_iter().map(Into::into).collect());
+    /// Build the leaf at `path` (a `[]` row path is fine) with `ctor` instead
+    /// of the default for its type.
+    pub fn with_node(mut self, path: &str, ctor: crate::field_node::NodeCtor) -> Self {
+        self.field(path).node = Some(ctor);
         self
     }
 
@@ -158,7 +133,24 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self.fields.entry(path.to_string()).or_default()
     }
 
+    /// Attributes to render on the field at `path`. They only render: what
+    /// formoxus validates (`min`, `max_length`, `pattern`, `required_true`, …)
+    /// is a setting of the field, given with [`with_node`](Self::with_node).
+    ///
+    /// # Panics
+    ///
+    /// If `attrs` holds an attribute formoxus validates. It would render and
+    /// never be checked, so the browser and the server would disagree.
     pub fn with_attrs(mut self, path: &str, attrs: FieldAttrs) -> Self {
+        if let Some(attr) = attrs.first_validated() {
+            // `form!`'s spelling (`max_length`), not the HTML name (`maxlength`):
+            // the one the dev wrote, and the field's setting is named the same.
+            panic!(
+                "{path}: `{}` is validated, so it is a setting of the field, not an \
+                 attribute; give it with `with_node`",
+                attr.variant_name().to_snake_case()
+            );
+        }
         self.field(path).attrs = attrs;
         self
     }

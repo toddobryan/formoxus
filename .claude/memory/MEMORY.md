@@ -1,13 +1,15 @@
-> Renames to read through in older entries: 2026-09-19 `formoxus::reflect::X` → `formoxus::X` ([derive-path removal](derive_path_removal.md)); 2026-09-29 `SelectChoice`→`Choice`, `ValuesByPath`→`ValuesStore`, `ButtonType::Button`→`Action`, all CSS classes `fx-`-prefixed ([CSS vocabulary](css_class_vocabulary.md)). 2026-10-10 crate `formoxus-attrs` → `formoxus-spec`.
+> Renames to read through in older entries: 2026-09-19 `formoxus::reflect::X` → `formoxus::X` ([derive-path removal](derive_path_removal.md)); 2026-09-29 `SelectChoice`→`Choice`, `ValuesByPath`→`ValuesStore`, `ButtonType::Button`→`Action`, all CSS classes `fx-`-prefixed ([CSS vocabulary](css_class_vocabulary.md)). 2026-10-10 crate `formoxus-attrs` → `formoxus-spec`. 2026-10-16 module `members` → `nodes`, `FormMember` → `Node`, `RenderCtx` → `NodeContext`, `OptionMember` → `OptionNode`, `*_member` builders → `*_node`, `FormField` → `Field`. 2026-10-20 `formoxus_spec::Element` → `HtmlElement`; component `Input` → `InputView`.
 
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-12 pm: green, pushed; P2 `Element`, row sort, `RenderedInputType`, `Input` router done; next `BuiltinWidget`; read `formoxus/ATTRIBUTES_PLAN.md`; how Todd works
+- [**START HERE: next session**](next_session.md) — 2026-10-23: `widget` MERGED into `main`, work on `main` now; checkpoint 4 DONE (`BuiltinWidget` deleted), `just ci` green; STEP 5 DONE, variant picker + `#[derive(Widget)]` deferred while Todd uses formoxus; read `formoxus/FIELDS_PLAN.md`
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
+- [Plan task-list format](feedback_plan_task_list_format.md) — plans render in VS Code preview: `- [ ] **N.** …` + blank line before lists; `N. [ ]` hides numbers
 - [Dev vs user](dev_vs_user_vocabulary.md) — "dev" builds an app with formoxus, "user" uses that app, "Formoxus dev" changes formoxus; correct Todd when he slips
+- [Radical refactors on a branch](feedback_radical_refactors_on_a_branch.md) — big refactor on a branch: one breaking change beats many green steps; compiler errors are the to-do list
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan
@@ -20,6 +22,7 @@
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical
 
 ## Core design
+- [Django parallel design](django_parallel_design.md) — 2026-10-16 GOAL = FEWER CONCEPTS; DECIDED: Field + Widget traits, typed ChoiceField, field registry, async server validation: Django mapped onto formoxus; name inventory; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
@@ -35,12 +38,13 @@
 
 ## Widgets, choices, attributes
 - [Widget table & what a Choice is](widget_table_and_choice.md) — unrenderable (kind, widget) pairs are compile errors; shape choice vs value choice
-- [Choice fields design](choice_fields_design.md) — tier 1 (`select { choices: EXPR }`) BUILT; tiers 2–3 (dynamic) open; `raw_value` may never be `""`
+- [Choice fields design](choice_fields_design.md) — tier 1 now FIELD-level `choices:` → typed `ChoiceField<T>` (2026-10-18); tiers 2–3 open (runtime = Step 8 `Context`); `""` never a value
 - [Chooser ideas](chooser_ideas.md) — QUEUED: select-vs-radio by choice count, per-choice hint text
 - [Enum as a value choice](enum_as_a_value_choice.md) — GAP: a unit enum can't take a widget (no radio group over an enum)
-- [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; no `step`
-- [Shrink FieldProps idea](shrink_fieldprops_idea.md) — 2026-10-08: `required`/`aria_invalid` DO move into the typed map (3d); `path`/`choices`/`errors` stay props; RadioGroup hard-places aria-invalid
+- [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; `step` never emitted, but a dev may write one (2026-10-19)
+- [Shrink FieldProps idea](shrink_fieldprops_idea.md) — HISTORY: `FieldProps` gone 2026-10-21, into one `WidgetProps`. 2026-10-08: `required`/`aria_invalid` DO move into the typed map (3d); `path`/`choices`/`errors` stay props; RadioGroup hard-places aria-invalid
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
+- [Widgets declare parts, presets own classes](widgets_declare_parts_presets_own_classes.md) — DECIDED 2026-10-22: `PARTS: &[Tag]`, no `default_classes()`, slots keyed `(W::NAME, Tag)`, generic lookups only
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`
 - [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade
 - [Attribute rules design](attribute_rules_design.md) — build order in `formoxus/ATTRIBUTES_PLAN.md`; ONE table in `formoxus-attrs`; custom widgets are a trait declaring ATTRS + default classes (2026-10-08, fn vs const open); DECIDED 2026-10-10: widget PARTS named by element
@@ -48,6 +52,7 @@
 - [Formoxus widget survey](formoxus_widget_survey.md) — Django's Field/Widget split (constraints follow the value type); why a proc macro beat facet attrs
 
 ## Gotchas
+- [Toolchain pin & goldens](toolchain_pin_and_goldens.md) — 1.99.1 + rust-src pinned 2026-10-21; a golden flips on another stable OR missing rust-src; check both before re-blessing
 - [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it

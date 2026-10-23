@@ -1,4 +1,4 @@
-//! The `FormMember` trait every part of a form implements, and the container
+//! The `Node` trait every part of a form implements, and the container
 //! kinds that make a form a tree rather than a flat list.
 
 use dioxus::prelude::*;
@@ -10,12 +10,12 @@ use std::rc::Rc;
 
 mod field_set;
 mod list_set;
-mod option_member;
+mod option_node;
 mod variant_set;
 
 pub use field_set::FieldSet;
 pub use list_set::ListSet;
-pub use option_member::OptionMember;
+pub use option_node::OptionNode;
 pub use variant_set::{VariantChoice, VariantSet};
 
 use crate::classes::Classes;
@@ -27,15 +27,15 @@ use dioxus::stores::Store;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
 
-pub trait FormMember: Debug {
+pub trait Node: Debug {
     fn name(&self) -> String;
     fn label(&self, case: LabelCase) -> Option<String>;
-    fn render(&self, ctx: &RenderCtx) -> Element;
-    /// This member's current value as the string an `<input>` would show.
+    fn render(&self, ctx: &NodeContext) -> Element;
+    /// This node's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
     /// widget layer only ever asks leaves for this.
     fn raw_value(&self) -> String;
-    /// Flatten this member's leaves into `(qualified_path, raw_value)` pairs,
+    /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two field sets in one form can each have a `street`.
     fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>);
@@ -44,7 +44,7 @@ pub trait FormMember: Debug {
     /// This is the "shuffle back" from widget state into plain form data.
     fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath);
     fn validate(&mut self);
-    /// Whether anything is wrong at this member OR anywhere under it: what
+    /// Whether anything is wrong at this node OR anywhere under it: what
     /// `FormState::validate` asks before building a model.
     ///
     /// Not the question a widget asks; see [`has_errors_here`](Self::has_errors_here).
@@ -53,11 +53,11 @@ pub trait FormMember: Debug {
     /// A leaf counts an unvalidated `Invalid` value too, which `validate` has
     /// not yet turned into an error message.
     fn has_errors_within(&self) -> bool;
-    /// Whether this member has errors of its OWN, ignoring any under it: the
+    /// Whether this node has errors of its OWN, ignoring any under it: the
     /// messages it renders, and what decides its `aria-invalid`. Always implies
     /// [`has_errors_within`](Self::has_errors_within), never the reverse.
     fn has_errors_here(&self) -> bool;
-    fn clone_box(&self) -> Box<dyn FormMember>;
+    fn clone_box(&self) -> Box<dyn Node>;
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError>;
 
     fn write_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
@@ -69,11 +69,11 @@ pub trait FormMember: Debug {
     fn is_present(&self) -> bool;
     fn clear_errors(&mut self);
 
-    /// Flatten this member's errors into `(qualified_path, errors)` pairs — the
+    /// Flatten this node's errors into `(qualified_path, errors)` pairs — the
     /// read counterpart to [`distribute_errors`](Self::distribute_errors), and
     /// what turns a validated tree into something that crosses a server fn.
     ///
-    /// **Only members that actually have errors appear.** A clean member pushes
+    /// **Only nodes that actually have errors appear.** A clean node pushes
     /// nothing, so an empty result means the subtree passed — which is what
     /// lets a caller branch on `fields.is_empty()` instead of scanning for a
     /// non-empty `Vec`. Every impl has to honour this or the shape stops
@@ -81,7 +81,7 @@ pub trait FormMember: Debug {
     ///
     /// **A container reports its OWN path too, when it has errors of its own.**
     /// The rule is `distribute_errors`'s, mirrored: whatever can be delivered
-    /// to a path has to be collectable from it. `VariantSet` is the one member where
+    /// to a path has to be collectable from it. `VariantSet` is the one node where
     /// that bites today — its `errors` render beside the `<select>` at its own
     /// path, not under a child.
     ///
@@ -95,8 +95,8 @@ pub trait FormMember: Debug {
     /// `distribute_errors`; and render them.
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath);
 
-    /// Take this member's own errors out of `errors`, by its qualified path, and
-    /// pass the rest down. Whatever no member claims is left in the map and will
+    /// Take this node's own errors out of `errors`, by its qualified path, and
+    /// pass the rest down. Whatever no node claims is left in the map and will
     /// surface as a form error.
     fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath);
 
@@ -104,14 +104,17 @@ pub trait FormMember: Debug {
     ///
     /// One method rather than one per edit kind because the containment walk
     /// each container performs is identical regardless of the edit; only the
-    /// member that owns the path cares what kind it is. `Edit::path()` is the
+    /// node that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
-    fn edit(&mut self, prefix: &str, edit: &Edit) -> Result<(), FormAccessError>;
-
-    fn distribute_specs(&mut self, prefix: &str, fields: &SpecsByPath);
+    fn edit(
+        &mut self,
+        prefix: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<(), FormAccessError>;
 }
 
-impl Clone for Box<dyn FormMember> {
+impl Clone for Box<dyn Node> {
     fn clone(&self) -> Self {
         self.clone_box()
     }
@@ -134,7 +137,7 @@ pub(crate) fn no_such_path(path: &str) -> FormAccessError {
     FormAccessError(format!("no such path: {path}"))
 }
 
-/// Guard that `path` is this member's own path or somewhere inside it.
+/// Guard that `path` is this node's own path or somewhere inside it.
 pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccessError> {
     if owns(container, path) {
         Ok(())
@@ -143,9 +146,9 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
     }
 }
 
-/// A member's name humanized for display: `can_shuffle` -> "Can Shuffle".
+/// A node's name humanized for display: `can_shuffle` -> "Can Shuffle".
 ///
-/// The fallback when nothing set a label explicitly, which is every member today
+/// The fallback when nothing set a label explicitly, which is every node today
 /// — the shape carries a field's name but no prose for it. Reuses the derive
 /// path's [`crate::label_case`], so both paths title-case identically.
 ///
@@ -230,7 +233,7 @@ pub type ValuesByPath = IndexMap<String, String>;
 /// [`std::collections::HashMap`] and a few others.
 pub type ValuesStore = Store<HashMap<String, String>>;
 
-/// What a member needs in order to render: where it sits in the path tree,
+/// What a node needs in order to render: where it sits in the path tree,
 /// where the live values are, and whether the browser should treat its leaves
 /// as required.
 ///
@@ -246,21 +249,21 @@ pub type ValuesStore = Store<HashMap<String, String>>;
 /// The second is the lesser evil, and `validate()` remains where the real rule
 /// lives — see the optional-container tests.
 #[derive(Clone, Debug)]
-pub struct RenderCtx {
+pub struct NodeContext {
     pub form_id: String,
     pub prefix: String,
     pub values: ValuesStore,
     pub required: bool,
     pub on_edit: Callback<Edit>,
     /// Already resolved — the cascade is settled once, where the ctx is built,
-    /// rather than re-decided at every member. See
+    /// rather than re-decided at every node. See
     /// `.claude/memory/config_cascade.md`.
     pub label_case: LabelCase,
     /// The form's classes, resolved once by `Form::classes()` (the app's,
-    /// then the form's `classes:` and `classes_plus:`), shared by every member
+    /// then the form's `classes:` and `classes_plus:`), shared by every node
     /// and widget of one render.
     ///
-    /// **`Rc`, and only here and in `FieldProps`.** Dioxus renders on one
+    /// **`Rc`, and only here and in `WidgetProps`.** Dioxus renders on one
     /// thread, so `Arc` would only add an atomic count. But an `Rc` must never
     /// go into `FormSpec` or `FormState`: both reach the server, where
     /// `Submission` rebuilds a `FormState` and a handler's future must be
@@ -269,9 +272,9 @@ pub struct RenderCtx {
     pub classes: Rc<Classes>,
 }
 
-impl RenderCtx {
+impl NodeContext {
     /// The context a whole form starts from: at the root, and required until
-    /// some `OptionMember` says otherwise.
+    /// some `OptionNode` says otherwise.
     pub fn root(
         form_id: String,
         values: ValuesStore,
@@ -303,7 +306,7 @@ impl RenderCtx {
         }
     }
 
-    /// Everything from here down is optional. `OptionMember` is the only member
+    /// Everything from here down is optional. `OptionNode` is the only node
     /// that *changes* the context rather than passing it along unaltered.
     pub fn optional(&self) -> Self {
         Self {
@@ -317,7 +320,7 @@ impl RenderCtx {
         }
     }
 
-    /// This member's own qualified path, for a leaf's `name` attribute.
+    /// This node's own qualified path, for a leaf's `name` attribute.
     pub fn path(&self, name: &str) -> String {
         qualify(&self.prefix, name)
     }

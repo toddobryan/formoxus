@@ -3,8 +3,8 @@
 //!
 //! The counterpart to `roundtrip`/`forms`, which cover values going out and
 //! back. These cover *verdicts* coming out. The contract under test is stated
-//! on [`FormMember::collect_errors`](formoxus::members::FormMember::collect_errors):
-//! only members with errors appear, and a container that can be *pushed* an
+//! on [`Node::collect_errors`](formoxus::nodes::Node::collect_errors):
+//! only nodes with errors appear, and a container that can be *pushed* an
 //! error at its own path must be able to hand it back from there.
 
 use super::models::{EventForCreate, Location, Shape};
@@ -13,7 +13,7 @@ use formoxus::{
     FormSpec, empty_form,
     error::{ValidationError, ValidationMessage},
     form_for,
-    members::Edit,
+    nodes::Edit,
     path,
 };
 use googletest::prelude::*;
@@ -92,14 +92,14 @@ fn leaf_paths_are_qualified_through_nested_field_sets() {
     );
 }
 
-// ── VariantSet: the member with errors of its own ────────────────────────
+// ── VariantSet: the node with errors of its own ────────────────────────
 
 #[gtest]
 fn an_unchosen_enum_reports_at_its_own_path() {
     // The regression test for `collect_errors` having been written as a copy of
     // `collect_values`, which early-returns when unchosen. `validate` pushes
     // "you must choose a variant" PRECISELY in that state, so the early return
-    // dropped the one error this member reliably produces.
+    // dropped the one error this node reliably produces.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
@@ -156,7 +156,7 @@ fn choosing_a_variant_clears_the_enums_own_error() {
 fn a_server_verdict_about_the_choice_itself_comes_back_out() {
     // The rule `collect_errors` follows: whatever `push_field_error` accepts at
     // a path has to be collectable from that path. `VariantSet` is the one
-    // member where the two could disagree, because it accepts its OWN path.
+    // node where the two could disagree, because it accepts its OWN path.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     form.push_field_error("shape", "That shape is not available on this plan.")
         .expect("the enum's own path is a legal target");
@@ -232,8 +232,8 @@ struct Sketch {
 
 #[gtest]
 fn an_absent_optional_enum_reports_nothing() {
-    // `OptionMember` is a pass-through decorator, but `validate` clears the
-    // inner member's errors when absent — so the "choose a variant" error the
+    // `OptionNode` is a pass-through decorator, but `validate` clears the
+    // inner node's errors when absent — so the "choose a variant" error the
     // required case produces must NOT appear here.
     let mut form = empty_form::<Sketch>(FormSpec::default());
     form.distribute_form_values(&[("name".to_string(), "Doodle".to_string())]);

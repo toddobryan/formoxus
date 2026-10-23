@@ -1,7 +1,7 @@
 //! `""` IS absence, at both boundaries.
 
 use facet::Facet;
-use formoxus::{members::ValuesByPath, prelude::*};
+use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 use std::fmt::Debug;
 

@@ -13,8 +13,10 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::attrs::{AttrSet, Tag};
 use formoxus::classes::{FixedKey, Slot};
-use formoxus::widgets::{BuiltinWidget, FieldProps, RenderedInputType, ValuesStore};
+use formoxus::widgets::WidgetProps;
+use formoxus::widgets::{Select, TextInput, Textarea, Widget};
 use formoxus::{Classes, Form, FormSpec, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
@@ -28,14 +30,10 @@ fn classes_is_in_the_prelude_and_at_the_crate_root() {
 fn a_custom_classes_is_built_from_formoxus_classes_and_widgets() {
     let classes = formoxus::Classes::bare()
         .with_fixed(FixedKey::Form, Slot::new("form"))
-        .with_part(
-            BuiltinWidget::Textarea,
-            "textarea",
-            Slot::new("input").with_invalid("is-invalid"),
-        );
+        .with_part::<Textarea>(Tag::Textarea, Slot::new("input").with_invalid("is-invalid"));
     expect_that!(classes.fixed_class(FixedKey::Form, false), some(eq("form")));
     expect_that!(
-        classes.part_class(BuiltinWidget::Textarea, "textarea", true),
+        classes.part_class::<Textarea>(Tag::Textarea, true),
         some(eq("input is-invalid"))
     );
     expect_that!(classes.fixed_class(FixedKey::FormTitle, false), none());
@@ -54,11 +52,7 @@ fn app_classes() -> Classes {
     Classes::bare()
         .with_fixed(FixedKey::Form, Slot::new("app-form"))
         .with_fixed(FixedKey::ButtonRow, Slot::new("app-row"))
-        .with_part(
-            BuiltinWidget::Select,
-            "select",
-            Slot::new("app-select").with_invalid("app-bad"),
-        )
+        .with_part::<Select>(Tag::Select, Slot::new("app-select").with_invalid("app-bad"))
 }
 
 /// What a test reads off the resolved classes: the form, the button row, and
@@ -66,14 +60,13 @@ fn app_classes() -> Classes {
 fn lookups(form: &Form<Signup>) -> String {
     let classes = form.classes();
     let show = |class: Option<String>| class.unwrap_or_else(|| "-".to_string());
-    let text = BuiltinWidget::Input(RenderedInputType::Text);
     format!(
         "form=[{}] row=[{}] select=[{}] select!=[{}] input!=[{}]",
         show(classes.fixed_class(FixedKey::Form, false)),
         show(classes.fixed_class(FixedKey::ButtonRow, false)),
-        show(classes.part_class(BuiltinWidget::Select, "select", false)),
-        show(classes.part_class(BuiltinWidget::Select, "select", true)),
-        show(classes.part_class(text, "input", true)),
+        show(classes.part_class::<Select>(Tag::Select, false)),
+        show(classes.part_class::<Select>(Tag::Select, true)),
+        show(classes.part_class::<TextInput>(Tag::Input, true)),
     )
 }
 
@@ -199,19 +192,26 @@ fn classes_plus_values_are_normalised_as_a_fields_are() {
 
 /// A custom widget that shows what it was handed: the form slot and the
 /// select's, from `props.classes`.
-#[component]
-fn ClassProbe(values: ValuesStore, props: FieldProps) -> Element {
-    let _ = values;
-    let form = props
-        .classes
-        .fixed_class(FixedKey::Form, false)
-        .unwrap_or_default();
-    let select = props
-        .classes
-        .part_class(BuiltinWidget::Select, "select", false)
-        .unwrap_or_default();
-    rsx! {
-        span { "probe form=[{form}] select=[{select}]" }
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ClassProbe;
+
+impl Widget for ClassProbe {
+    const NAME: &'static str = "class_probe";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
+
+    fn render(&self, props: WidgetProps) -> Element {
+        let form = props
+            .classes
+            .fixed_class(FixedKey::Form, false)
+            .unwrap_or_default();
+        let select = props
+            .classes
+            .part_class::<Select>(Tag::Select, false)
+            .unwrap_or_default();
+        rsx! {
+            span { "probe form=[{form}] select=[{select}]" }
+        }
     }
 }
 
@@ -226,7 +226,7 @@ fn a_custom_widget_receives_the_forms_resolved_classes() {
         let form = use_form(|| {
             empty_form(form! {
                 Signup {
-                    name => { widget: custom(ClassProbe) },
+                    name => { widget: ClassProbe },
                     classes_plus: { form: + [mine] },
                 }
             })
@@ -239,20 +239,66 @@ fn a_custom_widget_receives_the_forms_resolved_classes() {
     );
 }
 
+/// A dev's widget with parts of its own: `fx()` has never heard of it, so it
+/// renders unclassed until the app classes it with `with_part::<W>`, and it
+/// reads its slot back the same way a built-in does.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Notes;
+
+impl Widget for Notes {
+    const NAME: &'static str = "notes";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
+
+    fn render(&self, props: WidgetProps) -> Element {
+        let invalid = props.is_invalid();
+        let div = props.classes.part_class::<Notes>(Tag::Div, invalid);
+        let textarea = props.classes.part_class::<Notes>(Tag::Textarea, invalid);
+        rsx! {
+            div { class: div, textarea { class: textarea } }
+        }
+    }
+}
+
+#[gtest]
+fn an_app_classes_a_devs_widget_by_its_type() {
+    #[component]
+    fn Unclassed() -> Element {
+        let form = use_form(|| empty_form(form! { Signup { name => { widget: Notes } } }));
+        form.render(formoxus::using_fns! {})
+    }
+    #[component]
+    fn Classed() -> Element {
+        provide_defaults(
+            Formoxus::new().with_classes(
+                Classes::fx().with_part::<Notes>(Tag::Textarea, Slot::new("notes-box")),
+            ),
+        );
+        let form = use_form(|| empty_form(form! { Signup { name => { widget: Notes } } }));
+        form.render(formoxus::using_fns! {})
+    }
+    expect_that!(
+        resolved(Unclassed),
+        all![
+            contains_substring("<div><textarea></textarea></div>"),
+            not(contains_substring("notes-box"))
+        ]
+    );
+    expect_that!(
+        resolved(Classed),
+        contains_substring(r#"<div><textarea class="notes-box"></textarea></div>"#)
+    );
+}
+
 // ── Through to the markup ────────────────────────────────────────────────
 
 /// The app's classes for the rendered tests: none of them `fx()`'s, so any
 /// `fx-` in the output would be a lookup that skipped the cascade.
 fn rendered_app_classes() -> Classes {
-    let text = BuiltinWidget::Input(RenderedInputType::Text);
     Classes::bare()
         .with_fixed(FixedKey::Form, Slot::new("app-form"))
-        .with_part(text, "div", Slot::new("app-field"))
-        .with_part(
-            text,
-            "input",
-            Slot::new("app-input").with_invalid("app-bad"),
-        )
+        .with_part::<TextInput>(Tag::Div, Slot::new("app-field"))
+        .with_part::<TextInput>(Tag::Input, Slot::new("app-input").with_invalid("app-bad"))
 }
 
 /// `spec` rendered under [`rendered_app_classes`], validated first when

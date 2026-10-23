@@ -84,4 +84,8 @@ validity is keyed on ([[attribute-rules-design]]). Chosen by Todd over
 `<br>` are tags), and anything built on "input" reads as `<input>`. The test
 for any future name: does it name the bare element? If it names the thing
 around it, it is the reversed rename creeping back.
+**2026-10-23:** `FieldControl` is gone, flattened into `HtmlElement` (`Div |
+Fieldset | Label | Legend | Input(InputType) | Textarea | Select`) once
+`true_and_on` and `BuiltinWidget` stopped needing a control-only type.
+`fx-control` is the one name left; the test above still applies to new ones.
 

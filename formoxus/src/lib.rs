@@ -47,8 +47,7 @@
 //! `MEMORY.md` index.
 
 /// The HTML facts `formoxus-spec` holds, which `form!` and a hand-built
-/// `FormSpec` name: the attribute table, the elements and input types, and the
-/// built-in widgets.
+/// `FormSpec` name: the attribute table, the elements and the input types.
 ///
 /// An explicit list, not a glob of `formoxus_spec::*`, so a type added there
 /// is public here only when someone decides it should be. `SlotKey` is the one
@@ -57,8 +56,8 @@
 /// `formoxus::buttons` and `formoxus::classes`.
 pub mod attrs {
     pub use formoxus_spec::{
-        Attr, AttrKey, AttrType, AttrValue, Bound, BuiltinWidget, Element, FieldControl, FieldType,
-        FieldTypeWithOptional, InputType, Owner, Part, RenderedInputType,
+        Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, FieldType, FieldTypeSet,
+        FieldTypeWithOptional, HtmlElement, InputType, Owner, Step, Tag,
     };
 }
 
@@ -69,12 +68,15 @@ pub mod defaults;
 pub mod error;
 // Support for `form!`'s compile-time constraint checks, which name it from
 // the consumer's crate. Not API.
+pub mod field;
+pub mod field_attrs;
 #[doc(hidden)]
 pub mod field_kind;
+pub mod field_node;
 pub mod fields;
 pub mod form;
 pub mod label_case;
-pub mod members;
+pub mod nodes;
 pub mod path;
 pub mod submission;
 pub mod widgets;
@@ -125,7 +127,7 @@ pub use formoxus_macros::path;
 ///
 /// **The one list.** The crate root re-exports exactly this module and nothing
 /// else, so a name is either here — reachable as `formoxus::X` and through the
-/// glob — or only at its defining module (`formoxus::members::FormMember`,
+/// glob — or only at its defining module (`formoxus::nodes::Node`,
 /// `formoxus::buttons::ButtonSpec`). Two hand-kept lists drifted the first time
 /// an export changed, which is why there is no second one.
 ///

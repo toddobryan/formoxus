@@ -19,7 +19,7 @@ const STATES: &[(&str, &str)] = &[("AL", "Alabama")];
 fn main() {
     let _ = empty_form::<Address>(form! {
         Address {
-            state => { widget: radio_group { choices: STATES } },
+            state => { widget: radio_group, choices: STATES },
         }
     });
 }

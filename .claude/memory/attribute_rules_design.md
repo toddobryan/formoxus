@@ -171,6 +171,18 @@ widgets this is derived from the element facts.
 
 ## DECIDED 2026-10-10 (Todd): widgets have PARTS, named by their elements
 
+> **SUPERSEDED IN PART 2026-10-18 (Todd, FIELDS_PLAN.md W-A).** Parts survive
+> only as CLASS SLOTS (`Classes` keyed by widget and slot). Addressing
+> attributes to a part (decisions 3–5 below, and open point A) is DROPPED,
+> never having been built: a widget is a struct of props with `EXTENDS:
+> AttrSet`, and its `render` decides where every attribute goes. Per-element
+> classes per field become props (`RadioGroup`'s `group_class`/`input_class`).
+> **Those props were DROPPED 2026-10-20 (Todd)**, settling the class-placement
+> hold: a field's `class`/`class_plus` go on the radio group's `<fieldset>`
+> (where `EXTENDS` and the spread already pointed), inner slots are restyled
+> per app or form through `Classes`/`classes_plus:`, and per field by CSS from
+> the fieldset's class. Nothing addresses one inner element for one field.
+
 Todd floated it 2026-10-09: treat `RadioGroup` as the first multi-element
 widget (cf. Django's `MultiWidget`). Claude wrote it up 2026-10-10; Todd
 ADOPTED it the same day, with three decisions of his own (below). Points still
@@ -425,6 +437,12 @@ widget registry ([[widget-registry-idea]]), so no separate rendering layer.
 
 ## Element vs FieldControl (DECIDED 2026-10-11, Todd: option C)
 
+**SUPERSEDED 2026-10-23 (`FIELDS_PLAN.md` item 15):** option A won in the end.
+`HtmlElement` is flat, `Div | Fieldset | Label | Legend | Input(InputType) |
+Textarea | Select`, and `FieldControl` is deleted: both of its jobs went
+(`true_and_on`, below, and `BuiltinWidget`'s form-control part). What follows
+is the history.
+
 Parts can be `div`/`label`/`legend`, so the table must say what those may
 carry. Three options were weighed: A, grow `FieldControl` into one renamed
 `Element` (simple, but the type no longer says "this is a control", so
@@ -589,7 +607,11 @@ Entering the spec facts literally hit two snags: `min`/`max` are not valid on
    `placeholder:` set a select's "Choose..." text, is recorded in
    [[emitted-classes-and-strings]].
 
-10. **The `validated:` column, BUILT 2026-10-03** (replacing `check: bool`,
+10. **The `validated:` column, BUILT 2026-10-03** (`true_and_on(…)`,
+    `is_also_validated_on` and `is_allowed` DELETED 2026-10-23, item 15:
+    W-A's rule, that a validated key is a field setting, server-checked and
+    emitted only where it fits, replaced them. `validated:` is now only
+    `false` or `true`) (replacing `check: bool`,
     and superseding the `server_only:`, `Check` enum and `BrowserAndFormoxus`
     designs discussed the same day). Column order is now
     `name, owner, type, for, on, validated`. Values: `false`; `true` (formoxus

@@ -1,11 +1,11 @@
-//! Author attributes (C6): written in `form!`, through `FormField::render` and
-//! `ScalarWidget`, onto the element each widget puts them on.
+//! Author attributes (C6): written in `form!`, through `FieldNode::render`
+//! and the field's widget, onto the element each widget puts them on.
 //!
 //! These go through `form!`, the way an author writes them. A few stay on
 //! `FormSpec::with_attrs`, each saying why: what `form!` refuses (a quoted key
 //! the table knows) or cannot yet express (`custom(…)` drops attributes), and
 //! the `From` impl that only a hand-built spec uses. The conversion itself is
-//! unit-tested beside `FieldAttrs::to_attributes` in `fields.rs`. Which element
+//! unit-tested beside `FieldAttrs::to_attributes` in `field_attrs.rs`. Which element
 //! is valid for which attribute is in
 //! `.claude/memory/html_attributes_reference.md`.
 //!
@@ -15,11 +15,14 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue};
-use formoxus::fields::FieldAttrs;
-use formoxus::members::ValuesByPath;
+use formoxus::attrs::AttrSet;
+use formoxus::attrs::{AttrKey, AttrValue, Tag};
+use formoxus::field_attrs::FieldAttrs;
+use formoxus::field_kind::field_for;
+use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
-use formoxus::widgets::WidgetType;
+use formoxus::widgets::Widget;
+use formoxus::widgets::WidgetProps;
 use googletest::prelude::*;
 
 use super::models::Shape;
@@ -115,7 +118,7 @@ fn author_attributes_reach_the_checkbox() {
 fn author_attributes_reach_the_select() {
     let html = render!(form! {
         Person {
-            name => { widget: select { choices: STATES }, autocomplete: "address-level1" },
+            name => { widget: select, choices: STATES, autocomplete: "address-level1" },
         }
     });
     expect_that!(
@@ -130,7 +133,7 @@ fn author_attributes_reach_the_select() {
 #[gtest]
 fn on_a_radio_group_author_attributes_land_on_the_fieldset() {
     let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, "data-group": "states" } }
+        Person { name => { widget: radio_group, choices: STATES, "data-group": "states" } }
     });
     expect_that!(
         tag(&html, "fieldset"),
@@ -149,17 +152,19 @@ fn a_hidden_input_gets_no_author_attributes() {
 
 /// A custom widget that spreads whatever it is handed onto one `<input>`.
 ///
-/// Hand-built rather than `custom(…)` in `form!`, because the macro's closure
-/// passes only `values` and `props` today: attributes reaching a `form!`
-/// custom widget is step 4 of `ATTRIBUTES_PLAN.md`. This pins the runtime
-/// half, `ScalarWidget`'s `Custom` arm, on its own.
-fn spreading_widget() -> WidgetType {
-    WidgetType::Custom {
-        name: "Spreading",
-        render: |p| {
-            let attrs = p.attrs;
-            rsx! { input { class: "spreading", ..attrs } }
-        },
+/// Hand-built rather than named in `form!`, so this pins the runtime half on
+/// its own: what `FieldNode::render` hands a widget in `WidgetProps`.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Spreading;
+
+impl Widget for Spreading {
+    const NAME: &'static str = "spreading";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
+
+    fn render(&self, props: WidgetProps) -> Element {
+        let attrs = props.attrs.merge_with_attrs(props.extra_attrs);
+        rsx! { input { class: "spreading", ..attrs } }
     }
 }
 
@@ -172,16 +177,17 @@ fn spreading_widget() -> WidgetType {
 fn a_custom_widget_receives_the_fields_attributes() {
     let html = render!(
         FormSpec::<Person>::new()
-            .with_custom_widget("name", spreading_widget())
+            .with_widget("name", Spreading)
+            .with_node(
+                "name",
+                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+            )
             .with_attrs(
                 "name",
-                FieldAttrs::from([
-                    (AttrKey::Std(Attr::MaxLength), AttrValue::Int(10)),
-                    (
-                        AttrKey::NonStd("data-x"),
-                        AttrValue::String("1".to_string())
-                    ),
-                ])
+                FieldAttrs::from([(
+                    AttrKey::NonStd("data-x"),
+                    AttrValue::String("1".to_string())
+                )])
             )
     );
     let input = tag(&html, "input");
@@ -263,7 +269,7 @@ fn class_and_class_plus_on_the_checkbox() {
 #[gtest]
 fn class_and_class_plus_on_the_select() {
     let replaced = render!(form! {
-        Person { name => { widget: select { choices: STATES }, class: [wide] } }
+        Person { name => { widget: select, choices: STATES, class: [wide] } }
     });
     expect_that!(
         classes_of(tag(&replaced, "select")),
@@ -271,7 +277,7 @@ fn class_and_class_plus_on_the_select() {
     );
 
     let appended = render!(form! {
-        Person { name => { widget: select { choices: STATES }, class_plus: [wide] } }
+        Person { name => { widget: select, choices: STATES, class_plus: [wide] } }
     });
     expect_that!(
         classes_of(tag(&appended, "select")),
@@ -306,17 +312,28 @@ fn a_quoted_attribute_on_an_enum_field_reaches_the_variant_select() {
     expect_that!(tag(&html, "select"), contains_substring(r#"data-x="1""#));
 }
 
-/// **On a radio group an author's `class` goes nowhere, for now.** Where it
-/// belongs (the `<fieldset>`, each radio, or a `group_class`/`input_class`
-/// pair) is on hold; meanwhile `RadioGroup` never calls `FieldAttrs::class`,
-/// and the spread no longer carries it. Pinned so the decision, when it comes,
-/// changes this on purpose.
+/// **On a radio group they go on the `<fieldset>`**, where its other
+/// attributes land, and nowhere else. The inner elements take their classes
+/// from `Classes` alone, so a field's class reaches them only through CSS.
 #[gtest]
-fn on_a_radio_group_an_author_class_goes_nowhere_yet() {
-    let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, class: [wide] } }
+fn class_and_class_plus_on_the_radio_group() {
+    let replaced = render!(form! {
+        Person { name => { widget: radio_group, choices: STATES, class: [wide] } }
     });
-    expect_that!(html, not(contains_substring("wide")));
+    expect_that!(
+        classes_of(tag(&replaced, "fieldset")),
+        elements_are![eq("wide")]
+    );
+    expect_that!(replaced.matches("wide").count(), eq(1));
+
+    let appended = render!(form! {
+        Person { name => { widget: radio_group, choices: STATES, class_plus: [wide] } }
+    });
+    expect_that!(
+        classes_of(tag(&appended, "fieldset")),
+        elements_are![eq("fx-form-field fx-radio-group wide")]
+    );
+    expect_that!(appended.matches("wide").count(), eq(1));
 }
 
 // ── style and style_plus ─────────────────────────────────────────────────
@@ -366,13 +383,12 @@ fn style_plus_renders_like_style_while_formoxus_has_none() {
 }
 
 /// **On a radio group, `style` lands on the `<fieldset>`**, because it rides
-/// the spread and that is where `RadioGroup` spreads. Unlike `class`, which
-/// goes nowhere there (above). If the `RadioGroup` hold settles on per-radio
-/// placement, this should change with it.
+/// the spread and that is where `RadioGroup` spreads, as `class` does
+/// (above).
 #[gtest]
 fn on_a_radio_group_style_lands_on_the_fieldset() {
     let html = render!(form! {
-        Person { name => { widget: radio_group { choices: STATES }, style: { gap: 4px } } }
+        Person { name => { widget: radio_group, choices: STATES, style: { gap: 4px } } }
     });
     expect_that!(
         tag(&html, "fieldset"),
@@ -385,25 +401,30 @@ fn on_a_radio_group_style_lands_on_the_fieldset() {
 
 /// **A quoted attribute overrides a table attribute of the same HTML name,
 /// when it comes later.** Both are in the one map under different keys, so
-/// both are emitted, and `ScalarWidget`'s merge, keyed by HTML name, keeps the
+/// both are emitted, and `FieldAttrs::merge_with_attrs`, keyed by HTML name, keeps the
 /// later. So a raw `maxlength` replaces `max_length`'s, and the browser then
 /// allows 99 characters while `check` still rejects more than 10.
 ///
 /// This pins the hazard rather than endorsing it. `form!` refuses a quoted
 /// key the table knows ("write `max_length:`"), and this is what that refusal
-/// prevents. Only a hand-built `FormSpec` can still reach it.
+/// prevents. Only a hand-built `FormSpec` can still reach it. The field's own
+/// attributes render first and the author's after, so the author's wins.
 #[gtest]
 fn an_author_attribute_overrides_a_constraint_attribute() {
-    let html = render!(FormSpec::<Person>::new().with_attrs(
-        "name",
-        FieldAttrs::from([
-            (AttrKey::Std(Attr::MaxLength), AttrValue::Int(10)),
-            (
-                AttrKey::NonStd("maxlength"),
-                AttrValue::String("99".to_string())
-            ),
-        ])
-    ));
+    let html = render!(
+        FormSpec::<Person>::new()
+            .with_node(
+                "name",
+                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+            )
+            .with_attrs(
+                "name",
+                FieldAttrs::from([(
+                    AttrKey::NonStd("maxlength"),
+                    AttrValue::String("99".to_string())
+                )])
+            )
+    );
     let input = tag(&html, "input");
     expect_that!(input, contains_substring(r#"maxlength="99""#));
     expect_that!(input, not(contains_substring("maxlength=10")));

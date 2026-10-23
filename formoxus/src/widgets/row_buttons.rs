@@ -2,14 +2,14 @@
 //!
 //! Neither reads the value store. Adding or dropping a row changes the form's
 //! SHAPE, so all either one does is put an [`Edit`] on the wire and let
-//! [`ListSet`](crate::members::ListSet) rebuild itself.
+//! [`ListSet`](crate::nodes::ListSet) rebuild itself.
 
 use std::rc::Rc;
 
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
-use crate::{classes::Classes, members::Edit};
+use crate::{classes::Classes, nodes::Edit};
 
 /// The widget that appends a row to a list.
 ///

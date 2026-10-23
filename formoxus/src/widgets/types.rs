@@ -1,114 +1,15 @@
-//! What a widget IS, as opposed to what it renders: the widget
-//! vocabulary `form!` speaks, and the two prop bundles every input takes.
-//! This includes [`Choice`], which represents one of the legal values
-//! a widget can hold.
-
-use std::rc::Rc;
-
-use dioxus::prelude::*;
-use formoxus_spec::BuiltinWidget;
-
-use crate::classes::Classes;
-use crate::error::ValidationMessage;
-use crate::members::ValuesStore;
-
-#[derive(Clone, Copy)]
-pub enum WidgetType {
-    Builtin(BuiltinWidget),
-    Custom {
-        name: &'static str,
-        render: fn(WidgetProps) -> Element,
-    },
-}
-
-// `Debug` and `PartialEq` are hand-written rather than derived, because of
-// `Custom`'s `fn` pointer. `Debug` prints `form!`'s spelling (`select`, `tel`,
-// `custom(MarkdownWidget)`), so a panic quotes back what the author wrote;
-// deriving it would print the pointer's address beside a custom widget's name.
-impl std::fmt::Debug for WidgetType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Builtin(w) => write!(f, "{}", w.form_name()),
-            Self::Custom { name, .. } => write!(f, "custom({name})"),
-        }
-    }
-}
-
-impl PartialEq for WidgetType {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Builtin(a), Self::Builtin(b)) => a == b,
-            // Two custom widgets are the same widget when they name the same
-            // input. Comparing the `fn` pointers is what rustc warns about and
-            // is genuinely meaningless here: identical functions may be merged
-            // to one address, and one function may be duplicated across codegen
-            // units, so neither equality nor inequality tells you anything about
-            // which widget you have.
-            (Self::Custom { name: a, .. }, Self::Custom { name: b, .. }) => a == b,
-            _ => false,
-        }
-    }
-}
-
-impl From<BuiltinWidget> for WidgetType {
-    fn from(value: BuiltinWidget) -> Self {
-        WidgetType::Builtin(value)
-    }
-}
-
-/// What a custom widget is handed: the same pair every built-in widget gets.
-///
-/// One struct rather than two parameters because `render` is a `fn` pointer and
-/// a single argument keeps that signature stable as the boundary grows.
-///
-/// Note this is the widget boundary the design notes fix — `(path, label,
-/// required, errors)` in `props`, plus the value store — and NOT a
-/// `FormField<T>`. A widget never sees the typed field: it reads and writes raw
-/// strings through `values`, exactly as `Input` does.
-#[derive(Clone, Debug, PartialEq)]
-pub struct WidgetProps {
-    pub values: ValuesStore,
-    pub props: FieldProps,
-    /// Pass-through attributes for the element this widget puts them on. A
-    /// custom widget decides that for itself, the same way each built-in does.
-    pub attrs: Vec<Attribute>,
-}
+//! [`Choice`], one of the legal values a chooser can hold, and the
+//! `InputType` re-export.
 
 /// Defined in `formoxus-spec`, because the attribute table and `form!` both
 /// key on it and `formoxus-macros` cannot reach this crate. Re-exported here so
 /// that `formoxus::widgets::InputType` is still its address.
 pub use formoxus_spec::InputType;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct FieldProps {
-    /// The field's name in the PAGE: the control's `id`, what its `<label for>`
-    /// and `aria-describedby` point at. `{form id}-{path}`, built by
-    /// `RenderCtx::id`, so it differs between two copies of one form on a page.
-    pub id: String,
-    /// The field's name in the DATA: its `name` attribute, its key in the value
-    /// store, and what the server matches a submitted value to. The same for
-    /// every copy of the form, and never containing the form id, which the
-    /// server does not have.
-    pub path: String,
-    pub label: Option<String>,
-    /// The form's resolved classes, for the widget to look up its parts' slots
-    /// (`classes.part_class(widget, "label", invalid)`). A custom widget gets
-    /// them too, so it can borrow a built-in slot and follow the app's preset.
-    /// An `Rc` from `RenderCtx`; see the rule on `RenderCtx::classes`.
-    pub classes: Rc<Classes>,
-    pub errors: Vec<ValidationMessage>,
-}
-
-impl FieldProps {
-    pub fn is_invalid(&self) -> bool {
-        !self.errors.is_empty()
-    }
-}
-
 /// One of the options in a selectable list (e.g., [`super::Select`],
 /// [`super::RadioGroup`]).
 /// This is a value choice representable as a String. Contrast with
-/// [`crate::members::VariantChoice`], which specifies the SHAPE of the data.
+/// [`crate::nodes::VariantChoice`], which specifies the SHAPE of the data.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Choice {
     /// The raw string written into the value map, so it has to be exactly what

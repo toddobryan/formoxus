@@ -311,7 +311,7 @@ fn SelectForm() -> Element {
         "A required value choice as a select. The value is the code, the display is the name.",
         form! {
             Pick {
-                state => { widget: select { choices: STATES } },
+                state => { choices: STATES },
                 buttons: { save: { type: submit } }
             }
         },
@@ -328,7 +328,7 @@ fn RadioGroupForm() -> Element {
         "The same choices as radios. Nothing is pre-selected.",
         form! {
             Pick {
-                state => { widget: radio_group { choices: STATES } },
+                state => { widget: radio_group, choices: STATES },
                 buttons: { save: { type: submit } }
             }
         },
@@ -373,7 +373,7 @@ struct Bio {
 }
 
 /// A `<textarea>`, which is also where a multi-line value round-trips — the
-/// newline semantics `fields.rs` tests in Rust, seen from the browser.
+/// newline semantics `fields/string_field.rs` tests in Rust, seen from the browser.
 #[component]
 fn TextareaForm() -> Element {
     harness(

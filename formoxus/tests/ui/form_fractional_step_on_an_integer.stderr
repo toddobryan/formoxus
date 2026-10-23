@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `step` on an integer field must be a whole number
+  --> tests/ui/form_fractional_step_on_an_integer.rs:16:49
+   |
+16 |             quantity => { widget: number, step: 0.5 },
+   |                                                 ^^^ evaluation of `main::_` failed here

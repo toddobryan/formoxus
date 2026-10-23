@@ -9,35 +9,39 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::buttons::Fns;
-use formoxus::fields::{FieldAttrs, FieldValue, FormField};
+use formoxus::field::FieldValue;
+use formoxus::field_attrs::FieldAttrs;
+use formoxus::field_node::FieldNode;
+use formoxus::fields::StringField;
 use formoxus::label_case::LabelCase;
-use formoxus::members::ValuesByPath;
-use formoxus::members::{FieldSet, FormMember};
+use formoxus::nodes::ValuesByPath;
+use formoxus::nodes::{FieldSet, Node};
 use formoxus::prelude::*;
+use formoxus::widgets::TextInput;
 use googletest::prelude::*;
 use std::any::Any;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn FormMember> {
-    Box::new(FormField {
+fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
+    Box::new(FieldNode {
         name: name.to_string(),
         label: None,
         optional: false,
         attrs: FieldAttrs::default(),
-        custom_widget: None,
-        choices: None,
+        widget: TextInput.into(),
         wrapper: None,
         value,
         errors: Vec::new(),
+        field: StringField::default(),
     })
 }
 
-fn location_members(
+fn location_nodes(
     street: FieldValue<String>,
     city: FieldValue<String>,
     zip: FieldValue<String>,
-) -> Vec<Box<dyn FormMember>> {
+) -> Vec<Box<dyn Node>> {
     vec![
         text_field("street", street),
         text_field("city", city),
@@ -49,12 +53,12 @@ fn location_field_set(
     street: FieldValue<String>,
     city: FieldValue<String>,
     zip: FieldValue<String>,
-) -> Box<dyn FormMember> {
+) -> Box<dyn Node> {
     Box::new(FieldSet {
         name: "location".to_string(),
         optional: false,
         label: Some("Location".to_string()),
-        members: location_members(street, city, zip),
+        nodes: location_nodes(street, city, zip),
         errors: Vec::new(),
     })
 }
@@ -76,8 +80,8 @@ struct Trip {
     destination: Location,
 }
 
-fn member_names(members: &[Box<dyn FormMember>]) -> Vec<String> {
-    members.iter().map(|m| m.name()).collect()
+fn node_names(nodes: &[Box<dyn Node>]) -> Vec<String> {
+    nodes.iter().map(|m| m.name()).collect()
 }
 
 #[gtest]
@@ -105,15 +109,15 @@ fn EmptyEventForm() -> Element {
 }
 
 #[gtest]
-fn form_for_none_walks_the_shape_into_empty_members() {
+fn form_for_none_walks_the_shape_into_empty_nodes() {
     let form = empty_form::<EventForCreate>(FormSpec::default());
 
     expect_that!(
-        member_names(&form.members),
+        node_names(&form.nodes),
         elements_are![eq("title"), eq("location")]
     );
 
-    // The nested struct field became a FieldSet with its own members,
+    // The nested struct field became a FieldSet with its own nodes,
     // discovered purely from `Location`'s shape. The inner names are now
     // QUALIFIED (`location.street`, not `street`) — that changed when `render`
     // started threading a prefix, and it's what stops two field sets in one
@@ -184,11 +188,11 @@ fn option_fields_are_not_required() {
 
     // `note: Option<String>` is optional, so an empty form only complains
     // about `name` and `guests`.
-    for m in &mut form.members {
+    for m in &mut form.nodes {
         m.validate();
     }
     let complaining: Vec<String> = form
-        .members
+        .nodes
         .iter()
         .filter(|m| m.has_errors_within())
         .map(|m| m.name())
@@ -303,7 +307,7 @@ fn blanking_a_field_makes_it_empty_again() {
 
     expect_that!(form.validate(), none());
     let complaining: Vec<String> = form
-        .members
+        .nodes
         .iter()
         .filter(|m| m.has_errors_within())
         .map(|m| m.name())
@@ -335,7 +339,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 fn empty_event_form_is_invalid() {
     let mut form: FormState<Event> = FormState {
         spec: FormSpec::new().with_title("New Event"),
-        members: vec![
+        nodes: vec![
             text_field("title", FieldValue::Empty),
             location_field_set(FieldValue::Empty, FieldValue::Empty, FieldValue::Empty),
         ],
@@ -350,11 +354,11 @@ fn empty_event_form_is_invalid() {
 #[gtest]
 fn location_form_round_trips_to_model() {
     // `Location` has no uncollected fields, so this exercises the core
-    // `FormField::write_into` -> `Partial::build` -> `materialize` path
+    // `Field::write_into` -> `Partial::build` -> `materialize` path
     // with nothing else in the way.
     let mut form: FormState<Location> = FormState {
         spec: FormSpec::default(),
-        members: location_members(
+        nodes: location_nodes(
             FieldValue::Valid("123 Main St".to_string()),
             FieldValue::Valid("Springfield".to_string()),
             FieldValue::Valid("12345".to_string()),
@@ -378,7 +382,7 @@ fn location_form_round_trips_to_model() {
 fn event_for_create_form_round_trips_to_model() {
     let mut form: FormState<EventForCreate> = FormState {
         spec: FormSpec::new().with_title("New Event"),
-        members: vec![
+        nodes: vec![
             text_field("title", FieldValue::Valid("Board Game Night".to_string())),
             location_field_set(
                 FieldValue::Valid("123 Main St".to_string()),
@@ -410,7 +414,7 @@ fn a_label_defaults_to_the_humanized_field_name() {
 
     let form = empty_form::<Settings>(FormSpec::default());
     let labels: Vec<Option<String>> = form
-        .members
+        .nodes
         .iter()
         .map(|m| m.label(LabelCase::Title))
         .collect();
@@ -435,7 +439,7 @@ fn a_list_row_gets_no_label() {
         },
         FormSpec::default(),
     );
-    let list = &form.members[0];
+    let list = &form.nodes[0];
     expect_that!(list.label(LabelCase::Title), some(eq("Answer Choices")));
 
     // Rendered, the rows must not pick up "0"/"1" as labels. Note the list's own
@@ -471,7 +475,7 @@ struct Unsupported {
 }
 
 #[gtest]
-#[should_panic(expected = "scalar type USize is not supported in FormField")]
+#[should_panic(expected = "scalar type USize is not supported in Field")]
 fn an_unsupported_scalar_fails_loudly_at_construction() {
     // Loud rather than silent: the alternative to panicking is rendering the
     // field as something it isn't, and a form that quietly mis-handles a value

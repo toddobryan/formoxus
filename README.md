@@ -62,7 +62,7 @@ compile time, so `emial` is a compile error rather than a runtime
 This is the part that's usually painful, so it's worth showing directly.
 
 A form does **not** cross a server-function boundary — `FormState` holds
-`Box<dyn FormMember>` and isn't serializable. What crosses is the leaves: plain
+`Box<dyn Node>` and isn't serializable. What crosses is the leaves: plain
 `(path, value)` string pairs. The server rebuilds the form from the *same*
 `FormSpec` and validates it there, so cross-field rules live in one place
 instead of being duplicated on both sides.
@@ -124,23 +124,26 @@ read as success.
 
 Being explicit, since this is pre-release:
 
-- **Only 45 of the 84 `(value kind, widget)` pairs actually render**, and
-  `form!` accepts all 84 today. The rest panic at render. `select_multiple`,
-  `checkbox_multiple`, `radio_group` and `file` never work; `select` and
-  `checkbox` work only on `bool`; `textarea` only on a string; and every
-  `<input type=…>` panics on a `bool`. Run
-  `cargo run -p formoxus-examples --bin widget_matrix` for the current table —
-  and note that a failure here is a field *silently vanishing* from the form,
-  not a visible crash, because Dioxus contains the panic to that component.
+- **Not every `(value kind, widget)` pair renders**, and `form!` refuses
+  the ones that don't at compile time, pointing at the widget's name:
+  `checkbox` goes only on a `bool`, `textarea` only on a string, no
+  `<input type=…>` on a `bool`, `select` and `radio_group` on anything but a
+  `bool` only with `choices:`, and neither `checkbox` nor `radio_group` on an
+  `Option`. `select_multiple`, `checkbox_multiple` and `file` render nothing
+  yet and are refused by name. Run
+  `cargo run -p formoxus-examples --bin widget_matrix` for the current table.
 - **No file upload**, which is the `file` widget above.
 - **No live/as-you-type validation** — validation runs on submit.
 - **`Vec` rows are named by index**, so reordering rows renames their paths.
 - Error rendering is not yet configurable; `FieldErrors` is the component to
   swap when it becomes so.
 
-`custom(MyWidget)` is the escape hatch in the meantime: a custom widget is an
-ordinary Dioxus component, with no trait to implement and so no orphan-rule
-problem.
+A widget of your own is the escape hatch in the meantime: any type
+implementing `formoxus::widgets::Widget`, named by its path after `widget:`.
+Props go in its braces and the rest come from `Default`, so
+`widget: ui::Markdown { rows: 8 }` sets one field. The type and the impl are
+both in your crate, so there is no orphan-rule problem, and `form!` checks
+each attribute on the field against the widget's `EXTENDS`.
 
 ## Minimum supported Rust version
 

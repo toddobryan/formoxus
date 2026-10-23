@@ -1,5 +1,19 @@
-error[E0080]: evaluation panicked: `min` must be a whole number, because the field is an integer
+error[E0308]: mismatched types
   --> tests/ui/form_fractional_bound_on_an_integer.rs:14:32
    |
 14 |             quantity => { min: 1.5 },
-   |                                ^^^ evaluation of `main::_` failed here
+   |                                ^^^
+   |                                |
+   |                                expected `u32`, found floating-point number
+   |                                arguments to this enum variant are incorrect
+   |
+help: the type constructed contains `{float}` due to the type of the argument passed
+  --> tests/ui/form_fractional_bound_on_an_integer.rs:14:32
+   |
+14 |             quantity => { min: 1.5 },
+   |                                ^^^ this argument influences the type of `Some`
+note: tuple variant defined here
+  --> $RUST/core/src/option.rs
+   |
+   |     Some(#[stable(feature = "rust1", since = "1.0.0")] T),
+   |     ^^^^

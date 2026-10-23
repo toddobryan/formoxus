@@ -2,13 +2,13 @@
 
 use indexmap::IndexMap;
 
-use formoxus_spec::{Attr, AttrType, Element, FieldControl, FieldType, Owner};
+use formoxus_spec::{Attr, AttrType, FieldType, HtmlElement, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
 use regress::Regex;
 use syn::{
-    Expr, Ident, LitStr, Result, Token, braced, bracketed,
+    Expr, ExprLit, Ident, Lit, LitStr, Result, Token, braced, bracketed,
     ext::IdentExt,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
@@ -27,6 +27,7 @@ pub(crate) struct FieldSpec {
 pub(crate) struct FieldBody {
     pub(crate) widget: Option<WidgetRef>,
     pub(crate) label: Option<Expr>,
+    pub(crate) choices: Option<(Ident, Expr)>,
     pub(crate) attrs: ParsedAttrs,
 }
 
@@ -94,7 +95,7 @@ fn enum_refusal(attr: Attr) -> String {
             "`{name}` cannot go on an enum field: it renders a variant picker, which submits \
             no value to check"
         )
-    } else if !attr.is_valid_on(Element::Control(FieldControl::Select)) {
+    } else if !attr.is_valid_on(HtmlElement::Select) {
         format!("`{name}` cannot go on an enum field: its variant `<select>` does not take it")
     } else {
         format!("`{name}` cannot go on an enum field")
@@ -115,9 +116,31 @@ impl ParsedAttr {
     fn value_span(&self) -> Span {
         match &self.source {
             AttrSource::Expr(e) => e.span(),
-            AttrSource::Regex(s) => s.span(),
+            AttrSource::Regex(s) | AttrSource::Any(s) => s.span(),
             AttrSource::Flag => self.key_span,
             AttrSource::List(items) => items.first().map_or(self.key_span, LitStr::span),
+        }
+    }
+
+    /// The assignment a validated attribute contributes to the field's
+    /// settings closure: `__f.min = Some(13);`, `__f.required_true = true;`.
+    ///
+    /// The setting's name is the key's, so `min_length` sets `min_length`. A
+    /// field without that setting is rustc's "no field" error at the key; a
+    /// value of the wrong type is its type error at the value.
+    fn setting_tokens(&self, attr: Attr) -> TokenStream2 {
+        let name = Ident::new(&attr.variant_name().to_snake_case(), self.key_span);
+        let span = self.value_span();
+        match &self.source {
+            AttrSource::Flag => quote_spanned! { span=> __f.#name = true; },
+            AttrSource::Expr(e) => {
+                quote_spanned! { span=> __f.#name = ::core::option::Option::Some(#e); }
+            }
+            AttrSource::Regex(s) => {
+                quote_spanned! { span=> __f.#name = ::core::option::Option::Some(#s); }
+            }
+            AttrSource::List(_) => unreachable!("`{attr:?}` is validated but parsed as a list"),
+            AttrSource::Any(_) => unreachable!("`{attr:?}` is validated but parsed as `\"any\"`"),
         }
     }
 
@@ -145,6 +168,12 @@ impl ParsedAttr {
             (AttrType::Bound, AttrSource::Expr(e)) => {
                 quote! { #attrs::AttrValue::Bound((#e).into()) }
             }
+            (AttrType::Step, AttrSource::Expr(e)) => {
+                quote! { #attrs::AttrValue::Step(#attrs::Step::By((#e).into())) }
+            }
+            (AttrType::Step, AttrSource::Any(_)) => {
+                quote! { #attrs::AttrValue::Step(#attrs::Step::Any) }
+            }
             (AttrType::Regex, AttrSource::Regex(s)) => quote! { #attrs::AttrValue::Regex(#s) },
             (AttrType::Flag, AttrSource::Flag) => quote! { #attrs::AttrValue::Flag },
             (AttrType::TokenList | AttrType::Declarations, AttrSource::List(items)) => {
@@ -164,6 +193,30 @@ pub(crate) enum AttrSource {
     Regex(LitStr),
     Flag,
     List(Vec<LitStr>),
+    /// `step: "any"`, the one string a `step` takes; any other value is a
+    /// number, so an `Expr`.
+    Any(LitStr),
+}
+
+/// Whether formoxus validates this attribute, which makes it a setting of the
+/// field rather than an attribute to render.
+fn is_validated(attr_id: &AttrId) -> bool {
+    matches!(attr_id, AttrId::Std(attr) if attr.validated())
+}
+
+/// Lints the `min <= max` check allows, whatever type the bounds are.
+///
+/// It compares both as `f64`, so that one check serves every number type, and
+/// it carries the author's span, so a lint on it lands in THEIR crate: an
+/// `f64` bound `as f64` is a trivial cast, a literal `as f64` an unnecessary
+/// one, a `u32` a lossless one, and a `u64` a cast that may lose precision.
+fn cast_lints() -> TokenStream2 {
+    quote! {
+        trivial_numeric_casts,
+        clippy::unnecessary_cast,
+        clippy::cast_precision_loss,
+        clippy::cast_lossless
+    }
 }
 
 impl FieldBody {
@@ -180,40 +233,44 @@ impl FieldBody {
             .attrs
             .0
             .iter()
+            .filter(|(attr_id, _)| !is_validated(attr_id))
             .map(|(attr_id, parsed_attr)| parsed_attr.entry_tokens(attr_id))
             .collect();
 
         if entries.is_empty() {
             return None;
         }
-        Some(quote! { ::formoxus::fields::FieldAttrs::from([ #(#entries), * ]) })
+        Some(quote! { ::formoxus::field_attrs::FieldAttrs::from([ #(#entries), * ]) })
     }
-}
 
-/// Lints the bound checks allow, whatever type the author wrote the bound in.
-///
-/// They matter because each check carries the author's span, so a lint on it
-/// lands in THEIR crate: `max: 100` as f64 is an `unnecessary_cast` of a
-/// literal, an `f64` bound `as f64` a trivial cast, a `u64` `as i128` a
-/// lossless one, a float `as i128` a truncation.
-fn cast_lints() -> TokenStream2 {
-    quote! {
-        trivial_numeric_casts,
-        clippy::unnecessary_cast,
-        clippy::cast_precision_loss,
-        clippy::cast_lossless,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss
+    /// The field's settings, as the closure `field_kind::field_for` runs on
+    /// the field the model's type picks: `|__f| { __f.min = Some(13); }`.
+    /// `None` when the body has no validated attribute, so no `with_node` is
+    /// emitted and the field keeps the default `dispatch!` builds.
+    ///
+    /// `span` is the field's path: the closure's own tokens carry it, so an
+    /// error about the closure as a whole lands on the path.
+    pub(crate) fn settings_tokens(&self, span: Span) -> Option<TokenStream2> {
+        let sets: Vec<TokenStream2> = self
+            .attrs
+            .0
+            .iter()
+            .filter_map(|(attr_id, parsed_attr)| match attr_id {
+                AttrId::Std(attr) if attr.validated() => Some(parsed_attr.setting_tokens(*attr)),
+                _ => None,
+            })
+            .collect();
+        (!sets.is_empty()).then(|| quote_spanned! { span=> |__f| { #(#sets)* } })
     }
-}
 
-impl FieldBody {
     /// Free `const _` assertions that the field at `place` can take what this
-    /// body declares: one per table attribute (two for `required_true`), the
-    /// bound checks, `min <= max`
-    /// and `min_length <= max_length`, and whether the widget can render it
-    /// (see `WidgetRef::checks`).
+    /// body declares: one per table attribute (two for `required_true`),
+    /// `min <= max` and `min_length <= max_length`, a `step` above zero and
+    /// whole on an int field, whether the widget can render it (see
+    /// `WidgetRef::checks`) and pass each attribute through (see
+    /// `extends_checks`). Whether a bound fits the field's
+    /// type is rustc's question, since `settings_tokens` assigns it to the
+    /// field's own setting.
     ///
     /// Free const items rather than anything in `__paths_exist`, because only
     /// a free const item is evaluated by `cargo check` or when nothing calls
@@ -277,35 +334,9 @@ impl FieldBody {
                 ));
             }
         }
-        // Does each bound fit the field's type? The bound goes in cast both
-        // ways, since a const fn cannot be generic over "some number";
-        // `field_kind` explains what each pair of casts answers.
-        for (key, attr) in [("min", Attr::Min), ("max", Attr::Max)] {
-            let Some(e) = self.attrs.expr(attr) else {
-                continue;
-            };
-            for (test, problem) in [
-                ("bound_in_range", "is outside the range of the field's type"),
-                (
-                    "bound_is_whole",
-                    "must be a whole number, because the field is an integer",
-                ),
-                (
-                    "bound_is_exact",
-                    "is an integer too large to hold exactly as an f64",
-                ),
-            ] {
-                let test = Ident::new(test, Span::call_site());
-                let message = format!("`{key}` {problem}");
-                checks.push(quote_spanned! { e.span()=>
-                    #[allow(#cast_lints)]
-                    const _: () = ::core::assert!(
-                        ::formoxus::field_kind::#test(#shape, (#e) as f64, (#e) as i128),
-                        #message
-                    );
-                });
-            }
-        }
+        // Whether each bound fits the field's type is rustc's question now:
+        // the settings closure types it as the field's own `T`, so `min: 300`
+        // on a `u8` is its out-of-range error and `min: 2.5` its type error.
         // `as f64` on both sides is what lets `min: 3, max: 120.5` compare at
         // all.
         if let (Some(min), Some(max)) = (self.attrs.expr(Attr::Min), self.attrs.expr(Attr::Max)) {
@@ -329,9 +360,70 @@ impl FieldBody {
                 );
             });
         }
-        if let Some(widget) = &self.widget {
-            checks.push(widget.checks(&shape));
+        // `step` is a pass-through attribute, not a setting, so nothing types
+        // it as the field's `T` the way `min` is; a fractional one on an int
+        // field is refused here instead. HTML ignores a step that is not
+        // above zero, so that is refused too. `"any"` is not an `Expr`, so it
+        // is never asked.
+        if let Some(step) = self.attrs.expr(Attr::Step) {
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    ((#step) as f64) > 0.0,
+                    "`step` must be greater than zero"
+                );
+            });
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    !::formoxus::field_kind::is_int(#shape) || ((#step) as f64) % 1.0 == 0.0,
+                    "`step` on an integer field must be a whole number"
+                );
+            });
         }
+        if let Some(widget) = &self.widget {
+            checks.push(widget.checks(&shape, self.choices.is_some()));
+            checks.push(self.extends_checks(widget));
+            if let Some((key, _)) = &self.choices {
+                checks.push(widget.choices_check(key));
+            }
+        }
+        quote! { #(#checks)* }
+    }
+}
+
+impl FieldBody {
+    /// One `const _` assertion per attribute the widget must pass through:
+    /// every table attribute but the validated ones, which are the field's
+    /// settings and never reach the widget. Spanned on the key, since the
+    /// value is not what is wrong.
+    ///
+    /// Only with a `widget:`. Without one the widget is
+    /// `Field::default_widget`'s, chosen at run time, so there is no type here
+    /// to ask; the table's `for:` check is what catches most of those.
+    fn extends_checks(&self, widget: &WidgetRef) -> TokenStream2 {
+        let ty = widget.type_tokens();
+        let written = widget.written();
+        let checks = self.attrs.0.iter().filter_map(|(attr_id, parsed_attr)| {
+            let AttrId::Std(attr) = attr_id else {
+                return None;
+            };
+            if attr.validated() {
+                return None;
+            }
+            let variant = Ident::new(attr.variant_name(), Span::call_site());
+            let msg = format!(
+                "`{}` is not an attribute `{written}` passes through",
+                attr.variant_name().to_snake_case(),
+            );
+            Some(quote_spanned! { parsed_attr.key_span=>
+                const _: () = ::core::assert!(
+                    <#ty as ::formoxus::widgets::Widget>::EXTENDS
+                        .contains(::formoxus::attrs::Attr::#variant),
+                    #msg
+                );
+            })
+        });
         quote! { #(#checks)* }
     }
 }
@@ -353,8 +445,21 @@ impl Parse for FieldBody {
 
         // Asks "were there any keys?" directly, which cannot go stale when a
         // key is added.
-        if fb.widget.is_none() && fb.label.is_none() && fb.attrs.0.is_empty() {
+        if fb.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
+        }
+        if fb.choices.is_some()
+            && let Some((AttrId::Std(attr), parsed)) =
+                fb.attrs.0.iter().find(|(attr_id, _)| is_validated(attr_id))
+        {
+            return Err(syn::Error::new(
+                parsed.key_span,
+                format!(
+                    "`choices` cannot be combined with other constraints (like `{}`), \
+                    so you must make sure each choice meets these constraints yourself",
+                    attr.variant_name().to_snake_case()
+                ),
+            ));
         }
         Ok(fb)
     }
@@ -378,7 +483,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" => {
+            "widget" | "label" | "choices" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -387,11 +492,17 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.widget = Some(body.parse()?);
-                } else {
+                } else if name == "label" {
                     if self.label.is_some() {
                         return Err(given_twice());
                     }
                     self.label = Some(body.parse()?);
+                } else {
+                    assert!(name == "choices", "did you add another name to the match?");
+                    if self.choices.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.choices = Some((key.clone(), body.parse()?));
                 }
                 Ok(())
             }
@@ -401,6 +512,13 @@ impl FieldBody {
                 self.attrs.insert(AttrId::Std(attr), key.span(), source)
             }
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.widget.is_none()
+            && self.label.is_none()
+            && self.attrs.0.is_empty()
+            && self.choices.is_none()
     }
 }
 
@@ -445,12 +563,12 @@ fn quoted_key(key: &LitStr) -> Result<String> {
 /// pattern, nothing at all for a flag, or a bracketed list of strings.
 ///
 /// **Why `Expr` for most and `LitStr` for a pattern.** A bound may be any
-/// expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), and holding it as an
-/// `Expr` is also what lets the literal's own type pick the `Bound` variant
-/// once it reaches `.into()`. A pattern cannot: the macro has to hand the
-/// string to `regress` to check it compiles, and only a literal is readable at
-/// macro time. It also lands in `AttrValue::Regex`, which holds a
-/// `&'static str`.
+/// expression (`min: 13`, `min: MIN_AGE`, `min: 2 * N`), passed through as
+/// written: `settings_tokens` assigns it to the field's setting, so the
+/// field's own type types it. A pattern cannot be an expression: the macro
+/// has to hand the string to `regress` to check it compiles, and only a
+/// literal is readable at macro time. It also lands in
+/// `StringField::pattern`, which holds a `&'static str`.
 fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSource> {
     if attr.attr_type() == AttrType::Flag {
         if body.peek(Token![:]) {
@@ -464,6 +582,7 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
     body.parse::<Token![:]>()?;
     Ok(match attr.attr_type() {
         AttrType::String | AttrType::Int | AttrType::Bound => AttrSource::Expr(body.parse()?),
+        AttrType::Step => step_value(body.parse()?)?,
         AttrType::Regex => AttrSource::Regex(checked_pattern(body.parse()?)?),
         AttrType::TokenList => {
             let empty = (attr == Attr::ClassPlus)
@@ -788,6 +907,28 @@ fn checked_pattern(pattern: LitStr) -> Result<LitStr> {
     Ok(pattern)
 }
 
+/// A `step`: `"any"`, or a number as any expression, which `Bound`'s `From`
+/// impls then type. A string literal can only be `"any"`; one that is not
+/// is refused here, at the literal, since `Bound` would only say that `&str`
+/// does not convert.
+fn step_value(value: Expr) -> Result<AttrSource> {
+    match value {
+        Expr::Lit(ExprLit {
+            lit: Lit::Str(s), ..
+        }) => {
+            if s.value() == "any" {
+                Ok(AttrSource::Any(s))
+            } else {
+                Err(syn::Error::new_spanned(
+                    s,
+                    "`step` takes a number or `\"any\"`; for a number, write it unquoted",
+                ))
+            }
+        }
+        value => Ok(AttrSource::Expr(Box::new(value))),
+    }
+}
+
 /// The refusal for an attribute formoxus sets itself.
 fn owned(attr: Attr) -> String {
     let hint = if attr == Attr::Required {
@@ -805,15 +946,19 @@ fn owned(attr: Attr) -> String {
 /// Every identifier key a field body accepts: `widget`, `label`, then each
 /// table attribute an author may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
-    ["widget".to_string(), "label".to_string()]
-        .into_iter()
-        .chain(
-            Attr::ALL
-                .iter()
-                .filter(|attr| attr.owner() != Owner::Formoxus)
-                .map(|attr| attr.variant_name().to_snake_case()),
-        )
-        .collect()
+    [
+        "widget".to_string(),
+        "label".to_string(),
+        "choices".to_string(),
+    ]
+    .into_iter()
+    .chain(
+        Attr::ALL
+            .iter()
+            .filter(|attr| attr.owner() != Owner::Formoxus)
+            .map(|attr| attr.variant_name().to_snake_case()),
+    )
+    .collect()
 }
 
 /// The message for an identifier key that is not one: the HTML spelling of a
@@ -975,6 +1120,7 @@ mod tests {
             let entry = match key.as_str() {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
+                "choices" => quote!(#ident: STATES),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -985,9 +1131,9 @@ mod tests {
                         formoxus_spec::AttrType::String | formoxus_spec::AttrType::Regex => {
                             quote!(#ident: "x")
                         }
-                        formoxus_spec::AttrType::Int | formoxus_spec::AttrType::Bound => {
-                            quote!(#ident: 1)
-                        }
+                        formoxus_spec::AttrType::Int
+                        | formoxus_spec::AttrType::Bound
+                        | formoxus_spec::AttrType::Step => quote!(#ident: 1),
                         formoxus_spec::AttrType::TokenList => quote!(#ident: [x, "y"]),
                         formoxus_spec::AttrType::Declarations => quote!(#ident: { x: y }),
                     }
@@ -1368,53 +1514,66 @@ mod tests {
 
     // ── Constraints reach the expansion ──────────────────────────────────
 
+    /// The validated keys become the field's settings: ONE `with_node`, whose
+    /// closure assigns each, in the order written. None of them is an
+    /// attribute any more, so no `with_attrs` call is emitted.
     #[gtest]
-    fn attribute_keys_become_one_with_attrs_call() {
+    fn validated_keys_become_one_with_node_call() {
         let spec = parse(quote! {
             Source { notes => { min_length: 3, max_length: 500, pattern: "\\w+" } }
         })
         .unwrap();
         let tokens = spec.expand().to_string();
 
-        // ONE call, holding a struct literal — not one call per key.
-        expect_that!(tokens.matches("with_attrs").count(), eq(1));
+        expect_that!(tokens.matches("with_node").count(), eq(1));
+        expect_that!(tokens.matches("with_attrs").count(), eq(0));
         expect_that!(
             tokens,
-            contains_substring(":: formoxus :: fields :: FieldAttrs :: from ([")
+            contains_substring(":: formoxus :: field_kind :: field_for")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: MinLength) , :: formoxus :: attrs :: AttrValue :: Int (3))"
-            )
+            contains_substring("__f . min_length = :: core :: option :: Option :: Some (3) ;")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: MaxLength) , :: formoxus :: attrs :: AttrValue :: Int (500))"
-            )
+            contains_substring("__f . max_length = :: core :: option :: Option :: Some (500) ;")
         );
-        expect_that!(tokens, contains_substring("AttrValue :: Regex"));
+        expect_that!(tokens, contains_substring("__f . pattern ="));
     }
 
-    /// A bound goes through `.into()`, which is what lets the literal's own
-    /// type decide between `Bound::Int` and `Bound::Float` — the macro never
-    /// inspects the token to choose.
+    /// A field with both kinds splits: its settings go to `with_node`, and the
+    /// attributes that only render go to `with_attrs`, without the settings.
     #[gtest]
-    fn a_bound_is_converted_rather_than_classified() {
+    fn settings_and_render_only_attributes_split() {
+        let spec = parse(quote! {
+            Source { zip => { pattern: "[0-9]+", placeholder: "12345" } }
+        })
+        .unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens.matches("with_node").count(), eq(1));
+        expect_that!(tokens.matches("with_attrs").count(), eq(1));
+        // `Attr :: Pattern` also appears in the `applies` const checks, so only
+        // the `with_attrs` call, which comes last, is searched.
+        let attrs_call = &tokens[tokens.find("with_attrs").expect("one `with_attrs`")..];
+        expect_that!(attrs_call, contains_substring("Attr :: Placeholder"));
+        expect_that!(attrs_call, not(contains_substring("Attr :: Pattern")));
+    }
+
+    /// A bound is assigned as written. The field the model's type picks gives
+    /// it its type, so `13` is a `u8` on a `u8` field and `120.5` refuses one;
+    /// the macro never inspects the token.
+    #[gtest]
+    fn a_bound_is_assigned_as_written() {
         let spec = parse(quote! { Source { age => { min: 13, max: 120.5 } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(
             tokens,
-            contains_substring(
-                "Attr :: Min) , :: formoxus :: attrs :: AttrValue :: Bound ((13) . into ())"
-            )
+            contains_substring("__f . min = :: core :: option :: Option :: Some (13) ;")
         );
         expect_that!(
             tokens,
-            contains_substring(
-                "Attr :: Max) , :: formoxus :: attrs :: AttrValue :: Bound ((120.5) . into ())"
-            )
+            contains_substring("__f . max = :: core :: option :: Option :: Some (120.5) ;")
         );
     }
 
@@ -1427,19 +1586,13 @@ mod tests {
         expect_that!(tokens, contains_substring("2 * LIMIT"));
     }
 
-    /// `required_true` lands in the same `FieldAttrs` as the other keys, as
-    /// `Attr::RequiredTrue`, so it reaches `check` by the same route.
+    /// `required_true` is a flag, so its setting is a plain `true`.
     #[gtest]
-    fn required_true_becomes_a_constraint() {
+    fn required_true_becomes_a_setting() {
         let spec = parse(quote! { Source { agreed => { required_true } } }).unwrap();
         let tokens = spec.expand().to_string();
-        expect_that!(tokens.matches("with_attrs").count(), eq(1));
-        expect_that!(
-            tokens,
-            contains_substring(
-                "(:: formoxus :: attrs :: AttrKey :: Std (:: formoxus :: attrs :: Attr :: RequiredTrue) , :: formoxus :: attrs :: AttrValue :: Flag)"
-            )
-        );
+        expect_that!(tokens.matches("with_attrs").count(), eq(0));
+        expect_that!(tokens, contains_substring("__f . required_true = true ;"));
     }
 
     /// A flag is written bare. Its presence is the whole value, so there is
@@ -1484,6 +1637,69 @@ mod tests {
         );
     }
 
+    // ── The widget must pass each attribute through ──────────────────────
+
+    /// One assert per pass-through attribute, asking the widget's own type,
+    /// with a message naming both as the dev wrote them.
+    #[gtest]
+    fn a_pass_through_attribute_is_checked_against_the_widgets_extends() {
+        let tokens = parse(quote! { Source { notes => { widget: textarea, rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring(
+                "< :: formoxus :: widgets :: Textarea as :: formoxus :: widgets :: Widget > \
+                 :: EXTENDS . contains (:: formoxus :: attrs :: Attr :: Rows)"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring("\"`rows` is not an attribute `textarea` passes through\"")
+        );
+    }
+
+    #[gtest]
+    fn a_path_widget_is_asked_by_its_path_and_named_by_its_last_segment() {
+        let tokens = parse(quote! { Source { notes => { widget: ui::Markdown, rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring("< ui :: Markdown as :: formoxus :: widgets :: Widget > :: EXTENDS")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("`rows` is not an attribute `Markdown` passes through")
+        );
+    }
+
+    /// Validated keys are the field's settings and never reach the widget, and
+    /// a quoted key is not in the table.
+    #[gtest]
+    fn settings_and_quoted_keys_are_not_asked() {
+        let tokens = parse(quote! {
+            Source { notes => { widget: textarea, max_length: 500, "data-x": "y" } }
+        })
+        .unwrap()
+        .expand()
+        .to_string();
+        expect_that!(tokens, not(contains_substring("EXTENDS")));
+    }
+
+    /// With no `widget:`, the widget is chosen at run time, so there is no type
+    /// to ask.
+    #[gtest]
+    fn no_widget_means_no_extends_check() {
+        let tokens = parse(quote! { Source { notes => { rows: 5 } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, not(contains_substring("EXTENDS")));
+    }
+
     // ── A pattern must compile ───────────────────────────────────────────
 
     #[gtest]
@@ -1506,7 +1722,7 @@ mod tests {
     }
 
     /// `a)|(b` compiles once wrapped as `^(?:a)|(b)$`, and so would pass
-    /// `FormField::check`, but not alone. HTML compiles the bare pattern first
+    /// `Field::check`, but not alone. HTML compiles the bare pattern first
     /// and drops the constraint if that fails, so accepting it would leave the
     /// browser checking nothing while the server checks something.
     #[gtest]
@@ -1534,6 +1750,38 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { zip => { pattern: "[", max_length: 10 } } }),
             contains_substring("`pattern` is not a valid regular expression")
+        );
+    }
+
+    // ── A step is a number or "any" ──────────────────────────────────────
+
+    #[gtest]
+    fn a_step_of_any_becomes_step_any() {
+        let tokens = parse(quote! { Source { weight => { step: "any" } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, contains_substring("Step :: Any"));
+    }
+
+    /// A number goes through `Bound`'s `From` impls, like a bound, so a named
+    /// const works as well as a literal.
+    #[gtest]
+    fn a_numeric_step_becomes_step_by() {
+        let tokens = parse(quote! { Source { weight => { step: STEP } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, contains_substring("Step :: By ((STEP) . into ())"));
+    }
+
+    /// Refused at the literal, rather than left to `Bound`'s "`&str` does not
+    /// convert", which would not say what a `step` takes.
+    #[gtest]
+    fn a_step_string_other_than_any_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { weight => { step: "0.5" } } }),
+            contains_substring("`step` takes a number or `\"any\"`")
         );
     }
 }

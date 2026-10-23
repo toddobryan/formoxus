@@ -33,3 +33,12 @@ impl From<f64> for Bound {
         Bound::Float(v)
     }
 }
+
+/// A `step` attribute's value: a number, or `"any"` to switch the implicit
+/// step off. The one attribute that takes either, so the one user of
+/// [`AttrType::Step`](crate::AttrType::Step).
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum Step {
+    Any,
+    By(Bound),
+}

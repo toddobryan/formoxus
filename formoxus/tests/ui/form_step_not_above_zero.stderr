@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `step` must be greater than zero
+  --> tests/ui/form_step_not_above_zero.rs:15:46
+   |
+15 |             level => { widget: number, step: 0 },
+   |                                              ^ evaluation of `main::_` failed here

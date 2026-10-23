@@ -1,7 +1,7 @@
 //! What crosses a server-fn boundary, in both directions.
 //!
 //! Neither [`Form`] nor [`FormState`] can cross one. `Form` holds `Signal`s and
-//! a `Callback`; `FormState` holds `Vec<Box<dyn FormMember>>`, and trait objects
+//! a `Callback`; `FormState` holds `Vec<Box<dyn Node>>`, and trait objects
 //! do not deserialize. [`FormSpec`] holds `fn` pointers for the validator and
 //! every custom widget.
 //!
@@ -53,7 +53,7 @@ use crate::{
     Path,
     error::ValidationMessage,
     form::{FormErrors, FormSpec, form_for},
-    members::ValuesByPath,
+    nodes::ValuesByPath,
 };
 
 /// A form's mutable state, as plain data: raw values by leaf path, plus

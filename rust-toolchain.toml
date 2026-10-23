@@ -1,0 +1,10 @@
+# The one toolchain every machine and CI's gating jobs build with. tests/ui/
+# pins rustc's exact wording and spans, so two machines on different
+# `stable`s disagree about the goldens (2026-10-21: 1.96 and 1.98 each
+# re-blessed form_constraint_on_an_optional_enum the other's way). Bump
+# deliberately, with CI's pins in .github/workflows/ci.yml and any
+# regenerated goldens in the same commit.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = ["wasm32-unknown-unknown"]

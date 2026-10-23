@@ -25,14 +25,15 @@ mod buttons;
 mod elements;
 mod fixed_keys;
 mod input_types;
-mod slot_key;
-mod widgets;
+mod widget_names;
 
-pub use attrs::{Attr, AttrKey, AttrType, AttrValue, FieldType, FieldTypeWithOptional, Owner};
-pub use bound::Bound;
+pub use attrs::{
+    Attr, AttrKey, AttrSet, AttrType, AttrValue, FieldType, FieldTypeSet, FieldTypeWithOptional,
+    Owner,
+};
+pub use bound::{Bound, Step};
 pub use buttons::{ButtonType, Invocation};
-pub use elements::{Element, FieldControl};
+pub use elements::{HtmlElement, Tag};
 pub use fixed_keys::FixedKey;
-pub use input_types::{InputType, RenderedInputType};
-pub use slot_key::SlotKey;
-pub use widgets::{BuiltinWidget, Part};
+pub use input_types::InputType;
+pub use widget_names::WidgetName;

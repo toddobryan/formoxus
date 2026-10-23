@@ -6,8 +6,9 @@
 //! the expansion is exercised end to end rather than as tokens.
 
 use facet::Facet;
+use formoxus::attrs::Tag;
 use formoxus::form;
-use formoxus::members::ValuesByPath;
+use formoxus::nodes::ValuesByPath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
@@ -156,7 +157,7 @@ fn a_validator_fn_item_coerces_to_the_fn_pointer() {
 #[gtest]
 fn a_form_validator_rejects_a_model_whose_fields_are_each_valid() {
     // The point of a *form* validator: every field passes on its own, so no
-    // member reports an error, and the only thing that can reject this model is
+    // node reports an error, and the only thing that can reject this model is
     // a check over the whole of it.
     let shouted = Article {
         headline: "TREES ARE GOOD".to_string(),
@@ -614,31 +615,40 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
     );
 }
 
-// ── `custom(Widget)` ─────────────────────────────────────────────────────
+// ── A dev's own widget ───────────────────────────────────────────────────
 //
-// The escape hatch for a value kind no built-in widget can serve. These are
+// `widget: ShoutyWidget`, a path to a type implementing `Widget`. These are
 // here, and not as an inline `mod tests`, for the usual reason: a custom
-// widget is a component in the CONSUMING crate, which is exactly what the
-// macro has to expand against.
+// widget is a type in the CONSUMING crate, which is exactly what the macro has
+// to expand against.
 
-/// Stands in for `ui::MarkdownInput` and the source picker — a component taking
-/// the `(values, props)` pair every built-in widget gets.
+/// Stands in for `ui::MarkdownInput` and the source picker.
 ///
-/// It reads `props` to prove the boundary arrives intact, and calls `use_hook`
-/// to prove the widget gets a component scope of its own. That second part is
-/// the load-bearing one: the real widgets need `use_resource` (to fetch a
-/// picker's choices) and `use_signal` (to hold a preview toggle), which a plain
-/// function call from `render_widget` could not provide.
+/// It reads `props` to prove the boundary arrives intact, and its view calls
+/// `use_hook` to prove a widget can reach a component scope of its own. That
+/// second part is the load-bearing one: the real widgets need `use_resource`
+/// (to fetch a picker's choices) and `use_signal` (to hold a preview toggle),
+/// which `Widget::render`, a plain method, may not call itself.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ShoutyWidget;
+
+impl formoxus::widgets::Widget for ShoutyWidget {
+    const NAME: &'static str = "shouty";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
+
+    /// `render` may not call hooks, so it hands off to a component that does.
+    fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
+        let label = props.label.unwrap_or_default();
+        rsx! { ShoutyView { path: props.path, label } }
+    }
+}
+
 #[component]
-fn ShoutyWidget(
-    values: formoxus::widgets::ValuesStore,
-    props: formoxus::widgets::FieldProps,
-) -> Element {
-    let _ = values;
+fn ShoutyView(path: String, label: String) -> Element {
     let marker = use_hook(|| "scope-ok");
-    let label = props.label.clone().unwrap_or_default();
     rsx! {
-        div { class: "shouty", "data-marker": "{marker}", "data-path": "{props.path}",
+        div { class: "shouty", "data-marker": "{marker}", "data-path": "{path}",
             "{label.to_uppercase()}"
         }
     }
@@ -651,7 +661,7 @@ fn CustomSecret() -> Element {
             &a_trip(),
             form! {
                 Trip {
-                    secret => { widget: custom(ShoutyWidget) },
+                    secret => { widget: ShoutyWidget },
                 }
             },
         )
@@ -758,8 +768,8 @@ fn failing_paths(errors: &FormErrors) -> Vec<String> {
 }
 
 /// The whole chain the macro was the last missing link in: `form!` -> the
-/// `.with_attrs` call -> `FieldSpec` -> `apply_specs` -> `FormField` ->
-/// `FormField::check`. `specs.rs` covers the same ground through a hand-built
+/// `.with_attrs` call -> `FieldSpec` -> the shape walk -> `FieldNode` ->
+/// its attribute check. `specs.rs` covers the same ground through a hand-built
 /// `FormSpec`; this is the only test that proves the macro reaches it.
 #[gtest]
 fn constraints_from_the_macro_reach_validation() {
@@ -840,9 +850,10 @@ struct Listing {
 
 /// Every place a constraint may legitimately sit, so the `const _` checks
 /// `form!` emits must let each through: an `Option` is judged by what it
-/// holds, a nested field and a `[]` row by the leaf's own type, and a newtype
-/// is let through because its inside is out of reach at compile time. The
-/// rejections are trybuild goldens in `tests/ui/`, since they cannot compile.
+/// holds, and a nested field and a `[]` row by the leaf's own type. A newtype
+/// is NOT among them: it has no default field, so a setting on one does not
+/// compile (`tests/ui/form_setting_on_a_newtype`). The rejections are trybuild
+/// goldens in `tests/ui/`, since they cannot compile.
 #[gtest]
 fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
     let spec = || {
@@ -852,8 +863,7 @@ fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
                 hall.city => { min_length: 1 },
                 hall.seats => { min: 1, max: 500 },
                 tags[] => { pattern: "[a-z]+" },
-                rows[].price => { min: 0, max: 99.5 },
-                bio => { max_length: 280 },
+                rows[].price => { min: 0.0, max: 99.5 },
             }
         }
     };
@@ -877,14 +887,13 @@ struct Gauge {
 }
 
 /// A bound AT the limit of the field's type is ordinary (`min: 0` on a `u32`
-/// most of all), so the range check is inclusive. And `min: 2.0` on an integer
-/// field is whole, so it is used as 2 rather than rejected.
+/// most of all), so the range check is inclusive.
 #[gtest]
 fn bounds_at_the_limits_of_the_type_are_accepted() {
     let spec = || {
         form! {
             Gauge {
-                count => { min: 2.0, max: u32::MAX },
+                count => { min: 2, max: u32::MAX },
                 small => { min: 0, max: u8::MAX },
                 wide => { min: i64::MIN, max: i64::MAX },
                 level => { min: -f32::MAX, max: f32::MAX },
@@ -901,6 +910,6 @@ fn bounds_at_the_limits_of_the_type_are_accepted() {
         ])
     };
     expect_that!(Submission::accept(spec(), &fields("2")).is_ok(), eq(true));
-    let errors = Submission::accept(spec(), &fields("1")).expect_err("1 is below `min: 2.0`");
+    let errors = Submission::accept(spec(), &fields("1")).expect_err("1 is below `min: 2`");
     expect_that!(failing_paths(&errors), elements_are![eq("count")]);
 }

@@ -1,20 +1,45 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, BuiltinWidget, FieldType};
+use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
-use super::errors::FieldErrors;
-use super::label::field_label;
-use super::types::{Choice, FieldProps};
+use super::field_row::{LabelSide, field_row};
+use super::types::bool_choices;
 use super::values::{get_current, write_value};
-use crate::fields::FieldAttrs;
-use crate::members::ValuesStore;
+use crate::widgets::{Widget, widget_props::WidgetProps};
+
+/// `<select>`, the default for an optional `bool` and for a field with
+/// `choices`. Over a `bool` without choices it offers true and false.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Select;
+
+impl Widget for Select {
+    const NAME: &'static str = WidgetName::Select.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Select);
+
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Select];
+
+    /// `Bool` on its own, offering true and false; any other type only with
+    /// `choices`.
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
+
+    const ACCEPTS_OPTIONAL: bool = true;
+
+    const TAKES_CHOICES: bool = true;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        rsx! {
+            SelectView { widget_props: props }
+        }
+    }
+}
 
 /// A `<select>` over a fixed set of choices, bound to one path in the value map.
 ///
 /// Reads its current value from `values` like every other leaf input rather
 /// than taking it as a prop. That is not just consistency: computing `selected`
-/// for a prop would mean reading the store in `FormField::render`, a plain
+/// for a prop would mean reading the store in `Field::render`, a plain
 /// function with no scope of its own, which subscribes *the caller* — so one
 /// change here would re-render the whole form. [`VariantSelect`] takes its
 /// selection as a prop precisely because a variant choice is NOT a leaf and has
@@ -27,71 +52,51 @@ use crate::members::ValuesStore;
 /// the silent `unwrap_or_default()` it needs when an index doesn't match — buys
 /// nothing and loses the value.
 #[component]
-pub fn Select(
-    field_type: FieldType,
-    field_attrs: FieldAttrs,
-    values: ValuesStore,
-    choices: Vec<Choice>,
-    props: FieldProps,
-    #[props(extends = select)] attrs: Vec<Attribute>,
-) -> Element {
-    let my_widget = BuiltinWidget::Select;
-    let is_invalid = props.is_invalid();
+pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
+    // Not `props`: Dioxus reads a component's lone `props` parameter as its
+    // whole props struct, which `WidgetProps` is not.
+    let props = widget_props;
+    let values = props.values;
+    let path = props.path.clone();
+    let choices = props.choices.clone().unwrap_or_else(bool_choices);
+    let current = get_current(&path, values);
+    let required = props.attrs.contains(Attr::Required);
+    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
 
-    let class = field_attrs.class(props.classes.part(my_widget, "select"), is_invalid);
-    let attrs: Vec<Attribute> = field_attrs.merge_with_attrs(field_type, attrs);
-
-    let field_class = props.classes.part_class(my_widget, "div", is_invalid);
-
-    let current = get_current(&props.path, values);
-    let required = field_attrs.contains(Attr::Required);
-    let label = field_label(
-        &props.id,
-        props.label,
-        required,
-        &props.classes,
-        is_invalid,
-        my_widget,
-    );
-
-    rsx! {
-        div {
-            class: field_class,
-            {label}
-            select {
-                class: class,
-                id: props.id,
-                // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
-                // `name` or `distribute_form_values` would never see it.
-                name: "{props.path}",
-                // No branch on emptiness: the "no value" option's value is `""`,
-                // and `""` IS absence at both boundaries, so the same write does
-                // for every option.
-                onchange: move |e: FormEvent| write_value(&props.path, values, e.value()),
-                // Last among attributes, before the options: rsx! reads
-                // anything after a spread as children, and the options ARE
-                // children, so this sits between the two.
-                ..attrs,
-                // Required and unanswered: an unselectable placeholder, so the
-                // browser's own validation blocks submit and the user can't
-                // choose their way back to "unanswered". Optional: a real
-                // selectable entry, because absent is a legitimate answer.
-                if required && current.is_empty() {
-                    option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
-                } else if !required {
-                    option { value: "", selected: current.is_empty(), "{ABSENT_DISPLAY}" }
-                }
-                for choice in choices {
-                    option {
-                        value: "{choice.value}",
-                        selected: choice.value == current,
-                        "{choice.display}"
-                    }
+    let control = rsx! {
+        select {
+            class: props.control_class::<Select>(Tag::Select),
+            id: "{props.id}",
+            // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
+            // `name` or `distribute_form_values` would never see it.
+            name: "{path}",
+            // No branch on emptiness: the "no value" option's value is `""`,
+            // and `""` IS absence at both boundaries, so the same write does
+            // for every option.
+            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            // Last among attributes, before the options: rsx! reads
+            // anything after a spread as children, and the options ARE
+            // children, so this sits between the two.
+            ..attrs,
+            // Required and unanswered: an unselectable placeholder, so the
+            // browser's own validation blocks submit and the user can't
+            // choose their way back to "unanswered". Optional: a real
+            // selectable entry, because absent is a legitimate answer.
+            if required && current.is_empty() {
+                option { value: "", selected: true, disabled: true, hidden: true, "Choose..." }
+            } else if !required {
+                option { value: "", selected: current.is_empty(), "{ABSENT_DISPLAY}" }
+            }
+            for choice in choices {
+                option {
+                    value: "{choice.value}",
+                    selected: choice.value == current,
+                    "{choice.display}"
                 }
             }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }
-    }
+    };
+    field_row::<Select>(&props, required, LabelSide::Before, control)
 }
 
 /// The "leave this out" entry in an optional enum's picker.
@@ -100,7 +105,7 @@ pub fn Select(
 /// cosmetic one: the `<select>` carries no `name`, so nothing it holds is ever
 /// collected by `FormData::values()` and this text cannot come back as a value.
 /// That is what keeps it from reintroducing the sentinel problem
-/// [`VariantChoice`](crate::members::VariantChoice) exists to avoid — a model
+/// [`VariantChoice`](crate::nodes::VariantChoice) exists to avoid — a model
 /// with a genuine `None` variant would otherwise be indistinguishable from an
 /// unanswered optional field. What the select actually emits is `""`, which
 /// `VariantSelect` turns into `ChooseVariant { variant: None }`.

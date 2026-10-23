@@ -25,6 +25,8 @@ pub mod models;
 mod author_attrs;
 #[path = "suite/browser_validation.rs"]
 mod browser_validation;
+#[path = "suite/builtin_widgets.rs"]
+mod builtin_widgets;
 #[path = "suite/buttons.rs"]
 mod buttons;
 #[path = "suite/choices.rs"]
@@ -55,6 +57,8 @@ mod optional_containers;
 mod roundtrip;
 #[path = "suite/snapshot.rs"]
 mod snapshot;
+#[path = "suite/spec_constructors.rs"]
+mod spec_constructors;
 #[path = "suite/specs.rs"]
 mod specs;
 #[path = "suite/submissions.rs"]
@@ -82,6 +86,28 @@ pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
     dioxus_ssr::render(&dom)
+}
+
+/// `html` with its form's random id replaced by `FORMID`, so two renders of
+/// one form compare equal.
+///
+/// The id is read off the first `id="…"` that starts with one: 8 characters
+/// and a `-`, as `NodeContext::id` builds them. Replacing that exact string,
+/// rather than anything id-shaped, cannot touch a class or a value.
+pub fn without_form_id(html: &str) -> String {
+    let form_id = html.split("id=\"").skip(1).find_map(|rest| {
+        let candidate = rest.get(..9)?;
+        let (id, dash) = candidate.split_at(8);
+        let mut chars = id.chars();
+        let looks_like_one = dash == "-"
+            && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric());
+        looks_like_one.then(|| id.to_string())
+    });
+    match form_id {
+        Some(id) => html.replace(&id, "FORMID"),
+        None => html.to_string(),
+    }
 }
 
 // ── Driving a real interaction ───────────────────────────────────────────

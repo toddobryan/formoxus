@@ -1,0 +1,5 @@
+error: `choices` cannot be combined with other constraints (like `max_length`), so you must make sure each choice meets these constraints yourself
+  --> tests/ui/form_choices_with_a_constraint.rs:17:23
+   |
+17 |             code => { max_length: 10, widget: select, choices: STATES },
+   |                       ^^^^^^^^^^

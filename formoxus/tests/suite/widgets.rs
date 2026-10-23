@@ -10,9 +10,12 @@ use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, set_event_converter,
 };
 use facet::Facet;
-use formoxus::attrs::RenderedInputType;
-use formoxus::fields::FieldAttrs;
+use formoxus::field_attrs::FieldAttrs;
 use formoxus::prelude::*;
+use formoxus::widgets::{
+    AnyWidget, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
+    NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
+};
 use googletest::prelude::*;
 use std::any::Any;
 use std::rc::Rc;
@@ -160,36 +163,39 @@ fn signals_are_populated_from_the_model() {
 
 // ── The store-bound widget boundary ──────────────────────────────────────
 //
-// These drive `ScalarWidget` directly rather than through `FormMember::render`,
-// so they stay meaningful regardless of how the members wire it up.
+// These drive a widget's `render` directly rather than through
+// `Node::render`, so they stay meaningful regardless of how the nodes wire it
+// up.
 
-use formoxus::attrs::FieldType;
-use formoxus::widgets::{BuiltinWidget, FieldProps, ScalarWidget, WidgetType};
+use formoxus::nodes::ValuesStore;
+use formoxus::widgets::Widget;
+use formoxus::widgets::WidgetProps;
 
 const ID: &str = "rand0123-name";
+
+/// What a `String` field with no constraints hands its widget. Spelled out
+/// because nothing upstream computes it, which is the point: these pin the
+/// widget boundary independently of how the nodes wire it up.
+fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetProps {
+    WidgetProps {
+        id: ID.into(),
+        path: path.to_string(),
+        label: label.map(str::to_string),
+        errors: Vec::new(),
+        attrs: FieldAttrs::default(),
+        extra_attrs: Vec::new(),
+        values,
+        classes: Rc::new(Classes::default()),
+        choices: None,
+    }
+}
 
 #[component]
 fn PopulatedInput() -> Element {
     let values =
         use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "title".to_string(),
-                label: Some("Title".to_string()),
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {TextInput.render(plain_props(values, "title", Some("Title")))}
     }
 }
 
@@ -199,23 +205,7 @@ fn EmptyInput() -> Element {
     // chosen after mount produces.
     let values = use_store(HashMap::<String, String>::new);
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Text)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "shape.radius".to_string(),
-                label: None,
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {TextInput.render(plain_props(values, "shape.radius", None))}
     }
 }
 
@@ -263,7 +253,7 @@ fn type_into(app: fn() -> Element, text: &str) -> String {
             Mutation::NewEventListener { name, id } if name == "input" => Some(*id),
             _ => None,
         })
-        .expect("ScalarWidget should have registered an `oninput` listener");
+        .expect("the widget should have registered an `oninput` listener");
 
     // Listeners are registered against `PlatformEventData`, not `FormData` — the
     // `oninput` attribute macro does that conversion itself, inside the handler.
@@ -419,7 +409,7 @@ fn two_copies_of_a_form_get_different_ids_and_the_same_names() {
 // ── `type=` reaching the rendered input ──────────────────────────────────
 //
 // `Input` renders every `<input type=…>` there is, so the type has to travel
-// from the spec's `WidgetType` all the way to the attribute. Before these, both
+// from the widget set on the field all the way to the attribute. Before these, both
 // leaves hardcoded `type="text"` and a `password` override rendered a visible
 // text box.
 
@@ -435,55 +425,51 @@ struct OneNumber {
     count: u32,
 }
 
-fn rendered_with(widget: WidgetType) -> String {
+fn rendered_with(widget: impl Into<AnyWidget>) -> String {
     // A thread-local rather than a prop, because `render_to_html` takes a plain
     // `fn() -> Element` — there is nowhere to thread an argument through.
-    WIDGET.replace(Some(widget));
+    WIDGET.replace(Some(widget.into()));
     render_to_html(WithWidget)
 }
 
 thread_local! {
-    static WIDGET: std::cell::RefCell<Option<WidgetType>> =
+    static WIDGET: std::cell::RefCell<Option<AnyWidget>> =
         const { std::cell::RefCell::new(None) };
 }
 
 #[component]
 fn WithWidget() -> Element {
-    let widget = WIDGET.with_borrow(|c| c.expect("set by rendered_with"));
-    let form = use_form(|| {
-        empty_form(FormSpec::<OneString>::default().with_custom_widget("secret", widget))
-    });
+    let widget = WIDGET.with_borrow(|c| c.clone().expect("set by rendered_with"));
+    let form =
+        use_form(|| empty_form(FormSpec::<OneString>::default().with_widget("secret", widget)));
     form.render(using_fns! {})
 }
 
 #[gtest]
 fn every_input_type_reaches_the_type_attribute() {
-    // Every variant that is selectable, with the `type=` HTML actually wants.
-    // `tel` and `datetime-local` are the two where the variant name and the
+    // Every text-like input widget, with the `type=` HTML actually wants.
+    // `tel` and `datetime-local` are the two where the widget's name and the
     // attribute diverge, which is the whole reason `html_type` exists.
     let cases = [
-        (RenderedInputType::Text, "text"),
-        (RenderedInputType::Password, "password"),
-        (RenderedInputType::Number, "number"),
-        (RenderedInputType::Email, "email"),
-        (RenderedInputType::Telephone, "tel"),
-        (RenderedInputType::Url, "url"),
-        (RenderedInputType::Search, "search"),
-        (RenderedInputType::Color, "color"),
-        (RenderedInputType::Date, "date"),
-        (RenderedInputType::Time, "time"),
-        (RenderedInputType::DatetimeLocal, "datetime-local"),
-        (RenderedInputType::Month, "month"),
-        (RenderedInputType::Week, "week"),
+        (AnyWidget::from(TextInput), "text"),
+        (PasswordInput.into(), "password"),
+        (NumberInput.into(), "number"),
+        (EmailInput.into(), "email"),
+        (TelInput.into(), "tel"),
+        (UrlInput.into(), "url"),
+        (SearchInput.into(), "search"),
+        (ColorInput.into(), "color"),
+        (DateInput.into(), "date"),
+        (TimeInput.into(), "time"),
+        (DatetimeLocalInput.into(), "datetime-local"),
+        (MonthInput.into(), "month"),
+        (WeekInput.into(), "week"),
     ];
-    for (input_type, expected) in cases {
-        let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(input_type)));
+    for (widget, expected) in cases {
+        let name = widget.name();
+        let html = rendered_with(widget);
         let wanted = format!("type=\"{expected}\"");
-        expect_that!(
-            html,
-            contains_substring(wanted.as_str()),
-            "for {input_type:?}"
-        );
+        expect_that!(html, contains_substring(wanted.as_str()), "for {name}");
     }
 }
 
@@ -507,9 +493,7 @@ fn a_numeric_field_can_still_ask_for_a_number_input() {
     // The override half of `a_numeric_field_still_renders_as_text`: text is the
     // DEFAULT, not the only option. Someone who wants the spinner and the mobile
     // numeric keypad, and accepts that the browser may hand back `""`, can say so.
-    let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(
-        RenderedInputType::Number,
-    )));
+    let html = rendered_with(NumberInput);
     expect_that!(html, contains_substring("type=\"number\""));
 }
 
@@ -532,10 +516,7 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                 &OneString {
                     secret: "hunter2".to_string(),
                 },
-                FormSpec::<OneString>::default().with_custom_widget(
-                    "secret",
-                    WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),
-                ),
+                FormSpec::<OneString>::default().with_widget("secret", PasswordInput),
             )
         });
         form.render(using_fns! {})
@@ -558,9 +539,7 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
     // The wrapper every other leaf uses is a `label` with a caption and a
     // required marker. Around `type="hidden"` that puts visible text and an
     // asterisk on screen beside a widget nobody can see.
-    let html = rendered_with(WidgetType::Builtin(BuiltinWidget::Input(
-        RenderedInputType::Hidden,
-    )));
+    let html = rendered_with(HiddenInput);
     expect_that!(html, contains_substring("type=\"hidden\""));
     expect_that!(html, not(contains_substring("<label")));
     expect_that!(html, not(contains_substring("field-label")));
@@ -576,23 +555,7 @@ fn PasswordWithEcho() -> Element {
     let values = use_store(HashMap::<String, String>::new);
     let stored = values.read().get("secret").cloned().unwrap_or_default();
     rsx! {
-        ScalarWidget {
-            // What a `String` field with no constraints hands down. Spelled
-            // out because these drive `ScalarWidget` directly, so nothing
-            // upstream computes it, which is the point: they pin the widget
-            // boundary independently of how the members wire it up.
-            field_type: FieldType::Text,
-            field_attrs: FieldAttrs::default(),
-            widget: WidgetType::Builtin(BuiltinWidget::Input(RenderedInputType::Password)),
-            values,
-            props: FieldProps {
-                id: ID.into(),
-                path: "secret".to_string(),
-                label: Some("Secret".to_string()),
-                classes: Rc::new(Classes::default()),
-                errors: Vec::new(),
-            },
-        }
+        {PasswordInput.render(plain_props(values, "secret", Some("Secret")))}
         p { class: "echo", "{stored}" }
     }
 }

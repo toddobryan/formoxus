@@ -1,7 +1,7 @@
 //! What a button IS, as `form!` spells it: its type and when its handler runs.
 //!
 //! Here rather than in `formoxus` so `form!` reads the same names it expands
-//! to, as it does with [`crate::BuiltinWidget`]; `formoxus` re-exports both
+//! to, as it does with [`crate::WidgetName`]; `formoxus` re-exports both
 //! as `formoxus::buttons::{ButtonType, Invocation}`.
 
 use crate::attrs::str_eq;
