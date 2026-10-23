@@ -1,9 +1,7 @@
 //! `<select>` over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{
-    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName,
-};
+use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use super::field_row::{LabelSide, field_row};
 use super::types::bool_choices;
@@ -18,7 +16,7 @@ pub struct Select;
 impl Widget for Select {
     const NAME: &'static str = WidgetName::Select.form_name();
 
-    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Select));
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Select);
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Select];
 

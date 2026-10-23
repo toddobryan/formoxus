@@ -33,8 +33,7 @@ impl Field for BoolField {
     }
 
     /// `required_true` as HTML `required`, which on a checkbox means "must be
-    /// ticked". On a select or radio group it means something else, and the
-    /// attribute table keeps it off those (`true_and_on`).
+    /// ticked".
     fn widget_attrs(&self) -> FieldAttrs {
         let attrs = FieldAttrs::default();
         if self.required_true {

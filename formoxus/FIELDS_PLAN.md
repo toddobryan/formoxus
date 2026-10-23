@@ -1067,7 +1067,7 @@ widgets become ONE concept.
       `RenderedInputType` itself STAYS: `BuiltinWidget::Input` and
       `tests/suite/builtin_widgets.rs` still read it, so it goes with them
       in 16–17.
-  - [ ] **15.** **Flatten `FieldControl` into `HtmlElement`** (Todd, 2026-10-20):
+  - [x] **15.** **Flatten `FieldControl` into `HtmlElement`** (Todd, 2026-10-20):
       `HtmlElement` becomes `Div | Fieldset | Label | Legend | Input(InputType)
       | Textarea | Select`. Its jobs are gone: typing `form_control()` and
       `parts()` leaves with `BuiltinWidget`, and `true_and_on(…)` (with
@@ -1076,6 +1076,65 @@ widgets become ONE concept.
       key is a field setting, server-checked and emitted only where it fits.
       Drop the three `true_and_on` rows' extra arms. CLAUDE.md's "control"
       exception shrinks to `fx-control`.
+      Surveyed 2026-10-23. Nothing in `tests/`, `e2e/` or `examples/` names
+      `FieldControl`, and nothing outside `attrs.rs`'s own tests calls
+      `is_allowed`/`is_also_validated_on`. `BuiltinWidget` is still alive
+      (until 17), so it is converted here, not deleted.
+
+      Line numbers as of 2026-10-23, after 15a's first edits; they drift
+      as you go, so work each file bottom-up.
+
+      - [x] **15a.** `elements.rs`: `FieldControl` and its `From` impl gone;
+          `formoxus-spec/src/lib.rs:37` no longer re-exports it. LEFT: a doc
+          comment on `HtmlElement` (`elements.rs:3`), which now names every
+          element a widget part can be, bare controls included.
+      - [x] **15b.** `formoxus-spec/src/attrs.rs`, the table: each `on:
+          Control(…)` loses its wrapper (`Control(Input(Text | Search) |
+          Textarea)` → `Input(Text | Search) | Textarea`), at 338, 354, 380,
+          407, 415, 432, 442, 459, 496, 504, 512, 523, 531, 540, 549, 560,
+          568, 578, 590, 605, 622, 630, 647, 697, 707, 715. (`is_valid_on`'s
+          `FieldControl::*` glob, 186, is already gone.)
+      - [x] **15c.** `attrs.rs`, `true_and_on` goes:
+          - rows: `Max` 505, `Min` 524, `RequiredTrue` 606 → `validated: true`;
+          - `validated_flag!` (95–113): the `true_and_on` arm (102–104) and
+            the message's mention of it (107);
+          - the column doc (126–129) and its pointer to `is_allowed` (131–132);
+          - the macro pattern's `$( ( $also_on:pat ) )?` (141) and the
+            `$($also_on)?` passed to `validated_flag!` (197);
+          - `is_also_validated_on` with its doc (201–210);
+          - the whole `impl Attr { is_allowed }` block (302–322);
+          - `formoxus/src/fields/bool_field.rs:37`, a doc citing `true_and_on`.
+      - [x] **15d.** `attrs.rs` tests:
+          - delete 1478–1594, one block: the `true_and_on(…)` section
+            (`all_controls`, `only_three_rows_…`, `no_extra_control_…`) and
+            the acceptance-rule section (`is_allowed_follows_the_rule`,
+            `min_on_a_text_input_is_allowed_but_pattern_on_a_textarea_is_not`),
+            stopping before `each_attribute_takes_the_right_type_of_value`;
+          - flatten `TEXTAREA`/`SELECT` (1166–1167), 1338 and 1667.
+      - [x] **15e.** `formoxus-spec/src/widgets.rs` (`BuiltinWidget`, lives
+          until 17):
+          - the import (1) drops `FieldControl`;
+          - `HtmlElement::Control($control)` → `$control` (27, 43; also
+            153–154, 162);
+          - `FieldControl::` → `HtmlElement::` (169–188);
+          - `form_control()` (199–206) returns `HtmlElement`;
+          - the test's filter (409) matches `HtmlElement::Input(_) |
+            HtmlElement::Textarea | HtmlElement::Select`, and 423 loses
+            `HtmlElement::Control(…)`.
+      - [x] **15f.** `formoxus`: each import drops `FieldControl` and each
+          `HtmlElement::Control(FieldControl::X)` becomes `HtmlElement::X`:
+          - `widgets/input.rs` 10, 38–39, 126;
+          - `widgets/select.rs` 5, 21;
+          - `widgets/textarea.rs` 5, 19;
+          - `field_kind.rs` 25, 94;
+          - `lib.rs:60` drops `FieldControl` (it must go now to compile; the
+            rest of 16 waits).
+      - [x] **15g.** `formoxus-macros/src/form/field.rs` 5, 98, the same edit.
+      - [x] **15h.** `CLAUDE.md` 44–61: the "control" exception is only
+          `fx-control` (49–51); drop the `FieldControl` bullet (52–55) and the
+          `HtmlElement` sentence's `Control(FieldControl)` and "due to
+          flatten" note (56–61). (Memory is Claude's, in 17.)
+      - [x] **15i.** `just ci`; the goldens and snapshots should not move.
   - [ ] **16.** Re-exports: `formoxus/src/lib.rs:60` and `widgets.rs:75`.
   - [ ] **17.** (Claude) `widget_matrix` (it walks `BuiltinWidget::ALL`), the
       tests that compare against `BuiltinWidget`, the README, and memory.

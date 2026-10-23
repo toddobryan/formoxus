@@ -1,9 +1,7 @@
 //! The `<textarea>`.
 
 use dioxus::prelude::*;
-use formoxus_spec::{
-    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName,
-};
+use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use super::field_row::{LabelSide, field_row};
 use super::values::{get_current, write_value};
@@ -16,7 +14,7 @@ pub struct Textarea;
 impl Widget for Textarea {
     const NAME: &'static str = WidgetName::Textarea.form_name();
 
-    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Textarea));
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Textarea);
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Textarea];
 

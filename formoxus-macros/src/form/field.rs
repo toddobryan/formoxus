@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_spec::{Attr, AttrType, FieldControl, FieldType, HtmlElement, Owner};
+use formoxus_spec::{Attr, AttrType, FieldType, HtmlElement, Owner};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -95,7 +95,7 @@ fn enum_refusal(attr: Attr) -> String {
             "`{name}` cannot go on an enum field: it renders a variant picker, which submits \
             no value to check"
         )
-    } else if !attr.is_valid_on(HtmlElement::Control(FieldControl::Select)) {
+    } else if !attr.is_valid_on(HtmlElement::Select) {
         format!("`{name}` cannot go on an enum field: its variant `<select>` does not take it")
     } else {
         format!("`{name}` cannot go on an enum field")

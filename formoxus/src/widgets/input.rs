@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
+    Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
 };
 
 use super::field_row::{LabelSide, field_row};
@@ -35,9 +35,7 @@ macro_rules! text_like_inputs {
 
                 const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
 
-                const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(
-                    FieldControl::Input(InputType::$variant),
-                ));
+                const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::$variant));
 
                 /// Never `Bool`: a text box cannot say true or false. A number
                 /// is accepted, since the field parses the text back.
@@ -123,9 +121,7 @@ pub struct CheckboxInput;
 impl Widget for CheckboxInput {
     const NAME: &'static str = WidgetName::CheckboxInput.form_name();
 
-    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(
-        InputType::Checkbox,
-    )));
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Checkbox));
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Input, Tag::Label];
 

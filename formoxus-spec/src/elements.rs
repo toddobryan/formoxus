@@ -1,12 +1,17 @@
 use crate::{InputType, attrs::str_eq};
 
+/// An element a widget part can be: the wrappers (`div`, `fieldset`,
+/// `label`, `legend`) and the bare form controls. What attribute validity is
+/// keyed on, so an `<input>` carries its `type`, which HTML's rules depend on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HtmlElement {
     Div,
     Fieldset,
     Label,
     Legend,
-    Control(FieldControl),
+    Textarea,
+    Select,
+    Input(InputType),
 }
 
 impl HtmlElement {
@@ -16,27 +21,10 @@ impl HtmlElement {
             HtmlElement::Fieldset => "fieldset",
             HtmlElement::Label => "label",
             HtmlElement::Legend => "legend",
-            HtmlElement::Control(field_control) => match field_control {
-                FieldControl::Input(_) => "input",
-                FieldControl::Textarea => "textarea",
-                FieldControl::Select => "select",
-            },
+            HtmlElement::Input(_) => "input",
+            HtmlElement::Textarea => "textarea",
+            HtmlElement::Select => "select",
         }
-    }
-}
-
-/// The HTML tag in a field (including the label, errors, etc.) that the
-/// user actually attaches input to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FieldControl {
-    Input(InputType),
-    Textarea,
-    Select,
-}
-
-impl From<FieldControl> for HtmlElement {
-    fn from(value: FieldControl) -> Self {
-        Self::Control(value)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{FieldControl, FieldType, HtmlElement, InputType, RenderedInputType, attrs::str_eq};
+use crate::{FieldType, HtmlElement, InputType, RenderedInputType, attrs::str_eq};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinWidget {
@@ -24,7 +24,7 @@ macro_rules! labelled {
             &[
                 Part::from_element(HtmlElement::Div),
                 Part::from_element(HtmlElement::Label),
-                Part::from_element(HtmlElement::Control($control)),
+                Part::from_element($control),
             ]
         }
     };
@@ -40,7 +40,7 @@ macro_rules! grouped {
                 Part::from_element(HtmlElement::Fieldset),
                 Part::from_element(HtmlElement::Legend),
                 Part::from_element(HtmlElement::Div),
-                Part::from_element(HtmlElement::Control($control)),
+                Part::from_element($control),
                 Part::from_element(HtmlElement::Label),
             ]
         }
@@ -149,43 +149,37 @@ impl BuiltinWidget {
         use RenderedInputType as R;
         match self {
             Self::Input(R::Hidden) => {
-                const {
-                    &[Part::from_element(HtmlElement::Control(
-                        FieldControl::Input(InputType::Hidden),
-                    ))]
-                }
+                const { &[Part::from_element(HtmlElement::Input(InputType::Hidden))] }
             }
             Self::Input(R::Checkbox) => {
                 const {
                     &[
                         Part::from_element(HtmlElement::Div),
-                        Part::from_element(HtmlElement::Control(FieldControl::Input(
-                            InputType::Checkbox,
-                        ))),
+                        Part::from_element(HtmlElement::Input(InputType::Checkbox)),
                         Part::from_element(HtmlElement::Label),
                     ]
                 }
             }
-            Self::Input(R::Text) => labelled!(FieldControl::Input(InputType::Text)),
-            Self::Input(R::Password) => labelled!(FieldControl::Input(InputType::Password)),
-            Self::Input(R::Number) => labelled!(FieldControl::Input(InputType::Number)),
-            Self::Input(R::Email) => labelled!(FieldControl::Input(InputType::Email)),
-            Self::Input(R::Telephone) => labelled!(FieldControl::Input(InputType::Telephone)),
-            Self::Input(R::Url) => labelled!(FieldControl::Input(InputType::Url)),
-            Self::Input(R::Search) => labelled!(FieldControl::Input(InputType::Search)),
-            Self::Input(R::Color) => labelled!(FieldControl::Input(InputType::Color)),
-            Self::Input(R::Date) => labelled!(FieldControl::Input(InputType::Date)),
-            Self::Input(R::Time) => labelled!(FieldControl::Input(InputType::Time)),
+            Self::Input(R::Text) => labelled!(HtmlElement::Input(InputType::Text)),
+            Self::Input(R::Password) => labelled!(HtmlElement::Input(InputType::Password)),
+            Self::Input(R::Number) => labelled!(HtmlElement::Input(InputType::Number)),
+            Self::Input(R::Email) => labelled!(HtmlElement::Input(InputType::Email)),
+            Self::Input(R::Telephone) => labelled!(HtmlElement::Input(InputType::Telephone)),
+            Self::Input(R::Url) => labelled!(HtmlElement::Input(InputType::Url)),
+            Self::Input(R::Search) => labelled!(HtmlElement::Input(InputType::Search)),
+            Self::Input(R::Color) => labelled!(HtmlElement::Input(InputType::Color)),
+            Self::Input(R::Date) => labelled!(HtmlElement::Input(InputType::Date)),
+            Self::Input(R::Time) => labelled!(HtmlElement::Input(InputType::Time)),
             Self::Input(R::DatetimeLocal) => {
-                labelled!(FieldControl::Input(InputType::DatetimeLocal))
+                labelled!(HtmlElement::Input(InputType::DatetimeLocal))
             }
-            Self::Input(R::Month) => labelled!(FieldControl::Input(InputType::Month)),
-            Self::Input(R::Week) => labelled!(FieldControl::Input(InputType::Week)),
-            Self::Textarea => labelled!(FieldControl::Textarea),
-            Self::Select | Self::SelectMultiple => labelled!(FieldControl::Select),
-            Self::File => labelled!(FieldControl::Input(InputType::File)),
-            Self::RadioGroup => grouped!(FieldControl::Input(InputType::Radio)),
-            Self::CheckboxMultiple => grouped!(FieldControl::Input(InputType::Checkbox)),
+            Self::Input(R::Month) => labelled!(HtmlElement::Input(InputType::Month)),
+            Self::Input(R::Week) => labelled!(HtmlElement::Input(InputType::Week)),
+            Self::Textarea => labelled!(HtmlElement::Textarea),
+            Self::Select | Self::SelectMultiple => labelled!(HtmlElement::Select),
+            Self::File => labelled!(HtmlElement::Input(InputType::File)),
+            Self::RadioGroup => grouped!(HtmlElement::Input(InputType::Radio)),
+            Self::CheckboxMultiple => grouped!(HtmlElement::Input(InputType::Checkbox)),
         }
     }
 
@@ -196,14 +190,14 @@ impl BuiltinWidget {
     /// `RadioGroup` → `Input(Radio)` (P2-a: its validated attributes go to
     /// the radios, not the fieldset). Not-yet: `SelectMultiple` → `Select`,
     /// `CheckboxMultiple` → `Input(Checkbox)`, `File` → `Input(File)`.
-    pub const fn form_control(&self) -> FieldControl {
+    pub const fn form_control(&self) -> HtmlElement {
         match self {
-            BuiltinWidget::Input(t) => FieldControl::Input(t.to_input_type()),
-            BuiltinWidget::Textarea => FieldControl::Textarea,
-            BuiltinWidget::Select | BuiltinWidget::SelectMultiple => FieldControl::Select,
-            BuiltinWidget::RadioGroup => FieldControl::Input(InputType::Radio),
-            BuiltinWidget::CheckboxMultiple => FieldControl::Input(InputType::Checkbox),
-            BuiltinWidget::File => FieldControl::Input(InputType::File),
+            BuiltinWidget::Input(t) => HtmlElement::Input(t.to_input_type()),
+            BuiltinWidget::Textarea => HtmlElement::Textarea,
+            BuiltinWidget::Select | BuiltinWidget::SelectMultiple => HtmlElement::Select,
+            BuiltinWidget::RadioGroup => HtmlElement::Input(InputType::Radio),
+            BuiltinWidget::CheckboxMultiple => HtmlElement::Input(InputType::Checkbox),
+            BuiltinWidget::File => HtmlElement::Input(InputType::File),
         }
     }
 
@@ -406,7 +400,12 @@ mod tests {
         w.parts()
             .iter()
             .copied()
-            .filter(|p| matches!(p.element, HtmlElement::Control(_)))
+            .filter(|p| {
+                matches!(
+                    p.element,
+                    HtmlElement::Input(_) | HtmlElement::Textarea | HtmlElement::Select
+                )
+            })
             .collect()
     }
 
@@ -418,10 +417,7 @@ mod tests {
         for &w in BuiltinWidget::ALL {
             expect_that!(
                 controls(w),
-                elements_are![field!(
-                    &Part.element,
-                    eq(HtmlElement::Control(w.form_control()))
-                )],
+                elements_are![field!(&Part.element, eq(w.form_control()))],
                 "{w:?}"
             );
         }

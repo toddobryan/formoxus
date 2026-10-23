@@ -44,21 +44,20 @@ does not work.
 **The exception: "control" may name the BARE HTML element, and nothing
 else.** The rule's reason is that no widget renders a bare element, so it says
 nothing about a name for the bare element itself, and "form control" is the
-HTML spec's own term. Two things use it, both deliberately:
+HTML spec's own term. One thing uses it, deliberately: **the CSS class
+`fx-control`**, on the bare `<input>`/`<select>`/`<textarea>`. All emitted
+classes are `fx-`-prefixed; the full list and its reasoning are in
+`.claude/memory/css_class_vocabulary.md`.
 
-- **the CSS class `fx-control`**, on the bare `<input>`/`<select>`/`<textarea>`.
-  All emitted classes are `fx-`-prefixed; the full list and its reasoning are
-  in `.claude/memory/css_class_vocabulary.md`.
-- **`FieldControl` (Todd; narrowed 2026-10-12)**, the enum in
-  `formoxus-spec/src/elements.rs` naming a bare form control:
-  `Input(InputType) | Textarea | Select`, nothing else. It types whatever
-  must be a control (`true_and_on(…)`, a widget's form-control part).
-  Attribute validity is keyed on the wider **`HtmlElement`** (`Element` until
-  2026-10-20; renamed so it never collides with Dioxus's `Element`)
-  (`Div | Fieldset | Label | Legend | Control(FieldControl)`), every element a
-  widget part can be. Both are due to flatten into one `HtmlElement` in
-  `FIELDS_PLAN.md` Step 5's delete box. `Fieldset` was once a `FieldControl`, a stretch because
-  `RadioGroup` spread onto it; P2-a in `formoxus/ATTRIBUTES_PLAN.md` ended that.
+There used to be a second, the enum `FieldControl` (`Input(InputType) |
+Textarea | Select`), wrapped inside `HtmlElement` as `Control(…)`. It was
+flattened away on 2026-10-23 (`FIELDS_PLAN.md` item 15) once its jobs,
+`true_and_on(…)` and `BuiltinWidget`'s form-control part, were gone.
+**`HtmlElement`** (`formoxus-spec/src/elements.rs`; `Element` until
+2026-10-20, renamed so it never collides with Dioxus's `Element`) is now
+`Div | Fieldset | Label | Legend | Input(InputType) | Textarea | Select`, every
+element a widget part can be, and what attribute validity is keyed on.
+Anything still saying `FieldControl` or `HtmlElement::Control` is stale.
 
 Anything that RENDERS a field is still a widget. A new Rust name containing
 "control" needs to pass the same test: does it name the bare element, not the
