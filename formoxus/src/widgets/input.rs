@@ -1,5 +1,5 @@
 //! The `<input>` family: every `type=` formoxus renders, routed by
-//! [`RenderedInputType`] to one of three bodies. Text-like types (whose value
+//! its `InputBody` to one of three bodies. Text-like types (whose value
 //! the DOM hands back as plain text) read caption-then-input; a checkbox
 //! reads box-then-caption and binds `checked`; a hidden input renders bare.
 
@@ -7,8 +7,7 @@ use std::marker::PhantomData;
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
-    RenderedInputType, Tag, WidgetName,
+    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
 };
 
 use super::field_row::{LabelSide, field_row};
@@ -18,12 +17,11 @@ use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
 ///
-/// Everything a type needs follows from its name and its `RenderedInputType`
+/// Everything a type needs follows from its name and its `InputType`
 /// variant. `NAME` is `form!`'s spelling, read from the `WidgetName` variant
 /// of the same name, so the two cannot drift. `EXTENDS` is what HTML allows on
-/// that `<input>`, and `PARTS`, `ACCEPTS` and `render` are shared. The variant
-/// names one in both `RenderedInputType` and `InputType`, which spell them
-/// alike. Hidden and checkbox render differently, so they are written by hand.
+/// that `<input>`, and `PARTS`, `ACCEPTS` and `render` are shared. Hidden and
+/// checkbox render differently, so they are written by hand.
 macro_rules! text_like_inputs {
     ($( $(#[$doc:meta])* $widget:ident => $variant:ident, )+) => {
         $(
@@ -50,7 +48,7 @@ macro_rules! text_like_inputs {
                 const TAKES_CHOICES: bool = false;
 
                 fn render(&self, props: WidgetProps) -> Element {
-                    render_input::<Self>(RenderedInputType::$variant, props)
+                    render_input::<Self>(InputBody::TextLike(InputType::$variant), props)
                 }
             }
         )+
@@ -113,7 +111,7 @@ impl Widget for HiddenInput {
     const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
-        render_input::<Self>(RenderedInputType::Hidden, props)
+        render_input::<Self>(InputBody::Hidden, props)
     }
 }
 
@@ -139,42 +137,37 @@ impl Widget for CheckboxInput {
     const TAKES_CHOICES: bool = false;
 
     fn render(&self, props: WidgetProps) -> Element {
-        render_input::<Self>(RenderedInputType::Checkbox, props)
+        render_input::<Self>(InputBody::Checkbox, props)
     }
+}
+
+/// Which of `InputView`'s three bodies a widget renders. Each widget names
+/// its own, so a new `<input>` widget is routed where it is declared.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum InputBody {
+    Hidden,
+    Checkbox,
+    TextLike(InputType),
 }
 
 /// Every `<input>` widget's `render`: `props` split into what `InputView`
 /// takes. A plain fn, called from `render`, so it must not call hooks either.
-fn render_input<W: Widget>(input_type: RenderedInputType, props: WidgetProps) -> Element {
+fn render_input<W: Widget>(body: InputBody, props: WidgetProps) -> Element {
     rsx! {
-        InputView::<W> { input_type, props }
+        InputView::<W> { body, props }
     }
 }
 
 #[component]
 pub(crate) fn InputView<W: Widget>(
-    input_type: RenderedInputType,
+    body: InputBody,
     props: WidgetProps,
     #[props(default)] widget: PhantomData<W>,
 ) -> Element {
-    // No wildcard arm, on purpose: a type that joins `RenderedInputType`
-    // (`Range` is the likely one) has to be routed here before it compiles.
-    match input_type {
-        RenderedInputType::Hidden => hidden(props.path, props.values),
-        RenderedInputType::Checkbox => checkbox(&props),
-        RenderedInputType::Text
-        | RenderedInputType::Password
-        | RenderedInputType::Number
-        | RenderedInputType::Email
-        | RenderedInputType::Telephone
-        | RenderedInputType::Url
-        | RenderedInputType::Search
-        | RenderedInputType::Color
-        | RenderedInputType::Date
-        | RenderedInputType::Time
-        | RenderedInputType::DatetimeLocal
-        | RenderedInputType::Month
-        | RenderedInputType::Week => text_like::<W>(input_type, &props),
+    match body {
+        InputBody::Hidden => hidden(props.path, props.values),
+        InputBody::Checkbox => checkbox(&props),
+        InputBody::TextLike(input_type) => text_like::<W>(input_type, &props),
     }
 }
 
@@ -215,7 +208,7 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // Withholding it cost more than it bought: a field nothing could CLEAR
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
-fn text_like<W: Widget>(input_type: RenderedInputType, props: &WidgetProps) -> Element {
+fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
     let values = props.values;
     let path = props.path.clone();
     let current = get_current(&path, values);
@@ -224,7 +217,7 @@ fn text_like<W: Widget>(input_type: RenderedInputType, props: &WidgetProps) -> E
     let control = rsx! {
         input {
             class: props.control_class::<W>(Tag::Input),
-            r#type: input_type.to_input_type().html_type(),
+            r#type: input_type.html_type(),
             id: "{props.id}",
             name: "{path}",
             value: "{current}",

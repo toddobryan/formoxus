@@ -1035,9 +1035,38 @@ widgets become ONE concept.
       the re-exports (16), `widget_matrix`, `tests/suite/builtin_widgets.rs`,
       `formoxus-spec`'s own tests and `widget_names.rs`'s transition test
       (17), and doc comments in `field_kind.rs` and `buttons.rs`.
-  - [ ] **14.** `RenderedInputType`: once nothing keys on `BuiltinWidget::Input(t)`,
+  - [x] **14.** `RenderedInputType`: once nothing keys on `BuiltinWidget::Input(t)`,
       `InputView` (`input.rs:166`) can route on `InputType` directly and
       `RenderedInputType` goes, if nothing else needs it.
+      DECIDED 2026-10-23 (Todd): route on a new `InputBody`, not on
+      `InputType` (whose `Range`, `File`, … nothing renders, so a match on
+      it would need an unreachable arm). Each widget names its body where
+      it is declared. All in `formoxus/src/widgets/input.rs`:
+
+      - [x] **14a.** `pub(crate) enum InputBody { Hidden, Checkbox,
+          TextLike(InputType) }`, `#[derive(Clone, Copy, Debug, PartialEq)]`
+          (a component prop), above `render_input`.
+      - [x] **14b.** `render_input` and `InputView` take `body: InputBody`;
+          `InputView`'s match is three arms, `TextLike(t) =>
+          text_like::<W>(t, &props)`. The "no wildcard arm" comment goes.
+      - [x] **14c.** `text_like` takes `input_type: InputType`; `r#type:` is
+          `input_type.html_type()`, no `.to_input_type()`.
+      - [x] **14d.** `text_like_inputs!` renders
+          `InputBody::TextLike(InputType::$variant)`; its doc says the
+          variant names an `InputType`, not both enums.
+      - [x] **14e.** `HiddenInput` and `CheckboxInput` pass `InputBody::Hidden`
+          and `InputBody::Checkbox`.
+      - [x] **14f.** Drop `RenderedInputType` from the `formoxus_spec` import;
+          the module doc says "routed by its [`InputBody`]".
+      - [x] **14g.** `cargo test --workspace`, then `just ci`; snapshots
+          unchanged (no markup moves).
+
+      DONE 2026-10-23 (Todd; Claude fixed the doc comments, and the module
+      doc names `InputBody` in plain backticks, since a link to a
+      `pub(crate)` item fails `cargo doc -D warnings`).
+      `RenderedInputType` itself STAYS: `BuiltinWidget::Input` and
+      `tests/suite/builtin_widgets.rs` still read it, so it goes with them
+      in 16–17.
   - [ ] **15.** **Flatten `FieldControl` into `HtmlElement`** (Todd, 2026-10-20):
       `HtmlElement` becomes `Div | Fieldset | Label | Legend | Input(InputType)
       | Textarea | Select`. Its jobs are gone: typing `form_control()` and
