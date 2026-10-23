@@ -1,9 +1,50 @@
 ---
 name: next-session
-description: "HANDOFF written 2026-09-30 at Todd's request for a fresh session the next day: where the repo is, what is next (issue #6), what is parked, and how Todd likes to work. Read this first, then delete or update it once the session has picked things up"
+description: "HANDOFF, rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## Coming back after a break (written 2026-10-23)
+
+**Where it stands.** Everything is on `main` (`widget` was merged and
+deleted 2026-10-23), pushed, `just ci` green. `formoxus/FIELDS_PLAN.md` is
+the plan of record; **Step 5, the widget refactor, is DONE**: widgets are
+Django-style types implementing `formoxus::widgets::Widget` (consts `NAME`,
+`PARTS`, `EXTENDS`, `ACCEPTS`, `ACCEPTS_OPTIONAL`, `TAKES_CHOICES` plus
+`render`), held as `AnyWidget`, rendered from one `WidgetProps`; `form!`
+checks every widget, a dev's included, through `const _` asserts on those
+consts; classes are keyed `(W::NAME, Tag)`; `BuiltinWidget`, `FieldControl`
+and `RenderedInputType` are gone.
+
+**Paused on purpose (Todd: "use formoxus for a while before I commit to
+anything").** Two Step 5 boxes are DEFERRED with full surveys and line
+numbers kept in the plan:
+- the variant picker as an ordinary chooser widget (so `with_widget` could
+  put radios on an enum): open questions V1–V3. Nothing is broken; a bare
+  enum renders as a `<select>` and round-trips.
+- `#[derive(Widget)]`: open question DW1, where `render` goes, since a
+  derive cannot share an `impl Widget` with a hand-written `render`.
+Feedback from real use should decide both, so expect that rather than
+"what's the next plan step". Step 6 (`field:` in `form!`, a type → field
+registry) is the next un-deferred step.
+
+**First thing when USING it: apcsp-dioxus does not use this repo yet.**
+Checked 2026-10-23: its workspace still has `crates/formoxus` and
+`crates/formoxus-macros` as members, with `formoxus = { path =
+"crates/formoxus" }` and a `derive` feature, i.e. the stale pre-2026-09-19
+mirror (see CLAUDE.md). Pointing it at this repo (a path or git dependency)
+is the real first step, and will need every form there rewritten to `form!`
+over a `Facet` model, plus a direct `facet` dependency
+([[facet-reexport-needs-direct-dep]]). Do not edit apcsp-dioxus from a
+formoxus session without Todd asking.
+
+**How Todd works.** He builds step by step from a to-do list with LINE
+NUMBERS and hands me whole items or sub-steps; he wants design questions
+raised with a recommendation, not decided for him; commit/push only when
+told, no PR unless asked ([[no-pr-per-change]]).
+
+## Dated entries (history)
 
 **2026-10-23 (pushed as `555ebf2`, `just ci` GREEN): CHECKPOINT 4 DONE, `BuiltinWidget`
 IS GONE.** Items 14–18 landed today: `InputView` routes on a private
@@ -19,7 +60,7 @@ round-trips; V1–V3 open) and `#[derive(Widget)]` (DW1, where `render`
 goes, open). Todd wants to USE formoxus for a while before committing to
 either, so expect feedback from real use rather than a next plan step.
 **`widget` was MERGED into `main` the same day (Todd), and work happens on
-`main` from here.** The `widget` branch stays on origin as history. Todd builds step by step from a
+`main` from here.** The `widget` branch was then deleted (Todd); its commits live on in `main`'s history. Todd builds step by step from a
 to-do list with LINE NUMBERS (he asked for them on 15), and hands me whole
 items or sub-steps.
 

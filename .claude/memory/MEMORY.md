@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-23: `widget` MERGED into `main`, work on `main` now; checkpoint 4 DONE (`BuiltinWidget` deleted), `just ci` green; STEP 5 DONE, variant picker + `#[derive(Widget)]` deferred while Todd uses formoxus; read `formoxus/FIELDS_PLAN.md`
+- [**START HERE: next session**](next_session.md) — 2026-10-23: PAUSED for apcsp-dioxus; all on `main`, `just ci` green; Step 5 DONE, variant picker + `#[derive(Widget)]` deferred until real use; apcsp-dioxus still uses its stale in-tree mirror
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
