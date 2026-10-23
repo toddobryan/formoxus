@@ -245,7 +245,7 @@ impl Classes {
     /// class silently missing.
     fn key<W: Widget>(tag: Tag) -> SlotKey {
         assert!(
-            W::PARTS.contains(&tag),
+            has_part::<W>(tag),
             "`{}` has no part `{}` (it has {})",
             W::NAME,
             tag.as_str(),
@@ -320,7 +320,7 @@ impl Classes {
     /// default, so an app that says nothing gets these.
     ///
     /// The widget parts come from a loop over every built-in widget's
-    /// `Widget::PARTS`, asking [`fx_part`] for each, so a built-in or a part
+    /// `Widget::PARTS`, asking `fx_part` for each, so a built-in or a part
     /// added later panics here until it is given a class, instead of silently
     /// rendering unclassed. A dev's own widget is not in the list: a preset
     /// classes only the widgets it knows.
@@ -440,6 +440,24 @@ const BUILTINS: [(&str, &[Tag]); 18] = [
     parts_of::<Select>(),
     parts_of::<RadioGroup>(),
 ];
+
+/// Whether `W` renders a class on `tag`: `tag` is in `W::PARTS`. The one
+/// rule for it, read by [`Classes`]'s builders and lookups at run time and by
+/// `form!`'s `classes_plus:` in a `const _` assert, where rustc answers it in
+/// the dev's crate.
+///
+/// A `while` loop with [`Tag::same`], since a `const fn` can neither call
+/// `contains` nor compare with a derived `==`.
+pub const fn has_part<W: Widget>(tag: Tag) -> bool {
+    let mut i = 0;
+    while i < W::PARTS.len() {
+        if W::PARTS[i].same(tag) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
 
 /// A widget's `NAME` and `PARTS`, one row of [`BUILTINS`].
 const fn parts_of<W: Widget>() -> (&'static str, &'static [Tag]) {

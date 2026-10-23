@@ -1,6 +1,6 @@
-use formoxus_spec::{BuiltinWidget, FixedKey, Tag};
-use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote};
+use formoxus_spec::{FixedKey, Tag, WidgetName};
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{Ident, Result, Token, braced, parse::ParseStream, token};
 
 use super::button::unknown_button_type;
@@ -18,6 +18,10 @@ pub(crate) struct ClassEntry {
     pub(crate) base: Option<Change>,
     /// What happens to the slot's invalid class; `None` leaves it as it was.
     pub(crate) invalid: Option<Change>,
+    /// Where a part's tag was written, for the caret on the assert that the
+    /// widget has it. Not in `ClassKey`, whose `Eq` and `Hash` the "given
+    /// twice" check needs and `Span` has neither of. Unused for a fixed key.
+    pub(crate) part_span: Span,
 }
 
 /// Which slot an entry edits, resolved while parsing: a built-in widget's
@@ -25,20 +29,42 @@ pub(crate) struct ClassEntry {
 /// what the emitted `ClassEdit` builds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ClassKey {
-    Part(BuiltinWidget, Tag),
+    Part(WidgetName, Tag),
     Fixed(FixedKey),
 }
 
 impl ClassEntry {
     /// The `.with_class_edit(…)` call this entry becomes:
-    /// `ClassEdit::part(widget, "part")` or `ClassEdit::fixed(key)`, then one
+    /// `ClassEdit::part::<W>(Tag::…)` or `ClassEdit::fixed(key)`, then one
     /// `replace_*`/`append_*` per piece the entry changes.
+    ///
+    /// A part's edit is a block holding a `const _` assert that `W` has that
+    /// part, read by rustc from `W::PARTS` in the dev's crate, with the
+    /// caret on the tag. The macro cannot answer it: the parts live only on
+    /// the widget type. So the message cannot list them either, since a
+    /// const panic's message is a literal.
     pub(crate) fn tokens(&self) -> TokenStream2 {
         let edit = match self.key {
-            ClassKey::Part(widget, tag) => {
-                let ty = builtin_type(widget);
+            ClassKey::Part(widget_name, tag) => {
+                let ty = builtin_type(widget_name);
+                let message = format!(
+                    "`{}` has no part `{}`",
+                    widget_name.form_name(),
+                    tag.as_str()
+                );
                 let tag = format_ident!("{tag:?}");
-                quote! { ::formoxus::classes::ClassEdit::part::<#ty>(::formoxus::attrs::Tag::#tag) }
+                let check = quote_spanned! { self.part_span=>
+                    const _: () = ::core::assert!(
+                        ::formoxus::classes::has_part::<#ty>(::formoxus::attrs::Tag::#tag),
+                        #message
+                    );
+                };
+                quote! {
+                    {
+                        #check
+                        ::formoxus::classes::ClassEdit::part::<#ty>(::formoxus::attrs::Tag::#tag)
+                    }
+                }
             }
             ClassKey::Fixed(key) => {
                 let key = fixed_key_tokens(key);
@@ -65,9 +91,9 @@ impl Change {
 }
 
 /// `key`, as `::formoxus::classes::FixedKey::…`. Every variant but `Button`
-/// is a unit variant, written out by its `Debug` name as `BuiltinWidget`'s
-/// are; `Button(t)` prints as `Button(Submit)`, which is not an ident, so it
-/// is spelled out.
+/// is a unit variant, written out by its `Debug` name as a part's `Tag` is;
+/// `Button(t)` prints as `Button(Submit)`, which is not an ident, so it is
+/// spelled out.
 fn fixed_key_tokens(key: FixedKey) -> TokenStream2 {
     match key {
         FixedKey::Button(ty) => {
@@ -99,7 +125,7 @@ pub(crate) fn parse_classes_plus(input: ParseStream<'_>) -> Result<Entry> {
     let braces = braced!(body in input);
     let mut entries: Vec<ClassEntry> = Vec::new();
     while !body.is_empty() {
-        let (key, written) = parse_slot_key(&body)?;
+        let (key, written, part_span) = parse_slot_key(&body)?;
         if entries.iter().any(|e| e.key == key) {
             return Err(syn::Error::new_spanned(
                 written,
@@ -111,7 +137,12 @@ pub(crate) fn parse_classes_plus(input: ParseStream<'_>) -> Result<Entry> {
         }
         body.parse::<Token![:]>()?;
         let (base, invalid) = parse_class_value(&body)?;
-        entries.push(ClassEntry { key, base, invalid });
+        entries.push(ClassEntry {
+            key,
+            base,
+            invalid,
+            part_span,
+        });
         if !body.is_empty() {
             body.parse::<Token![,]>()?;
         }
@@ -137,18 +168,20 @@ fn selector(key: ClassKey) -> String {
 /// A selector: which slot an entry edits, as a `ClassKey`. One of
 ///
 /// - `widget.part` (`select.select`, `text.input`): a part of a built-in
-///   widget, by its `form!` name and its `parts()` name;
+///   widget, by its `form!` name and its tag;
 /// - `button.type` (`button.submit`): one button type's button;
 /// - `fixed_key` (`button_row`, `required_marker`): an element no widget
 ///   renders, by its `FixedKey` name.
 ///
-/// Every name is checked here, with the caret on the token at fault, so a
-/// selector that parses names a slot that exists. Also returns the tokens as
-/// written, so a later error about the whole selector can underline all of it.
-fn parse_slot_key(input: ParseStream<'_>) -> Result<(ClassKey, TokenStream2)> {
+/// Every name is checked here, with the caret on the token at fault. The
+/// one thing left to rustc is whether a widget has the tag (see
+/// [`ClassEntry::tokens`]). Also returns the tokens as written, so a later
+/// error about the whole selector can underline all of it, and the tag's
+/// span for that assert.
+fn parse_slot_key(input: ParseStream<'_>) -> Result<(ClassKey, TokenStream2, Span)> {
     let first: Ident = input.parse()?;
     if !input.peek(Token![.]) {
-        return Ok((fixed_key(&first)?, quote! { #first }));
+        return Ok((fixed_key(&first)?, quote! { #first }, first.span()));
     }
     let dot: Token![.] = input.parse()?;
     let second: Ident = input.parse()?;
@@ -157,7 +190,7 @@ fn parse_slot_key(input: ParseStream<'_>) -> Result<(ClassKey, TokenStream2)> {
     } else {
         part_key(&first, &second)?
     };
-    Ok((key, quote! { #first #dot #second }))
+    Ok((key, quote! { #first #dot #second }, second.span()))
 }
 
 /// `button.<type>`, with `type` checked as `buttons:` checks it.
@@ -167,35 +200,48 @@ fn button_key(ty: &Ident) -> Result<ClassKey> {
         .ok_or_else(|| syn::Error::new(ty.span(), unknown_button_type(ty)))
 }
 
-/// `widget.part`: a widget `widget:` would accept, that renders, and has a
-/// part by that name.
-fn part_key(widget: &Ident, part: &Ident) -> Result<ClassKey> {
-    let Some(builtin) = BuiltinWidget::from_form_name(&widget.to_string()) else {
-        return Err(syn::Error::new(
-            widget.span(),
-            unknown_widget(widget, false),
-        ));
-    };
-    if !builtin.is_rendered() {
+/// `widget.part`: a widget `widget:` would accept, that renders, and a part
+/// that is a `Tag`. Whether the widget has that tag is the assert in
+/// [`ClassEntry::tokens`].
+fn part_key(widget: &Ident, tag_ident: &Ident) -> Result<ClassKey> {
+    let widget_as_written = widget.to_string();
+    if WidgetName::NOT_YET.contains(&widget_as_written.as_str()) {
         return Err(syn::Error::new(
             widget.span(),
             format!("`{widget}` is not supported yet — nothing renders it, so it has no classes"),
         ));
     }
-    let written = part.to_string();
-    let found = builtin.parts().iter().find(|p| p.name == written);
-    found
-        .map(|p| ClassKey::Part(builtin, Tag::from_str(p.name).expect("every part is a Tag")))
-        .ok_or_else(|| {
-            let parts: Vec<&str> = builtin.parts().iter().map(|p| p.name).collect();
-            syn::Error::new(
-                part.span(),
-                format!(
-                    "`{widget}` has no part `{part}` — it has {}",
-                    parts.join(", ")
-                ),
-            )
-        })
+    let Some(widget_name) = WidgetName::from_form_name(&widget_as_written) else {
+        return Err(syn::Error::new(
+            widget.span(),
+            unknown_widget(widget, false),
+        ));
+    };
+
+    let tag_as_written = tag_ident.to_string();
+    let Some(tag) = Tag::from_str(&tag_as_written) else {
+        return Err(syn::Error::new(
+            tag_ident.span(),
+            unknown_tag(&tag_as_written),
+        ));
+    };
+    Ok(ClassKey::Part(widget_name, tag))
+}
+
+/// The message for a part that is no `Tag`: a near miss, or the whole list.
+/// Whether the widget HAS the tag is rustc's question, not this one.
+fn unknown_tag(written: &str) -> String {
+    let tags = || Tag::ALL.iter().map(Tag::as_str);
+    match tags()
+        .filter(|t| edit_distance(written, t) <= 2)
+        .min_by_key(|t| edit_distance(written, t))
+    {
+        Some(near) => format!("unknown part `{written}` — did you mean `{near}`?"),
+        None => format!(
+            "unknown part `{written}` — a part is one of {}",
+            tags().collect::<Vec<_>>().join(", ")
+        ),
+    }
 }
 
 /// A lone name: a `FixedKey`. Failing that, the message guesses what was
@@ -206,15 +252,12 @@ fn fixed_key(name: &Ident) -> Result<ClassKey> {
     if let Some(key) = FixedKey::from_form_name(&written) {
         return Ok(ClassKey::Fixed(key));
     }
-    let message = if let Some(widget) = BuiltinWidget::from_form_name(&written) {
-        let parts: Vec<String> = widget
-            .parts()
-            .iter()
-            .map(|p| format!("`{written}.{}`", p.name))
-            .collect();
+    let is_widget = WidgetName::from_form_name(&written).is_some()
+        || WidgetName::NOT_YET.contains(&written.as_str());
+    let message = if is_widget {
         format!(
-            "`{written}` is a widget, and its classes are set part by part: {}",
-            parts.join(", ")
+            "`{written}` is a widget, and its classes are set part by part, \
+             as `{written}.<element>`"
         )
     } else if written == "button" {
         "a button's classes are set by its type, as `button.submit`".to_string()
@@ -322,14 +365,14 @@ mod tests {
     use super::{Change, ClassEntry, ClassKey, parse_class_value, parse_slot_key};
     use crate::form::Entry;
     use crate::form::tests::{err_of, parse};
-    use formoxus_spec::{BuiltinWidget, ButtonType, FixedKey, RenderedInputType, Tag};
+    use formoxus_spec::{ButtonType, FixedKey, Tag, WidgetName};
     use googletest::prelude::*;
     use proc_macro2::TokenStream as TokenStream2;
     use quote::quote;
     use syn::parse::Parser;
 
     fn key(tokens: TokenStream2) -> syn::Result<ClassKey> {
-        parse_slot_key.parse2(tokens).map(|(key, _)| key)
+        parse_slot_key.parse2(tokens).map(|(key, _, _)| key)
     }
 
     fn key_err(tokens: TokenStream2) -> String {
@@ -337,17 +380,24 @@ mod tests {
     }
 
     #[gtest]
-    fn a_widget_part_is_its_form_name_and_part_name() {
+    fn a_widget_part_is_its_form_name_and_tag() {
         expect_that!(
             key(quote!(select.select)),
-            ok(eq(&ClassKey::Part(BuiltinWidget::Select, Tag::Select)))
+            ok(eq(&ClassKey::Part(WidgetName::Select, Tag::Select)))
         );
         expect_that!(
             key(quote!(tel.input)),
-            ok(eq(&ClassKey::Part(
-                BuiltinWidget::Input(RenderedInputType::Telephone),
-                Tag::Input
-            )))
+            ok(eq(&ClassKey::Part(WidgetName::TelInput, Tag::Input)))
+        );
+    }
+
+    /// Any real tag parses, whether or not the widget has it: that question
+    /// is the `has_part` assert's, answered by rustc from `W::PARTS`.
+    #[gtest]
+    fn a_tag_the_widget_lacks_still_parses() {
+        expect_that!(
+            key(quote!(select.legend)),
+            ok(eq(&ClassKey::Part(WidgetName::Select, Tag::Legend)))
         );
     }
 
@@ -382,10 +432,19 @@ mod tests {
     }
 
     #[gtest]
-    fn a_part_the_widget_lacks_lists_the_ones_it_has() {
+    fn a_misspelt_part_gets_a_suggestion() {
         expect_that!(
             key_err(quote!(select.lable)),
-            eq("`select` has no part `lable` — it has div, label, select")
+            eq("unknown part `lable` — did you mean `label`?")
+        );
+    }
+
+    #[gtest]
+    fn a_part_that_is_no_element_lists_the_tags() {
+        expect_that!(
+            key_err(quote!(select.wrapper)),
+            eq("unknown part `wrapper` — a part is one of \
+                 div, fieldset, label, legend, input, textarea, select")
         );
     }
 
@@ -417,10 +476,7 @@ mod tests {
     fn a_widget_without_its_part_is_told_how_to_name_one() {
         expect_that!(
             key_err(quote!(select)),
-            eq(
-                "`select` is a widget, and its classes are set part by part: \
-                `select.div`, `select.label`, `select.select`"
-            )
+            eq("`select` is a widget, and its classes are set part by part, as `select.<element>`")
         );
     }
 
@@ -555,7 +611,11 @@ mod tests {
             })
             .expect("a classes_plus block")
             .into_iter()
-            .map(|ClassEntry { key, base, invalid }| (key, base, invalid))
+            .map(
+                |ClassEntry {
+                     key, base, invalid, ..
+                 }| (key, base, invalid),
+            )
             .collect()
     }
 
@@ -574,7 +634,7 @@ mod tests {
             entries,
             elements_are![
                 eq(&(
-                    ClassKey::Part(BuiltinWidget::Select, Tag::Select),
+                    ClassKey::Part(WidgetName::Select, Tag::Select),
                     replace("form-select"),
                     None
                 )),
@@ -584,7 +644,7 @@ mod tests {
                     None
                 )),
                 eq(&(
-                    ClassKey::Part(BuiltinWidget::Input(RenderedInputType::Text), Tag::Input),
+                    ClassKey::Part(WidgetName::TextInput, Tag::Input),
                     None,
                     replace("is-invalid")
                 )),
@@ -666,9 +726,23 @@ mod tests {
                 }
             }),
             contains_substring(
-                ". with_class_edit (:: formoxus :: classes :: ClassEdit :: part :: \
-                 < :: formoxus :: widgets :: Select > (:: formoxus :: attrs :: Tag :: Select) \
+                ":: formoxus :: classes :: ClassEdit :: part :: \
+                 < :: formoxus :: widgets :: Select > (:: formoxus :: attrs :: Tag :: Select) } \
                  . replace_base (\"form-select\") . append_invalid (\"is-invalid\"))"
+            )
+        );
+    }
+
+    /// The edit is a block holding the assert that the widget has the part,
+    /// so the check sits beside the call it guards, inside the method chain.
+    #[gtest]
+    fn a_part_entry_asserts_the_widget_has_the_part() {
+        expect_that!(
+            expansion(quote! { Signup { classes_plus: { textarea.legend: [x] } } }),
+            contains_substring(
+                ". with_class_edit ({ const _ : () = :: core :: assert ! \
+                 (:: formoxus :: classes :: has_part :: < :: formoxus :: widgets :: Textarea > \
+                 (:: formoxus :: attrs :: Tag :: Legend) , \"`textarea` has no part `legend`\") ;"
             )
         );
     }
@@ -679,7 +753,7 @@ mod tests {
             expansion(quote! { Signup { classes_plus: { tel.input: + [phone] } } }),
             contains_substring(
                 "ClassEdit :: part :: < :: formoxus :: widgets :: TelInput > \
-                 (:: formoxus :: attrs :: Tag :: Input) \
+                 (:: formoxus :: attrs :: Tag :: Input) } \
                  . append_base (\"phone\")"
             )
         );

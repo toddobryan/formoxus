@@ -1,7 +1,7 @@
 //! `widget: <name>` and `widget: path::To::MyWidget { prop: value }` — the
 //! author-facing widget vocabulary.
 
-use formoxus_spec::{BuiltinWidget, RenderedInputType};
+use formoxus_spec::WidgetName;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{
@@ -14,54 +14,34 @@ use syn::{
 
 use super::suggest::{edit_distance, to_snake};
 
-// The author-facing widget vocabulary is `BuiltinWidget::form_name`, in
-// `formoxus-spec`: flat and lowercase, deliberately. `Input(Password)` is the
-// shape of formoxus's own enum, grouping the `<input type=X>` family under one
-// variant for dispatch, not a concept an author has. HTML spells it
-// `type="password"` and so does `form!`. That keeps the names a stable surface:
-// the enums under them can be regrouped or renamed without touching a single
-// `form!` call. Names follow HTML where HTML has one (`tel`, `datetime_local`
+// The author-facing widget vocabulary is `WidgetName::form_name`, in
+// `formoxus-spec`: flat and lowercase, deliberately. A dev writes `password`,
+// as HTML writes `type="password"`, never the type `PasswordInput` the name
+// stands for. That keeps the names a stable surface: the types under them can
+// be regrouped or renamed without touching a single `form!` call. Names follow HTML where HTML has one (`tel`, `datetime_local`
 // for `datetime-local`, since a hyphen cannot be an ident) and formoxus where
 // it does not (`textarea`, `select`, `radio_group`).
 
-/// Every name `form!` accepts after `widget:`, for the "unknown widget"
-/// message, in `BuiltinWidget::ALL`'s order.
+/// Every name `form!` knows after `widget:`, for the "unknown widget"
+/// message: the rendered widgets in `WidgetName::ALL`'s order, then the
+/// not-yet ones, so a near miss of `file` is still told it is coming.
 fn widget_names() -> impl Iterator<Item = &'static str> {
-    BuiltinWidget::ALL.iter().map(BuiltinWidget::form_name)
+    WidgetName::ALL
+        .iter()
+        .map(|widget_name| widget_name.form_name())
+        .chain(WidgetName::NOT_YET.iter().copied())
 }
 
-/// `widget`, as the type implementing `::formoxus::widgets::Widget` that
-/// renders it. Exhaustive, with no wildcard, so a new built-in cannot compile
-/// without a row here.
-pub(crate) fn builtin_type(widget: BuiltinWidget) -> TokenStream2 {
-    use RenderedInputType as T;
-    let name = match widget {
-        BuiltinWidget::Input(input_type) => match input_type {
-            T::Text => "TextInput",
-            T::Password => "PasswordInput",
-            T::Hidden => "HiddenInput",
-            T::Number => "NumberInput",
-            T::Email => "EmailInput",
-            T::Telephone => "TelInput",
-            T::Url => "UrlInput",
-            T::Search => "SearchInput",
-            T::Color => "ColorInput",
-            T::Date => "DateInput",
-            T::Time => "TimeInput",
-            T::DatetimeLocal => "DatetimeLocalInput",
-            T::Month => "MonthInput",
-            T::Week => "WeekInput",
-            T::Checkbox => "CheckboxInput",
-        },
-        BuiltinWidget::Textarea => "Textarea",
-        BuiltinWidget::Select => "Select",
-        BuiltinWidget::RadioGroup => "RadioGroup",
-        BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
-            unreachable!("parse rejects widgets that render nothing")
-        }
-    };
-    let name = format_ident!("{name}");
-    quote! { ::formoxus::widgets::#name }
+/// `widget`, as the path of the type implementing `::formoxus::widgets::Widget`
+/// that renders it: `WidgetName::MODULE`, then its `type_name`. A row in
+/// `WidgetName` is all a new built-in needs here; `formoxus` tests that each
+/// row names the right type.
+pub(crate) fn builtin_type(widget: WidgetName) -> TokenStream2 {
+    let module = WidgetName::MODULE
+        .iter()
+        .map(|segment| format_ident!("{segment}"));
+    let name = format_ident!("{}", widget.type_name());
+    quote! { #( ::#module )* :: #name }
 }
 
 #[derive(Debug)]
@@ -75,7 +55,7 @@ pub(crate) enum WidgetKind {
     /// A built-in widget, by the name the author wrote (kept for its span and
     /// for messages) and what it resolved to. Never a widget that renders
     /// nothing yet: `parse` refuses those.
-    Named { name: Ident, widget: BuiltinWidget },
+    Named { name: Ident, widget: WidgetName },
     /// `MarkdownWidget` — a `Path`, not an `Ident`, so that
     /// `inputs::MarkdownWidget` works without importing the input.
     Path(Path),
@@ -159,36 +139,86 @@ fn is_number_literal(expr: &Expr) -> bool {
 /// Why `widget` cannot render an optional field, for the widgets whose
 /// `ACCEPTS_OPTIONAL` is `false`. A `select` can say "no answer", with its
 /// blank option, which is why it is the default for an `Option<bool>`.
-fn optional_refusal(widget: BuiltinWidget) -> &'static str {
-    match widget {
-        BuiltinWidget::RadioGroup => {
+fn optional_refusal(widget_name: WidgetName) -> &'static str {
+    match widget_name {
+        WidgetName::RadioGroup => {
             "`radio_group` cannot render an optional field — a picked radio can't be un-picked; use `select`"
         }
-        BuiltinWidget::Input(RenderedInputType::Checkbox) => {
+        WidgetName::CheckboxInput => {
             "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`"
         }
         // Asserted for every widget, so one that accepts an optional field
-        // needs a message too, though its assert always holds.
-        _ => "this widget cannot render an optional field",
+        // needs a message too, though its assert always holds. Listed rather
+        // than `_`, so a new widget has to say which kind it is.
+        WidgetName::TextInput
+        | WidgetName::PasswordInput
+        | WidgetName::HiddenInput
+        | WidgetName::NumberInput
+        | WidgetName::EmailInput
+        | WidgetName::TelInput
+        | WidgetName::UrlInput
+        | WidgetName::SearchInput
+        | WidgetName::ColorInput
+        | WidgetName::DateInput
+        | WidgetName::TimeInput
+        | WidgetName::DatetimeLocalInput
+        | WidgetName::MonthInput
+        | WidgetName::WeekInput
+        | WidgetName::Textarea
+        | WidgetName::Select => "this widget cannot render an optional field",
     }
 }
 
-/// What a failed `renders` check says, by the rule `BuiltinWidget::renders`
-/// applied.
-fn cannot_render(widget: BuiltinWidget) -> &'static str {
-    match widget {
-        BuiltinWidget::Input(RenderedInputType::Checkbox) => {
-            "`checkbox` can only render a bool field"
-        }
-        BuiltinWidget::Input(_) => {
-            "an `<input>` widget cannot render a bool field; use `checkbox` or `select`"
-        }
-        BuiltinWidget::Textarea => "`textarea` can only render a String field",
-        BuiltinWidget::Select | BuiltinWidget::RadioGroup => {
+/// What a failed `renders` check says, by the widget's `ACCEPTS` and
+/// `TAKES_CHOICES`. Every widget listed, so a new one needs a message.
+/// Whether a built-in takes `choices`, for the message naming the ones that
+/// do. `W::TAKES_CHOICES` is the rule rustc checks; this is only wording, so
+/// it lives with the other messages. Every widget listed, so a new one has to
+/// say.
+fn takes_choices(widget_name: WidgetName) -> bool {
+    match widget_name {
+        WidgetName::Select | WidgetName::RadioGroup => true,
+        WidgetName::TextInput
+        | WidgetName::PasswordInput
+        | WidgetName::HiddenInput
+        | WidgetName::NumberInput
+        | WidgetName::EmailInput
+        | WidgetName::TelInput
+        | WidgetName::UrlInput
+        | WidgetName::SearchInput
+        | WidgetName::ColorInput
+        | WidgetName::DateInput
+        | WidgetName::TimeInput
+        | WidgetName::DatetimeLocalInput
+        | WidgetName::MonthInput
+        | WidgetName::WeekInput
+        | WidgetName::CheckboxInput
+        | WidgetName::Textarea => false,
+    }
+}
+
+fn cannot_render(widget_name: WidgetName) -> &'static str {
+    match widget_name {
+        WidgetName::CheckboxInput => "`checkbox` can only render a bool field",
+        WidgetName::Textarea => "`textarea` can only render a String field",
+        WidgetName::Select | WidgetName::RadioGroup => {
             "this widget needs `choices` unless the field is a bool"
         }
-        BuiltinWidget::SelectMultiple | BuiltinWidget::CheckboxMultiple | BuiltinWidget::File => {
-            unreachable!("parse rejects widgets that render nothing")
+        WidgetName::TextInput
+        | WidgetName::PasswordInput
+        | WidgetName::HiddenInput
+        | WidgetName::NumberInput
+        | WidgetName::EmailInput
+        | WidgetName::TelInput
+        | WidgetName::UrlInput
+        | WidgetName::SearchInput
+        | WidgetName::ColorInput
+        | WidgetName::DateInput
+        | WidgetName::TimeInput
+        | WidgetName::DatetimeLocalInput
+        | WidgetName::MonthInput
+        | WidgetName::WeekInput => {
+            "an `<input>` widget cannot render a bool field; use `checkbox` or `select`"
         }
     }
 }
@@ -204,9 +234,9 @@ impl WidgetRef {
         let message = match &self.kind {
             WidgetKind::Named { name, .. } => format!(
                 "`{name}` takes no `choices` — they apply to {}",
-                BuiltinWidget::ALL
+                WidgetName::ALL
                     .iter()
-                    .filter(|w| w.takes_choices() && w.is_rendered())
+                    .filter(|w| takes_choices(**w))
                     .map(|w| format!("`{}`", w.form_name()))
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -244,9 +274,12 @@ impl WidgetRef {
         // `W`'s consts in the dev's crate. Only the wording differs, since a
         // built-in's says why and what to use instead.
         let (cannot_render, optional_refusal) = match &self.kind {
-            WidgetKind::Named { widget, .. } => (
-                cannot_render(*widget).to_string(),
-                optional_refusal(*widget).to_string(),
+            WidgetKind::Named {
+                widget: widget_name,
+                ..
+            } => (
+                cannot_render(*widget_name).to_string(),
+                optional_refusal(*widget_name).to_string(),
             ),
             WidgetKind::Path(_) => {
                 let written = self.written();
@@ -296,10 +329,8 @@ impl Parse for WidgetKind {
         }
 
         let name: Ident = input.parse()?;
-        let Some(widget) = BuiltinWidget::from_form_name(&name.to_string()) else {
-            return Err(syn::Error::new(name.span(), unknown_widget(&name, true)));
-        };
-        if !widget.is_rendered() {
+        let written = name.to_string();
+        if WidgetName::NOT_YET.contains(&written.as_str()) {
             return Err(syn::Error::new(
                 name.span(),
                 format!(
@@ -308,6 +339,9 @@ impl Parse for WidgetKind {
                 ),
             ));
         }
+        let Some(widget) = WidgetName::from_form_name(&written) else {
+            return Err(syn::Error::new(name.span(), unknown_widget(&name, true)));
+        };
         Ok(Self::Named { name, widget })
     }
 }
@@ -324,7 +358,7 @@ impl Parse for WidgetKind {
 pub(crate) fn unknown_widget(name: &Ident, path_ok: bool) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);
-    if lowered != written && BuiltinWidget::from_form_name(&lowered).is_some() {
+    if lowered != written && widget_names().any(|n| n == lowered) {
         return format!(
             "unknown widget `{written}` — widget names are lowercase, write `{lowered}`"
         );
@@ -377,23 +411,13 @@ mod tests {
 
     #[gtest]
     fn every_name_in_the_table_parses_and_resolves_to_its_own_type() {
-        // Generated from `BuiltinWidget::ALL`, so every widget's name is tried.
-        // A widget that renders nothing yet must instead be refused, by name.
+        // Generated from `WidgetName::ALL`, so every widget's name is tried.
         // Distinct types, so a row copied without its name changed fails here.
         let mut types = HashSet::new();
-        for widget in BuiltinWidget::ALL {
+        for widget in WidgetName::ALL {
             let name = widget.form_name();
             let id = Ident::new(name, proc_macro2::Span::call_site());
             let parsed = parse(quote! { Source { f => { widget: #id } } });
-            if !widget.is_rendered() {
-                let err = parsed.err().map(|e| e.to_string()).unwrap_or_default();
-                expect_that!(
-                    err,
-                    contains_substring("is not supported yet"),
-                    "`{name}` renders nothing, so it should be refused"
-                );
-                continue;
-            }
             let spec = parsed.unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
             let tokens = widget_of(&spec).type_tokens().to_string();
             expect_that!(
@@ -405,6 +429,19 @@ mod tests {
                 types.insert(tokens.clone()),
                 eq(true),
                 "`{name}` resolves to `{tokens}`, as an earlier name did"
+            );
+        }
+    }
+
+    /// A widget that renders nothing yet is refused by name, not as unknown.
+    #[gtest]
+    fn every_not_yet_name_is_refused_as_not_supported_yet() {
+        for name in WidgetName::NOT_YET {
+            let id = Ident::new(name, proc_macro2::Span::call_site());
+            expect_that!(
+                err_of(quote! { Source { f => { widget: #id } } }),
+                contains_substring(format!("`{name}` is not supported yet")),
+                "{name}"
             );
         }
     }
@@ -485,17 +522,40 @@ mod tests {
         );
     }
 
-    /// `checks` calls these only for a widget some `form!` uses, so a widget
-    /// added without a message would otherwise surface as a proc-macro panic
-    /// in an author's build. Calls each wherever `checks` could.
+    /// The message functions match on `WidgetName`, every variant listed, so
+    /// a new widget cannot compile without one. What the compiler cannot see
+    /// is an arm on the WRONG widget: these pin the ones with their own text.
     #[gtest]
-    fn every_widget_checks_can_reach_has_a_message() {
-        for &widget in BuiltinWidget::ALL.iter().filter(|w| w.is_rendered()) {
-            expect_that!(cannot_render(widget), not(eq("")), "{widget:?}");
-            if !widget.accepts_optional() {
-                expect_that!(optional_refusal(widget), not(eq("")), "{widget:?}");
-            }
-        }
+    fn each_widget_with_its_own_message_gets_it() {
+        expect_that!(
+            optional_refusal(WidgetName::CheckboxInput),
+            starts_with("`checkbox` cannot render an optional field")
+        );
+        expect_that!(
+            optional_refusal(WidgetName::RadioGroup),
+            starts_with("`radio_group` cannot render an optional field")
+        );
+        expect_that!(
+            cannot_render(WidgetName::CheckboxInput),
+            eq("`checkbox` can only render a bool field")
+        );
+        expect_that!(
+            cannot_render(WidgetName::Textarea),
+            eq("`textarea` can only render a String field")
+        );
+        expect_that!(
+            cannot_render(WidgetName::TelInput),
+            starts_with("an `<input>` widget")
+        );
+        let choosers: Vec<WidgetName> = WidgetName::ALL
+            .iter()
+            .copied()
+            .filter(|w| takes_choices(*w))
+            .collect();
+        expect_that!(
+            choosers,
+            elements_are![eq(&WidgetName::Select), eq(&WidgetName::RadioGroup)]
+        );
     }
 
     // ── `choices:`, beside `widget:` ─────────────────────────────────────

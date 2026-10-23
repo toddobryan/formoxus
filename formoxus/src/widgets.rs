@@ -89,3 +89,63 @@ pub use crate::nodes::ValuesStore;
 pub use variant_select::VariantSelect;
 pub use widget::{AnyWidget, Widget};
 pub use widget_props::WidgetProps;
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
+        MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
+        TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
+    };
+    use formoxus_spec::WidgetName;
+    use googletest::prelude::*;
+    use std::collections::HashSet;
+
+    /// The row `form!` reads for `W`: the `WidgetName` whose `form_name` is
+    /// `W::NAME`, and the last segment of `W`'s type name.
+    fn row_of<W: Widget>() -> (Option<WidgetName>, &'static str) {
+        let type_name = std::any::type_name::<W>();
+        let last = type_name.rsplit("::").next().unwrap_or(type_name);
+        (WidgetName::from_form_name(W::NAME), last)
+    }
+
+    /// Every built-in's `NAME` finds a row, and that row's `type_name` is the
+    /// built-in itself. What makes `widget: tel` render a `TelInput`: `form!`
+    /// emits `type_name` from the row, and nothing else would notice a row
+    /// naming the wrong type. Each `impl` picks its own `WidgetName` variant
+    /// for `NAME`, so this catches one that picked another's too. And every
+    /// row is some built-in's, so none names a type that is not one.
+    #[gtest]
+    fn each_builtins_row_names_the_builtin_itself() {
+        let rows = [
+            row_of::<TextInput>(),
+            row_of::<PasswordInput>(),
+            row_of::<HiddenInput>(),
+            row_of::<NumberInput>(),
+            row_of::<EmailInput>(),
+            row_of::<TelInput>(),
+            row_of::<UrlInput>(),
+            row_of::<SearchInput>(),
+            row_of::<ColorInput>(),
+            row_of::<DateInput>(),
+            row_of::<TimeInput>(),
+            row_of::<DatetimeLocalInput>(),
+            row_of::<MonthInput>(),
+            row_of::<WeekInput>(),
+            row_of::<CheckboxInput>(),
+            row_of::<Textarea>(),
+            row_of::<Select>(),
+            row_of::<RadioGroup>(),
+        ];
+        let mut seen = HashSet::new();
+        for (row, type_name) in rows {
+            expect_that!(
+                row.map(WidgetName::type_name),
+                some(eq(type_name)),
+                "{type_name}"
+            );
+            seen.extend(row);
+        }
+        expect_that!(seen.len(), eq(WidgetName::ALL.len()));
+    }
+}

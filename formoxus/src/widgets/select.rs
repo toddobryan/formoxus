@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag,
+    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName,
 };
 
 use super::field_row::{LabelSide, field_row};
@@ -16,7 +16,7 @@ use crate::widgets::{Widget, widget_props::WidgetProps};
 pub struct Select;
 
 impl Widget for Select {
-    const NAME: &'static str = BuiltinWidget::Select.form_name();
+    const NAME: &'static str = WidgetName::Select.form_name();
 
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Select));
 

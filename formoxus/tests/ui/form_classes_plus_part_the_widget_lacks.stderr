@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `textarea` has no part `legend`
+  --> tests/ui/form_classes_plus_part_the_widget_lacks.rs:16:26
+   |
+16 |                 textarea.legend: [form_legend],
+   |                          ^^^^^^ evaluation of `main::_` failed here

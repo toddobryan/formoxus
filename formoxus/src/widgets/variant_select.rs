@@ -14,7 +14,7 @@ use super::select::ABSENT_DISPLAY;
 /// The `<select>` a [`VariantSet`](crate::nodes::VariantSet) renders to ask which
 /// variant a value takes.
 ///
-/// A SHAPE choice, not a value choice — contrast [`Select`](super::Select),
+/// A SHAPE choice, not a value choice — contrast [`Select`],
 /// which picks one of a field's legal values and is a leaf. This one carries no
 /// `name`, because the answer is not a value to submit: it goes out as an
 /// [`Edit`] and rebuilds the form beneath it.

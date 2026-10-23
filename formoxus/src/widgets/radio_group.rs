@@ -1,7 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{Attr, AttrSet, BuiltinWidget, FieldType, FieldTypeSet, HtmlElement, Tag};
+use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::field_row::required_marker;
@@ -21,7 +21,7 @@ use crate::widgets::{FieldErrors, Widget, get_current, widget_props::WidgetProps
 pub struct RadioGroup;
 
 impl Widget for RadioGroup {
-    const NAME: &'static str = BuiltinWidget::RadioGroup.form_name();
+    const NAME: &'static str = WidgetName::RadioGroup.form_name();
 
     /// The `<fieldset>`'s, where the spread lands.
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Fieldset);

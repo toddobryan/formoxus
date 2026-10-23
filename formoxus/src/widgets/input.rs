@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, BuiltinWidget, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
-    RenderedInputType, Tag,
+    Attr, AttrSet, FieldControl, FieldType, FieldTypeSet, HtmlElement, InputType,
+    RenderedInputType, Tag, WidgetName,
 };
 
 use super::field_row::{LabelSide, field_row};
@@ -18,12 +18,12 @@ use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
 ///
-/// Everything a type needs follows from its `RenderedInputType` variant:
-/// `NAME` is `form!`'s spelling of it (`BuiltinWidget::form_name`, so the two
-/// cannot drift), `EXTENDS` is what HTML allows on that `<input>`, and
-/// `PARTS`, `ACCEPTS` and `render` are shared. The variant names one in both
-/// `RenderedInputType` and `InputType`, which spell them alike. Hidden and
-/// checkbox render differently, so they are written by hand.
+/// Everything a type needs follows from its name and its `RenderedInputType`
+/// variant. `NAME` is `form!`'s spelling, read from the `WidgetName` variant
+/// of the same name, so the two cannot drift. `EXTENDS` is what HTML allows on
+/// that `<input>`, and `PARTS`, `ACCEPTS` and `render` are shared. The variant
+/// names one in both `RenderedInputType` and `InputType`, which spell them
+/// alike. Hidden and checkbox render differently, so they are written by hand.
 macro_rules! text_like_inputs {
     ($( $(#[$doc:meta])* $widget:ident => $variant:ident, )+) => {
         $(
@@ -33,7 +33,7 @@ macro_rules! text_like_inputs {
 
             impl Widget for $widget {
                 const NAME: &'static str =
-                    BuiltinWidget::Input(RenderedInputType::$variant).form_name();
+                    WidgetName::$widget.form_name();
 
                 const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
 
@@ -97,7 +97,7 @@ text_like_inputs! {
 pub struct HiddenInput;
 
 impl Widget for HiddenInput {
-    const NAME: &'static str = BuiltinWidget::Input(RenderedInputType::Hidden).form_name();
+    const NAME: &'static str = WidgetName::HiddenInput.form_name();
 
     const EXTENDS: AttrSet = AttrSet::EMPTY;
 
@@ -123,7 +123,7 @@ impl Widget for HiddenInput {
 pub struct CheckboxInput;
 
 impl Widget for CheckboxInput {
-    const NAME: &'static str = BuiltinWidget::Input(RenderedInputType::Checkbox).form_name();
+    const NAME: &'static str = WidgetName::CheckboxInput.form_name();
 
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Control(FieldControl::Input(
         InputType::Checkbox,

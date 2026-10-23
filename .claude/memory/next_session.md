@@ -5,6 +5,19 @@ metadata:
   type: project
 ---
 
+**2026-10-22, NIGHT (pushed, `just ci` GREEN): CHECKPOINT 3 DONE and
+ITEM 13 DONE; NEXT IS ITEM 14** (`RenderedInputType`: `InputView` routes on
+`InputType` directly), then 15 (flatten `FieldControl` into `HtmlElement`),
+16 (re-exports), 17 (mine: `widget_matrix`, `tests/suite/builtin_widgets.rs`,
+`formoxus-spec`'s own tests, the transition test in `widget_names.rs`,
+README, memory). The plan's item 13 note lists exactly what still reads
+`BuiltinWidget`. Item 13 became an ENUM, `formoxus_spec::WidgetName` (Todd:
+"a Java enum"), one `macro_rules!` row per widget, variant = type name; the
+macro matches on it exhaustively for its messages. `classes_plus:` checks a
+part with a `const _` on `formoxus::classes::has_part::<W>`; its error no
+longer lists the parts (accepted). Todd is still building, step by step,
+and asked me to take whole items when he steps away.
+
 **2026-10-22, END OF SCHOOL DAY (pushed, build RED on purpose):
 deleting `BuiltinWidget`, checkpoints 1–2 DONE (`281f5c1`, `ad1449c`);
 checkpoint 3 redesigned (Todd: widgets declare `PARTS: &[Tag]`, presets own

@@ -1,5 +1,5 @@
-error: `select` has no part `lable` — it has div, label, select
-  --> tests/ui/form_classes_plus_unknown_part.rs:15:24
+error: unknown part `lable` — did you mean `label`?
+  --> tests/ui/form_classes_plus_unknown_part.rs:16:24
    |
-15 |                 select.lable: [form_label],
+16 |                 select.lable: [form_label],
    |                        ^^^^^

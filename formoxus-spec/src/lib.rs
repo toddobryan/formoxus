@@ -25,6 +25,7 @@ mod buttons;
 mod elements;
 mod fixed_keys;
 mod input_types;
+mod widget_names;
 mod widgets;
 
 pub use attrs::{
@@ -36,4 +37,5 @@ pub use buttons::{ButtonType, Invocation};
 pub use elements::{FieldControl, HtmlElement, Tag};
 pub use fixed_keys::FixedKey;
 pub use input_types::{InputType, RenderedInputType};
+pub use widget_names::WidgetName;
 pub use widgets::{BuiltinWidget, Part};
