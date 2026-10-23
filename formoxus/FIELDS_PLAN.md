@@ -1162,6 +1162,90 @@ widgets become ONE concept.
   group). Since `custom_widget` went (2026-10-21) nothing reads it there,
   so a widget on an enum is silently ignored until this box; no check
   added meanwhile (Todd).
+  **DEFERRED 2026-10-23 (Todd).** Nothing is broken: a bare enum, unit-only
+  included (`Mode`, `Contact`), renders as a `<select>` over its variants
+  and round-trips (suite `enums.rs`, a snapshot, e2e `/t/enum`). What is
+  missing is only CHOOSING another widget for an enum, which `form!`
+  refuses with a clear error. Not to be confused with `chooser_ideas.md`'s
+  `Chooser` (select vs radios by list length), which is unbuilt and which
+  this box does not need. The survey below stands for when it comes back.
+  Surveyed 2026-10-23, line numbers as of `555ebf2`. What makes it more
+  than a move: `SelectView` (`select.rs:54–103`) and `RadioGroupView`
+  (`radio_group.rs:75`) READ their value from the store (`get_current`)
+  and WRITE it there (`write_value`, `select.rs:76`, `radio_group.rs:138`),
+  under a `name` (`select.rs:72`, `radio_group.rs:132`). A variant choice
+  is none of those: it is not in the store, arrives as `selected`, leaves as
+  an `Edit`, and carries no `name` so `distribute_form_values` never sees it
+  (`select.rs:102–122`'s doc on `ABSENT_DISPLAY` says why that matters).
+
+  Open, for Todd:
+  - **V1. How a chooser learns it is picking a variant.** (a, Claude
+    recommends) `WidgetProps` gains one field, `binding: Binding`, an enum
+    `Value` (today's: store + `name`) | `Shape { selected: Option<String>,
+    on_choose: Callback<Edit> }` (no `name`, no store); each chooser branches
+    on it once for reading and once for writing. One field rather than two
+    `Option`s, so "a selected but no callback" cannot be written. (b) The
+    `VariantSet` gives the chooser a private store keyed by its path and
+    fires the `Edit` from an effect: no change to the widgets, but a second
+    source of truth and a render's delay. (c) Write the variant into the
+    form's own store: rejected, it reopens the sentinel problem
+    `VariantChoice` exists to close.
+  - **V2. Radios need a `name` to be one group**, and a named radio is
+    submitted. Either the shape binding still names them, under a key
+    `distribute_form_values` ignores (`{path}.$variant`? anything unparsable
+    as a field path), or radios are refused as a variant chooser for now and
+    only `Select` takes the binding. The box's own example IS a radio group,
+    so the first.
+  - **V3. Which widgets `form!` lets onto an enum.** `is_single_value`
+    (`field_kind.rs:151`) refuses every widget there, and `form!` asserts it
+    (`formoxus-macros/src/form/widget.rs:266–271`). Proposed: an enum takes
+    exactly the widgets with `TAKES_CHOICES` (its variants ARE the
+    choices), with `ACCEPTS_OPTIONAL` still deciding `Option<Enum>`, so
+    `radio_group` on an optional enum is refused as the memory note
+    `enum_as_a_value_choice.md` predicted. `renders` (`field_kind.rs:167`)
+    then judges `Kind::Enum` by `TAKES_CHOICES` instead of returning `true`.
+
+  Then, in order:
+
+  - [ ] **VP1.** `WidgetProps` (`widgets/widget_props.rs:14–38`) gains the
+      V1 field; every place that builds one sets it (`FieldNode`, the suite's
+      `through_widget` in `tests/suite/builtin_widgets.rs`, the custom-widget
+      tests).
+  - [ ] **VP2.** `SelectView` honours it: `selected`/`on_choose` instead of
+      `get_current`/`write_value`, no `name`, the `""` option mapping to
+      `Edit::new_choose_variant(&path, None)` as `variant_select.rs:40–44`
+      does now. The required/optional placeholder logic (`select.rs:85–90`)
+      is the same as `VariantSelect`'s (`variant_select.rs:49–53`), so it
+      carries over unchanged.
+  - [ ] **VP3.** `RadioGroupView` honours it, per V2.
+  - [ ] **VP4.** `VariantSet::render` (`nodes/variant_set.rs:228–250`):
+      render `self.widget` (a new `AnyWidget` field) instead of
+      `VariantSelect`, with `choices: Some(variants as Choice)`, each
+      `Choice::new(v, v.to_case(ctx.label_case))`, so the `label_case` prop
+      goes. `values` stays the form's, unread.
+  - [ ] **VP5.** `enum_node` (`build.rs:541–583`) reads `spec.widget` (from
+      `walk.spec_for(prefix)` at 554), defaulting to `Select`, into
+      `VariantSet`'s new field.
+  - [ ] **VP6.** `form!`, per V3: `is_single_value` lets an enum through;
+      `renders` judges it; the assert's message at `widget.rs:270` stops
+      saying "or enum". Golden: `tests/ui/form_widget_on_a_struct.stderr`
+      moves with the message; new goldens for a non-chooser on an enum and
+      `radio_group` on an `Option<Enum>`.
+  - [ ] **VP7.** Delete `VariantSelect`: `widgets/variant_select.rs`, the
+      module and re-export (`widgets.rs:68`, `88`), the module list doc
+      (`widgets.rs:55`), and the doc mentions at `select.rs:44`, `70`, `111`
+      and `row_buttons.rs:16`.
+  - [ ] **VP8.** (Claude) Tests. Existing: `tests/suite/enums.rs` (202,
+      920–923), `author_attrs.rs` (293, 310), `label_case.rs:248`,
+      `choices.rs:3`, `field_kind.rs:522`, and e2e
+      `an_enums_variant_select_is_named_by_its_legend`
+      (`e2e/tests/widgets.rs:135`) must pass unchanged, which proves the
+      default did not move; so must the `tests/snapshots/` files, since a
+      `Select` chooser keeps `Select`'s slots. New: `with_widget` on an enum
+      renders radios; picking a radio fires `ChooseVariant` (suite) and
+      rebuilds the fields beneath it (e2e, a new `/t/enum-radios` form in
+      `examples/src/test_forms.rs`, in a pair with its test); the radios'
+      name is not submitted as a value (V2).
 - [ ] **`#[derive(Widget)]`** with `#[widget(extends = …)]` and per-prop
   `#[widget(default = …)]`, once the built-ins show what it should write.
   `CLAUDE.md`'s "never derives" gains its exception.

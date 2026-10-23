@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**2026-10-23 (`just ci` GREEN): CHECKPOINT 4 DONE, `BuiltinWidget`
+**2026-10-23 (pushed as `555ebf2`, `just ci` GREEN): CHECKPOINT 4 DONE, `BuiltinWidget`
 IS GONE.** Items 14–18 landed today: `InputView` routes on a private
 `InputBody`, `FieldControl` is flattened into `HtmlElement` and `true_and_on`
 deleted (15), and `BuiltinWidget`, `Part` and `RenderedInputType` are deleted
@@ -13,8 +13,9 @@ from `formoxus-spec` with their re-exports, tests and the transition test
 (16–18, one commit; 18 was a box I added, since no box deleted the types).
 `widget_matrix` now reads each widget's `ACCEPTS` through `entry::<W>()`
 and no longer lists not-yet widgets (it cannot see `WidgetName::NOT_YET`).
-NEXT, per Step 5 in `formoxus/FIELDS_PLAN.md`: the variant picker as a
-chooser widget, then `#[derive(Widget)]`. Todd builds step by step from a
+NEXT, per Step 5 in `formoxus/FIELDS_PLAN.md`: `#[derive(Widget)]`. The
+variant picker box is DEFERRED (Todd, 2026-10-23): a bare enum already
+renders and round-trips; its V1–V3 survey stays in the plan. Todd builds step by step from a
 to-do list with LINE NUMBERS (he asked for them on 15), and hands me whole
 items or sub-steps.
 
