@@ -43,16 +43,16 @@ impl WidgetProps {
     }
 
     /// `part`'s classes from the form's `Classes`, with its invalid addition
-    /// when the field has errors.
-    ///
-    /// Crate-private, as `field_row` is.
-    pub(crate) fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
+    /// when the field has errors. For a part's `class` other than the control,
+    /// such as the wrapping `div`; [`control_class`](Self::control_class) is
+    /// for the control itself.
+    pub fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
         self.classes.part_class::<W>(tag, self.is_invalid())
     }
 
     /// The form control's `class`: `part`'s slot, as the field's own `class`
     /// and `class_plus` replace or extend it.
-    pub(crate) fn control_class<W: Widget>(&self, tag: Tag) -> Option<String> {
+    pub fn control_class<W: Widget>(&self, tag: Tag) -> Option<String> {
         self.attrs
             .class(self.classes.part::<W>(tag), self.is_invalid())
     }

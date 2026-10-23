@@ -47,8 +47,9 @@
 //!   [`AnyWidget`], the form a field holds one in.
 //! - `widget_props` (re-exported as [`WidgetProps`]) — what a widget is handed
 //!   to render a field.
-//! - `field_row` (crate-private) — the row a one-control widget renders
-//!   around its control: wrapper, caption and required marker, errors.
+//! - [`field_row`](mod@field_row) — the row a one-control widget renders
+//!   around its control: wrapper, caption and required marker, errors. Public
+//!   so a dev's widget can look like a built-in one without copying the layout.
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
@@ -57,7 +58,7 @@
 //! - [`errors`] — the error list rendered under every widget.
 
 pub mod errors;
-pub(crate) mod field_row;
+pub mod field_row;
 pub mod input;
 pub mod radio_group;
 pub mod row_buttons;
@@ -72,6 +73,7 @@ pub(crate) mod widget_props;
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
+pub use field_row::{LabelSide, field_label, field_row, required_marker};
 pub use input::{
     CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,

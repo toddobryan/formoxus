@@ -29,15 +29,16 @@ Feedback from real use should decide both, so expect that rather than
 "what's the next plan step". Step 6 (`field:` in `form!`, a type → field
 registry) is the next un-deferred step.
 
-**First thing when USING it: apcsp-dioxus does not use this repo yet.**
-Checked 2026-10-23: its workspace still has `crates/formoxus` and
-`crates/formoxus-macros` as members, with `formoxus = { path =
-"crates/formoxus" }` and a `derive` feature, i.e. the stale pre-2026-09-19
-mirror (see CLAUDE.md). Pointing it at this repo (a path or git dependency)
-is the real first step, and will need every form there rewritten to `form!`
-over a `Facet` model, plus a direct `facet` dependency
-([[facet-reexport-needs-direct-dep]]). Do not edit apcsp-dioxus from a
-formoxus session without Todd asking.
+**apcsp-dioxus DOES use this repo (corrected 2026-10-23).** It was
+repointed at `../formoxus/formoxus` on 2026-09-29 (apcsp `2994d6e`); the note
+that stood here was written from a machine that hadn't pulled that. On
+2026-10-23 apcsp branch `external-formoxus` caught it up to this repo's
+post-09-30 API (`ValidationMessage`/`ValidationError<T>`, the `Widget` trait).
+That port surfaced one miss, fixed here the same day: `field_row`,
+`field_label`, `required_marker`, `LabelSide` and `WidgetProps::part_class`/
+`control_class` were `pub(crate)`, so a custom widget couldn't share the
+built-ins' layout. Do not edit apcsp-dioxus from a formoxus session without
+Todd asking.
 
 **How Todd works.** He builds step by step from a to-do list with LINE
 NUMBERS and hands me whole items or sub-steps; he wants design questions

@@ -10,7 +10,7 @@ use crate::widgets::{FieldErrors, Widget, WidgetProps};
 
 /// Which side of its form control a field's caption goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LabelSide {
+pub enum LabelSide {
     /// Caption, then control: how every text-like input, a textarea and a
     /// select read.
     Before,
@@ -28,7 +28,11 @@ pub(crate) enum LabelSide {
 /// marker, which is `required` for most widgets but `required_true` for a
 /// checkbox. A hidden input (bare) and a radio group (`fieldset`/`legend`)
 /// do not use it.
-pub(crate) fn field_row<W: Widget>(
+///
+/// A dev's own widget calls it the same way the built-ins do, with its own
+/// type as `W`: that keys the wrapper's and caption's classes to the widget's
+/// slots in `Classes`, so a custom widget is styled like any other.
+pub fn field_row<W: Widget>(
     props: &WidgetProps,
     marked: bool,
     side: LabelSide,
@@ -67,7 +71,7 @@ pub(crate) fn field_row<W: Widget>(
 /// The marker is INSIDE the label, not a sibling: a consumer who makes
 /// `.fx-field-label` a block (the natural choice above an input) would
 /// otherwise push a lone asterisk onto its own line.
-pub(crate) fn field_label<W: Widget>(
+pub fn field_label<W: Widget>(
     id: &str,
     text: Option<String>,
     marked: bool,
@@ -94,7 +98,7 @@ pub(crate) fn field_label<W: Widget>(
 /// `aria-hidden` because it is a VISUAL convention only: the `required`
 /// attribute is what a screen reader announces, so the asterisk would just be
 /// noise in the accessible name.
-pub(crate) fn required_marker(classes: &Classes) -> Element {
+pub fn required_marker(classes: &Classes) -> Element {
     let class_for_required = classes.fixed_class(FixedKey::RequiredMarker, false);
     rsx! {
         span { class: class_for_required, aria_hidden: "true", " *" }
