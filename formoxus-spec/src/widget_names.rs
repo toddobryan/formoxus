@@ -103,7 +103,6 @@ impl WidgetName {
 #[cfg(test)]
 mod tests {
     use super::WidgetName;
-    use crate::BuiltinWidget;
     use googletest::prelude::*;
     use std::collections::HashSet;
 
@@ -151,25 +150,5 @@ mod tests {
                 "{name}"
             );
         }
-    }
-
-    /// While `BuiltinWidget` still exists: `ALL` is its rendered widgets'
-    /// names, in its order, and `NOT_YET` its others. Goes when
-    /// `BuiltinWidget` does.
-    #[gtest]
-    fn the_names_agree_with_builtin_widget() {
-        let rendered: Vec<&str> = BuiltinWidget::ALL
-            .iter()
-            .filter(|w| w.is_rendered())
-            .map(BuiltinWidget::form_name)
-            .collect();
-        let not_yet: Vec<&str> = BuiltinWidget::ALL
-            .iter()
-            .filter(|w| !w.is_rendered())
-            .map(BuiltinWidget::form_name)
-            .collect();
-        let names: Vec<&str> = WidgetName::ALL.iter().map(|w| w.form_name()).collect();
-        expect_that!(names, eq(&rendered));
-        expect_that!(WidgetName::NOT_YET.to_vec(), eq(&not_yet));
     }
 }

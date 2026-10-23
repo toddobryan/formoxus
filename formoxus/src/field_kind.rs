@@ -137,9 +137,10 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
 
 // ── Can this widget render this field? ──────────────────────────────────
 //
-// Which (field type, widget) pairs render is `BuiltinWidget::renders`. These
-// checks, called from `form!`'s `const _` items, are the only place it is
-// enforced: no widget type checks its field's type at runtime, so a pair
+// Which (field type, widget) pairs render is each widget's `ACCEPTS`,
+// `ACCEPTS_OPTIONAL` and `TAKES_CHOICES`. These checks, called from `form!`'s
+// `const _` items, are the only place it is enforced: no widget type checks
+// its field's type at runtime, so a pair
 // `form!` refuses still renders from a hand-built `FormSpec` (`widget_matrix`
 // marks those `ok*`).
 

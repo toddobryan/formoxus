@@ -47,8 +47,7 @@
 //! `MEMORY.md` index.
 
 /// The HTML facts `formoxus-spec` holds, which `form!` and a hand-built
-/// `FormSpec` name: the attribute table, the elements and input types, and the
-/// built-in widgets.
+/// `FormSpec` name: the attribute table, the elements and the input types.
 ///
 /// An explicit list, not a glob of `formoxus_spec::*`, so a type added there
 /// is public here only when someone decides it should be. `SlotKey` is the one
@@ -57,8 +56,8 @@
 /// `formoxus::buttons` and `formoxus::classes`.
 pub mod attrs {
     pub use formoxus_spec::{
-        Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, BuiltinWidget, FieldType, FieldTypeSet,
-        FieldTypeWithOptional, HtmlElement, InputType, Owner, Part, RenderedInputType, Step, Tag,
+        Attr, AttrKey, AttrSet, AttrType, AttrValue, Bound, FieldType, FieldTypeSet,
+        FieldTypeWithOptional, HtmlElement, InputType, Owner, Step, Tag,
     };
 }
 

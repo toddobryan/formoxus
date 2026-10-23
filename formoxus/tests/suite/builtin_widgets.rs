@@ -6,7 +6,7 @@ use dioxus::core::Attribute;
 use dioxus::prelude::*;
 use formoxus::ValidationMessage;
 use formoxus::attrs::AttrSet;
-use formoxus::attrs::{Attr, AttrKey, AttrValue, BuiltinWidget, FieldType, RenderedInputType as R};
+use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::widgets::Choice;
@@ -23,41 +23,26 @@ use std::rc::Rc;
 const ID: &str = "rand0123-title";
 const PATH: &str = "title";
 
-/// Every text-like widget type, beside the `BuiltinWidget` input it stands in
-/// for. A type added to the macro and not here goes untested, so the length
-/// is pinned against `BuiltinWidget::ALL` below.
-fn text_likes() -> Vec<(AnyWidget, R)> {
+/// Every text-like widget type, beside the `type=` it renders. Nothing here
+/// notices one added to the macro and left out of this list; that every
+/// built-in has a `WidgetName` row is `formoxus`'s own
+/// `each_builtins_row_names_the_builtin_itself`.
+fn text_likes() -> Vec<(AnyWidget, T)> {
     vec![
-        (TextInput.into(), R::Text),
-        (PasswordInput.into(), R::Password),
-        (NumberInput.into(), R::Number),
-        (EmailInput.into(), R::Email),
-        (TelInput.into(), R::Telephone),
-        (UrlInput.into(), R::Url),
-        (SearchInput.into(), R::Search),
-        (ColorInput.into(), R::Color),
-        (DateInput.into(), R::Date),
-        (TimeInput.into(), R::Time),
-        (DatetimeLocalInput.into(), R::DatetimeLocal),
-        (MonthInput.into(), R::Month),
-        (WeekInput.into(), R::Week),
+        (TextInput.into(), T::Text),
+        (PasswordInput.into(), T::Password),
+        (NumberInput.into(), T::Number),
+        (EmailInput.into(), T::Email),
+        (TelInput.into(), T::Telephone),
+        (UrlInput.into(), T::Url),
+        (SearchInput.into(), T::Search),
+        (ColorInput.into(), T::Color),
+        (DateInput.into(), T::Date),
+        (TimeInput.into(), T::Time),
+        (DatetimeLocalInput.into(), T::DatetimeLocal),
+        (MonthInput.into(), T::Month),
+        (WeekInput.into(), T::Week),
     ]
-}
-
-/// Every built-in widget type, beside the `BuiltinWidget` it stands in for.
-fn builtins() -> Vec<(AnyWidget, BuiltinWidget)> {
-    let mut all: Vec<_> = text_likes()
-        .into_iter()
-        .map(|(w, t)| (w, BuiltinWidget::Input(t)))
-        .collect();
-    all.extend([
-        (HiddenInput.into(), BuiltinWidget::Input(R::Hidden)),
-        (CheckboxInput.into(), BuiltinWidget::Input(R::Checkbox)),
-        (Textarea.into(), BuiltinWidget::Textarea),
-        (Select.into(), BuiltinWidget::Select),
-        (RadioGroup.into(), BuiltinWidget::RadioGroup),
-    ]);
-    all
 }
 
 /// SSR of `root` given `props`: `render_to_html`, for a root that takes props,
@@ -110,17 +95,6 @@ fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Elemen
 
 // ── The text-like inputs ─────────────────────────────────────────────────
 
-/// Every text-like `RenderedInputType` has a widget type in the table: all
-/// the inputs `BuiltinWidget::ALL` has, less hidden and checkbox.
-#[gtest]
-fn every_text_like_input_has_a_widget_type() {
-    let inputs = BuiltinWidget::ALL
-        .iter()
-        .filter(|w| matches!(w, BuiltinWidget::Input(t) if !matches!(t, R::Hidden | R::Checkbox)))
-        .count();
-    expect_that!(text_likes().len(), eq(inputs));
-}
-
 /// Each piece of the props reaches the markup.
 #[gtest]
 fn each_text_like_renders_every_prop() {
@@ -129,10 +103,7 @@ fn each_text_like_renders_every_prop() {
         expect_that!(
             html,
             all![
-                contains_substring(format!(
-                    r#"type="{}""#,
-                    input_type.to_input_type().html_type()
-                )),
+                contains_substring(format!(r#"type="{}""#, input_type.html_type())),
                 contains_substring(r#"value="A""#),
                 contains_substring("Title"),
                 contains_substring("too short"),
@@ -187,9 +158,6 @@ fn checkbox_and_textarea_render_every_prop() {
 /// once `Classes` is keyed on it.
 #[gtest]
 fn each_builtin_is_named_as_form_spells_it() {
-    for (widget, builtin) in builtins() {
-        expect_that!(widget.name(), eq(builtin.form_name()));
-    }
     expect_that!(Textarea::NAME, eq("textarea"));
     expect_that!(TextInput::NAME, eq("text"));
     expect_that!(TelInput::NAME, eq("tel"));
@@ -289,122 +257,4 @@ fn the_choosers_extend_their_own_elements() {
     // The spread lands on the fieldset, so a radio's attributes are not here.
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Disabled), eq(true));
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Checked), eq(false));
-}
-
-// ── The kind consts agree with `BuiltinWidget` ───────────────────────────
-//
-// Checkpoint 1 of `FIELDS_PLAN.md`'s "Delete `BuiltinWidget`": the consts
-// each widget declares must answer what `BuiltinWidget`'s methods answer
-// today, so that `form!` can switch from one to the other in checkpoint 2
-// with nothing moving. Goes with `BuiltinWidget`, in checkpoint 4.
-
-const FIELD_TYPES: [FieldType; 4] = [
-    FieldType::Text,
-    FieldType::Int,
-    FieldType::Float,
-    FieldType::Bool,
-];
-
-/// Everything `W`'s consts and `builtin`'s methods disagree on; empty when
-/// they agree. The `renders` rule is checked for every field type, with and
-/// without choices, since `TAKES_CHOICES` changes the answer.
-fn disagreements<W: Widget>(builtin: BuiltinWidget) -> Vec<String> {
-    let mut found = Vec::new();
-    if W::ACCEPTS_OPTIONAL != builtin.accepts_optional() {
-        found.push(format!("ACCEPTS_OPTIONAL is {}", W::ACCEPTS_OPTIONAL));
-    }
-    if W::TAKES_CHOICES != builtin.takes_choices() {
-        found.push(format!("TAKES_CHOICES is {}", W::TAKES_CHOICES));
-    }
-    for field_type in FIELD_TYPES {
-        for has_choices in [false, true] {
-            let mine = W::ACCEPTS.contains(field_type) || (W::TAKES_CHOICES && has_choices);
-            if mine != builtin.renders(field_type, has_choices) {
-                found.push(format!(
-                    "renders {field_type:?} (choices: {has_choices}) is {mine}"
-                ));
-            }
-        }
-    }
-    found
-}
-
-#[gtest]
-fn each_builtins_kind_consts_agree_with_builtin_widget() {
-    let found = [
-        (
-            TextInput::NAME,
-            disagreements::<TextInput>(BuiltinWidget::Input(R::Text)),
-        ),
-        (
-            PasswordInput::NAME,
-            disagreements::<PasswordInput>(BuiltinWidget::Input(R::Password)),
-        ),
-        (
-            NumberInput::NAME,
-            disagreements::<NumberInput>(BuiltinWidget::Input(R::Number)),
-        ),
-        (
-            EmailInput::NAME,
-            disagreements::<EmailInput>(BuiltinWidget::Input(R::Email)),
-        ),
-        (
-            TelInput::NAME,
-            disagreements::<TelInput>(BuiltinWidget::Input(R::Telephone)),
-        ),
-        (
-            UrlInput::NAME,
-            disagreements::<UrlInput>(BuiltinWidget::Input(R::Url)),
-        ),
-        (
-            SearchInput::NAME,
-            disagreements::<SearchInput>(BuiltinWidget::Input(R::Search)),
-        ),
-        (
-            ColorInput::NAME,
-            disagreements::<ColorInput>(BuiltinWidget::Input(R::Color)),
-        ),
-        (
-            DateInput::NAME,
-            disagreements::<DateInput>(BuiltinWidget::Input(R::Date)),
-        ),
-        (
-            TimeInput::NAME,
-            disagreements::<TimeInput>(BuiltinWidget::Input(R::Time)),
-        ),
-        (
-            DatetimeLocalInput::NAME,
-            disagreements::<DatetimeLocalInput>(BuiltinWidget::Input(R::DatetimeLocal)),
-        ),
-        (
-            MonthInput::NAME,
-            disagreements::<MonthInput>(BuiltinWidget::Input(R::Month)),
-        ),
-        (
-            WeekInput::NAME,
-            disagreements::<WeekInput>(BuiltinWidget::Input(R::Week)),
-        ),
-        (
-            HiddenInput::NAME,
-            disagreements::<HiddenInput>(BuiltinWidget::Input(R::Hidden)),
-        ),
-        (
-            CheckboxInput::NAME,
-            disagreements::<CheckboxInput>(BuiltinWidget::Input(R::Checkbox)),
-        ),
-        (
-            Textarea::NAME,
-            disagreements::<Textarea>(BuiltinWidget::Textarea),
-        ),
-        (Select::NAME, disagreements::<Select>(BuiltinWidget::Select)),
-        (
-            RadioGroup::NAME,
-            disagreements::<RadioGroup>(BuiltinWidget::RadioGroup),
-        ),
-    ];
-    // Every widget type, so one added later and left out of this list fails.
-    expect_that!(found.len(), eq(builtins().len()));
-    for (name, disagreements) in found {
-        expect_that!(disagreements, is_empty(), "{name}");
-    }
 }

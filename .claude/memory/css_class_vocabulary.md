@@ -64,6 +64,8 @@ and Todd extended the carve-out by one type: **`FieldControl`** in
 `formoxus-attrs`, which names the bare element too (see CLAUDE.md's vocabulary
 section). The rule now reads: "control" names the bare HTML element and nothing
 else; anything that renders a field is a widget.
+**SUPERSEDED 2026-10-23:** `FieldControl` was flattened into `HtmlElement`
+(`FIELDS_PLAN.md` item 15), so `fx-control` is again the word's only use.
 
 ## The five gaps the old set had
 

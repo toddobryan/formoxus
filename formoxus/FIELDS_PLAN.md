@@ -1135,9 +1135,27 @@ widgets become ONE concept.
           `HtmlElement` sentence's `Control(FieldControl)` and "due to
           flatten" note (56–61). (Memory is Claude's, in 17.)
       - [x] **15i.** `just ci`; the goldens and snapshots should not move.
-  - [ ] **16.** Re-exports: `formoxus/src/lib.rs:60` and `widgets.rs:75`.
-  - [ ] **17.** (Claude) `widget_matrix` (it walks `BuiltinWidget::ALL`), the
+  - [x] **16.** Re-exports: `formoxus/src/lib.rs:60` and `widgets.rs:75`.
+      DONE 2026-10-23 (Todd), with 17 and 18 in one commit.
+  - [x] **17.** (Claude) `widget_matrix` (it walks `BuiltinWidget::ALL`), the
       tests that compare against `BuiltinWidget`, the README, and memory.
+  - [x] **18.** (Claude, added 2026-10-23) Delete the types themselves from
+      `formoxus-spec`: `BuiltinWidget` and `Part` (all of `widgets.rs`, its
+      tests included), `RenderedInputType` (`input_types.rs`, with its
+      tests), their `lib.rs` exports, and `widget_names.rs`'s transition
+      test. No box said so, and after 16–17 nothing reads them. 16, 17 and
+      18 are ONE commit: 16 alone turns exactly 17's list red.
+      DONE 2026-10-23. 17: `widget_matrix` reads each widget's `ACCEPTS`
+      through a generic `entry::<W>()` (same table as before, since
+      checkpoint 1's test had pinned the consts to `BuiltinWidget::renders`),
+      and drops its "no widget type yet" line, since it cannot see
+      `WidgetName::NOT_YET`. The suite's `text_likes` pairs each widget with
+      an `InputType`; the kind-consts comparison and the text-like count pin
+      went, the latter's job being `formoxus`'s own
+      `each_builtins_row_names_the_builtin_itself`. Neither README named the
+      types; memory marks `FieldControl` and `true_and_on` superseded. 18:
+      `formoxus-spec/src/widgets.rs` deleted outright (it held nothing
+      else). CHECKPOINT 4 DONE: `BuiltinWidget` is gone.
 - [ ] **The variant picker** (`VariantSelect`) becomes a chooser widget that
   still fires `on_edit` (decided 2026-10-16). **And `enum_node` reads
   `spec.widget`** so `with_widget` on an enum picks the chooser (a radio

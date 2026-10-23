@@ -1,6 +1,6 @@
 //! Which `(value kind, widget)` pairs actually render, and which panic.
 //!
-//! Whether `form!` accepts a pair is `BuiltinWidget::renders`, checked at
+//! Whether `form!` accepts a pair is the widget's `ACCEPTS`, checked at
 //! compile time. Nothing checks it at runtime since the widget types replaced
 //! `ScalarWidget`, which asserted it. This tool builds its forms with
 //! `FormSpec` directly, bypassing `form!`, so it shows both: what the runtime
@@ -13,8 +13,9 @@
 //! ```
 //!
 //! It is a development tool rather than a teaching example: it exists to keep
-//! the README's "what isn't done" section honest, and to tell us when work on
-//! the unimplemented widgets actually lands.
+//! the README's "what isn't done" section honest. A widget `form!` reserves a
+//! name for but nothing renders yet (`WidgetName::NOT_YET` in `formoxus-spec`)
+//! has no type, so it has no row here until it lands.
 
 // `dx serve` builds this whole package for wasm, binaries included, and there
 // is no `dioxus-ssr` there — nor any point in a terminal table inside a
@@ -27,9 +28,9 @@ use facet::Facet;
 use formoxus::attrs::FieldType;
 use formoxus::using_fns;
 use formoxus::widgets::{
-    AnyWidget, BuiltinWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput,
-    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
-    TextInput, Textarea, TimeInput, UrlInput, WeekInput,
+    AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
+    MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput,
+    Textarea, TimeInput, UrlInput, WeekInput, Widget,
 };
 use formoxus::{FormSpec, empty_form, use_form};
 use std::panic;
@@ -60,40 +61,36 @@ fn OneField(path: String, widget: AnyWidget) -> Element {
     form.render(using_fns! {})
 }
 
-/// Every built-in widget type, by its `form!` name, in `BuiltinWidget::ALL`'s
-/// order.
-fn every_widget() -> Vec<(&'static str, AnyWidget)> {
-    let widgets: [AnyWidget; 18] = [
-        TextInput.into(),
-        PasswordInput.into(),
-        HiddenInput.into(),
-        NumberInput.into(),
-        EmailInput.into(),
-        TelInput.into(),
-        UrlInput.into(),
-        SearchInput.into(),
-        ColorInput.into(),
-        DateInput.into(),
-        TimeInput.into(),
-        DatetimeLocalInput.into(),
-        MonthInput.into(),
-        WeekInput.into(),
-        CheckboxInput.into(),
-        Textarea.into(),
-        Select.into(),
-        RadioGroup.into(),
-    ];
-    widgets.into_iter().map(|w| (w.name(), w)).collect()
+/// One row of the table: a widget's `form!` name, the widget, and whether
+/// `form!` accepts it on a field of each type (no choices, not optional).
+type Entry = (&'static str, AnyWidget, fn(FieldType) -> bool);
+
+fn entry<W: Widget + Default>() -> Entry {
+    (W::NAME, W::default().into(), |t| W::ACCEPTS.contains(t))
 }
 
-/// The names in `BuiltinWidget::ALL` that `every_widget` has no type for:
-/// the widgets `form!` accepts but nothing can render yet.
-fn without_a_type(widgets: &[(&'static str, AnyWidget)]) -> Vec<&'static str> {
-    BuiltinWidget::ALL
-        .iter()
-        .map(BuiltinWidget::form_name)
-        .filter(|name| widgets.iter().all(|(n, _)| n != name))
-        .collect()
+/// Every built-in widget type, in `WidgetName::ALL`'s order.
+fn every_widget() -> [Entry; 18] {
+    [
+        entry::<TextInput>(),
+        entry::<PasswordInput>(),
+        entry::<HiddenInput>(),
+        entry::<NumberInput>(),
+        entry::<EmailInput>(),
+        entry::<TelInput>(),
+        entry::<UrlInput>(),
+        entry::<SearchInput>(),
+        entry::<ColorInput>(),
+        entry::<DateInput>(),
+        entry::<TimeInput>(),
+        entry::<DatetimeLocalInput>(),
+        entry::<MonthInput>(),
+        entry::<WeekInput>(),
+        entry::<CheckboxInput>(),
+        entry::<Textarea>(),
+        entry::<Select>(),
+        entry::<RadioGroup>(),
+    ]
 }
 
 /// `true` if the pair actually produced markup.
@@ -137,7 +134,7 @@ fn main() {
     let widgets = every_widget();
     let width = widgets
         .iter()
-        .map(|(n, _)| n.len())
+        .map(|(n, _, _)| n.len())
         .max()
         .unwrap_or(0)
         .max(7);
@@ -152,14 +149,10 @@ fn main() {
 
     // What `form!` would say about each pair, beside what the runtime does.
     let (mut ok, mut unchecked, mut bad) = (0, 0, 0);
-    for (name, widget) in &widgets {
-        let builtin = BuiltinWidget::from_form_name(name).expect("a built-in widget's name");
+    for (name, widget, accepts) in &widgets {
         print!("{name:width$}");
         for (path, field_type) in FIELDS {
-            let cell = match (
-                renders(path, widget.clone()),
-                builtin.renders(field_type, false),
-            ) {
+            let cell = match (renders(path, widget.clone()), accepts(field_type)) {
                 (true, true) => {
                     ok += 1;
                     "ok"
@@ -185,8 +178,4 @@ fn main() {
          ok* = {unchecked} more render, but `form!` rejects them at compile time,\n\
          so only a hand-built `FormSpec` reaches one.\n"
     );
-    let missing = without_a_type(&widgets);
-    if !missing.is_empty() {
-        println!("No widget type yet: {}.\n", missing.join(", "));
-    }
 }
