@@ -1249,13 +1249,108 @@ widgets become ONE concept.
 - [ ] **`#[derive(Widget)]`** with `#[widget(extends = …)]` and per-prop
   `#[widget(default = …)]`, once the built-ins show what it should write.
   `CLAUDE.md`'s "never derives" gains its exception.
-- [ ] Tests (Claude): `widget_matrix` and the custom-widget tests move to the
+  **DEFERRED 2026-10-23 (Todd):** he wants to use formoxus for a while
+  before committing to the derive's shape; DW1 is the decision to come
+  back to. The survey below stands.
+  Fleshed out 2026-10-23, line numbers as of `1fe6db6`. What a dev writes
+  today, by hand, is short: the suite's `Notes` (`tests/suite/classes.rs:245–261`)
+  is three consts and `render`, and `NAME`, `PARTS` and `EXTENDS` are the
+  only consts without a default (`widgets/widget.rs:22–66`). So the derive
+  earns its place on three things: per-prop defaults (a `Default` that is
+  not all zeros), `extends = textarea` in place of
+  `AttrSet::valid_on(HtmlElement::Textarea)`, and a misspelled part or
+  element caught at expansion with a suggestion, as `classes_plus:` does.
+
+  Open, for Todd:
+  - **DW1. Where `render` goes.** A derive writes a whole `impl Widget`, and
+    a trait impl cannot be split, so `render` cannot sit in the dev's own
+    `impl Widget` beside it. (a, Claude recommends) Split the trait: the
+    derive writes `impl Widget` (the consts), and the dev writes `impl
+    WidgetRender for Notes { fn render(…) }`, with `Widget: WidgetRender`
+    so `DynWidget` and `AnyWidget` see one bound. Built-ins move `render`
+    into the second trait, mechanically. (b) No trait change: the derive's
+    `render` calls an inherent method the dev names,
+    `#[widget(render = Self::view)]`. Smaller, but a second name for the
+    same thing, and defaulting it to `render` would make a missing method
+    recurse forever instead of failing to compile. (c) An attribute macro
+    on the impl block instead of a derive, `#[widget(extends = textarea)]
+    impl Widget for Notes { fn render … }`, filling in the consts; then
+    per-prop defaults need a second, struct-level macro.
+  - **DW2. `NAME` by default.** Snake case of the type name (`MarkdownWidget`
+    → `"markdown_widget"`), overridable with `#[widget(name = "…")]`. It keys
+    class slots and is what `classes_plus:` would one day spell, so two
+    crates' `Notes` would share slots; Claude would accept that and document
+    it, rather than key on the module path.
+  - **DW3. Does `#[derive(Widget)]` always write `Default`?** `Widget`
+    requires it, and per-prop defaults are half the point, so Claude says
+    always: a dev who also derives `Default` gets rustc's "conflicting
+    implementations", which says exactly what to delete.
+  - **DW4. Do the built-ins use it?** Claude says no: their `NAME` is a const
+    expression (`WidgetName::Textarea.form_name()`) and the text-likes come
+    from `macro_rules!` (`widgets/input.rs:25`), so the derive would need an
+    expression-valued `name` and `extern crate self as formoxus` for paths
+    that start `::formoxus`. The suite's custom widgets are the proof instead.
+
+  Then, in order:
+
+  - [ ] **DW-a.** `formoxus-spec`: parsers the derive reads at expansion
+      time, `const fn`s beside the existing `Tag::from_str`
+      (`elements.rs:81`): `HtmlElement` from `textarea`, `select`,
+      `fieldset`, `input(email)` (the `InputType` by its `html_type`
+      keyword, `_` for `-`), and `FieldType` from `text`, `int`, `float`,
+      `bool`. Each with an `ALL` for suggestions.
+  - [ ] **DW-b.** Per DW1, the trait split in `widgets/widget.rs:22–66` and
+      `DynWidget` (71–95); every built-in's `render` moves (`input.rs` 48,
+      111, 135; `textarea.rs:27`; `select.rs:31`; `radio_group.rs:41`), and
+      the suite's and goldens' `impl Widget`s (`tests/suite/classes.rs` 198,
+      248; `author_attrs.rs:160`; `form_macro.rs:641`; the five
+      `tests/ui/form_dev_widget_*.rs` and `form_widget_prop_*.rs`).
+  - [ ] **DW-c.** The derive, `formoxus-macros/src/widget.rs` (new; plain
+      `syn`, as the rest of the crate is since darling went), registered in
+      `formoxus-macros/src/lib.rs` beside `form` (44) as
+      `#[proc_macro_derive(Widget, attributes(widget))]`. Struct-level keys:
+      `name`, `parts = [div, label, textarea]`, `extends = textarea`
+      (omitted: `AttrSet::EMPTY`), `accepts = [text, int]`, `optional =
+      false`, `choices = false` (the last three omitted: the trait's
+      defaults). Field-level: `default = <expr>`. Refused with a span: a
+      tuple struct or enum (props are named `pub` fields), an unknown key,
+      a key given twice, an unknown tag or element (with a suggestion).
+      Emits `impl ::formoxus::widgets::Widget` and `impl Default`.
+  - [ ] **DW-d.** Export: `formoxus/src/widgets.rs:89` becomes `pub use
+      widget::{AnyWidget, Widget, WidgetRender};` plus `pub use
+      formoxus_macros::Widget;`. A derive and a trait can share the name
+      (macro vs type namespace, as serde's do), so `use
+      formoxus::widgets::Widget;` brings both.
+  - [ ] **DW-e.** Docs: the `Widget` trait's doc (`widget.rs:12–21`) shows
+      the derive first and the hand-written impl second; `CLAUDE.md:14`
+      ("form! and using_fns!, nothing else") and `CLAUDE.md:27–30` ("never
+      derives") gain the exception and its reason, from W-A: a widget is the
+      dev's own type in the dev's own crate, so the orphan rule that makes
+      `form!` function-like never applies.
+  - [ ] **DW-f.** (Claude) Tests: the suite's `Notes` and `Spreading` move to
+      the derive, `ClassProbe` stays hand-written so both routes stay
+      covered; a widget with a defaulted prop renders with it; goldens for
+      each refusal in DW-c, and one where `extends = textarea` lets `rows`
+      through and refuses `pattern`, which a `<textarea>` does not take. Merge
+      the next box into this one: its goldens for a misspelled prop and a
+      wrong-typed one already exist (item 16, 2026-10-20).
+- [x] Tests (Claude): `widget_matrix` and the custom-widget tests move to the
   new trait; goldens for a key a widget does not take, a misspelled prop, and
   a prop of the wrong type.
-- [ ] **Acceptance: nothing rules out Step 10.** `render` gets the whole
+  DONE by other boxes (checked 2026-10-23): `widget_matrix` and the suite's
+  custom widgets are `Widget` impls, and the goldens are item 16's
+  (`form_attribute_not_in_extends`, `form_widget_prop_misspelled`,
+  `form_widget_prop_wrong_type`, `form_widget_prop_on_a_widget_with_none`).
+  The derive's own tests are DW-f, deferred with it.
+- [x] **Acceptance: nothing rules out Step 10.** `render` gets the whole
   `ValuesStore` and its path, not one value string; `AnyWidget` does not
   depend on `FieldNode`, so a `FieldSet` can hold one later; and the trait
   leaves room for split hooks (`sub_names`, `combine`) as default methods.
+  CHECKED 2026-10-23 (Claude): `WidgetProps` carries `values: ValuesStore`
+  and `path`; `widgets/widget.rs` and `widget_props.rs` import nothing from
+  `field_node` (only `Classes`, `FieldAttrs`, `ValuesStore`, `Choice`); and
+  a default method can join `Widget` without breaking any impl. With the
+  variant picker and the derive deferred, STEP 5 IS DONE.
 
 ## Step 6: `field:` in `form!`, and the type → field registry
 

@@ -13,9 +13,11 @@ from `formoxus-spec` with their re-exports, tests and the transition test
 (16–18, one commit; 18 was a box I added, since no box deleted the types).
 `widget_matrix` now reads each widget's `ACCEPTS` through `entry::<W>()`
 and no longer lists not-yet widgets (it cannot see `WidgetName::NOT_YET`).
-NEXT, per Step 5 in `formoxus/FIELDS_PLAN.md`: `#[derive(Widget)]`. The
-variant picker box is DEFERRED (Todd, 2026-10-23): a bare enum already
-renders and round-trips; its V1–V3 survey stays in the plan. Todd builds step by step from a
+STEP 5 IS DONE. Two boxes DEFERRED (Todd, 2026-10-23), surveys kept in
+the plan: the variant picker (a bare enum already renders and
+round-trips; V1–V3 open) and `#[derive(Widget)]` (DW1, where `render`
+goes, open). Todd wants to USE formoxus for a while before committing to
+either, so expect feedback from real use rather than a next plan step. Todd builds step by step from a
 to-do list with LINE NUMBERS (he asked for them on 15), and hands me whole
 items or sub-steps.
 
