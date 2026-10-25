@@ -7,6 +7,7 @@
 //! only nodes with errors appear, and a container that can be *pushed* an
 //! error at its own path must be able to hand it back from there.
 
+use super::across_the_wire;
 use super::models::{EventForCreate, Location, Shape};
 use facet::Facet;
 use formoxus::{
@@ -47,6 +48,7 @@ fn a_passing_form_collects_nothing_at_all() {
     // must not report `(path, [])` for every field it happens to contain.
     let mut form = form_for(&filled_event(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&filled_event())));
+    expect_that!(across_the_wire(&filled_event()), ok(eq(&filled_event())));
 
     let errors = form.collect_errors();
     expect_that!(errors.fields, is_empty());

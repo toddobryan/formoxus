@@ -215,7 +215,7 @@ pub fn use_form_values<T>(form: &FormState<T>) -> ValuesStore
 where
     T: Clone + Debug + PartialEq + Facet<'static>,
 {
-    let leaves = form.collect_values();
+    let leaves = form.leaf_values();
     use_store(move || leaves.into_iter().collect())
 }
 
@@ -225,11 +225,12 @@ where
 /// `Copy`, so it drops into event handlers without ceremony.
 #[derive(Debug)]
 pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
-    /// Structure, typed values, errors — and *answers*. A fieldless enum
-    /// variant contributes nothing to `leaves()`, so a variant choice lives
-    /// nowhere but here. That's why it's `FormState` and not `FormSchema`, and
-    /// why it's a `Signal`: a structural edit rebuilds it and the page has to
-    /// re-render.
+    /// Structure, typed values, errors — and *answers*. Every enum's chosen
+    /// variant and every list's rows live here and only here, never in the
+    /// store: they change through an [`Edit`], and they reach the wire from
+    /// this state, as structure values ([`FormState::collect_values`]). That's
+    /// why it's `FormState` and not `FormSchema`, and why it's a `Signal`: a
+    /// structural edit rebuilds it and the page has to re-render.
     state_signal: Signal<FormState<T>>,
     /// Live raw values by qualified path. Changes on every keystroke, and
     /// survives a schema rebuild because paths are stable under one.
@@ -552,6 +553,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// **Structure is not rebuilt.** Values land in the map, but which paths
     /// get *rendered* is decided by the state's schema, so a server cannot add
     /// a row or choose a variant this way — only change what is already there.
+    /// A reply from [`WireForm::from_model`] does CARRY structure (each enum's
+    /// variant name, each list's row keys), and those entries are written into
+    /// the store like any other, deliberately: nothing reads a structure path
+    /// from the store ([`to_wire`](Self::to_wire) and [`validate`](Self::validate)
+    /// take structure from the state), so they sit there unread, and a key that
+    /// turns up where one should have been read is easier to debug present than
+    /// filtered away.
     #[expect(
         clippy::needless_pass_by_value,
         reason = "the caller is done with it: a `WireForm` arrives from a server fn and is consumed here, so `form.absorb(create_account(form.to_wire()).await?)` reads straight through. A reference would force every caller to bind it first"
@@ -581,7 +589,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// is the thing that has to change.
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
-        let leaves = fresh.collect_values();
+        let leaves = fresh.leaf_values();
         let mut state = self.state_signal;
         *state.write() = fresh;
         // Written per path rather than by replacing the map, so each input's
@@ -697,7 +705,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     let values = use_store(move || {
         state
             .peek()
-            .collect_values()
+            .leaf_values()
             .into_iter()
             .collect::<HashMap<_, _>>()
     });

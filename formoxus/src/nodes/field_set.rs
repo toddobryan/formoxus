@@ -3,10 +3,10 @@
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::nodes::NodeContext;
 use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns, qualify,
 };
+use crate::nodes::{NodeContext, RawValue};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use formoxus_spec::FixedKey;
@@ -70,7 +70,7 @@ impl Node for FieldSet {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
         let nested = qualify(prefix, &self.name);
         for m in &self.nodes {
             m.collect_values(&nested, out);
@@ -84,10 +84,10 @@ impl Node for FieldSet {
         }
     }
 
-    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
         for m in &mut self.nodes {
-            m.distribute_values(&nested, values);
+            m.distribute_values(&nested, specs, values);
         }
     }
 

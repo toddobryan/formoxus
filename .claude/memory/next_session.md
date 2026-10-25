@@ -5,6 +5,72 @@ metadata:
   type: project
 ---
 
+## ▶ NEXT: fix issue #13 (added 2026-10-24, from apcsp-dioxus)
+
+**A form with an enum can't be submitted:** the chosen variant is lost on the
+wire, so `Submission::accept` rejects it with "You must choose a variant for
+this field." Full write-up, a confirmed reproduction, the cause
+(`nodes/variant_set.rs` `collect_values`/`distribute_values`, lines 316-332)
+and a suggested fix (emit the variant name at the enum's own path, pick it
+via the `Edit::ChooseVariant` code in `distribute_values`) are in
+[#13](https://github.com/toddobryan/formoxus/issues/13), with a checklist of
+cases to test. This is the "feedback from real use" the pause below was
+waiting for: apcsp-dioxus's question editor (`QuestionForm.data` is an enum)
+is blocked on it, and two of its HTTP tests in `crates/web/src/server.rs`
+should go green once it's fixed. Todd writes the fix; Claude writes the
+round-trip tests for the issue's checklist.
+
+**Decided with Todd 2026-10-24, before the fix (the issue predates these):**
+- **A. The STATE owns the choice, not the store.** The trap in the issue's
+  fix as written: `collect_values` also seeds the `ValuesStore`, and
+  `to_wire`/`Form::validate` go through `ordered_values` (keys from
+  `collect_values`, values from the STORE), but `VariantSelect` only sends
+  `Edit::ChooseVariant` and never writes the store. So the choice goes on
+  the wire but never into the store; `ordered_values` takes it from the state.
+- **B.** `distribute_values` with the name already chosen is a no-op (else
+  every client `validate` rebuilds the variant's nodes blank).
+- **C.** An unknown name must survive `validate`, which clears errors, and
+  `OptionNode::validate` clears an absent inner's errors too, so an
+  `Option<Title>` given "Sir" would be ACCEPTED as `None`. Fix: remember the
+  bad name in the state (e.g. `VariantChoice::Unknown(String)`, which
+  `is_present` counts as present) and let `validate` re-derive the error.
+  Not only forged requests: a stale tab after a deploy renaming a variant.
+- **D.** `absorb` keeps "structure is not rebuilt": a choice in a reply is
+  ignored, and kept out of the store.
+
+**RED tests written 2026-10-24, uncommitted** (16 fail, all for the right
+reason): `submissions.rs` section "Enums: the choice has to cross the wire
+(#13)" + "Lists"; `wire.rs` gained `title: Title` on `Contact` (so its two
+hand-built round trips are red too) and section "A variant chosen in the
+browser (#13)", Harness tests that pick in the `<select>` and read `to_wire`.
+`Title` is in `models.rs`. NOT yet touched, and may need updating depending
+on how the fix splits leaves from choices: `optional_containers.rs`
+`a_chosen_unit_variant_survives_two_containers_deep` (asserts
+`collect_values()` empty) and `enums.rs`
+`a_variants_fields_are_namespaced_under_a_variant_segment` (exact paths).
+
+**Found the same day, NOT #13: every `Vec` is silently emptied by
+`Submission::accept`.** `empty_form` has no rows and `ListSet::
+distribute_values` only fills existing ones, so `accept` returns `Ok` with
+`[]`. Same root as #13 (structure isn't recovered from the wire); the design
+notes' "create mode yields zero rows" predates `Submission`. Test:
+`a_list_survives_the_wire`. FOLDED INTO #13 (Todd), which was retitled and
+given a comment with A–D. **The build order is `formoxus/ISSUE_13_PLAN.md`**
+(boxes 1–26. DECIDED Q1: ONE tagged walk, never a second `collect_structure` (Todd dislikes two functions doing the same traversal); Q2 rows as `tags` = `#0,#1`; Q3 malformed = field error. Q4 `enum Value { Leaf { path, raw }, Structure { path, raw } }`, not a struct with a kind field; Q5 `FormState::collect_values` returns everything).
+
+**Also found, separate:** tuple variants build fine (fields `0`, `1`, paths
+`shape.$Rect.0`) but their inputs render with NO `<label>`, since
+`default_label("0", …)` is `None`. Todd: require the dev to label them
+(FIELDS_PLAN V4); `form!` cannot address any field inside a variant yet, but
+`FormSpec::with_label("shape.$Rect.0", …)` works. And the variant `<select>` has no `name`,
+deliberately (see `enums.rs` `a_nested_enum_dispatches_under_its_qualified_path`),
+so a native form submit / `distribute_form_values` can't carry the choice.
+
+**Queued after #13: issue #14, min/max row counts for a list** (filed
+2026-10-24, Todd: "probably worth doing"). It builds on #13's list-level
+error path; open questions are in the issue (the name; whether a minimum
+pre-builds blank rows in `empty_form`).
+
 ## Coming back after a break (written 2026-10-23)
 
 **Where it stands.** Everything is on `main` (`widget` was merged and

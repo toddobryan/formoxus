@@ -3,13 +3,15 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — 2026-10-23: PAUSED for apcsp-dioxus; all on `main`, `just ci` green; Step 5 DONE, variant picker + `#[derive(Widget)]` deferred until real use; apcsp-dioxus uses this repo (its stale-mirror note was wrong, corrected)
+- [**START HERE: next session**](next_session.md) — **2026-10-24: NEXT is issue #13** (an enum's chosen variant is lost on the wire; blocks apcsp-dioxus's question editor). 2026-10-23: paused for apcsp-dioxus; all on `main`, `just ci` green; Step 5 DONE, variant picker + `#[derive(Widget)]` deferred until real use
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
 - [Plan task-list format](feedback_plan_task_list_format.md) — plans render in VS Code preview: `- [ ] **N.** …` + blank line before lists; `N. [ ]` hides numbers
 - [Dev vs user](dev_vs_user_vocabulary.md) — "dev" builds an app with formoxus, "user" uses that app, "Formoxus dev" changes formoxus; correct Todd when he slips
 - [Radical refactors on a branch](feedback_radical_refactors_on_a_branch.md) — big refactor on a branch: one breaking change beats many green steps; compiler errors are the to-do list
+- [One function, not two](feedback_one_function_not_two.md) — extend an existing function (tag/param/enum) over adding a near-duplicate; migration cost alone does not win
+- [Raise parked gaps when built on](feedback_raise_parked_gaps_when_built_on.md) — new code on a path a known-limitation comment/`*_yet` test warns about: say so; #13 came from one
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan
@@ -31,6 +33,7 @@
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30; per-field validators and `ErrorsStore` still open
 - [Errors here vs within](errors_here_vs_within.md) — 2026-10-09: `has_errors_here` (own, for rendering) vs `has_errors_within` (subtree, for validate); they can never agree
 - [Config cascade](config_cascade.md) — app → form → field via Dioxus context; RULE: resolve at the `Form` boundary, never call `defaults()` while rendering
+- [IndexMap store: not worth it](indexmap_store_not_worth_it.md) — ASKED TWICE: feasible (~150 lines, extension trait) but `ordered_values` stays; upstream PR if ever
 - [Const shape walk blocked](const_shape_walk_blocked.md) — compile-time checks are FREE `const _` items with `shape_of`, not `const {}` in a generic fn
 - [Facet newtypes & custom widgets](facet_newtypes_and_custom_widgets.md) — newtypes are leaves; `WidgetType::Custom` is a fn pointer; `wrapper` side-channel
 - [facet re-export needs a direct dep](facet_reexport_needs_direct_dep.md) — users still need `facet` directly; the derive hard-codes `::facet` (facet#2662)

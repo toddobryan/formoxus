@@ -15,8 +15,8 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
-use crate::nodes::NodeContext;
 use crate::nodes::{Edit, Node, ValuesByPath, no_such_path, owns};
+use crate::nodes::{NodeContext, RawValue};
 use crate::{classes::Classes, error::ValidationError};
 
 use super::FormSpec;
@@ -135,39 +135,81 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    /// Every leaf input in the form, keyed by qualified path, in the order the
-    /// node tree declares them — the inverse of
-    /// [`distribute_values`](Self::distribute_values), and the list the widget
-    /// layer turns into one store entry apiece.
-    pub fn collect_values(&self) -> ValuesByPath {
+    fn raw_values(&self) -> Vec<RawValue> {
         let mut out = Vec::new();
         for m in &self.nodes {
             m.collect_values("", &mut out);
         }
-        out.into_iter().collect()
+        out
     }
 
-    /// A [`ValuesStore`](crate::ValuesStore)'s contents as a [`ValuesByPath`],
-    /// ordered by the node tree rather than by the map's hashing.
+    /// The leaf entries alone: what a [`ValuesStore`](crate::nodes::ValuesStore)
+    /// is seeded with. Structure stays out, because the state owns it.
+    pub(crate) fn leaf_values(&self) -> ValuesByPath {
+        self.raw_values()
+            .into_iter()
+            .filter_map(|v| match v {
+                RawValue::Leaf { path, data } => Some((path, data)),
+                RawValue::Structure { .. } => None,
+            })
+            .collect()
+    }
+
+    /// Everything a server needs to rebuild this form, keyed by qualified path,
+    /// in the order the node tree declares them — the inverse of
+    /// [`distribute_values`](Self::distribute_values), and exactly what goes on
+    /// the wire.
+    ///
+    /// Two kinds of entry (see [`RawValue`]): every leaf input's raw value, and
+    /// every structure value, which decides which nodes exist at all: an enum's
+    /// chosen variant name at the enum's own path (`""` when unchosen), and a
+    /// list's row keys in order at the list's own path (`tags` = `#0,#1`). A
+    /// client that builds a payload without a form (a script, a test) has to
+    /// send both, or the server rebuilds no variants and no rows.
+    ///
+    /// Only the leaves belong in a [`ValuesStore`](crate::nodes::ValuesStore): the
+    /// state owns structure, so seeding a store takes the leaves alone.
+    pub fn collect_values(&self) -> ValuesByPath {
+        self.raw_values()
+            .into_iter()
+            .map(RawValue::into_pair)
+            .collect()
+    }
+
+    /// The live form as a [`ValuesByPath`]: what the user typed, plus the
+    /// structure the state holds, in the node tree's order. What `Form::to_wire`
+    /// sends and what `Form::validate` distributes back.
     ///
     /// The bridge every read of the live values crosses, because the store's map
     /// and [`ValuesByPath`] cannot be the same type — see
-    /// [`ValuesStore`](crate::ValuesStore). Takes its KEYS and their order from
-    /// [`collect_values`](Self::collect_values) and its VALUES from the store, which is the only
-    /// way to get both: the schema knows the order, the store knows what the
-    /// user typed.
+    /// [`ValuesStore`](crate::nodes::ValuesStore). Takes its PATHS and their
+    /// order from the node tree's own walk (the [`RawValue`]s behind
+    /// [`collect_values`](Self::collect_values)), and each VALUE from whichever
+    /// side owns it, which the entry's kind decides:
     ///
-    /// Two things follow from taking the keys from the schema. A path the store
-    /// holds but the schema does not is dropped — those are the stale keys an
-    /// undone variant choice leaves behind, which nothing reads. And a path the
-    /// schema has but the store does not arrives as `""`, which is the same
+    /// - A [`RawValue::Leaf`]'s value comes from the STORE, which is what the
+    ///   user has typed since the state last saw it. The state's own copy is
+    ///   stale by every keystroke since.
+    /// - A [`RawValue::Structure`]'s value comes from the ENTRY ITSELF, which is
+    ///   the state: a variant chosen in the select or a row added with a button
+    ///   lands in the state, through an `Edit`, and never in the store. Looking
+    ///   it up in the store would send `""` for a choice made on an empty form,
+    ///   and the old choice after the user switched variants.
+    ///
+    /// Two things follow from taking the paths from the tree. A path the store
+    /// holds but the tree does not is dropped — those are the stale keys an
+    /// undone variant choice leaves behind, which nothing reads. And a leaf the
+    /// tree has but the store does not arrives as `""`, which is the same
     /// "absent IS empty" rule [`distribute_values`](Self::distribute_values) already follows.
     pub(crate) fn ordered_values(&self, store: &HashMap<String, String>) -> ValuesByPath {
-        self.collect_values()
-            .into_keys()
-            .map(|path| {
-                let raw = store.get(&path).cloned().unwrap_or_default();
-                (path, raw)
+        self.raw_values()
+            .into_iter()
+            .map(|v| match v {
+                RawValue::Leaf { path, .. } => {
+                    let raw = store.get(&path).cloned().unwrap_or_default();
+                    (path, raw)
+                }
+                RawValue::Structure { path, data } => (path, data),
             })
             .collect()
     }
@@ -177,7 +219,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// `validate()`.
     pub fn distribute_values(&mut self, values: &ValuesByPath) {
         for m in &mut self.nodes {
-            m.distribute_values("", values);
+            m.distribute_values("", &self.spec.fields, values);
         }
     }
 

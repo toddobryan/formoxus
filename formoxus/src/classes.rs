@@ -381,7 +381,13 @@ impl Classes {
                 FixedKey::FieldSetLegend,
                 Slot::new("fx-legend fx-field-label"),
             ),
-            (FixedKey::ListSet, Slot::new("fx-group fx-list-set")),
+            // `fx-invalid` like the radio group's fieldset, the other `fieldset`
+            // that carries its own errors: a list's own (row count, a rejected
+            // row-key entry), never a row's.
+            (
+                FixedKey::ListSet,
+                Slot::new("fx-group fx-list-set").with_invalid("fx-invalid"),
+            ),
             (
                 FixedKey::ListSetLegend,
                 Slot::new("fx-legend fx-field-label"),
@@ -716,9 +722,12 @@ mod tests {
             (FixedKey::FieldError, "fx-field-error"),
         ];
         for (slot, base) in expected {
+            // The one fixed slot with an invalid class: a list's fieldset
+            // carries the list's own errors, as the radio group's does (#13).
+            let invalid = (slot == FixedKey::ListSet).then_some("fx-invalid");
             expect_that!(
                 base_of(&fx, SlotKey::Fixed(slot)),
-                eq(Some((base, None))),
+                eq(Some((base, invalid))),
                 "{slot:?}"
             );
         }

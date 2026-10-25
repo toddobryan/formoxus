@@ -1,5 +1,6 @@
 //! `""` IS absence, at both boundaries.
 
+use super::across_the_wire;
 use facet::Facet;
 use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
@@ -37,6 +38,10 @@ fn populating_some_empty_collapses_to_none() {
         FormSpec::default(),
     );
     expect_that!(form.validate(), some(eq(&Optional { body: None })));
+    expect_that!(
+        across_the_wire(&Optional { body: None }),
+        ok(eq(&Optional { body: None }))
+    );
 }
 
 #[gtest]
@@ -92,12 +97,14 @@ fn non_empty_strings_are_untouched() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 
     let value = Required {
         body: "hello".to_string(),
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -119,4 +126,5 @@ fn zero_valued_scalars_are_not_empty() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }

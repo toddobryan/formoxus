@@ -44,6 +44,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// Rebuild the form from the raw `(path, value)` pairs a client sent, and
     /// run the form's own validation over it.
     ///
+    /// The form starts EMPTY, with no variant chosen and no rows, so the pairs
+    /// have to carry the structure as well as the leaves: each enum's variant
+    /// name and each list's row keys at its own path, as
+    /// [`Form::to_wire`](crate::Form::to_wire) sends them (the
+    /// [`wire`](crate::wire) module docs show the spelling). An unknown variant
+    /// name or a malformed row list is a field error at that path. An entry
+    /// that is simply MISSING leaves that enum unchosen and that list empty,
+    /// which a required enum then rejects, but an empty list does not.
+    ///
     /// The spec is the same one the client rendered from, so every per-field
     /// check AND the cross-field validator run again here — a request that
     /// skipped the browser entirely gets identical treatment, with no check
@@ -120,12 +129,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
         self.into_wire_with_errors()
     }
 
-    /// Accepted as submitted: the form's own leaves, no errors.
+    /// Accepted as submitted: the form's own values, leaves and structure, no
+    /// errors.
     ///
     /// For a handler that is finished and wants the client to absorb the
     /// canonical values. To send back values the server *changed*, normalize
     /// the model instead and use [`WireForm::from_model`] — that regenerates
-    /// every leaf from the value, so the two cannot drift.
+    /// every value from the model, so the two cannot drift.
     pub fn into_wire(self) -> WireForm<T> {
         WireForm::new(self.state.collect_values(), FormErrors::default())
     }

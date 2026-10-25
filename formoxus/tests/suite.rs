@@ -82,6 +82,23 @@ mod wire;
 /// if the format changes.
 pub const FORM_ID: &str = "[A-Za-z][A-Za-z0-9]{7}";
 
+/// What a server handler sees of `model`: its wire form, accepted afresh by
+/// an empty form, as `Submission::accept` does on every request.
+///
+/// The check `form_for(&m, …).validate() == Some(m)` cannot make: that path
+/// keeps typed values and never rebuilds anything, so it "holds by
+/// construction" (see `roundtrip`) and stayed green through #13, where every
+/// enum's choice and every list's rows were lost on the way to a server. So
+/// every test that round-trips a model in memory also sends it across here.
+pub fn across_the_wire<T>(model: &T) -> Result<T, formoxus::FormErrors>
+where
+    T: Clone + std::fmt::Debug + PartialEq + facet::Facet<'static>,
+{
+    let wire = formoxus::WireForm::from_model(model, formoxus::FormSpec::default());
+    formoxus::Submission::accept(formoxus::FormSpec::default(), wire.values())
+        .map(formoxus::Submission::into_model)
+}
+
 pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();

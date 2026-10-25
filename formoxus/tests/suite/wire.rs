@@ -5,11 +5,13 @@
 //! borrow, and neither resolves inside the library itself. A test here is the
 //! only place the expansion is exercised as a caller meets it.
 
+use super::models::Title;
+use super::{Harness, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{
-    ErrorsByPath, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form, form,
-    form_for, nodes::ValuesByPath, path, use_form, using_fns,
+    ErrorsByPath, Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form,
+    form, form_for, nodes::ValuesByPath, path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -21,6 +23,7 @@ struct Location {
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Contact {
+    title: Title,
     name: String,
     email: String,
     location: Location,
@@ -28,6 +31,7 @@ struct Contact {
 
 fn seeded() -> Contact {
     Contact {
+        title: Title::Dr,
         name: "Ada".into(),
         email: "ada@example.com".into(),
         location: Location {
@@ -309,6 +313,7 @@ fn handle(wire: &WireForm<Contact>) -> WireForm<Contact> {
 fn a_rejected_round_trip_comes_back_with_the_verdict() {
     let wire = WireForm::<Contact>::new(
         [
+            ("title", "Dr"),
             ("name", "Ada"),
             ("email", "ada@example.com"),
             ("location.city", "London"),
@@ -336,6 +341,7 @@ fn a_rejected_round_trip_comes_back_with_the_verdict() {
 fn an_accepted_round_trip_comes_back_normalized() {
     let wire = WireForm::<Contact>::new(
         [
+            ("title", "Dr"),
             ("name", "Ada"),
             ("email", "  ADA@Lovelace.ORG "),
             ("location.city", "London"),
@@ -371,4 +377,147 @@ fn a_wire_form_round_trips_through_json() {
 
     expect_that!(back.values().get("name"), some(eq("Ada")));
     expect_that!(back.errors().fields.len(), eq(1));
+}
+
+// ── A variant chosen in the browser (#13) ────────────────────────────────
+//
+// The choice lives in the STATE only (decided 2026-10-24): `VariantSelect`
+// reads it from there and reports a change as `Edit::ChooseVariant`, and
+// nothing writes it to the store. But `to_wire` and `Form::validate` build
+// their values through `ordered_values`, which reads the store, so a choice
+// emitted by `collect_values` and then looked up in the store would arrive
+// empty (picked on an empty form) or stale (switched on a seeded one). These
+// go in through the `<select>` because that is the only way to get a choice
+// the store never saw.
+
+/// What `to_wire` would send for `title` right now, and a button that runs
+/// `validate`, so a `Harness` can read both after an event.
+fn title_probe(form: Form<Contact>) -> Element {
+    let mut validated = use_signal(String::new);
+    let sent = form
+        .to_wire()
+        .values()
+        .get("title")
+        .cloned()
+        .unwrap_or_default();
+    rsx! {
+        {form.render(using_fns! {})}
+        output { id: "sent-title", "{sent}" }
+        button {
+            onclick: move |_| validated.set(format!("{:?}", form.validate().map(|c| c.title))),
+            "check"
+        }
+        output { id: "validated", "{validated}" }
+    }
+}
+
+#[component]
+fn EmptyContactProbe() -> Element {
+    let form = use_form(|| empty_form(form! { Contact {} }));
+    title_probe(form)
+}
+
+#[component]
+fn SeededContactProbe() -> Element {
+    let contact = seeded();
+    let form = use_form(move || form_for(&contact, form! { Contact {} }));
+    title_probe(form)
+}
+
+fn sent(title: &str) -> String {
+    format!(r#"<output id="sent-title">{title}</output>"#)
+}
+
+#[gtest]
+fn a_title_picked_on_an_empty_form_reaches_the_wire() {
+    let mut app = Harness::mount(EmptyContactProbe);
+    expect_that!(app.html(), contains_substring(sent("")));
+
+    // The text inputs listen for `input`, so the select is the only `change`.
+    app.fire("change", app.only_listener("change"), "Ms");
+
+    expect_that!(app.html(), contains_substring(sent("Ms")));
+}
+
+#[gtest]
+fn a_title_switched_on_a_seeded_form_reaches_the_wire() {
+    let mut app = Harness::mount(SeededContactProbe);
+    expect_that!(app.html(), contains_substring(sent("Dr")));
+
+    app.fire("change", app.only_listener("change"), "Rev");
+
+    expect_that!(
+        app.html(),
+        contains_substring(sent("Rev")),
+        "the store was seeded with Dr; the state's choice has to win"
+    );
+}
+
+/// `Form::validate` distributes `ordered_values` back into the state, so a
+/// stale choice there would switch the form back to what it was seeded with.
+#[gtest]
+fn validate_keeps_a_title_switched_in_the_browser() {
+    let mut app = Harness::mount(SeededContactProbe);
+    app.fire("change", app.only_listener("change"), "Rev");
+
+    app.click(app.only_listener("click"));
+
+    expect_that!(
+        app.html(),
+        contains_substring(r#"<output id="validated">Some(Rev)</output>"#)
+    );
+    expect_that!(
+        app.html(),
+        contains_substring(sent("Rev")),
+        "and the form still shows Rev afterwards"
+    );
+}
+
+/// A server reply built by `WireForm::from_model` carries the choice now, and
+/// `absorb` takes in values, not structure: the same choice must change
+/// nothing at all.
+#[gtest]
+fn absorbing_a_reply_with_the_same_title_changes_nothing() {
+    #[component]
+    fn Plain() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.render(using_fns! {})
+    }
+    #[component]
+    fn Absorbed() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.absorb(WireForm::from_model(&seeded(), form! { Contact {} }))
+            .expect("the reply names only this form's paths");
+        form.render(using_fns! {})
+    }
+    expect_that!(
+        without_form_id(&render(Absorbed)),
+        eq(&without_form_id(&render(Plain)))
+    );
+}
+
+/// A reply with a DIFFERENT choice leaves the variant alone ("structure is not
+/// rebuilt"), and its `title` must not linger anywhere `to_wire` would read it.
+#[gtest]
+fn absorbing_a_reply_with_another_title_leaves_the_choice_alone() {
+    #[component]
+    fn App() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        let reply = Contact {
+            title: Title::Rev,
+            ..seeded()
+        };
+        form.absorb(WireForm::from_model(&reply, form! { Contact {} }))
+            .expect("the reply names only this form's paths");
+        title_probe(form)
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(sent("Dr")));
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="Dr" selected=true>"#)
+    );
 }

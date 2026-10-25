@@ -1,5 +1,6 @@
 //! `Vec`/`Def::List` in edit mode.
 
+use super::across_the_wire;
 use super::models::{Location, Shape};
 use super::{Harness, new_since};
 use dioxus::prelude::*;
@@ -59,6 +60,7 @@ fn venues() -> Venues {
 fn scalar_rows_round_trip() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&quiz())));
+    expect_that!(across_the_wire(&quiz()), ok(eq(&quiz())));
 }
 
 #[gtest]
@@ -72,6 +74,7 @@ fn an_empty_list_round_trips() {
     };
     let mut form = form_for(&empty, FormSpec::default());
     expect_that!(form.validate(), some(eq(&empty)));
+    expect_that!(across_the_wire(&empty), ok(eq(&empty)));
 }
 
 #[gtest]
@@ -81,6 +84,7 @@ fn struct_rows_round_trip() {
     // field. Confusing the two halves fails exactly here.
     let mut form = form_for(&venues(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&venues())));
+    expect_that!(across_the_wire(&venues()), ok(eq(&venues())));
 }
 
 #[gtest]
@@ -92,6 +96,8 @@ fn rows_are_named_by_key() {
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
+            // The list's own entry: its row keys, in row order.
+            ("answers".to_string(), "#0,#1".to_string()),
             ("answers.#0".to_string(), "alpha".to_string()),
             ("answers.#1".to_string(), "beta".to_string()),
         ])
@@ -105,6 +111,7 @@ fn struct_rows_qualify_through_their_key() {
     expect_that!(
         paths,
         elements_are![
+            eq("places"),
             eq("places.#0.street"),
             eq("places.#0.city"),
             eq("places.#0.zip"),
@@ -124,14 +131,22 @@ fn nested_lists_nest_their_keys() {
         ],
     };
     let form = form_for(&grid, FormSpec::default());
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
     expect_that!(
-        paths,
-        elements_are![eq("rows.#0.#0"), eq("rows.#0.#1"), eq("rows.#1.#0")]
+        // Every list says which rows it has, the inner ones included.
+        form.collect_values().into_iter().collect::<Vec<_>>(),
+        eq(&vec![
+            ("rows".to_string(), "#0,#1".to_string()),
+            ("rows.#0".to_string(), "#0,#1".to_string()),
+            ("rows.#0.#0".to_string(), "a".to_string()),
+            ("rows.#0.#1".to_string(), "b".to_string()),
+            ("rows.#1".to_string(), "#0".to_string()),
+            ("rows.#1.#0".to_string(), "c".to_string()),
+        ])
     );
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&grid)));
+    expect_that!(across_the_wire(&grid), ok(eq(&grid)));
 }
 
 #[gtest]
@@ -153,7 +168,10 @@ fn enum_rows_are_pinned_by_the_value() {
     expect_that!(
         paths,
         elements_are![
+            eq("shapes"),
+            eq("shapes.#0"),
             eq("shapes.#0.$Circle.radius"),
+            eq("shapes.#1"),
             eq("shapes.#1.$Rectangle.width"),
             eq("shapes.#1.$Rectangle.height"),
         ]
@@ -161,6 +179,7 @@ fn enum_rows_are_pinned_by_the_value() {
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&drawings)));
+    expect_that!(across_the_wire(&drawings), ok(eq(&drawings)));
 }
 
 #[gtest]
@@ -174,21 +193,22 @@ fn editing_one_row_leaves_the_others_alone() {
     let mut expected = venues();
     expected.places[1].city = "Ogdenville".to_string();
     expect_that!(form.validate(), some(eq(&expected)));
+    expect_that!(across_the_wire(&expected), ok(eq(&expected)));
 }
 
 #[gtest]
 fn leaves_then_apply_is_an_identity_round_trip() {
-    // The widget loop, for lists. Note this reloads into a form of the SAME
-    // shape rather than `empty_form` (the way the scalar version of this
-    // test does): create mode yields zero rows today, so an `empty_form`
-    // here would drop every row on the floor. Swap it once step 4 lands —
-    // that substitution is a good check that lengths really are plumbed.
+    // The widget loop, for lists, reloaded into an `empty_form` the way the
+    // scalar version of this test does. An empty form has no rows, so this
+    // only works because the list's own entry (`places` = `#0,#1`) rebuilds
+    // them: before #13 it reloaded into a form of the same shape instead.
     let form = form_for(&venues(), FormSpec::default());
     let collected: ValuesByPath = form.collect_values();
 
-    let mut reloaded = form_for(&venues(), FormSpec::default());
+    let mut reloaded = empty_form::<Venues>(FormSpec::default());
     reloaded.distribute_values(&collected);
     expect_that!(reloaded.validate(), some(eq(&venues())));
+    expect_that!(across_the_wire(&venues()), ok(eq(&venues())));
 }
 
 #[gtest]
@@ -237,6 +257,7 @@ fn adding_a_row_appends_by_default() {
         paths_of(&form),
         elements_are![
             eq("title"),
+            eq("answers"),
             eq("answers.#0"),
             eq("answers.#1"),
             eq("answers.#2")
@@ -286,6 +307,9 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
+            // The list's own entry carries the ORDER, which the keys alone
+            // cannot: #2 is the newest key but the first row.
+            ("answers".to_string(), "#2,#0,#1".to_string()),
             // The new row comes FIRST in order...
             ("answers.#2".to_string(), String::new()),
             // ...while the two that were already here keep both their keys and
@@ -337,6 +361,7 @@ fn removing_a_row_leaves_the_survivors_keys_untouched() {
     expect_that!(
         paths_of(&form),
         elements_are![
+            eq("places"),
             eq("places.#1.street"),
             eq("places.#1.city"),
             eq("places.#1.zip")
@@ -369,9 +394,15 @@ fn a_key_is_never_reused() {
 
     expect_that!(
         paths_of(&form),
-        elements_are![eq("title"), eq("answers.#0"), eq("answers.#2")],
+        elements_are![
+            eq("title"),
+            eq("answers"),
+            eq("answers.#0"),
+            eq("answers.#2")
+        ],
         "the removed row was #1, so #1 must not come back"
     );
+    expect_that!(form.collect_values().get("answers"), some(eq("#0,#2")));
 }
 
 #[gtest]
@@ -390,7 +421,11 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
 
     expect_that!(
         paths_of(&form),
-        elements_are![eq("shapes.#0.$Circle.radius")]
+        elements_are![
+            eq("shapes"),
+            eq("shapes.#0"),
+            eq("shapes.#0.$Circle.radius")
+        ]
     );
 }
 
@@ -415,7 +450,12 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     );
     expect_that!(
         paths_of(&form),
-        elements_are![eq("title"), eq("answers.#0"), eq("answers.#1")],
+        elements_are![
+            eq("title"),
+            eq("answers"),
+            eq("answers.#0"),
+            eq("answers.#1")
+        ],
         "a rejected edit must leave the list exactly as it was"
     );
 }
@@ -542,6 +582,144 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
         contains_substring(r#"name="answers.#1" value="beta""#),
         "row two keeps its key AND the text typed into it"
     );
+}
+
+/// What `to_wire` would send for `answers` right now, and what a server makes
+/// of the whole payload, so a `Harness` can read both after clicks.
+#[component]
+fn BlankQuizProbe() -> Element {
+    let form = use_form(|| empty_form::<Quiz>(FormSpec::default()));
+    let wire = form.to_wire();
+    let rows = wire.values().get("answers").cloned().unwrap_or_default();
+    let accepted = match Submission::accept(FormSpec::<Quiz>::default(), wire.values()) {
+        Ok(sub) => sub.into_model().answers.join("|"),
+        Err(_) => "rejected".to_string(),
+    };
+    rsx! {
+        {form.render(using_fns! {})}
+        output { id: "rows", "{rows}" }
+        output { id: "accepted", "{accepted}" }
+    }
+}
+
+/// The browser half of #13 for lists: rows added, typed into and removed
+/// through real clicks reach the wire, and a server rebuilds exactly them.
+/// The rows exist only in the state, never in the store, so this is the path
+/// that would send none if `to_wire` read structure from the store.
+#[gtest]
+fn rows_added_and_removed_in_the_browser_reach_the_server() {
+    let mut app = Harness::mount(BlankQuizProbe);
+    // `title` is required, so the server rejects until it has one.
+    let title = app.only_listener("input");
+    app.fire("input", title, "Unit 1");
+    let add = app.only_listener("click");
+
+    let clicks = app.listeners("click");
+    let inputs = app.listeners("input");
+    app.click(add);
+    let remove_first = new_since(&clicks, app.listeners("click"))[0];
+    app.fire(
+        "input",
+        new_since(&inputs, app.listeners("input"))[0],
+        "alpha",
+    );
+
+    let inputs = app.listeners("input");
+    app.click(add);
+    app.fire(
+        "input",
+        new_since(&inputs, app.listeners("input"))[0],
+        "beta",
+    );
+    expect_that!(
+        app.html(),
+        all![
+            contains_substring(r#"<output id="rows">#0,#1</output>"#),
+            contains_substring(r#"<output id="accepted">alpha|beta</output>"#)
+        ]
+    );
+
+    app.click(remove_first);
+
+    expect_that!(
+        app.html(),
+        all![
+            contains_substring(r#"<output id="rows">#1</output>"#),
+            contains_substring(r#"<output id="accepted">beta</output>"#)
+        ],
+        "the removed row is gone from the wire, and its survivor keeps its key"
+    );
+}
+
+// ── The list's own errors ────────────────────────────────────────────────
+//
+// A list's own error (a server's verdict at the list's path, a rejected
+// row-key entry, and one day a row count, #14) renders under its legend,
+// linked by `aria-describedby`. A bad CELL is its row's error, not the list's.
+
+fn errors_at(path: &str, message: &str) -> FormErrors {
+    FormErrors {
+        form: Vec::new(),
+        fields: [(
+            path.to_string(),
+            vec![ValidationMessage(message.to_string())],
+        )]
+        .into_iter()
+        .collect(),
+    }
+}
+
+#[component]
+fn QuizWithAListError() -> Element {
+    let form = use_form(|| form_for(&quiz(), FormSpec::default()));
+    form.absorb(WireForm::from_errors(errors_at(
+        "answers",
+        "Give at least three answers.",
+    )))
+    .expect("answers is a path of this form");
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_lists_own_error_renders_under_its_legend_and_describes_it() {
+    let html = super::without_form_id(&super::render_to_html(QuizWithAListError));
+    expect_that!(
+        html,
+        contains_substring(
+            r#"<fieldset class="fx-group fx-list-set fx-invalid" id="FORMID-answers" aria-describedby="FORMID-answers-errors">"#
+        )
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<ul class="fx-field-errors" id="FORMID-answers-errors">"#)
+    );
+    // In reading order: the list's name, then its message, then its rows.
+    let legend = html.find("Answers</legend>").expect("the legend renders");
+    let message = html
+        .find("Give at least three answers.")
+        .expect("the message renders");
+    let first_row = html.find(r#"name="answers.#0""#).expect("the rows render");
+    expect_that!(legend < message && message < first_row, eq(true));
+}
+
+#[component]
+fn QuizWithACellError() -> Element {
+    let form = use_form(|| form_for(&quiz(), FormSpec::default()));
+    form.absorb(WireForm::from_errors(errors_at("answers.#0", "Too short.")))
+        .expect("answers.#0 is a path of this form");
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_bad_cell_does_not_mark_the_list_invalid() {
+    let html = super::without_form_id(&super::render_to_html(QuizWithACellError));
+    expect_that!(html, contains_substring("Too short."));
+    expect_that!(
+        html,
+        contains_substring(r#"<fieldset class="fx-group fx-list-set" id="FORMID-answers">"#),
+        "no fx-invalid and no aria-describedby: the error is the cell's"
+    );
+    expect_that!(html, not(contains_substring("FORMID-answers-errors")));
 }
 
 #[gtest]

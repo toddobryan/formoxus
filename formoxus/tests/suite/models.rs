@@ -47,3 +47,17 @@ pub enum Mode {
     Fast,
     Slow,
 }
+
+/// A fieldless enum a real form would have, for the wire tests (#13): a unit
+/// variant's choice is the ONLY thing the wire carries for it, so it is the
+/// case that proves the choice crosses at all. Used by `submissions` and `wire`.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+pub enum Title {
+    Mr,
+    Miss,
+    Mrs,
+    Ms,
+    Dr,
+    Rev,
+}

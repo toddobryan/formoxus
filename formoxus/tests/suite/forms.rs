@@ -1,5 +1,6 @@
 //! End-to-end round trips through `FormState<T>`: populate, collect, apply, validate.
 
+use super::across_the_wire;
 use super::models::{Event, EventForCreate, Location};
 use super::render_to_html;
 use dioxus::core::Mutation;
@@ -180,6 +181,7 @@ fn form_for_some_round_trips_the_model() {
     let mut form = form_for(&event, FormSpec::default());
     expect_that!(form.has_errors(), eq(false));
     expect_that!(form.validate(), some(eq(&event)));
+    expect_that!(across_the_wire(&event), ok(eq(&event)));
 }
 
 #[gtest]
@@ -333,6 +335,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
     reloaded.distribute_values(&round_tripped);
 
     expect_that!(reloaded.validate(), some(eq(&rsvp)));
+    expect_that!(across_the_wire(&rsvp), ok(eq(&rsvp)));
 }
 
 #[gtest]

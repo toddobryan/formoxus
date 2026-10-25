@@ -21,6 +21,7 @@
 //! cannot be derived the way it is for structs and lists.
 
 use super::Harness;
+use super::across_the_wire;
 use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
@@ -126,6 +127,7 @@ fn a_present_optional_struct_round_trips() {
     let value = contact(Some(springfield()));
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -137,6 +139,7 @@ fn an_absent_optional_struct_round_trips() {
     let value = contact(None);
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -146,6 +149,8 @@ fn create_mode_leaves_an_untouched_optional_struct_absent() {
     let mut form = empty_form::<Contact>(FormSpec::default());
     form.distribute_values(&applied(&[("name", "Ada")]));
     expect_that!(form.validate(), some(eq(&contact(None))));
+    let model = contact(None);
+    expect_that!(across_the_wire(&model), ok(eq(&model)));
 }
 
 #[gtest]
@@ -160,6 +165,8 @@ fn filling_in_an_absent_optional_struct_makes_it_present() {
         ("address.zip", "12345"),
     ]));
     expect_that!(form.validate(), some(eq(&contact(Some(springfield())))));
+    let model = contact(Some(springfield()));
+    expect_that!(across_the_wire(&model), ok(eq(&model)));
 }
 
 #[gtest]
@@ -173,6 +180,8 @@ fn blanking_a_present_optional_struct_makes_it_absent() {
         ("address.zip", ""),
     ]));
     expect_that!(form.validate(), some(eq(&contact(None))));
+    let model = contact(None);
+    expect_that!(across_the_wire(&model), ok(eq(&model)));
 }
 
 #[gtest]
@@ -203,6 +212,7 @@ fn a_present_optional_list_round_trips() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -210,6 +220,7 @@ fn an_absent_optional_list_round_trips() {
     let value = Tagged { tags: None };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -231,6 +242,10 @@ fn an_empty_optional_list_collapses_to_absent() {
         FormSpec::default(),
     );
     expect_that!(form.validate(), some(eq(&Tagged { tags: None })));
+    expect_that!(
+        across_the_wire(&Tagged { tags: None }),
+        ok(eq(&Tagged { tags: None }))
+    );
 }
 
 #[gtest]
@@ -243,6 +258,7 @@ fn an_optional_list_of_structs_round_trips() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 // ── Composition ──
@@ -258,10 +274,14 @@ fn option_peels_one_layer_at_a_time() {
         cells: Some(vec![Some("a".to_string()), None]),
     };
     let form = form_for(&value, FormSpec::default());
-    expect_that!(paths(&form), elements_are![eq("cells.#0"), eq("cells.#1")]);
+    expect_that!(
+        paths(&form),
+        elements_are![eq("cells"), eq("cells.#0"), eq("cells.#1")]
+    );
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 // ── Presence that the leaves cannot see ──
@@ -297,6 +317,7 @@ fn a_chosen_unit_variant_survives_behind_an_option() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -310,6 +331,7 @@ fn an_absent_optional_unit_variant_stays_absent() {
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[gtest]
@@ -322,13 +344,19 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
     };
     let form = form_for(&value, FormSpec::default());
     expect_that!(
-        form.collect_values(),
-        is_empty(),
-        "fieldless variants have no leaves"
+        // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order.
+        form.collect_values().into_iter().collect::<Vec<_>>(),
+        eq(&vec![
+            ("modes".to_string(), "#0,#1".to_string()),
+            ("modes.#0".to_string(), "Fast".to_string()),
+            ("modes.#1".to_string(), "Slow".to_string()),
+        ]),
+        "fieldless variants have no leaves, only their choices"
     );
 
     let mut form = form;
     expect_that!(form.validate(), some(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
 }
 
 #[component]

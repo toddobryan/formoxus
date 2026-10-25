@@ -10,7 +10,9 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, qualify};
+use crate::nodes::{
+    Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label, qualify,
+};
 use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{AnyWidget, CheckboxInput, Widget};
 
@@ -204,11 +206,14 @@ impl<F: Field> Node for FieldNode<F> {
         }
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
-        out.push((qualify(prefix, &self.name), self.raw_value()));
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+        out.push(RawValue::Leaf {
+            path: qualify(prefix, &self.name),
+            data: self.raw_value(),
+        });
     }
 
-    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &str, _specs: &SpecsByPath, values: &ValuesByPath) {
         let Some(raw) = values.get(&qualify(prefix, &self.name)) else {
             return; // nothing supplied for this field; leave it as it stands
         };

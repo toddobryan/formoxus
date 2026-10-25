@@ -22,6 +22,7 @@
 //! `FormState::choose_variant` — all passes as of the same commit, and now stands as
 //! the regression net for both.
 
+use super::across_the_wire;
 use super::models::{Mode, Shape};
 use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
@@ -91,6 +92,7 @@ fn form_for_round_trips_an_enum_field() {
     };
     let mut form = form_for(&drawing, FormSpec::default());
     expect_that!(form.validate(), some(eq(&drawing)));
+    expect_that!(across_the_wire(&drawing), ok(eq(&drawing)));
 }
 
 #[gtest]
@@ -106,6 +108,7 @@ fn nested_enum_field_round_trips() {
     };
     let mut form = form_for(&outer, FormSpec::default());
     expect_that!(form.validate(), some(eq(&outer)));
+    expect_that!(across_the_wire(&outer), ok(eq(&outer)));
 }
 
 #[gtest]
@@ -116,6 +119,7 @@ fn edit_mode_round_trips_an_optional_enum() {
     };
     let mut form = form_for(&sketch, FormSpec::default());
     expect_that!(form.validate(), some(eq(&sketch)));
+    expect_that!(across_the_wire(&sketch), ok(eq(&sketch)));
 }
 
 #[gtest]
@@ -126,6 +130,7 @@ fn edit_mode_round_trips_an_absent_optional_enum() {
     };
     let mut form = form_for(&sketch, FormSpec::default());
     expect_that!(form.validate(), some(eq(&sketch)));
+    expect_that!(across_the_wire(&sketch), ok(eq(&sketch)));
 }
 
 // ── Blank mode: everything starts Unchosen ──
@@ -135,11 +140,17 @@ fn a_blank_form_starts_every_enum_unchosen() {
     // No caller supplies choices any more, so this is now infallible — the
     // single biggest consequence of the change.
     let form = empty_form::<Drawing>(FormSpec::default());
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let values = form.collect_values();
+    let paths: Vec<String> = values.keys().cloned().collect();
     expect_that!(
         paths,
-        elements_are![eq("name")],
-        "an unchosen variant has no fields to contribute: {paths:?}"
+        elements_are![eq("name"), eq("shape")],
+        "an unchosen variant contributes its choice and no fields: {paths:?}"
+    );
+    expect_that!(
+        values.get("shape"),
+        some(eq("")),
+        "unchosen is sent as an empty choice"
     );
 }
 
@@ -531,7 +542,10 @@ fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
     expect_that!(
         paths,
         elements_are![
+            eq("shapes"),
+            eq("shapes.#0"),
             eq("shapes.#0.$Circle.radius"),
+            eq("shapes.#1"),
             eq("shapes.#1.$Rectangle.width"),
             eq("shapes.#1.$Rectangle.height"),
         ],
@@ -592,8 +606,13 @@ fn a_variants_fields_are_namespaced_under_a_variant_segment() {
     form.choose_variant("footprint", Some("Circle"))
         .expect("Circle is a variant of Footprint");
 
+    // The choice itself sits at the enum's own path, its fields one `$` segment
+    // below it.
     let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
-    expect_that!(paths, elements_are![eq("footprint.$Circle.size")]);
+    expect_that!(
+        paths,
+        elements_are![eq("footprint"), eq("footprint.$Circle.size")]
+    );
 }
 
 #[gtest]
@@ -605,14 +624,22 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
     form.choose_variant("footprint", Some("Circle"))
         .expect("Circle is a variant of Footprint");
 
-    // Type into every leaf Circle offers, then snapshot the value map.
-    let typed: ValuesByPath = form
-        .collect_values()
+    // Type into every leaf Circle offers, then snapshot the value map. Leaves
+    // only, for both: `collect_values` also carries the choice at `footprint`,
+    // which the real store never holds. Typing "5" there would make an unknown
+    // variant, and a snapshot holding `Circle` would switch the form back.
+    let variant_leaves = |values: ValuesByPath| -> ValuesByPath {
+        values
+            .into_iter()
+            .filter(|(p, _)| p.contains(".$"))
+            .collect()
+    };
+    let typed: ValuesByPath = variant_leaves(form.collect_values())
         .into_iter()
         .map(|(p, _)| (p, "5".to_string()))
         .collect();
     form.distribute_values(&typed);
-    let store: ValuesByPath = form.collect_values();
+    let store: ValuesByPath = variant_leaves(form.collect_values());
 
     // Switch. The store is keyed by path and survives structural edits by
     // design, so the Circle's entry is still sitting in it.
@@ -777,8 +804,14 @@ fn unsetting_drops_the_subtree_from_the_form() {
 
     form.choose_variant("shape", None)
         .expect("an optional enum can be cleared");
-    let cleared: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
-    expect_that!(cleared, elements_are![eq("name")]);
+    let cleared = form.collect_values();
+    let cleared_paths: Vec<String> = cleared.keys().cloned().collect();
+    expect_that!(cleared_paths, elements_are![eq("name"), eq("shape")]);
+    expect_that!(
+        cleared.get("shape"),
+        some(eq("")),
+        "only the empty choice is left"
+    );
 }
 
 #[gtest]

@@ -3,7 +3,7 @@ use dioxus::core::Element;
 use crate::ErrorsByPath;
 use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, SpecsByPath, ValuesByPath};
+use crate::nodes::{Edit, RawValue, SpecsByPath, ValuesByPath};
 use crate::nodes::{Node, NodeContext};
 
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ impl Node for OptionNode {
         self.inner.raw_value()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
         self.inner.collect_values(prefix, out);
     }
 
@@ -39,8 +39,8 @@ impl Node for OptionNode {
         self.inner.collect_errors(prefix, out);
     }
 
-    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
-        self.inner.distribute_values(prefix, values);
+    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
+        self.inner.distribute_values(prefix, specs, values);
     }
 
     fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {

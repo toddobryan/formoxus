@@ -208,3 +208,12 @@ practice: it needs a tampered submission or a refusal to pick a required variant
 snake_case rule gives a `ClassPlus` row, so it needs no special parsing. Only
 one of `class:` (replace) or `class_plus:` (append) per field. Every `class+`
 above means `class_plus:`. See [[attribute-rules-design]], decisions 13–14.
+
+**2026-10-24 (#13): the list's `fieldset` gets `fx-invalid` too** (`FixedKey::ListSet`,
+now `Slot::new("fx-group fx-list-set").with_invalid("fx-invalid")`), the one
+FIXED slot with an invalid class, for its OWN errors only (`has_errors_here`:
+a server verdict at the list's path, a rejected row-key entry, a row count
+once #14 lands), never a bad cell's. Same reasoning as the radio group's
+fieldset. No `aria-invalid` on it (role `group` leaves it undefined); the
+link is `aria-describedby` to its `FieldErrors` list, `{id}-errors`.
+

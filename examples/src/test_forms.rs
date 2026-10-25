@@ -41,6 +41,7 @@ pub fn TestForm(slug: String) -> Element {
         "radio-group" => rsx! { RadioGroupForm {} },
         "textarea" => rsx! { TextareaForm {} },
         "enum" => rsx! { EnumForm {} },
+        "enum-submit" => rsx! { EnumSubmit {} },
         "buttons" => rsx! { Buttons {} },
         "bare" => rsx! { Bare {} },
         other => rsx! {
@@ -363,6 +364,63 @@ fn EnumForm() -> Element {
             }
         },
     )
+}
+
+// ── enum-submit ──────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Footprint {
+    Circle { radius: f64 },
+    Square { side: f64 },
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Plot {
+    footprint: Footprint,
+}
+
+/// A data-carrying enum chosen and filled IN THE BROWSER, then submitted:
+/// issue #13's path. The variant lives only in the form's state, never in the
+/// value store, so this is where a real `onchange` has to reach the wire.
+///
+/// Records three things: the model the client validated (`#submitted`, as
+/// every test form does), what `Submission::accept` builds from `to_wire()`
+/// (`#accepted`, run in the page, since no test form has a server fn), and how
+/// many submits there have been (`#submits`), so validating twice is visible.
+#[component]
+fn EnumSubmit() -> Element {
+    let spec = || form! { Plot { buttons: { save: { type: submit } } } };
+    let mut submitted = use_signal(|| None::<String>);
+    let mut accepted = use_signal(String::new);
+    let mut submits = use_signal(|| 0_u32);
+    let form = use_form(move || empty_form(spec()));
+    rsx! {
+        Harness {
+            title: "enum-submit".to_string(),
+            note: "A data-carrying enum: choose a variant, fill its field, submit. What the client validated and what a server would build from the wire should agree.".to_string(),
+            submitted: submitted().unwrap_or_default(),
+            {
+                form.render(using_fns! {
+                    save: move |model: Plot| async move {
+                        *submits.write() += 1;
+                        submitted.set(Some(format!("{model:#?}")));
+                        let wire = form.to_wire();
+                        accepted.set(match Submission::accept(spec(), wire.values()) {
+                            Ok(sub) => format!("{:#?}", sub.into_model()),
+                            Err(errors) => format!("rejected: {errors:?}"),
+                        });
+                    },
+                })
+            }
+            section { class: "accepted",
+                "Accepted by Submission::accept:"
+                br {}
+                pre { id: "accepted", "{accepted}" }
+            }
+            p { "Submits: " output { id: "submits", "{submits}" } }
+        }
+    }
 }
 
 // ── textarea ─────────────────────────────────────────────────────────────

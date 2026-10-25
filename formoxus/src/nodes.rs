@@ -38,11 +38,11 @@ pub trait Node: Debug {
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two field sets in one form can each have a `street`.
-    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>);
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>);
     /// The reverse of [`collect_values`](Self::collect_values): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
-    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath);
+    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath);
     fn validate(&mut self);
     /// Whether anything is wrong at this node OR anywhere under it: what
     /// `FormState::validate` asks before building a model.
@@ -219,6 +219,30 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
         name.to_string()
     } else {
         format!("{prefix}.{name}")
+    }
+}
+
+/// One entry [`Node::collect_values`] emits, as a qualified path and its raw
+/// string.
+///
+/// A [`Leaf`](Self::Leaf) is what a user types into one input, and lives in the
+/// [`ValuesStore`]. A [`Structure`](Self::Structure) decides which nodes exist
+/// at all (an enum's variant name, a list's row keys), and lives only in the
+/// state, never in the store. Both cross the wire, because a server rebuilds
+/// from an empty form and has no other way to learn the structure.
+#[derive(Clone, Debug)]
+pub enum RawValue {
+    Leaf { path: String, data: String },
+    Structure { path: String, data: String },
+}
+
+impl RawValue {
+    pub fn into_pair(self) -> (String, String) {
+        match self {
+            RawValue::Leaf { path: p, data: d } | RawValue::Structure { path: p, data: d } => {
+                (p, d)
+            }
+        }
     }
 }
 

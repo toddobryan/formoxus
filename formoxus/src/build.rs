@@ -139,7 +139,7 @@ fn fields_from_struct(
 /// map, keyed by this enum's qualified path. Shared by the top-level
 /// `fields_from_enum` and `node_for`'s enum-field arm (which also needs the
 /// variant's *name*), so the selection logic lives in exactly one place.
-/// `None` means [`VariantChoice::Absent`] — an `Option<Enum>` with no value.
+/// `None` means [`VariantChoice::Unchosen`] — an `Option<Enum>` with no value.
 ///
 /// [`FormMode`] is what disambiguates a `peek_enum` of `None`: under
 /// `Populated` it means the value's `Option` really was `None` (absent, no
@@ -504,6 +504,7 @@ fn list_node(
         next_key: rows.len(),
         rows,
         errors: Vec::new(),
+        rejected_keys: None,
     })
 }
 

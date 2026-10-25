@@ -7,6 +7,7 @@
 //! halves of that: the string-facing side behaves exactly like the bare scalar,
 //! and the value still rebuilds as the wrapper.
 
+use super::across_the_wire;
 use facet::Facet;
 use formoxus::prelude::*;
 use googletest::prelude::*;
@@ -93,6 +94,7 @@ fn a_newtype_round_trips_through_edit_mode() {
     };
     let mut form = form_for(&doc, FormSpec::default());
     expect_that!(form.validate(), some(eq(&doc)));
+    expect_that!(across_the_wire(&doc), ok(eq(&doc)));
 }
 
 #[gtest]
@@ -214,4 +216,5 @@ fn a_present_optional_newtype_round_trips_as_some() {
     };
     let mut form = form_for(&doc, FormSpec::default());
     expect_that!(form.validate(), some(eq(&doc)));
+    expect_that!(across_the_wire(&doc), ok(eq(&doc)));
 }

@@ -5,11 +5,11 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::nodes::NodeContext;
 use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
+use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::VariantSelect;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
@@ -28,15 +28,24 @@ pub enum VariantChoice {
     Unchosen,
     /// This variant, by name.
     Named(String),
+    /// A name that matched no variant, kept so validate can re-derive the error,
+    /// which a pushed error would not survive.
+    Unknown(String),
 }
 
-/// An enum-typed field, locked to one answer chosen before the form (per the
-/// design — variant choice is a construction parameter, not an editable field).
-/// For a [`VariantChoice::Named`] answer it's a `FieldSet` over that variant's
-/// fields, plus the name so `write_into` can replay the choice; for
-/// [`VariantChoice::Unchosen`] it holds no nodes at all and writes `None`.
-/// The choice itself is NOT a leaf — it never appears in a path or a submitted
-/// value.
+/// An enum-typed field: a variant picker plus the chosen variant's fields.
+///
+/// The choice is an answer the user gives in the form, through the select and
+/// an `Edit::ChooseVariant`. For a [`VariantChoice::Named`] answer this holds
+/// that variant's fields, plus the name so `write_into` can replay the choice;
+/// for [`VariantChoice::Unchosen`] and [`VariantChoice::Unknown`] it holds no
+/// nodes at all.
+///
+/// The choice is NOT a leaf: it never enters the value store, and its fields'
+/// paths name it only as a `$Variant` segment. It IS a submitted value, though,
+/// a [`RawValue::Structure`] at this enum's own path (`shape` = `Circle`, `""`
+/// when unchosen), because a server rebuilds the form from nothing and has no
+/// other way to learn which variant's fields to build.
 #[derive(Clone, Debug)]
 pub struct VariantSet {
     pub field_attrs: FieldAttrs,
@@ -59,7 +68,7 @@ impl VariantSet {
                 &qualify(prefix, &self.name),
                 &variant_segment(variant),
             )),
-            VariantChoice::Unchosen => None,
+            VariantChoice::Unchosen | VariantChoice::Unknown(_) => None,
         }
     }
 
@@ -136,12 +145,24 @@ impl VariantSet {
         if let Some(found) = enum_type.variants.iter().find(|v| v.name == name) {
             return Ok(found);
         }
-        let known: Vec<&str> = enum_type.variants.iter().map(|v| v.name).collect();
-        let message = format!(
-            "{name:?} is not a variant of the enum at {my_path} (expected one of {known:?})"
-        );
+        let message = self.unknown_variant_message(name);
         self.errors.push(ValidationMessage(message.clone()));
-        Err(FormAccessError(message))
+        // The `Err` is read by a dev, with no select beside it, so it says where.
+        Err(FormAccessError(format!("{my_path}: {message}")))
+    }
+
+    /// What a user sees for a name that matches no variant, listing the real
+    /// ones so the message is actionable.
+    ///
+    /// Shared by `lookup_variant` (a stale name from a live select) and
+    /// `validate` (an `Unknown` that arrived on the wire), so the two cannot
+    /// drift. No path: the message is shown beside the select, or keyed by
+    /// the enum's path in `FormErrors`, so a path would only repeat that.
+    fn unknown_variant_message(&self, name: &str) -> String {
+        format!(
+            "{name:?} is not a variant (expected one of {:?})",
+            self.variants()
+        )
     }
 
     pub fn variants(&self) -> Vec<&'static str> {
@@ -150,7 +171,7 @@ impl VariantSet {
 
     pub fn chosen(&self) -> Option<String> {
         match &self.choice {
-            VariantChoice::Unchosen => None,
+            VariantChoice::Unchosen | VariantChoice::Unknown(_) => None,
             VariantChoice::Named(v) => Some(v.clone()),
         }
     }
@@ -184,7 +205,7 @@ impl Node for VariantSet {
         // dioxus would tear the `<select>` down and rebuild it on every change,
         // losing keyboard focus mid-interaction.
         let nodes: Vec<Element> = match &self.choice {
-            VariantChoice::Unchosen => Vec::new(),
+            VariantChoice::Unchosen | VariantChoice::Unknown(_) => Vec::new(),
             VariantChoice::Named(variant) => {
                 let nested = ctx.nested(&self.name).nested(&variant_segment(variant));
                 self.nodes.iter().map(|m| m.render(&nested)).collect()
@@ -255,13 +276,21 @@ impl Node for VariantSet {
 
     fn validate(&mut self) {
         self.errors.clear();
-        if matches!(self.choice, VariantChoice::Unchosen) {
-            self.errors.push(ValidationMessage(
-                "You must choose a variant for this field.".to_string(),
-            ));
-        }
-        for m in &mut self.nodes {
-            m.validate();
+        match &self.choice {
+            VariantChoice::Unchosen => {
+                self.errors.push(ValidationMessage(
+                    "You must choose a variant for this field.".to_string(),
+                ));
+            }
+            VariantChoice::Unknown(name) => {
+                let message = self.unknown_variant_message(name);
+                self.errors.push(ValidationMessage(message));
+            }
+            VariantChoice::Named(_) => {
+                for m in &mut self.nodes {
+                    m.validate();
+                }
+            }
         }
     }
 
@@ -313,21 +342,62 @@ impl Node for VariantSet {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<(String, String)>) {
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+        // The choice goes out even when unchosen, as `""`, so a list row that
+        // holds an unchosen optional enum still has an entry to be rebuilt from.
+        // An `Unknown` sends its bad name back, so a reply shows what was rejected.
+        let data = match &self.choice {
+            VariantChoice::Unchosen => String::new(),
+            VariantChoice::Named(name) | VariantChoice::Unknown(name) => name.clone(),
+        };
+        out.push(RawValue::Structure {
+            path: qualify(prefix, &self.name),
+            data,
+        });
         let Some(nested) = self.child_prefix(prefix) else {
-            return; // unchosen: no nodes, so no leaves
+            return; // unchosen or unknown: no nodes, so no leaves
         };
         for m in &self.nodes {
             m.collect_values(&nested, out);
         }
     }
 
-    fn distribute_values(&mut self, prefix: &str, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
+        let my_path = qualify(prefix, &self.name);
+
+        // Apply the choice, if one was sent. Absent means "leave it alone": a
+        // leaves-only map (a native form submit) has no entry here, and must
+        // not unchoose what the user picked.
+        if let Some(raw) = values.get(&my_path) {
+            let already_chosen =
+                matches!(&self.choice, VariantChoice::Named(current) if current == raw);
+            if !already_chosen {
+                if raw.is_empty() {
+                    self.set_variant(&my_path, None, specs)
+                        .expect("clearing a choice cannot fail");
+                } else if self
+                    .enum_type
+                    .variants
+                    .iter()
+                    .any(|v| v.name == raw.as_str())
+                {
+                    self.set_variant(&my_path, Some(raw.as_str()), specs)
+                        .expect("the name was just checked against the variants");
+                } else {
+                    // Kept, not reported: `validate` turns it into the error.
+                    self.choice = VariantChoice::Unknown(raw.clone());
+                    self.nodes = Vec::new();
+                }
+            }
+        }
+
+        // Then fill the chosen variant's fields, exactly as before. This has to
+        // come second: on the server, the above is what builds these nodes.
         let Some(nested) = self.child_prefix(prefix) else {
-            return; // unchosen: nothing to apply into
+            return; // unchosen or unknown: no nodes to fill
         };
         for m in &mut self.nodes {
-            m.distribute_values(&nested, values);
+            m.distribute_values(&nested, specs, values);
         }
     }
 
@@ -375,7 +445,12 @@ impl Node for VariantSet {
     }
 
     fn is_present(&self) -> bool {
-        !matches!(self.choice, VariantChoice::Unchosen)
+        match self.choice {
+            VariantChoice::Unchosen => false,
+            // `Unknown` is present so `OptionNode` validates it rather than
+            // clearing its error, which would let a bad name pass as `None`.
+            VariantChoice::Unknown(_) | VariantChoice::Named(_) => true,
+        }
     }
 
     fn write_value_into<'p>(&self, mut partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
@@ -390,7 +465,14 @@ impl Node for VariantSet {
                 }
             }
             VariantChoice::Unchosen => {
-                unreachable!("A VariantChoice::Unchosen is handled by OptionNode")
+                unreachable!(
+                    "validate() rejects an unchosen required enum, and OptionNode writes None for an unchosen optional one, so write_value_into never sees Unchosen"
+                )
+            }
+            VariantChoice::Unknown(_) => {
+                unreachable!(
+                    "validate() reports an unknown variant, so write_value_into never sees Unknown"
+                )
             }
         }
         Ok(partial)

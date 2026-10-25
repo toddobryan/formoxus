@@ -96,6 +96,11 @@ Useful for ideas, but Django is the real bar.
 8. **Submission lifecycle:** no built-in pending, success or error states, and
    no `reset_on_success` (leptos_form has these). Handlers via `using_fns!` cover
    the rest.
-9. **Formsets:** no min/max row counts, no delete/order flags for existing
-   rows, and rows are index-named, not stable ids.
+9. **Formsets:** no min/max row counts (issue #14, filed 2026-10-24, with
+   the open questions: reuse `min_length`/`max_length` on the list's path,
+   `min_elements`/`max_elements`, or Django's `min_num`/`max_num`; and
+   whether a minimum pre-builds blank rows),
+   and no delete/order flags for existing rows. (Rows are NOT index-named any
+   more: they have been keyed by identity, `#n`, since the add/remove-row
+   work, and since #13 the keys cross the wire, in order, at the list's path.)
 10. **Docs:** the `form!` grammar is undocumented (a `TODO` on `form!`).

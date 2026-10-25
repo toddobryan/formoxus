@@ -1204,6 +1204,31 @@ widgets become ONE concept.
     `radio_group` on an optional enum is refused as the memory note
     `enum_as_a_value_choice.md` predicted. `renders` (`field_kind.rs:167`)
     then judges `Kind::Enum` by `TAKES_CHOICES` instead of returning `true`.
+  - **V4. A tuple variant's fields have no label** (found 2026-10-24, during
+    #13). They build and round-trip like a struct variant's, named `0`, `1`
+    (`shape.$Rect.0`), but `default_label` (`nodes.rs:158–164`) returns
+    `None` for an all-digit name, so `Rect(f64, f64)` renders two bare
+    inputs: no `<label>`, which axe fails and a user cannot tell apart.
+    DECIDED (Todd): not disallowed; **the dev must supply the labels.** So
+    `form!` refuses a tuple-variant field without `label:`, a compile error
+    in the house style.
+    **Checked 2026-10-24: `form!` cannot reach INSIDE a variant at all**,
+    tuple or struct: not `shape.$Rect.0`, not `shape.$Named.side`, not an
+    enum inside a variant. `SpecPath` (`formoxus-macros/src/form/spec_path.rs:84–113`)
+    takes only idents, each optionally `[]`, so `$` and `0` do not parse;
+    and its witnesses `probe`/`project` (125–171) are field accesses
+    (`__m.shape.side`), which do not type-check through an enum. **The
+    runtime builder already does it:** `spec_key` (`build.rs:71`) keeps `$`
+    segments, and a probe confirmed `FormSpec::with_label("shape.$Rect.0",
+    "Width")` and `with_label("shape.$Named.fill.$Solid.opacity", "Alpha")`
+    both render. So the gap is `form!`'s grammar plus a witness. The witness
+    is the hard part: a variant pattern has to NAME the enum
+    (`Shape::Rect(..)`), which `form!` never sees, so it probably has to be a
+    `const _` over facet shapes (`const_shape_walk_blocked.md`) rather than
+    a place expression. A shape walk that never meets a `form!`
+    (`FormSpec::default()`) still renders tuple fields bare, so that case wants a
+    runtime answer too, maybe the variant's name as the label of a one-field
+    tuple variant.
 
   Then, in order:
 

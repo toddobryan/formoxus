@@ -12,6 +12,7 @@ use formoxus::nodes::ValuesByPath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
+use super::across_the_wire;
 use super::render_to_html;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -534,6 +535,7 @@ fn a_passing_validator_lets_the_model_through() {
         form! { Article { validator: headline_is_not_shouted } },
     );
     expect_that!(state.validate(), some(eq(&quiet)));
+    expect_that!(across_the_wire(&quiet), ok(eq(&quiet)));
     expect_that!(state.has_errors(), eq(false));
 }
 

@@ -59,7 +59,18 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
-## 29 tests, 6 files (was 24/5 until 2026-10-01)
+## 35 tests, 7 files (29/6 until 2026-10-24; 24/5 until 2026-10-01)
+
+**2026-10-24: `wire` (2), for issue #13**, on `/t/enum-submit`. That form also
+shows `#accepted`, what `Submission::accept` builds from `form.to_wire()` run
+IN THE PAGE (no test form has a server fn), and `#submits`, a counter, so
+"validated twice" is assertable. Both tests were mutation-checked: they fail
+when `ordered_values` reads structure from the store.
+
+**A `just e2e` filter matches test NAMES, not file names.** `just e2e wire`
+ran nothing, vacuously green (`2 filtered out`). Select a file with
+`just e2e --test wire`: the recipe puts its args before its own `--`, so
+`--test` reaches cargo.
 
 `required_text` (5), `constraints` (9: pattern incl. anchoring end-to-end,
 lengths, bounds), `widgets` (8: checkbox, select, radio-group, textarea),

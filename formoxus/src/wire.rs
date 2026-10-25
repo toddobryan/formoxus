@@ -15,6 +15,26 @@
 //! values and errors back. That return leg is what lets a server normalize what
 //! it was sent and hand the corrected form back for confirmation.
 //!
+//! **The values include the form's structure**, because [`Submission::accept`]
+//! rebuilds the form from an empty one, where no enum has a variant chosen and
+//! no list has rows. Beside each leaf's raw value, every enum sends its chosen
+//! variant's name at its own path, and every list sends its row keys, in
+//! order, at its own path:
+//!
+//! ```text
+//! title           = "Dr"          // an enum: the variant's name ("" if unchosen)
+//! shape           = "Circle"
+//! shape.$Circle.radius = "2"      // that variant's field
+//! tags            = "#0,#1"       // a list: its row keys, in order ("" if none)
+//! tags.#0         = "rust"
+//! tags.#1         = "forms"
+//! ```
+//!
+//! [`Form::to_wire`](crate::Form::to_wire) and [`WireForm::from_model`] write
+//! all of it. A client that builds the map by hand (a script, a test) has to
+//! as well, or the server builds no variants and no rows. An unknown variant
+//! name or a malformed row list is a field error at that path, never a panic.
+//!
 //! ```ignore
 //! // server
 //! #[post]
@@ -56,12 +76,13 @@ use crate::{
     nodes::ValuesByPath,
 };
 
-/// A form's mutable state, as plain data: raw values by leaf path, plus
-/// whatever anyone has objected to.
+/// A form's mutable state, as plain data: raw values by path, both each leaf's
+/// and the structure (variant choices, row keys; see the [module docs](self)),
+/// plus whatever anyone has objected to.
 ///
 /// This is the whole of what a server needs and the whole of what it can send
-/// back. Everything else about a form — its structure, labels, widgets,
-/// validator — is rebuilt on each side from the shared [`FormSpec`].
+/// back. Everything else about a form — its shape, labels, widgets, validator —
+/// is rebuilt on each side from the shared [`FormSpec`].
 ///
 /// **`initial` is deliberately absent.** Carrying it would be cheap, and it is
 /// tempting for "skip the write if nothing changed". But it would arrive from
@@ -138,10 +159,11 @@ impl<T> WireForm<T> {
 }
 
 impl<T: Clone + Debug + PartialEq + Facet<'static>> WireForm<T> {
-    /// Leaves regenerated from a model — the server's answer when it has
-    /// changed something and wants the client to show the corrected form.
+    /// Values regenerated from a model, leaves and structure both — the
+    /// server's answer when it has changed something and wants the client to
+    /// show the corrected form.
     ///
-    /// Takes the spec because leaf paths come from the built tree, not from `T`
+    /// Takes the spec because paths come from the built tree, not from `T`
     /// alone: which paths exist depends on the chosen variants and row counts
     /// that [`form_for`] derives from the value.
     pub fn from_model(model: &T, spec: FormSpec<T>) -> Self {
