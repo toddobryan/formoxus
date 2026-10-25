@@ -30,5 +30,5 @@ because the common round-trip test (`form_for(&m).validate() == Some(m)`)
   built on it until it is lifted, not just that it SHOULD start failing later.
 - Prefer a property over examples at a boundary: `tests/suite.rs`
   `across_the_wire` is now asserted beside every in-memory round trip
-  (`ISSUE_13_PLAN.md` box 19a). See [[feedback-one-function-not-two]] for
+  (#13's plan, box 19a; deleted once #13 closed, read it with `git show 4dcf0fb:formoxus/ISSUE_13_PLAN.md`). See [[feedback-one-function-not-two]] for
   the related "fewer parallel concepts" instinct.

@@ -389,7 +389,12 @@ choice needed).
    both "create mode" and "the `Option` was `None`"). `#[ignore]d` with the diagnosis.
    **See "Optional containers" below — this is one instance of a general gap, not a
    list-specific bug, so don't fix it by bolting an `optional` flag onto `ListSet`.**
-2. **Create mode yields zero rows, silently** — the row count isn't in the shape, so it's
+2. **SUPERSEDED FOR THE WIRE 2026-10-24 (#13, [[structure-on-the-wire]]):** a list's
+   row keys now cross at its path, so a server rebuilds the rows; this gap is
+   what `Submission::accept` was built on, unnoticed, and the bug it caused.
+   `empty_form` itself still starts with zero rows, which the Add button makes
+   correct. Original note:
+   **Create mode yields zero rows, silently** — the row count isn't in the shape, so it's
    a construction parameter like a variant choice, and it isn't plumbed yet. That's step 4:
    `MissingVariants` → `MissingChoices` carrying lengths too, with the two walks
    (`missing_variants` pre-flight and construction) kept in step per the invariant above.
