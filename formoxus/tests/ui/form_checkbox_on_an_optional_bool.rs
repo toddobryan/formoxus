@@ -14,7 +14,7 @@ struct Survey {
 fn main() {
     let _ = empty_form::<Survey>(form! {
         Survey {
-            would_recommend => { widget: checkbox },
+            would_recommend? => { widget: checkbox },
         }
     });
 }

@@ -29,7 +29,7 @@ impl Widget for Stars {
 fn main() {
     let _ = empty_form::<Survey>(form! {
         Survey {
-            comments => { widget: Stars },
+            comments? => { widget: Stars },
         }
     });
 }

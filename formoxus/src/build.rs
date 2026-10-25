@@ -83,6 +83,161 @@ pub(crate) fn spec_key(path: &str) -> String {
     out
 }
 
+/// Why the spec key `key` names no node in a form over `root`, or `None` if it
+/// names one.
+///
+/// What keeps a typo in `with_widget("venue.ctiy", …)` from storing a spec
+/// that is never looked up. It walks the shape the way the walk below
+/// builds nodes: an `Option` is transparent, a newtype is one leaf, `name[]`
+/// is every row of a list, and `$Variant` enters a variant of the enum before
+/// it. A top-level enum's fields have no `$Variant` in front (see
+/// `fields_from_enum`), so at the root a name may be any variant's field.
+pub(crate) fn spec_key_error(root: &'static Shape, key: &str) -> Option<String> {
+    let mut at = At::Shape(root);
+    let mut walked = String::new();
+    for segment in key.split('.') {
+        if segment.starts_with(ROW_SIGIL) {
+            return Some(format!(
+                "`{segment}` is one row's key — a spec names every row at once, with `[]` \
+                 (`{walked}[]`)"
+            ));
+        }
+        let next = if let Some(variant_name) = segment.strip_prefix('$') {
+            variant_named(at, variant_name, &walked).map(At::Variant)
+        } else {
+            let name = segment.trim_end_matches("[]");
+            let rows = (segment.len() - name.len()) / 2;
+            field_named(at, name, &walked).and_then(|field| rows_of(field.shape(), name, rows))
+        };
+        match next {
+            Ok(next) => at = next,
+            Err(why) => return Some(why),
+        }
+        walked = qualify(&walked, segment);
+    }
+    match at {
+        At::Variant(_) => Some(format!(
+            "`{key}` is a variant, which has no node of its own — name a field inside it, or \
+             put this on the enum field before it"
+        )),
+        At::Shape(_) => None,
+    }
+}
+
+/// Where [`spec_key_error`]'s walk is: at a value of some shape, or inside a
+/// variant.
+#[derive(Clone, Copy)]
+enum At {
+    Shape(&'static Shape),
+    Variant(&'static Variant),
+}
+
+/// `shape` with every `Option` around it taken off, which the node walk does
+/// without adding a segment.
+fn peel(mut shape: &'static Shape) -> &'static Shape {
+    while let Ok(option_def) = shape.def.into_option() {
+        shape = option_def.t;
+    }
+    shape
+}
+
+fn field_names(fields: &[FacetField]) -> String {
+    fields.iter().map(|f| f.name).collect::<Vec<_>>().join(", ")
+}
+
+/// The variant `name` of the enum at `at`, for a `$name` segment after
+/// `walked`.
+fn variant_named(at: At, name: &str, walked: &str) -> Result<&'static Variant, String> {
+    let At::Shape(shape) = at else {
+        return Err(format!(
+            "`{walked}` is a variant, so `${name}` cannot follow it — name one of its fields \
+             first"
+        ));
+    };
+    let shape = peel(shape);
+    let Type::User(UserType::Enum(enum_type)) = &shape.ty else {
+        return Err(format!(
+            "`{walked}` is a `{shape}`, not an enum, so it has no variant `{name}`"
+        ));
+    };
+    enum_type
+        .variants
+        .iter()
+        .find(|v| v.name == name)
+        .ok_or_else(|| {
+            let all = enum_type
+                .variants
+                .iter()
+                .map(|v| v.name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("`{shape}` has no variant `{name}` (its variants: {all})")
+        })
+}
+
+/// The field `name` of whatever is at `at`, for a segment after `walked`.
+fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, String> {
+    let shape = match at {
+        At::Variant(variant) => {
+            return variant
+                .data
+                .fields
+                .iter()
+                .find(|f| f.name == name)
+                .ok_or_else(|| {
+                    format!(
+                        "variant `{}` has no field `{name}` (its fields: {})",
+                        variant.name,
+                        field_names(variant.data.fields)
+                    )
+                });
+        }
+        At::Shape(shape) => peel(shape),
+    };
+    match &shape.ty {
+        _ if newtype_inner(shape).is_some() => Err(format!(
+            "`{walked}` is a `{shape}`, one input, which has no field `{name}`"
+        )),
+        Type::User(UserType::Struct(st)) => {
+            st.fields.iter().find(|f| f.name == name).ok_or_else(|| {
+                format!(
+                    "`{shape}` has no field `{name}` (its fields: {})",
+                    field_names(st.fields)
+                )
+            })
+        }
+        // A top-level enum's fields carry no `$Variant` (see `fields_from_enum`).
+        Type::User(UserType::Enum(enum_type)) if walked.is_empty() => enum_type
+            .variants
+            .iter()
+            .find_map(|v| v.data.fields.iter().find(|f| f.name == name))
+            .ok_or_else(|| format!("no variant of `{shape}` has a field `{name}`")),
+        Type::User(UserType::Enum(_)) => Err(format!(
+            "`{walked}` is an enum, so a field inside it is reached through its variant: \
+             `{walked}.$Variant.{name}`"
+        )),
+        _ => Err(format!(
+            "`{walked}` is a `{shape}`, which has no field `{name}`"
+        )),
+    }
+}
+
+/// The element shape `rows` lists deep inside `shape`, for `name` written
+/// with that many `[]`.
+fn rows_of(mut shape: &'static Shape, name: &str, rows: usize) -> Result<At, String> {
+    for _ in 0..rows {
+        match peel(shape).def.into_list() {
+            Ok(list_def) => shape = list_def.t,
+            Err(_) => {
+                return Err(format!(
+                    "`{name}` is a `{shape}`, not a list, so `[]` names nothing"
+                ));
+            }
+        }
+    }
+    Ok(At::Shape(shape))
+}
+
 /// One node per declared field of `shape`. `peek` is the value being populated
 /// from, if any — it must describe the same shape.
 pub(crate) fn nodes_for(

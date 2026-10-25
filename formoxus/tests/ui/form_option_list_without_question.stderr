@@ -1,0 +1,11 @@
+error[E0080]: evaluation panicked: a widget applies only to a single-value field, not a struct, list or enum
+  --> tests/ui/form_option_list_without_question.rs:22:35
+   |
+22 |             phones[] => { widget: email },
+   |                                   ^^^^^ evaluation of `main::_` failed here
+
+error[E0080]: evaluation panicked: this field is an `Option`, so a path writes `?` after it, as in `address?` or `address?.city`
+  --> tests/ui/form_option_list_without_question.rs:22:13
+   |
+22 |             phones[] => { widget: email },
+   |             ^^^^^^ evaluation of `main::_` failed here

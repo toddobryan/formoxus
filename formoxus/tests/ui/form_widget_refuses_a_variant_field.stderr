@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox` can only render a bool field
+  --> tests/ui/form_widget_refuses_a_variant_field.rs:21:61
+   |
+21 |             data.$QuestionData::TrueFalse.text => { widget: checkbox },
+   |                                                             ^^^^^^^^ evaluation of `main::_` failed here

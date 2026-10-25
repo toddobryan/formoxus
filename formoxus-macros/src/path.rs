@@ -28,7 +28,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Path as TypePath, Result, Token};
 
-use crate::form::{SpecPath, probe};
+use crate::form::{SpecPath, option_checks, probe};
 
 pub(crate) fn impl_path(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<PathInput>(input) {
@@ -58,6 +58,7 @@ impl Parse for PathInput {
         input.parse::<Token![.]>()?;
 
         let field: SpecPath = input.parse()?;
+        field.check_names_a_node()?;
         if !input.is_empty() {
             return Err(input.error("unexpected token after the field path"));
         }
@@ -70,11 +71,13 @@ impl PathInput {
         let model = &self.model;
         let key = self.field.key();
         let witness = probe(&self.field.segments, quote!(__s), 0);
+        let options = option_checks(&self.field.segments, model);
 
         quote! {
             {
                 #[allow(unused)]
                 fn __formoxus_path_witness(__s: &#model) { #witness }
+                #options
 
                 ::formoxus::path::Path::<#model>::__new(#key)
             }
@@ -120,6 +123,22 @@ mod tests {
         let out = expand(quote! { Quiz.answers[].text });
         expect_that!(out, contains_substring("for __row0 in"));
         expect_that!(out, contains_substring("\"answers[].text\""));
+    }
+
+    #[gtest]
+    fn a_variant_path_witnesses_a_match_and_keys_on_the_variant() {
+        let out = expand(quote! { Quiz.data.$QuestionData::TrueFalse.text });
+        expect_that!(out, contains_substring("match & __s . data"));
+        expect_that!(out, contains_substring("\"data.$TrueFalse.text\""));
+    }
+
+    /// A `Path` names a node, and a variant has none of its own.
+    #[gtest]
+    fn a_path_ending_at_a_variant_is_rejected() {
+        expect_that!(
+            expand(quote! { Quiz.data.$QuestionData::TrueFalse }),
+            contains_substring("no node of its own")
+        );
     }
 
     #[gtest]

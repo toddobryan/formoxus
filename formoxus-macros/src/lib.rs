@@ -10,7 +10,10 @@
 //!
 //! - [`macro@form`] builds a `FormSpec` for a model from a declarative block:
 //!   title, per-field labels and widgets, `[]` row selectors for `Vec` fields,
-//!   a form-wide validator, and a `buttons:` block. Every field path it names is
+//!   `?` on an `Option` field (required, so a path spells every container),
+//!   `$Enum::Variant` segments for a variant's fields, nested `path => { … }`
+//!   blocks sharing a prefix, a form-wide validator, and a `buttons:` block.
+//!   Every field path it names is
 //!   checked against the model's real shape at compile time, by emitting a
 //!   witness expression per path — a typo is a compile error, not a runtime
 //!   `no_such_path`.
@@ -51,8 +54,10 @@ pub fn form(input: TokenStream) -> TokenStream {
 ///
 /// Emits a witness borrow of the field beside the path's string form, so a
 /// typo is `E0609` at the call site instead of a runtime `no_such_path`. Works
-/// for any field, nested (`Model.venue.city`) or rows (`Model.answers[].text`),
-/// whether or not a `form!` names it.
+/// for any field, nested (`Model.venue.city`), rows (`Model.answers[].text`),
+/// through an `Option` (`Model.address?.city`, keyed `address.city`) or inside a
+/// variant (`Model.shape.$Shape::Circle.radius`, keyed
+/// `shape.$Circle.radius`), whether or not a `form!` names it.
 #[proc_macro]
 pub fn path(input: TokenStream) -> TokenStream {
     path::impl_path(input.into()).into()

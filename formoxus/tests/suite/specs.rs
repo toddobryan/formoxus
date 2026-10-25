@@ -7,7 +7,7 @@
 //! builder is the contract between the macro and the tree, so testing the builder
 //! keeps these honest about which half is being exercised.
 
-use super::models::{EventForCreate, Location};
+use super::models::{EventForCreate, Location, Shape};
 use super::{render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
@@ -240,20 +240,95 @@ fn a_widget_type_on_a_list_is_rejected() {
 
 // ── Rejections and no-ops ────────────────────────────────────────────────
 
+// A path that names no node is refused when the spec is built. It used to be
+// stored and never looked up, so a typo in a string path did nothing at all
+// (issue #15). `form!` can't write one, since it checks its paths at compile
+// time; these are for the builder, which takes a string.
+
 #[gtest]
-fn an_unmatched_path_is_a_no_op() {
-    // The witness fn makes this unreachable through `form!`, but the builder is
-    // public and the walk must not panic on a path it simply doesn't find —
-    // a spec is a set of statements about nodes, not an assertion that each
-    // exists.
-    let form =
-        empty_form(FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored"));
-    expect_that!(form.collect_values().len(), gt(0));
+#[should_panic(
+    expected = "nowhere.at.all: names nothing in a form over `EventForCreate`: \
+                           `EventForCreate` has no field `nowhere` (its fields: title, location)"
+)]
+fn an_unknown_field_is_refused() {
+    let _ = FormSpec::<EventForCreate>::default().with_label("nowhere.at.all", "Ignored");
+}
+
+#[gtest]
+#[should_panic(expected = "`Location` has no field `ctiy` (its fields: street, city, zip)")]
+fn an_unknown_nested_field_is_refused() {
+    let _ = FormSpec::<EventForCreate>::default().with_label("location.ctiy", "Town");
+}
+
+#[gtest]
+#[should_panic(expected = "`#0` is one row's key — a spec names every row at once, with `[]`")]
+fn one_rows_key_is_refused() {
+    let _ = FormSpec::<WithRows>::default().with_label("venues.#0.city", "Town");
+}
+
+#[gtest]
+#[should_panic(expected = "`title` is a `String`, not a list, so `[]` names nothing")]
+fn brackets_on_a_scalar_are_refused() {
+    let _ = FormSpec::<EventForCreate>::default().with_label("title[]", "Title");
+}
+
+#[gtest]
+fn every_kind_of_node_is_accepted() {
+    // A leaf, a field set, a field in it, a list, its rows, a row's field: each
+    // names a node, so none of these panics.
+    let _ = FormSpec::<EventForCreate>::default()
+        .with_label("title", "Headline")
+        .with_label("location", "Where")
+        .with_label("location.city", "Town");
+    let _ = FormSpec::<WithRows>::default()
+        .with_label("venues", "Venues")
+        .with_label("venues[]", "Venue")
+        .with_label("venues[].city", "Town");
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct WithRows {
     venues: Vec<Location>,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct WithShape {
+    shape: Shape,
+    maybe: Option<Shape>,
+}
+
+#[gtest]
+fn a_variants_field_is_accepted_through_an_option_too() {
+    let _ = FormSpec::<WithShape>::default()
+        .with_label("shape.$Circle.radius", "R")
+        .with_label("maybe.$Rectangle.width", "W");
+}
+
+#[gtest]
+#[should_panic(expected = "`Shape` has no variant `Circel` (its variants: Circle, Rectangle)")]
+fn an_unknown_variant_is_refused() {
+    let _ = FormSpec::<WithShape>::default().with_label("shape.$Circel.radius", "R");
+}
+
+#[gtest]
+#[should_panic(expected = "variant `Circle` has no field `width` (its fields: radius)")]
+fn a_field_of_another_variant_is_refused() {
+    let _ = FormSpec::<WithShape>::default().with_label("shape.$Circle.width", "W");
+}
+
+#[gtest]
+#[should_panic(expected = "`shape.$Circle` is a variant, which has no node of its own")]
+fn a_path_ending_at_a_variant_is_refused() {
+    let _ = FormSpec::<WithShape>::default().with_label("shape.$Circle", "C");
+}
+
+#[gtest]
+#[should_panic(
+    expected = "`shape` is an enum, so a field inside it is reached through its \
+                           variant: `shape.$Variant.radius`"
+)]
+fn a_variants_field_without_the_variant_is_refused() {
+    let _ = FormSpec::<WithShape>::default().with_label("shape.radius", "R");
 }
 
 // ── `[]` — selecting every row of a list ─────────────────────────────────

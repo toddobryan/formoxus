@@ -1,0 +1,10 @@
+error[E0609]: no field `city` on type `std::option::Option<Address>`
+  --> tests/ui/form_option_struct_without_question.rs:22:21
+   |
+22 |             address.city => { label: "Town" },
+   |                     ^^^^ unknown field
+   |
+help: a field with a similar name exists
+   |
+22 |             address.unwrap().city => { label: "Town" },
+   |                     +++++++++

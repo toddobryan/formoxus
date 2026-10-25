@@ -1,0 +1,14 @@
+error[E0599]: no variant named `Shrot` found for enum `QuestionData`
+  --> tests/ui/path_unknown_variant.rs:18:48
+   |
+ 7 | enum QuestionData {
+   | ----------------- variant `Shrot` not found here
+...
+18 |     let _ = path!(Question.data.$QuestionData::Shrot.prompt);
+   |                                                ^^^^^
+   |
+help: there is a variant with a similar name
+   |
+18 -     let _ = path!(Question.data.$QuestionData::Shrot.prompt);
+18 +     let _ = path!(Question.data.$QuestionData::Short.prompt);
+   |

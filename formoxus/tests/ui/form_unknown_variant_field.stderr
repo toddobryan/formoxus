@@ -1,0 +1,5 @@
+error[E0026]: variant `QuestionData::TrueFalse` does not have a field named `prompt`
+  --> tests/ui/form_unknown_variant_field.rs:21:43
+   |
+21 |             data.$QuestionData::TrueFalse.prompt => { label: "Prompt" },
+   |                                           ^^^^^^ variant `QuestionData::TrueFalse` does not have this field

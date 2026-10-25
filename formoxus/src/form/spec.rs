@@ -129,7 +129,17 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         &self.buttons
     }
 
+    /// The spec for `path`, which every `with_*` taking a path goes through.
+    ///
+    /// # Panics
+    ///
+    /// If `path` names no node in a form over `T`. The spec would be stored
+    /// and never looked up, so a typo would do nothing at all. `form!` only
+    /// writes paths it has already checked at compile time.
     fn field(&mut self, path: &str) -> &mut FieldSpec {
+        if let Some(why) = crate::build::spec_key_error(T::SHAPE, path) {
+            panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE);
+        }
         self.fields.entry(path.to_string()).or_default()
     }
 

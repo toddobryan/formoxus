@@ -1,13 +1,13 @@
 error[E0609]: no field `min` on type `&mut StringField`
-  --> tests/ui/form_min_on_a_string.rs:14:27
+  --> tests/ui/form_min_on_a_string.rs:14:28
    |
-14 |             nickname => { min: 3 },
-   |                           ^^^ unknown field
+14 |             nickname? => { min: 3 },
+   |                            ^^^ unknown field
    |
    = note: available fields are: `min_length`, `max_length`, `pattern`
 
 error[E0080]: evaluation panicked: `min` applies only to a number field
-  --> tests/ui/form_min_on_a_string.rs:14:32
+  --> tests/ui/form_min_on_a_string.rs:14:33
    |
-14 |             nickname => { min: 3 },
-   |                                ^ evaluation of `main::_` failed here
+14 |             nickname? => { min: 3 },
+   |                                 ^ evaluation of `main::_` failed here

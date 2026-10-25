@@ -13,7 +13,7 @@ mod widget;
 pub(crate) use button::ButtonInfo;
 pub(crate) use classes::ClassEntry;
 pub(crate) use field::{FieldBody, FieldSpec};
-pub(crate) use spec_path::{SpecPath, probe, project};
+pub(crate) use spec_path::{SpecPath, option_checks, probe, project};
 pub(crate) use widget::WidgetRef;
 
 use std::collections::HashSet;
@@ -168,7 +168,11 @@ impl FormSpecInput {
         let type_checks: Vec<TokenStream2> = fsm
             .field_specs
             .iter()
-            .map(|f| f.body.type_checks(&model_type, &project(&f.path.segments)))
+            .map(|f| {
+                let types = f.body.type_checks(&model_type, &project(&f.path.segments));
+                let options = option_checks(&f.path.segments, &model_type);
+                quote! { #types #options }
+            })
             .collect();
 
         quote! {
@@ -262,15 +266,53 @@ impl Parse for FormSpecInput {
         let target: Path = input.parse()?;
         let body;
         braced!(body in input);
-        let entries: Vec<Entry> = Punctuated::<Entry, Token![,]>::parse_terminated(&body)?
-            .into_iter()
-            .collect();
+        let mut entries: Vec<Entry> = Vec::new();
+        for entry in Punctuated::<Entry, Token![,]>::parse_terminated(&body)? {
+            match entry {
+                Entry::Field { path, body } => flatten(&path, *body, &mut entries)?,
+                other => entries.push(other),
+            }
+        }
+        // After flattening, so that a path written once flat and once inside a
+        // nested block is caught like any other repeat.
         let mut attrs: FormAttribute = FormAttribute::default();
         for e in &entries {
             attrs.check_duplicate(&body, e)?;
         }
         Ok(FormSpecInput { target, entries })
     }
+}
+
+/// `path => { …keys…, sub => { … } }` as one entry per path that has keys of its
+/// own: `path`, if it does, then `path.sub` and so on down.
+///
+/// A path that ends at a variant names no node, so its body may hold nested
+/// entries only. The nested block exists for that case: entering one variant
+/// for several of its fields.
+fn flatten(path: &SpecPath, mut body: FieldBody, out: &mut Vec<Entry>) -> Result<()> {
+    let nested = std::mem::take(&mut body.nested);
+    if path.ends_with_variant() {
+        if !body.is_empty() {
+            return Err(syn::Error::new(
+                path.last_span(),
+                format!(
+                    "`{}` is a variant, which has no node of its own, so its block holds only \
+                     fields inside it (`field => {{ … }}`) — a label or widget goes on the \
+                     enum field before it",
+                    path.key()
+                ),
+            ));
+        }
+    } else if !body.is_empty() {
+        out.push(Entry::Field {
+            path: path.clone(),
+            body: Box::new(body),
+        });
+    }
+    for (sub, sub_body) in nested {
+        flatten(&sub.under(path)?, sub_body, out)?;
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -362,6 +404,7 @@ impl Entry {
 
     fn parse_field(input: ParseStream<'_>) -> Result<Self> {
         let path: SpecPath = input.parse()?;
+        path.check_starts_at_a_field()?;
         if !input.peek(syn::token::FatArrow) {
             return Err(input.error("Expected => after a field name"));
         }
@@ -455,7 +498,9 @@ impl Parse for Entry {
         // guards above have already had their say, and each of them needs a
         // following `:`, so nothing an author writes as a field can be
         // swallowed here.
-        } else if input.peek(Ident::peek_any) {
+        // `$` too, so that a path written from a variant gets
+        // `parse_field`'s message about where a path starts.
+        } else if input.peek(Ident::peek_any) || input.peek(Token![$]) {
             Entry::parse_field(input)
         } else {
             Err(input.error("expected a form attribute or a field specifier"))
@@ -529,7 +574,7 @@ impl FieldSpec {
             .path
             .segments
             .last()
-            .map_or_else(Span::call_site, |s| s.ident.span());
+            .map_or_else(Span::call_site, spec_path::Segment::span);
         let place = respan(project(&self.path.segments), span);
         // At most one constructor: `FieldBody::parse` refuses `choices` beside a
         // validated key, so a field never needs both.

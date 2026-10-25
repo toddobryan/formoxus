@@ -110,7 +110,7 @@ fn an_optional_choice_field_offers_the_absent_entry() {
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
-                Optional { state => { widget: select, choices: STATES } }
+                Optional { state? => { widget: select, choices: STATES } }
             })
         });
         form.render(using_fns! {})

@@ -1,9 +1,27 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-10-25: issue #15 BUILT, UNCOMMITTED; Todd to review, then commit and close
+
+Todd picked: **A** (name the enum: `data.$QuestionData::TrueFalse.text`), tuple
+fields by index (`.0`, `.1`), the nested `prefix => { … }` block, and **C**
+bundled in (a string path that names no node now PANICS in `FormSpec::field`).
+Then, same day: `?` REQUIRED on every `Option` in a `form!`/`path!` path; top-level
+enum models dropped. Design and gotchas in [[variant-paths-in-form-macro]].
+Todd reviewed every new compiler output and approved; the seven older Option
+goldens got a `?` and were re-blessed. `just ci` green. One old test reversed on purpose:
+`specs::an_unmatched_path_is_a_no_op` → `an_unknown_field_is_refused` and friends.
+
+apcsp-dioxus's waiting edit (`crates/api/src/questions.rs`) needs `$TrueFalse` →
+`$QuestionFormData::TrueFalse`, a `?` on any `Option` field it names, and a
+`,` after that entry's `}` before
+`buttons:` (top-level entries are comma-separated; inside a body they are
+optional). Then `web`'s `views/questions/forms.rs` layer and its
+`MARKDOWN_FIELDS` guard can go.
 
 ## ▶ 2026-10-24: issue #13 FIXED (4dcf0fb, pushed, closed); NEXT is #14 or Todd's call
 
@@ -25,8 +43,8 @@ doing"). Builds on #13's list-level error path; open questions in the issue
 
 **Also open, found during #13:** tuple-variant fields render with NO
 `<label>` (`default_label("0", …)` is `None`); Todd: require the dev to label
-them, `FIELDS_PLAN.md` V4. `form!` cannot address any field inside a variant
-yet, though `FormSpec::with_label("shape.$Rect.0", …)` works.
+them, `FIELDS_PLAN.md` V4. (`form!` can now address them,
+`shape.$Shape::Rect.0 => { label: … }`, since #15.)
 
 ## Coming back after a break (written 2026-10-23)
 

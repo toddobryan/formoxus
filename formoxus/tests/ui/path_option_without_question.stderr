@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: this field is an `Option`, so a path writes `?` after it, as in `address?` or `address?.city`
+  --> tests/ui/path_option_without_question.rs:19:27
+   |
+19 |     let _ = path!(Contact.nickname);
+   |                           ^^^^^^^^ evaluation of `main::_` failed here

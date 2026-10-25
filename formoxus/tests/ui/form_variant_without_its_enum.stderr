@@ -1,0 +1,5 @@
+error: name the enum as well as the variant, as in `$MyEnum::TrueFalse` — `form!` sees the field's name, not its type, and the check that the variant exists has to name it
+  --> tests/ui/form_variant_without_its_enum.rs:21:19
+   |
+21 |             data.$TrueFalse.text => { label: "Prompt" },
+   |                   ^^^^^^^^^

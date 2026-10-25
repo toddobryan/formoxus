@@ -11,7 +11,7 @@ struct Profile {
 fn main() {
     let _ = empty_form::<Profile>(form! {
         Profile {
-            nickname => { min: 3 },
+            nickname? => { min: 3 },
         }
     });
 }

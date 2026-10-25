@@ -10,7 +10,7 @@ struct Survey {
 fn main() {
     let _ = empty_form::<Survey>(form! {
         Survey {
-            score => { widget: textarea },
+            score? => { widget: textarea },
         }
     });
 }

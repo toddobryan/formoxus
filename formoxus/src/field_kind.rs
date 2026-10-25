@@ -79,6 +79,23 @@ pub fn row<'a, T: 'a>(_: impl IntoIterator<Item = &'a T>) -> &'a T {
     unreachable!("a form! projection is type-checked, never called")
 }
 
+/// The other arm of a `$Enum::Variant` path segment's `match` in a projection:
+/// the field, in a variant that isn't chosen.
+///
+/// A plain fn rather than `unreachable!()` in the generated code, for the same
+/// reason as [`row`]. Never called.
+pub fn other_variant<'a, T: 'a>() -> &'a T {
+    unreachable!("a form! projection is type-checked, never called")
+}
+
+/// What an `Option` holds, for a `?` path segment in a witness or projection.
+///
+/// Taking `&Option<T>` is the check that `?` is on an `Option`: anything else
+/// is a type error at the field. Never called, like [`row`].
+pub fn some<T>(_: &Option<T>) -> &T {
+    unreachable!("a form! witness or projection is type-checked, never called")
+}
+
 /// Whether `attr` can apply to this field: the table's `for:` column, asked
 /// of the field's type. `form!` emits one of these per table attribute a field
 /// body declares.

@@ -471,6 +471,267 @@ fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
     expect_that!(html, contains_substring("b@example.com"));
 }
 
+// ── `$Enum::Variant`, a variant's fields ─────────────────────────────────
+//
+// Issue #15. The enum is named in the path because the compile-time checks are
+// a `match`, whose pattern must name it; the key keeps only `$TrueFalse`.
+
+/// ONE variant, as apcsp-dioxus's question form has: the case where the
+/// checks' catch-all arm for the other variants is unreachable, which must not
+/// warn in the dev's crate.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum QuestionData {
+    TrueFalse {
+        text: String,
+        answer: bool,
+        explanation: String,
+    },
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Question {
+    name: String,
+    data: QuestionData,
+}
+
+fn a_question() -> Question {
+    Question {
+        name: "Q1".to_string(),
+        data: QuestionData::TrueFalse {
+            text: "The sky is blue.".to_string(),
+            answer: true,
+            explanation: "Rayleigh scattering.".to_string(),
+        },
+    }
+}
+
+#[component]
+fn FlatVariantPath() -> Element {
+    use_form(|| {
+        form_for(
+            &a_question(),
+            form! {
+                Question {
+                    data.$QuestionData::TrueFalse.text => { widget: textarea },
+                }
+            },
+        )
+    })
+    .render(using_fns! {})
+}
+
+#[gtest]
+fn a_variant_path_reaches_the_field_inside_the_variant() {
+    let html = render_to_html(FlatVariantPath);
+    expect_that!(
+        html,
+        contains_substring(r#"name="data.$TrueFalse.text" value="The sky is blue.""#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<textarea class="fx-control fx-textarea""#)
+    );
+    // Only that field: its sibling is still the default input.
+    expect_that!(html.matches("<textarea").count(), eq(1));
+}
+
+#[component]
+fn NestedVariantBlock() -> Element {
+    // The enum field's own label and the variant's fields in one block. A
+    // variant has no node to label, so `label` sits on `data` and the variant
+    // block holds only fields.
+    use_form(|| {
+        form_for(
+            &a_question(),
+            form! {
+                Question {
+                    data => {
+                        label: "Question Type",
+                        $QuestionData::TrueFalse => {
+                            text => { label: "Prompt" },
+                            answer => { widget: select },
+                            explanation => { widget: textarea },
+                        },
+                    },
+                }
+            },
+        )
+    })
+    .render(using_fns! {})
+}
+
+#[gtest]
+fn a_nested_block_applies_each_entry_under_its_prefix() {
+    let html = render_to_html(NestedVariantBlock);
+    expect_that!(html, contains_substring("Question Type"));
+    expect_that!(html, contains_substring("Prompt"));
+    expect_that!(
+        html,
+        contains_substring(r#"name="data.$TrueFalse.explanation""#)
+    );
+    expect_that!(html.matches("<textarea").count(), eq(1));
+    // `answer` is a `<select>` now, not the checkbox a `bool` derives.
+    expect_that!(html, not(contains_substring(r#"type="checkbox""#)));
+}
+
+/// A tuple variant, whose fields are named by index.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Reading {
+    Pair(String, u32),
+    Blank,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Meter {
+    reading: Reading,
+}
+
+#[component]
+fn TupleVariantFields() -> Element {
+    use_form(|| {
+        form_for(
+            &Meter {
+                reading: Reading::Pair("north".to_string(), 7),
+            },
+            form! {
+                Meter {
+                    reading.$Reading::Pair.0 => { label: "Where" },
+                    reading.$Reading::Pair.1 => { min: 3 },
+                }
+            },
+        )
+    })
+    .render(using_fns! {})
+}
+
+#[gtest]
+fn a_tuple_variant_field_is_named_by_index() {
+    // `min` reaching the markup also proves the field's type came through the
+    // `match`: it is a setting typed by the field, so a wrong type would not
+    // have compiled.
+    let html = render_to_html(TupleVariantFields);
+    expect_that!(html, contains_substring("Where"));
+    expect_that!(html, contains_substring("min=3"));
+}
+
+#[gtest]
+fn path_takes_a_variant_segment_and_keys_on_the_runtime_spelling() {
+    expect_that!(
+        formoxus::path!(Question.data.$QuestionData::TrueFalse.text).as_str(),
+        eq("data.$TrueFalse.text")
+    );
+}
+
+// ── `?`, an `Option` field ───────────────────────────────────────────────
+//
+// Required on every `Option` in a path, the last segment too, so a path spells
+// each container in the field's type. The key drops it: the runtime walk adds
+// no segment for an `Option`.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Address {
+    street: String,
+    city: String,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Contact {
+    name: String,
+    nickname: Option<String>,
+    address: Option<Address>,
+    kind: Option<QuestionData>,
+    phones: Option<Vec<String>>,
+}
+
+fn a_contact() -> Contact {
+    Contact {
+        name: "Ada".to_string(),
+        nickname: None,
+        address: Some(Address {
+            street: "1 Loop Rd".to_string(),
+            city: "Analytic".to_string(),
+        }),
+        kind: Some(QuestionData::TrueFalse {
+            text: "Is it?".to_string(),
+            answer: false,
+            explanation: "No.".to_string(),
+        }),
+        phones: Some(vec![
+            "a@example.com".to_string(),
+            "b@example.com".to_string(),
+        ]),
+    }
+}
+
+#[component]
+fn ThroughOptions() -> Element {
+    use_form(|| {
+        form_for(
+            &a_contact(),
+            form! {
+                Contact {
+                    nickname? => { widget: textarea },
+                    address? => {
+                        label: "Mailing address",
+                        city => { label: "Town" },
+                    },
+                    kind?.$QuestionData::TrueFalse.explanation => { label: "Why" },
+                    phones?[] => { widget: email },
+                }
+            },
+        )
+    })
+    .render(using_fns! {})
+}
+
+#[gtest]
+fn a_question_mark_reaches_an_option_leaf() {
+    let html = render_to_html(ThroughOptions);
+    expect_that!(
+        html,
+        contains_substring(r#"<textarea class="fx-control fx-textarea""#)
+    );
+    expect_that!(html, contains_substring(r#"name="nickname""#));
+}
+
+#[gtest]
+fn a_question_mark_block_labels_the_option_and_reaches_its_fields() {
+    let html = render_to_html(ThroughOptions);
+    expect_that!(html, contains_substring("Mailing address"));
+    expect_that!(html, contains_substring("Town"));
+    // Its sibling keeps the label derived from its name.
+    expect_that!(html, contains_substring("Street"));
+}
+
+#[gtest]
+fn a_question_mark_reaches_a_variant_inside_an_option() {
+    let html = render_to_html(ThroughOptions);
+    expect_that!(html, contains_substring("Why"));
+    expect_that!(
+        html,
+        contains_substring(r#"name="kind.$TrueFalse.explanation""#)
+    );
+}
+
+#[gtest]
+fn a_question_mark_reaches_the_rows_of_an_optional_list() {
+    // Without the `?`, `Option::iter` would have made the whole list the "row";
+    // the const check refuses that spelling (`tests/ui/form_option_list_*`).
+    let html = render_to_html(ThroughOptions);
+    expect_that!(html.matches(r#"type="email""#).count(), eq(2));
+}
+
+#[gtest]
+fn path_takes_a_question_mark_and_keys_without_it() {
+    expect_that!(
+        formoxus::path!(Contact.address?.city).as_str(),
+        eq("address.city")
+    );
+    expect_that!(formoxus::path!(Contact.nickname?).as_str(), eq("nickname"));
+}
+
 // ── The whole chain in one invocation ────────────────────────────────────
 
 #[component]
@@ -861,7 +1122,7 @@ fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
     let spec = || {
         form! {
             Listing {
-                note => { max_length: 3 },
+                note? => { max_length: 3 },
                 hall.city => { min_length: 1 },
                 hall.seats => { min: 1, max: 500 },
                 tags[] => { pattern: "[a-z]+" },

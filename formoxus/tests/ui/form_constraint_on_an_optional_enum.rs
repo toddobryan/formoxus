@@ -18,7 +18,7 @@ struct Order {
 fn main() {
     let _ = empty_form::<Order>(form! {
         Order {
-            shipping => { min_length: 2 },
+            shipping? => { min_length: 2 },
         }
     });
 }

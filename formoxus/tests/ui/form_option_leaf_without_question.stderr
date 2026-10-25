@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: this field is an `Option`, so a path writes `?` after it, as in `address?` or `address?.city`
+  --> tests/ui/form_option_leaf_without_question.rs:23:13
+   |
+23 |             nickname => { widget: textarea },
+   |             ^^^^^^^^ evaluation of `main::_` failed here

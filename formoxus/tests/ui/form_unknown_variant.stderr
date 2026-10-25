@@ -1,0 +1,13 @@
+error[E0599]: no variant named `TrueFals` found for enum `QuestionData`
+  --> tests/ui/form_unknown_variant.rs:21:33
+   |
+ 8 | enum QuestionData {
+   | ----------------- variant `TrueFals` not found here
+...
+21 |             data.$QuestionData::TrueFals.text => { label: "Prompt" },
+   |                                 ^^^^^^^^
+   |
+help: there is a variant with a similar name
+   |
+21 |             data.$QuestionData::TrueFalse.text => { label: "Prompt" },
+   |                                         +

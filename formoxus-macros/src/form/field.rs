@@ -29,6 +29,10 @@ pub(crate) struct FieldBody {
     pub(crate) label: Option<Expr>,
     pub(crate) choices: Option<(Ident, Expr)>,
     pub(crate) attrs: ParsedAttrs,
+    /// `sub.path => { … }` entries written inside this body, each relative to
+    /// this body's path. `form!`'s parse flattens them into entries of their
+    /// own, so nothing past the parse sees one.
+    pub(crate) nested: Vec<(SpecPath, FieldBody)>,
 }
 
 #[derive(Debug, Default)]
@@ -445,7 +449,7 @@ impl Parse for FieldBody {
 
         // Asks "were there any keys?" directly, which cannot go stale when a
         // key is added.
-        if fb.is_empty() {
+        if fb.is_empty() && fb.nested.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
         if fb.choices.is_some()
@@ -470,6 +474,15 @@ impl FieldBody {
     /// attribute by its `snake_case` variant name, or a quoted key passed
     /// through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
+        if starts_nested(body) {
+            let path: SpecPath = body.parse()?;
+            if !body.peek(Token![=>]) {
+                return Err(body.error("Expected => after a field name"));
+            }
+            body.parse::<Token![=>]>()?;
+            self.nested.push((path, body.parse()?));
+            return Ok(());
+        }
         if body.peek(LitStr) {
             let key: LitStr = body.parse()?;
             let id = AttrId::NonStd(quoted_key(&key)?);
@@ -514,12 +527,33 @@ impl FieldBody {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    /// Whether the body has no keys of its own. Nested entries are not its
+    /// own: they are about other paths.
+    pub(crate) fn is_empty(&self) -> bool {
         self.widget.is_none()
             && self.label.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
     }
+}
+
+/// Whether the next entry in a body is a nested `path => { … }` rather than a
+/// key.
+///
+/// A key is a name followed by `:`, or a bare flag followed by `,` or nothing,
+/// and a quoted key is a string. A path is anything else a path can start
+/// with: a `$` variant, a tuple index, or a name followed by what can follow
+/// one in a path (`=>`, `.`, `?` or `[`). So a field named `widget` nests as
+/// `widget => { … }` without being taken for the `widget:` key.
+fn starts_nested(body: ParseStream<'_>) -> bool {
+    body.peek(Token![$])
+        || body.peek(syn::LitInt)
+        || body.peek(syn::LitFloat)
+        || (body.peek(Ident::peek_any)
+            && (body.peek2(Token![=>])
+                || body.peek2(Token![.])
+                || body.peek2(Token![?])
+                || body.peek2(syn::token::Bracket)))
 }
 
 /// The table attribute an identifier key names, or the error explaining why

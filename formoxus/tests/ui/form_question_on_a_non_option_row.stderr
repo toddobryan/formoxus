@@ -1,0 +1,16 @@
+error[E0308]: mismatched types
+  --> tests/ui/form_question_on_a_non_option_row.rs:21:13
+   |
+21 |             phones?[]? => { widget: email },
+   |             ^^^^^^
+   |             |
+   |             expected `&Option<_>`, found `&String`
+   |             arguments to this function are incorrect
+   |
+   = note: expected reference `&std::option::Option<_>`
+              found reference `&std::string::String`
+note: function defined here
+  --> src/field_kind.rs
+   |
+   | pub fn some<T>(_: &Option<T>) -> &T {
+   |        ^^^^
