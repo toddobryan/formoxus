@@ -127,6 +127,20 @@ impl ListSet {
         self.rows.remove(index);
         Ok(())
     }
+
+    /// Move the row according to the given indexes. If indexes are out of range,
+    /// return `FormAccessError`.
+    fn move_row(&mut self, my_path: &str, from: usize, to: usize) -> Result<(), FormAccessError> {
+        let len = self.rows.len();
+        if from >= len || to >= len {
+            return Err(FormAccessError(format!(
+                "cannot move row {from} to {to} in {my_path}; it has {len} rows"
+            )));
+        }
+        let row = self.rows.remove(from);
+        self.rows.insert(to, row);
+        Ok(())
+    }
 }
 
 impl Node for ListSet {
@@ -324,6 +338,7 @@ impl Node for ListSet {
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a list, not an enum")))
                 }
+                Edit::MoveRow { from, to, .. } => self.move_row(&my_path, *from, *to),
             };
         }
 

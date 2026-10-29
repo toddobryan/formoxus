@@ -1,9 +1,45 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-10-29: `formoxus/ORDERED_LISTS_PLAN.md`, box 1 DONE; box 2 next, Todd picks his steps
+
+Todd switched back from apcsp-dioxus to build this. apcsp wants its "new
+assignment" page (ordered groups of questions, search-to-add) as a formoxus
+form; lists need two general features first: **moving a row** and **adding
+a row that arrives filled in**. Everything else that form needs already
+works (checked: `Vec<enum>` rows, nested lists, numbers, path errors, a
+widget reading the whole store).
+
+**Decided the same day, all recorded in the plan (A–G):** reordering is
+opt-in (`answers => { allow_reordering: true }`, the list's OWN path, not
+`answers[]`, which is every row); a reorderable list renders `<ol>`/`<li>`;
+a filled row comes from a TYPED value on `AddRow`; the adder is a plain
+component fn set by `add_row_button:`; ↑/↓ on a row's left, ✕ on its right;
+icons are Lucide, INLINED as SVG (the `dioxus-free-icons` crate measured
+13.8 s and 65 MB per target for four icons); a display-only row needs no
+`<label>`.
+
+The finding that changed B: `Node::edit` never sees the live `ValuesStore`,
+so a filled row is built from the value in the tree, `FormState::edit`
+returns its path, and `use_form`'s `on_edit` copies its leaves into the
+store. Open: how the value is type-erased inside `Edit` (box 4).
+
+**Box 1 done:** Todd wrote `Edit::MoveRow { path, from, to }` and
+`ListSet::move_row` (remove + insert, a bad index is a `FormAccessError`);
+Claude wrote 9 tests in `tests/suite/vecs.rs` ("Moving rows") and the doc
+comments on `from`/`to`. Two bugs caught in review before the tests: `len - 1`
+underflowed on an empty list, and the first version swapped instead of moving.
+
+**Next, box 2:** carry `allow_reordering` from `form!` to `ListSet`, split
+into steps 2a–2g with file:line pointers. Todd is to pick which steps he
+takes (natural split: runtime 2a–2d vs macro 2e–2g) and answer 2-i (bare
+flag too?) and 2-ii (hand-built `FormSpec` on a non-list: ignore or
+assert?). Then box 3, the move buttons, is Claude's, copied from apcsp's
+`crates/ui/src/forms/ordered_picker.rs`.
 
 ## ▶ 2026-10-25: issue #15 BUILT, UNCOMMITTED; Todd to review, then commit and close
 

@@ -384,6 +384,16 @@ pub enum Edit {
         path: String,
         index: usize,
     },
+    MoveRow {
+        path: String,
+        /// The position of the row to move. Positions, not keys, for the same
+        /// reason as `AddRow::before`: a ↑/↓ button knows where its row is.
+        from: usize,
+        /// The row's position AFTER the move, so the rows between shift to close
+        /// the gap: in `a,b,c`, `from: 0, to: 2` gives `b,c,a`, not the swap
+        /// `c,b,a`. Moving down one place from `i` is `to: i + 1`.
+        to: usize,
+    },
 }
 
 impl Edit {
@@ -393,7 +403,8 @@ impl Edit {
         match self {
             Edit::ChooseVariant { path, .. }
             | Edit::AddRow { path, .. }
-            | Edit::RemoveRow { path, .. } => path,
+            | Edit::RemoveRow { path, .. }
+            | Edit::MoveRow { path, .. } => path,
         }
     }
 

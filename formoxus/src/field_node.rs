@@ -386,7 +386,7 @@ impl<F: Field> Node for FieldNode<F> {
             // The article has to travel with the noun, so this carries both.
             let wanted = match edit {
                 Edit::ChooseVariant { .. } => "an enum",
-                Edit::AddRow { .. } | Edit::RemoveRow { .. } => "a list",
+                Edit::AddRow { .. } | Edit::RemoveRow { .. } | Edit::MoveRow { .. } => "a list",
             };
             FormAccessError(format!("{path} is a field, not {wanted}"))
         } else {

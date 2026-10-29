@@ -475,6 +475,230 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     );
 }
 
+// ── Moving rows ──────────────────────────────────────────────────────────
+//
+// A move reorders `rows` and touches nothing else: each row keeps its key, so
+// its values and errors go with it, and the list's own entry — the only place
+// order is written down — follows. Three rows, not two, wherever the result
+// would otherwise be the same for a SWAP: with two rows every move is one.
+
+fn abc() -> Quiz {
+    Quiz {
+        title: "Unit 1".to_string(),
+        answers: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+    }
+}
+
+fn move_answer(form: &mut FormState<Quiz>, from: usize, to: usize) {
+    form.edit(&Edit::MoveRow {
+        path: "answers".to_string(),
+        from,
+        to,
+    })
+    .expect("answers is a list, and both positions are in range");
+}
+
+#[gtest]
+fn moving_the_first_row_to_the_end_shifts_the_others_up() {
+    // The test that tells a move from a swap: a swap of 0 and 2 would give
+    // `c,b,a` and leave `b` where it was.
+    let mut form = form_for(&abc(), FormSpec::default());
+    move_answer(&mut form, 0, 2);
+
+    expect_that!(
+        form.collect_values().into_iter().collect::<Vec<_>>(),
+        eq(&vec![
+            ("title".to_string(), "Unit 1".to_string()),
+            ("answers".to_string(), "#1,#2,#0".to_string()),
+            ("answers.#1".to_string(), "b".to_string()),
+            ("answers.#2".to_string(), "c".to_string()),
+            ("answers.#0".to_string(), "a".to_string()),
+        ])
+    );
+    expect_that!(
+        form.validate(),
+        some(field!(Quiz.answers, eq(&vec!["b", "c", "a"])))
+    );
+}
+
+#[gtest]
+fn moving_the_last_row_to_the_front_shifts_the_others_down() {
+    let mut form = form_for(&abc(), FormSpec::default());
+    move_answer(&mut form, 2, 0);
+
+    expect_that!(form.collect_values().get("answers"), some(eq("#2,#0,#1")));
+    expect_that!(
+        form.validate(),
+        some(field!(Quiz.answers, eq(&vec!["c", "a", "b"])))
+    );
+}
+
+#[gtest]
+fn a_middle_row_moves_up_and_down_one_place() {
+    // What the ↑/↓ buttons will send: `to` is the row's position AFTER the
+    // move, so "down one" from 1 is `to: 2`, not `to: 3`.
+    let mut up = form_for(&abc(), FormSpec::default());
+    move_answer(&mut up, 1, 0);
+    expect_that!(up.collect_values().get("answers"), some(eq("#1,#0,#2")));
+
+    let mut down = form_for(&abc(), FormSpec::default());
+    move_answer(&mut down, 1, 2);
+    expect_that!(down.collect_values().get("answers"), some(eq("#0,#2,#1")));
+}
+
+#[gtest]
+fn moving_a_row_onto_itself_changes_nothing() {
+    let mut form = form_for(&abc(), FormSpec::default());
+    move_answer(&mut form, 1, 1);
+    expect_that!(form.collect_values().get("answers"), some(eq("#0,#1,#2")));
+}
+
+#[gtest]
+fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
+    // `Vec::remove` and `Vec::insert` panic out of range, and on wasm a panic
+    // aborts. The empty list is its own case because `len - 1` underflows
+    // there, which is how the first version of `move_row` would have panicked.
+    let mut form = form_for(&abc(), FormSpec::default());
+    for (from, to) in [(3, 0), (0, 3), (9, 9)] {
+        expect_that!(
+            form.edit(&Edit::MoveRow {
+                path: "answers".to_string(),
+                from,
+                to
+            })
+            .map_err(|e| e.0),
+            err(contains_substring("cannot move row")),
+            "{from} → {to}"
+        );
+    }
+    expect_that!(
+        form.collect_values().get("answers"),
+        some(eq("#0,#1,#2")),
+        "a rejected move must leave the list exactly as it was"
+    );
+
+    let mut empty = form_for(
+        &Quiz {
+            title: "Unit 1".to_string(),
+            answers: Vec::new(),
+        },
+        FormSpec::default(),
+    );
+    expect_that!(
+        empty.edit(&Edit::MoveRow {
+            path: "answers".to_string(),
+            from: 0,
+            to: 0
+        }),
+        err(anything())
+    );
+}
+
+#[gtest]
+fn a_move_aimed_at_a_field_says_it_is_not_a_list() {
+    let mut form = form_for(&abc(), FormSpec::default());
+    let error = form
+        .edit(&Edit::MoveRow {
+            path: "title".to_string(),
+            from: 0,
+            to: 1,
+        })
+        .expect_err("a String field is not a list");
+    expect_that!(error.0, contains_substring("title is a field, not a list"));
+}
+
+#[gtest]
+fn a_moved_row_takes_its_values_and_errors_with_it() {
+    // Struct rows, so "its values" is more than one leaf. The error is a
+    // server's verdict on one cell; after the move it must still be on that
+    // cell (same key, same path), not on whatever row now sits at position 0.
+    let mut form = form_for(&venues(), FormSpec::default());
+    form.push_field_error("places.#0.city", "No such city.")
+        .expect("places.#0.city is a path of this form");
+    form.edit(&Edit::MoveRow {
+        path: "places".to_string(),
+        from: 0,
+        to: 1,
+    })
+    .expect("places is a list");
+
+    expect_that!(
+        paths_of(&form),
+        elements_are![
+            eq("places"),
+            eq("places.#1.street"),
+            eq("places.#1.city"),
+            eq("places.#1.zip"),
+            eq("places.#0.street"),
+            eq("places.#0.city"),
+            eq("places.#0.zip"),
+        ]
+    );
+    expect_that!(
+        form.collect_errors()
+            .fields
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        eq(&vec!["places.#0.city"])
+    );
+    let mut swapped = venues();
+    swapped.places.reverse();
+    expect_that!(form.validate(), some(eq(&swapped)));
+}
+
+#[gtest]
+fn a_server_rebuilds_the_rows_in_their_moved_order() {
+    // The wire half: nothing about a move is new on the wire, because the list's
+    // own entry already carries row order. A server starts with no rows and
+    // builds them in the order the keys arrive.
+    let mut form = form_for(&abc(), FormSpec::default());
+    move_answer(&mut form, 0, 2);
+
+    let accepted = Submission::accept(FormSpec::<Quiz>::default(), &form.collect_values())
+        .expect("every field is filled in");
+    expect_that!(accepted.into_model().answers, eq(&vec!["b", "c", "a"]));
+}
+
+#[gtest]
+fn a_move_inside_a_nested_list_reorders_only_that_list() {
+    let grid = Grid {
+        rows: vec![
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            vec!["d".to_string(), "e".to_string()],
+        ],
+    };
+    let mut form = form_for(&grid, FormSpec::default());
+    form.edit(&Edit::MoveRow {
+        path: "rows.#0".to_string(),
+        from: 0,
+        to: 2,
+    })
+    .expect("rows.#0 is a list");
+
+    let values = form.collect_values();
+    expect_that!(
+        values.get("rows"),
+        some(eq("#0,#1")),
+        "the outer list is untouched"
+    );
+    expect_that!(values.get("rows.#0"), some(eq("#1,#2,#0")));
+    expect_that!(
+        values.get("rows.#1"),
+        some(eq("#0,#1")),
+        "and so is its sibling"
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&Grid {
+            rows: vec![
+                vec!["b".to_string(), "c".to_string(), "a".to_string()],
+                vec!["d".to_string(), "e".to_string()],
+            ],
+        }))
+    );
+}
+
 #[component]
 fn QuizForm() -> Element {
     let form = use_form(|| form_for(&quiz(), FormSpec::default()));
