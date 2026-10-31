@@ -89,7 +89,7 @@ impl Node for OptionNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         // `name()` delegates to the inner, so the inner derives the same
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.

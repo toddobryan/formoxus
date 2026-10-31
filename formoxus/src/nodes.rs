@@ -2,8 +2,10 @@
 //! kinds that make a form a tree rather than a flat list.
 
 use dioxus::prelude::*;
+use facet::{Facet, Peek, Shape};
 use facet::{Partial, ReflectError};
 use indexmap::IndexMap;
+use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -106,12 +108,19 @@ pub trait Node: Debug {
     /// each container performs is identical regardless of the edit; only the
     /// node that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
+    ///
+    /// `Ok(Some(path))` is the full path of the row an `AddRow` created
+    /// (`answers.#3`), which is how a caller finds a row whose key it could
+    /// not have known in advance. Every other edit, which creates no row, is
+    /// `Ok(None)`. `Err` when no node owns the path or when the edit does not
+    /// fit the node that does: an out-of-range row, a variant the enum lacks,
+    /// a `RowValue` of the wrong type. A refused edit changes nothing.
     fn edit(
         &mut self,
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError>;
+    ) -> Result<Option<String>, FormAccessError>;
 }
 
 impl Clone for Box<dyn Node> {
@@ -362,6 +371,75 @@ impl NodeContext {
     }
 }
 
+/// The value a new row arrives filled in with: [`Edit::AddRow`]'s `value`.
+///
+/// **Type-erased** because `Edit` is not generic and cannot be. It crosses
+/// the widget boundary as a `Callback<Edit>`, and one `Edit` type serves
+/// every form, whatever its model. A list's row type is known only from its
+/// shape, at runtime, so the value is a `T` behind `dyn Any`.
+///
+/// **The shape is kept** because nothing checks the type at compile time.
+/// An edit names its list by a string path, so a `RowValue` of any type can
+/// be aimed at any list. `add_row` compares [`shape`](Self::shape) with the
+/// list's row shape and refuses a mismatch, rather than building a row from
+/// a value it would misread.
+///
+/// The rest serves `Edit`'s derives. `Rc`, not `Box`, makes `Clone` cheap
+/// (the value is only ever read). The `peek` fn pointer, made in `new` where
+/// `T` is still known, is how an erased value gets back to a
+/// [`Peek`]: that is how the row is built, and how `Debug` and
+/// `PartialEq` work without requiring either of `T`. Equality goes through
+/// facet, so two values are equal only if they have the same shape and
+/// facet can compare them. A `T` whose shape has no `PartialEq` is never
+/// equal, not even to itself.
+#[derive(Clone)]
+pub struct RowValue {
+    value: Rc<dyn Any>,
+    shape: &'static Shape,
+    peek: for<'a> fn(&'a dyn Any) -> Peek<'a, 'static>,
+}
+
+impl RowValue {
+    /// Wrap a row's value. `T` is the list's ROW type: a `String` for a
+    /// `Vec<String>` or an `Option<Vec<String>>`, an `Option<String>` for a
+    /// `Vec<Option<String>>`.
+    pub fn new<T: Facet<'static> + 'static>(value: T) -> Self {
+        Self {
+            value: Rc::new(value),
+            shape: T::SHAPE,
+            peek: |any| {
+                Peek::new(
+                    any.downcast_ref::<T>()
+                        .expect("a RowValue holds the T it was made from"),
+                )
+            },
+        }
+    }
+
+    /// The shape of the `T` this was made from, which `add_row` checks
+    /// against the list's rows.
+    pub fn shape(&self) -> &'static Shape {
+        self.shape
+    }
+
+    /// The value, readable by reflection: what the row is built from.
+    pub(crate) fn peek(&self) -> Peek<'_, 'static> {
+        (self.peek)(self.value.as_ref())
+    }
+}
+
+impl Debug for RowValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("RowValue").field(&self.peek()).finish()
+    }
+}
+
+impl PartialEq for RowValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.shape == other.shape && self.peek() == other.peek()
+    }
+}
+
 /// A change to the form's *shape*, as opposed to its values — the counterpart
 /// to `apply`. Crosses the widget boundary in a `Callback<Edit>`, which is why
 /// it owns its strings rather than borrowing.
@@ -373,6 +451,19 @@ pub enum Edit {
     },
     AddRow {
         path: String,
+        /// What the new row holds. `None` is a blank row, the one the Add
+        /// button makes: every leaf empty, an enum row with no variant chosen.
+        /// `Some` builds the row from the value the way `form_for` builds a
+        /// form from a model, so its leaves show the value and an enum row
+        /// starts on the value's variant.
+        ///
+        /// The value must be of the list's row type (see [`RowValue::new`]),
+        /// or the edit is refused and nothing changes. Through
+        /// [`Form::edit`](crate::form::Form::edit) or a button, a filled row's
+        /// values also reach the store, which `validate` and `to_wire` read.
+        /// [`FormState::edit`](crate::form::FormState::edit) alone puts them
+        /// only in the tree.
+        value: Option<RowValue>,
         /// Insert the new row *before* the row currently at this position, or
         /// append when `None`. A position rather than a key because that is what
         /// the widget knows: an "insert here" button sits between two rendered

@@ -616,6 +616,7 @@ fn a_row_inserted_at_the_front_arrives_at_the_front() {
     form.edit(&formoxus::nodes::Edit::AddRow {
         path: "tags".to_string(),
         before: Some(0),
+        value: None,
     })
     .expect("tags is a list");
     form.distribute_values(&wire(&[("tags.#2", "dioxus")]));

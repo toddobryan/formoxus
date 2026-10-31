@@ -258,7 +258,7 @@ or reordered without renaming".
     list, so the text costs nothing; ↑/↓/✕ repeat per row, so they are
     icon-only with an `aria-label`). The `<svg>`s get no class: CSS
     reaches them as `.fx-button svg`.
-  - DONE 2026-10-30 (Claude), uncommitted. `MoveRowButtons` in
+  - DONE 2026-10-30 (Claude), ebe4437. `MoveRowButtons` in
     `widgets/row_buttons.rs` (exported beside Add/Remove); icons in
     `widgets/icons.rs` (`pub(crate)`, an `icon(&[path data])` fn);
     `FixedKey::{MoveRowButtons, MoveRowUpButton, MoveRowDownButton}`.
@@ -277,6 +277,15 @@ or reordered without renaming".
   for screen readers (focus says where the row went) more than for
   sight. Lettered so boxes 4–8 keep their numbers.
   - Tests: e2e only (focus is a browser fact).
+  - Decided (Todd, 2026-10-30): AFTER box 4, reusing its returned
+    row path (`FormState::edit`) and its blank-vs-filled split. Focus
+    ONLY a row that arrives blank (`AddRow` with no value): a filled
+    row from a custom adder leaves focus where the adder put it, so a
+    search-to-add user keeps searching. Shape: `on_edit` sets a one-shot
+    signal to the new row's path; a `use_effect` in `use_form` focuses
+    the row's first input with `document::eval`, scoped to the form, on
+    `[name="p"], [name^="p."]` (a bare prefix would match `#20` for
+    `#2`), then clears it. Check playwright-rs has `to_be_focused`.
 
 - [ ] **3b.** (PARKED) Per-row "insert before" (`AddRow { before:
   Some(i) }`, which the edit already supports; `row_buttons.rs:28`
@@ -286,19 +295,111 @@ or reordered without renaming".
   and not until box 5 decides whether a custom adder can be told a
   position, since a search adder is one per list.
 
-- [ ] **4.** (Todd) Add-with-value per B, steps 1–3. `Edit` derives
-  `Clone, Debug, PartialEq` and isn't generic, so the typed value needs
-  erasing; the open part is how. One shape for it: a `RowValue` holding
-  an `Rc<dyn Any>`, the `&'static Shape`, and a monomorphized
-  `fn(&dyn Any) -> Peek<'_, 'static>` made in `RowValue::new::<T:
-  Facet<'static>>`. `Rc` keeps it `Clone`; `Debug` and `PartialEq` are
-  hand-written (`Rc::ptr_eq`?). The stored shape lets `add_row` refuse a
-  value whose type isn't the list's row type, which nothing checks at
-  compile time once `add_row_button:` is a plain fn. `AddRowButton` sends
-  `None`.
-  - Tests (Claude): a leaf row and a struct row added with values; the
-    store and `collect_values` see them; inserting with `before` and a
-    value; a value of the wrong type refused.
+- [ ] **4.** (Todd) Add a row that arrives filled in, per B: a TYPED
+  value on `AddRow`, erased so `Edit` stays non-generic and keeps its
+  `Clone, Debug, PartialEq`. Today `Edit::AddRow { path, before }`
+  (`nodes.rs:373`), `ListSet::add_row` (`list_set.rs:47`) always builds
+  through `blank_row` (`:73`, `None` peek + `FormMode::Blank`), and
+  `use_form`'s `on_edit` (`form.rs:712`) only logs an error. Design
+  (Todd, 2026-10-30: "follow your design"):
+
+  - [x] **4a.** `RowValue` in `nodes.rs`, beside `Edit`:
+    `value: Rc<dyn Any>`, `shape: &'static Shape`, and
+    `peek: for<'a> fn(&'a dyn Any) -> Peek<'a, 'static>`, the last made
+    in `RowValue::new::<T: Facet<'static> + 'static>(value: T)` as a
+    non-capturing closure (`|any| Peek::new(any.downcast_ref::<T>()…)`),
+    so it is monomorphized per `T` and needs no `T` on the struct.
+    `pub fn shape()`, `pub(crate) fn peek()`. `Clone` derives (`Rc`, a
+    fn pointer and a `&'static` are all `Clone`). `Debug` and
+    `PartialEq` by hand, both through `Peek`, which has them: `Debug`
+    prints `RowValue(<the value's Debug>)`; `PartialEq` is
+    `self.shape == other.shape && self.peek() == other.peek()`, so two
+    `RowValue`s made separately from equal values ARE equal (better
+    than `Rc::ptr_eq`, which a test building the expected edit would
+    trip on). `Shape`'s `PartialEq` compares type ids.
+
+  - [x] **4b.** `Edit::AddRow` gains `value: Option<RowValue>`, `None`
+    being today's blank row. Every construction site breaks, which is
+    the to-do list: `AddRowButton` (`row_buttons.rs:31`) sends `None`;
+    the tests' sites are Claude's (`value: None`).
+
+  - [x] **4c.** `blank_row` becomes `new_row(…, value: Option<&RowValue>)`
+    (one function, not a twin): `Some` builds with `Some(value.peek())`
+    and `FormMode::Populated`, as `form_for` would build that row;
+    `None` is today's `None` + `Blank`. `set_rows` passes `None`.
+    `add_row` takes the value and first refuses one whose `shape()` is
+    not `self.shape` (the row type, so `Vec<Option<T>>` wants a
+    `RowValue` of `Option<T>`): a `FormAccessError` naming both types,
+    and no row added. A `Populated` subtree inside a `Blank` form is
+    not the mixing `FormMode`'s doc warns about: the mode is fixed at
+    the subtree's root, from whether THIS call has a value, never from
+    a peek further down.
+
+    Done (Todd, Claude the `optional` part, 2026-10-30). Found on the way:
+    `add_row`/`set_rows` built rows with the LIST's `optional`, where
+    `list_node` builds them with `false`; an `Option<Vec<bool>>`'s added
+    row was a tri-state select beside a checkbox. `new_row` now always
+    passes `false` and the parameter is gone from both. Tests in
+    `optional_containers.rs` ("Rows added to an Option<Vec<T>>"). The
+    same slip in `VariantSet::set_variant` is fixed too (Claude, at
+    Todd's word): it builds a chosen variant's fields with `false`, and
+    `VariantSet.optional`, read nowhere else, is deleted along with
+    `enum_node`'s parameter. Test: "A variant chosen inside an
+    Option<enum>". Blank rows were never dropped (an empty row already
+    failed `validate`); an unwanted row is removed with its button.
+
+  - [x] **4d.** `Node::edit` returns `Result<Option<String>,
+    FormAccessError>`: the full path of a row it CREATED, so the caller
+    can find it. `ListSet` returns `Some(qualify(my_path,
+    &row_segment(key)))` from `AddRow` (filled or blank: 3a wants
+    both); every other edit and node returns `Ok(None)`; containers
+    already `return m.edit(…)`, so they only change signature.
+    `FormState::edit` returns it unchanged; its `choose_variant`
+    wrapper (`state.rs:282`) maps it away.
+
+  - [x] **4e.** `use_form`'s `on_edit`: on `Ok(Some(row))` from an
+    `AddRow` whose `value` is `Some`, copy the new row's leaves from
+    `state.peek().leaf_values()`, those whose path `owns(row, …)`, into
+    the store with `write_value` (overwriting, so nothing stale can
+    shadow them). A blank row copies nothing: absent is `""` already.
+    Without this the row would render filled (the tree has the values)
+    but submit empty, since the store is what `to_wire` and `validate`
+    read.
+
+  - [x] **4e+.** (Todd's call, Claude, 2026-10-30) `Form::edit(&self,
+    &Edit) -> Result<Option<String>, FormAccessError>`, a public way to
+    apply an edit from code, because nothing outside formoxus could reach
+    `on_edit` and so 4e was untestable. `on_edit` and `Form::edit` share
+    `apply_edit` (`form.rs`): the button path logs a failure, `edit`
+    returns it. 4t2/4t5 go through it: probes add a filled row with
+    `Form::edit` in a `use_hook` and render `Submission::accept` of
+    `to_wire()`, which reads the store; mutation-checked (dropping the
+    store copy fails all four).
+
+  - [x] **4f.** (Claude) Docs: `AddRow::value` (what `None` and `Some` build, the
+    type check), `RowValue` (why erased, why the shape is kept: nothing
+    checks the type at compile time once the adder is a plain fn, box
+    5), and `Node::edit`'s new return.
+
+  - [x] **4t1.** (Claude) `RowValue`: equal values from separate `new`s
+    are equal, different values are not, the same `Debug` text from
+    two types is not equal; `Debug` shows the value.
+  - [x] **4t2.** (Claude) Filled rows through `Harness` (the real
+    `on_edit`): a leaf row (`Vec<String>`), a struct row
+    (`Vec<Location>`), an enum row (`Vec<Shape>`, its variant chosen by
+    the value), and `Vec<Option<String>>` with `Some` and `None`; each
+    renders its values AND `validate` returns them, which is what
+    proves 4e.
+  - [x] **4t3.** (Claude) `before: Some(i)` with a value inserts the
+    filled row there; the rows around it keep their keys and values.
+  - [x] **4t4.** (Claude) A value of the wrong type is refused, by
+    message, and the list is unchanged.
+  - [x] **4t5.** (Claude) Across the wire: a filled row reaches
+    `Submission::accept` (`across_the_wire`) with its values.
+  - [x] **4t6.** (Claude) `FormState::edit` returns the new row's path
+    for a blank and a filled `AddRow` (including a nested list's, like
+    `rows.#1.#2`), and `None` for `RemoveRow`, `MoveRow` and
+    `ChooseVariant`.
 
 - [ ] **5.** (Todd) `add_row_button:` per C, replacing `AddRowButton`
   when set.
@@ -321,6 +422,10 @@ or reordered without renaming".
   `SearchToAdd` as the adder, the question row as the row widget, and
   `ordered_picker.rs`'s `OrderedPicker` retired if nothing else uses it.
   apcsp's `ANSWERING_PLAN.md` 2e–2j get rewritten around the form then.
+  A filled row added off-screen is invisible (3a only focuses blank
+  rows), so apcsp flashes "Question was added" once it has messaging
+  (Todd, 2026-10-30). Make it an `aria-live="polite"` region, so a
+  screen reader hears it too.
 
 ## Not in this plan
 

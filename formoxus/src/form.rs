@@ -571,10 +571,18 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         self.distribute_errors(wire.errors())
     }
 
-    /// Push the live values into the state, then build the model.
+    /// Apply a structural edit from code: add, remove or move a row, or choose
+    /// a variant. It goes the way formoxus's own buttons send theirs, so a row
+    /// added with a [`RowValue`](crate::nodes::RowValue) has its values in the
+    /// store, where `validate` and `to_wire` read them, as well as in the tree.
     ///
-    /// Lives here because this is the only place that knows both halves — a
-    /// caller never has to remember that `apply` comes first.
+    /// Unlike a button, which can only log a rejected edit, this returns it.
+    /// `Ok(Some(path))` is a row it created (`answers.#3`), so a caller can find
+    /// it; `Ok(None)` is every other edit.
+    pub fn edit(&self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
+        apply_edit(self.state_signal, self.values_store, edit)
+    }
+
     /// Put the form back the way [`use_form`] built it.
     ///
     /// Everything goes: edited values, validation errors, and structural edits
@@ -710,8 +718,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .collect::<HashMap<_, _>>()
     });
     let on_edit = use_callback(move |edit: Edit| {
-        let mut state = state;
-        if let Err(e) = state.write().edit(&edit) {
+        if let Err(e) = apply_edit(state, values, &edit) {
             // An unknown variant name has already been recorded against the
             // `VariantSet`, so it renders beside the select. Anything else is a
             // bug or a forged event — log rather than panic, since on wasm a
@@ -719,6 +726,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             warn!("rejected form edit: {e}");
         }
     });
+
     let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
 
     Form {
@@ -728,6 +736,31 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         initial_signal: initial,
         id: use_signal(|| form_id),
     }
+}
+
+/// Apply `edit` to the live form: the state, and then the store where the edit
+/// leaves the two apart. Shared by `use_form`'s `on_edit`, which formoxus's own
+/// buttons call and which can only log a failure, and [`Form::edit`], which
+/// returns it.
+fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
+    mut state: Signal<FormState<T>>,
+    values: ValuesStore,
+    edit: &Edit,
+) -> Result<Option<String>, FormAccessError> {
+    // Its own statement, so the write guard is dropped before `peek` below.
+    let created = state.write().edit(edit)?;
+    // A filled row was built from its value, so the TREE has its values, but
+    // widgets, `validate` and `to_wire` read the STORE. Copy the new row's
+    // leaves across, overwriting, so nothing stale can shadow them. A blank row
+    // needs nothing: absent is already `""`.
+    if let (Some(row), Edit::AddRow { value: Some(_), .. }) = (&created, edit) {
+        for (path, raw) in state.peek().leaf_values() {
+            if crate::nodes::owns(row, &path) {
+                crate::widgets::values::write_value(&path, values, raw);
+            }
+        }
+    }
+    Ok(created)
 }
 
 const ALPHANUMERIC: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

@@ -9,8 +9,8 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, Node, ROW_SIGIL, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path,
-    owns, qualify, row_segment,
+    Edit, Node, ROW_SIGIL, RowValue, SpecsByPath, ValuesByPath, default_label, ensure_owned,
+    no_such_path, owns, qualify, row_segment,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::errors::errors_id;
@@ -40,17 +40,29 @@ pub struct ListSet {
 }
 
 impl ListSet {
-    /// Build one blank row under the next key and put it *before* position
-    /// `at`, or on the end. The row's prefix has to match what `list_node`
-    /// produces at construction, or the row would render fine and write to
-    /// store keys nobody reads; `blank_row` keeps the two the same.
+    /// Build one row under the next key, from `value` if there is one and
+    /// blank if not, and put it *before* position `at`, or on the end. A value
+    /// whose type is not the row type is refused, and nothing is added. The
+    /// row's prefix has to match what `list_node` produces at construction, or
+    /// the row would render fine and write to store keys nobody reads;
+    /// `new_row` keeps the two the same.
     fn add_row(
         &mut self,
         my_path: &str,
         before: Option<usize>,
-        optional: bool,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+        value: Option<&RowValue>,
+    ) -> Result<String, FormAccessError> {
+        if let Some(value) = value
+            && value.shape() != self.shape
+        {
+            return Err(FormAccessError(format!(
+                "cannot add a `{}` row to {my_path}: its rows are `{}`",
+                value.shape(),
+                self.shape,
+            )));
+        }
+
         let at = before.unwrap_or(self.rows.len());
         if at > self.rows.len() {
             return Err(FormAccessError(format!(
@@ -58,36 +70,47 @@ impl ListSet {
                 self.rows.len()
             )));
         }
-        let row = self.blank_row(my_path, self.next_key, optional, specs);
+        let row = self.new_row(my_path, self.next_key, specs, value);
+        // Taken before the row moves into `rows`: its full path, which is what
+        // `FormState::edit` hands back so the caller can find the row.
+        let row_path = qualify(my_path, &row.name());
         self.next_key += 1;
         self.rows.insert(at, row);
-        Ok(())
+        Ok(row_path)
     }
 
-    /// One blank row under `key`, built the way construction builds one.
-    ///
-    /// `None` peek and `FormMode::Blank`: a new row has no value to read, the
-    /// same pair `VariantSet::set_variant` passes when it rebuilds a variant's
-    /// nodes. Shared by `add_row`, which takes the next key, and `set_rows`,
-    /// which takes the key the wire named.
-    fn blank_row(
+    /// One row under `key`, built the way construction builds one: from
+    /// `value` in `Populated` mode when there is one, as `form_for` would,
+    /// else blank (`None` peek, `FormMode::Blank`, the pair
+    /// `VariantSet::set_variant` passes). Shared by `add_row`, which takes the
+    /// next key, and `set_rows`, which takes the key the wire named.
+    fn new_row(
         &self,
         my_path: &str,
         key: usize,
-        optional: bool,
         specs: &SpecsByPath,
+        value: Option<&RowValue>,
     ) -> Box<dyn Node> {
         let name = row_segment(key);
+        // A value makes this one row a `form_for` of its own: read from it, and
+        // in `Populated` mode, so a `None` inside it means "absent" (answered),
+        // not "nothing to read" as it does in a blank row.
+        let (peek, mode) = match value {
+            Some(value) => (Some(value.peek()), FormMode::Populated),
+            None => (None, FormMode::Blank),
+        };
         node_for_shape(
             self.shape,
             &name,
-            None,
-            Walk {
-                mode: FormMode::Blank,
-                specs,
-            },
+            peek,
+            Walk { mode, specs },
             &qualify(my_path, &name),
-            optional,
+            // Never the list's own `optional`: that says the LIST is an
+            // `Option`'s payload, which its rows are not, exactly as
+            // `list_node` builds them. A row that can be absent says so in its
+            // own shape (`Vec<Option<T>>`), which the walk peels.
+            /* optional */
+            false,
         )
     }
 
@@ -105,7 +128,7 @@ impl ListSet {
             .map(|&key| {
                 existing
                     .remove(&row_segment(key))
-                    .unwrap_or_else(|| self.blank_row(my_path, key, self.optional, specs))
+                    .unwrap_or_else(|| self.new_row(my_path, key, specs, None))
             })
             .collect();
         self.rows = rows;
@@ -353,20 +376,22 @@ impl Node for ListSet {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path == my_path {
             return match edit {
-                Edit::AddRow { before, .. } => {
-                    self.add_row(&my_path, *before, self.optional, specs)
-                }
-                Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index),
+                Edit::AddRow { before, value, .. } => self
+                    .add_row(&my_path, *before, specs, value.as_ref())
+                    .map(Some),
+                Edit::RemoveRow { index, .. } => self.remove_row(&my_path, *index).map(|()| None),
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a list, not an enum")))
                 }
-                Edit::MoveRow { from, to, .. } => self.move_row(&my_path, *from, *to),
+                Edit::MoveRow { from, to, .. } => {
+                    self.move_row(&my_path, *from, *to).map(|()| None)
+                }
             };
         }
 

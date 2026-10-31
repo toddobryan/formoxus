@@ -52,7 +52,6 @@ pub struct VariantSet {
     pub name: String,
     pub label: Option<String>,
     pub enum_type: &'static EnumType,
-    pub optional: bool,
     pub choice: VariantChoice,
     pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
@@ -80,7 +79,7 @@ impl VariantSet {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let Some(child_prefix) = self.child_prefix(prefix) else {
             return Err(no_such_path(path)); // unchosen: no children to be inside
@@ -121,7 +120,10 @@ impl VariantSet {
                 specs,
             },
             &qualify(my_path, &variant_segment(chosen.name)),
-            self.optional,
+            // As `enum_node` builds them: the enum may be an `Option`'s
+            // payload, but its variant's fields are not.
+            /* optional */
+            false,
         );
         self.errors.clear();
         Ok(())
@@ -299,7 +301,7 @@ impl Node for VariantSet {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         // Two paths are in play, and they are NOT the same: this node sits at
         // `my_path`, where the `<select>` lives, but its children sit one segment
         // deeper under the chosen variant's descriptor. `forward_to_child` owns
@@ -311,9 +313,9 @@ impl Node for VariantSet {
             return self.forward_to_child(prefix, edit, specs);
         }
         match edit {
-            Edit::ChooseVariant { variant, .. } => {
-                self.set_variant(&my_path, variant.as_deref(), specs)
-            }
+            Edit::ChooseVariant { variant, .. } => self
+                .set_variant(&my_path, variant.as_deref(), specs)
+                .map(|()| None),
             _ => Err(FormAccessError(format!("{my_path} is an enum, not a list"))),
         }
     }

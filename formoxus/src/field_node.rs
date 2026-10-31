@@ -377,7 +377,7 @@ impl<F: Field> Node for FieldNode<F> {
         prefix: &str,
         edit: &Edit,
         _specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         // A leaf can only ever be the wrong answer, but which wrong answer is
         // worth saying: hitting a real field means the caller's path was right
         // and its *expectation* was wrong.

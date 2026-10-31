@@ -114,7 +114,7 @@ impl Node for FieldSet {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
-    ) -> Result<(), FormAccessError> {
+    ) -> Result<Option<String>, FormAccessError> {
         let nested = qualify(prefix, &self.name);
         let path = edit.path();
         ensure_owned(&nested, path)?;

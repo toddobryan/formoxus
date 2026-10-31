@@ -240,7 +240,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.distribute_values(&map);
     }
 
-    pub fn edit(&mut self, edit: &Edit) -> Result<(), FormAccessError> {
+    pub fn edit(&mut self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
             return Err(no_such_path(path));
@@ -280,6 +280,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         variant: Option<&str>,
     ) -> Result<(), FormAccessError> {
         self.edit(&Edit::new_choose_variant(path, variant))
+            .map(|_| ())
     }
 
     pub fn buttons(&self) -> &[ButtonSpec] {

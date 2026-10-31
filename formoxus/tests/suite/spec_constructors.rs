@@ -142,6 +142,7 @@ fn a_constructor_reaches_a_row_added_later() {
         .edit(&Edit::AddRow {
             path: "venues".into(),
             before: None,
+            value: None,
         })
         .unwrap();
     expect_that!(
@@ -164,6 +165,7 @@ fn a_constructor_reaches_a_variant_chosen_inside_an_added_row() {
         .edit(&Edit::AddRow {
             path: "shapes".into(),
             before: None,
+            value: None,
         })
         .unwrap();
     state

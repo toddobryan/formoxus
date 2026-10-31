@@ -30,7 +30,7 @@ pub fn AddRowButton(path: String, on_edit: Callback<Edit>, classes: Rc<Classes>)
                 // Append. `before` exists for mid-list insertion, which needs a
                 // widget between every pair of rows — a UI question that hasn't
                 // been answered yet, not a limitation of the edit.
-                on_edit.call(Edit::AddRow { path: path.clone(), before: None });
+                on_edit.call(Edit::AddRow { path: path.clone(), value: None, before: None });
             },
             // Icon and word: there is one Add per list, so the text costs
             // nothing, and a lone "+" under a list says less than "+ Add".

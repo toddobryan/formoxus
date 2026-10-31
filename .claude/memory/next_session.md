@@ -1,11 +1,11 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE uncommitted (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-10-30: BOX 2 DONE (ec05880, pushed); BOX 3 DONE, uncommitted; box 4 (Todd) next
+## ▶ 2026-10-30/31: BOX 2 DONE (ec05880); BOX 3 DONE (ebe4437); BOX 4 DONE, uncommitted
 
 Todd decided 2-i (a BARE FLAG only: `allow_reordering`, never `: true`,
 like every other flag; first answered "both" from Claude's wrong claim
@@ -24,7 +24,19 @@ new row) queued, lower priority. 2d adds `fx-list-rows` and renames
 All of box 2 then landed: 2d (Todd) and 2t3 (Claude, six render tests in
 `vecs.rs`). Committed and pushed as ec05880. Then box 3 (Claude): move
 buttons, icons on Add/Remove for every list, `/t/reorder` e2e; details in
-the plan's box 3. Uncommitted. Next: box 4 (Todd), or 3a.
+the plan's box 3. Committed as ebe4437. Next: box 4 (Todd). 3a (focus a
+new BLANK row) waits for box 4 by decision; its shape is in the plan.
+Box 4 in progress, UNCOMMITTED by decision (commit once box 4 is done):
+4a–4c + 4t1 done; also both `optional` slips fixed (ListSet rows,
+VariantSet::set_variant; see [[optional-flag-is-payload-only]]). `just ci`
+and e2e 37/37 green. Then 4d (Todd: `Node::edit` returns
+`Result<Option<String>, _>`, the created row's path), 4e (Todd: on_edit copies
+a filled row's leaves into the store), 4e+ (Claude: shared `apply_edit` +
+public `Form::edit`, which returns the error and path instead of logging),
+4t2–4t6 (Claude; the 4 live-form probes mutation-checked) and 4f (Claude,
+2026-10-31: docs on `RowValue`, `AddRow::value`, `Node::edit`). **All of box
+4 done, `just ci` green, e2e 37/37; awaiting Todd's go to commit.** Next after
+that: 3a (focus a new blank row), then box 5.
 
 ## ▶ 2026-10-29: `formoxus/ORDERED_LISTS_PLAN.md`, box 1 DONE; box 2 next, Todd picks his steps
 

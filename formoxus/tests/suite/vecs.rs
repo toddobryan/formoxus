@@ -10,6 +10,7 @@ use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use indexmap::IndexMap;
+use std::fmt::Debug;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Quiz {
@@ -250,6 +251,7 @@ fn adding_a_row_appends_by_default() {
     form.edit(&Edit::AddRow {
         path: "answers".to_string(),
         before: None,
+        value: None,
     })
     .expect("answers is a list");
 
@@ -274,6 +276,7 @@ fn a_new_row_is_blank_and_buildable() {
     form.edit(&Edit::AddRow {
         path: "answers".to_string(),
         before: None,
+        value: None,
     })
     .expect("answers is a list");
     form.distribute_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
@@ -298,6 +301,7 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
     form.edit(&Edit::AddRow {
         path: "answers".to_string(),
         before: Some(0),
+        value: None,
     })
     .expect("answers is a list");
 
@@ -329,6 +333,7 @@ fn the_list_builds_in_row_order_not_key_order() {
     form.edit(&Edit::AddRow {
         path: "answers".to_string(),
         before: Some(0),
+        value: None,
     })
     .expect("answers is a list");
     form.distribute_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
@@ -389,6 +394,7 @@ fn a_key_is_never_reused() {
     form.edit(&Edit::AddRow {
         path: "answers".to_string(),
         before: None,
+        value: None,
     })
     .expect("answers is a list");
 
@@ -414,6 +420,7 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
     form.edit(&Edit::AddRow {
         path: "shapes".to_string(),
         before: None,
+        value: None,
     })
     .expect("shapes is a list");
     form.choose_variant("shapes.#0", Some("Circle"))
@@ -437,7 +444,8 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     expect_that!(
         form.edit(&Edit::AddRow {
             path: "answers".to_string(),
-            before: Some(9)
+            before: Some(9),
+            value: None,
         }),
         err(anything())
     );
@@ -469,7 +477,8 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     expect_that!(
         form.edit(&Edit::AddRow {
             path: "answers".to_string(),
-            before: None
+            before: None,
+            value: None,
         }),
         ok(anything())
     );
@@ -1218,4 +1227,426 @@ fn add_shows_its_word_beside_its_icon() {
     let add = &add[..add.find("</button>").unwrap()];
     expect_that!(add, contains_substring(r#"aria-hidden="true""#));
     expect_that!(add, ends_with("</svg>Add"));
+}
+
+// ── Rows that arrive filled in ───────────────────────────────────────────
+
+/// Two separately made from equal values are equal, which is what lets a test
+/// build the `Edit` it expects: comparing the `Rc`s instead would never match.
+#[gtest]
+fn row_values_compare_by_value() {
+    use formoxus::nodes::RowValue;
+    expect_that!(
+        RowValue::new("q1".to_string()),
+        eq(&RowValue::new("q1".to_string()))
+    );
+    expect_that!(
+        RowValue::new("q1".to_string()),
+        not(eq(&RowValue::new("q2".to_string())))
+    );
+}
+
+/// Same `Debug` text, different types: still unequal, because the shape is
+/// compared first.
+#[gtest]
+fn row_values_of_different_types_are_unequal() {
+    use formoxus::nodes::RowValue;
+    expect_that!(RowValue::new(3_u8), not(eq(&RowValue::new(3_u16))));
+}
+
+#[gtest]
+fn a_row_values_debug_shows_the_value() {
+    use formoxus::nodes::RowValue;
+    expect_that!(
+        format!(
+            "{:?}",
+            RowValue::new(Location {
+                street: "1 Main".to_string(),
+                city: "Paris".to_string(),
+                zip: "75001".to_string(),
+            })
+        ),
+        eq(r#"RowValue(Location { street: "1 Main", city: "Paris", zip: "75001" })"#)
+    );
+}
+
+// ── What `edit` returns ──────────────────────────────────────────────────
+//
+// `FormState::edit` hands back the full path of a row it created, which is
+// how `use_form` finds a filled row to copy into the store (and, later, a blank
+// one to focus). Every container passes it up from where the row was made.
+
+fn add_row(path: &str, value: Option<formoxus::nodes::RowValue>) -> Edit {
+    Edit::AddRow {
+        path: path.to_string(),
+        before: None,
+        value,
+    }
+}
+
+#[gtest]
+fn adding_a_blank_row_returns_its_path() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    expect_that!(
+        form.edit(&add_row("answers", None)),
+        ok(some(eq("answers.#2")))
+    );
+}
+
+#[gtest]
+fn adding_a_filled_row_returns_its_path() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    expect_that!(
+        form.edit(&add_row(
+            "answers",
+            Some(formoxus::nodes::RowValue::new("gamma".to_string()))
+        )),
+        ok(some(eq("answers.#2")))
+    );
+}
+
+/// The path names the row's KEY, not where it landed: inserted at the top,
+/// it is still the third row made.
+#[gtest]
+fn a_row_inserted_mid_list_returns_its_key_not_its_position() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::AddRow {
+            path: "answers".to_string(),
+            before: Some(0),
+            value: None,
+        }),
+        ok(some(eq("answers.#2")))
+    );
+}
+
+/// Up through the outer list's row.
+#[gtest]
+fn a_row_added_to_a_nested_list_returns_its_full_path() {
+    let mut form = form_for(&grid(), FormSpec::default());
+    expect_that!(
+        form.edit(&add_row("rows.#1", None)),
+        ok(some(eq("rows.#1.#1")))
+    );
+}
+
+/// Up through a variant (`VariantSet::forward_to_child`) and the list's row.
+#[gtest]
+fn a_row_added_to_a_list_inside_a_variant_returns_its_full_path() {
+    let mut form = form_for(
+        &Assignment {
+            groups: vec![Group::All {
+                questions: vec!["q1".to_string()],
+                shuffle: false,
+            }],
+        },
+        FormSpec::default(),
+    );
+    expect_that!(
+        form.edit(&add_row("groups.#0.$All.questions", None)),
+        ok(some(eq("groups.#0.$All.questions.#1")))
+    );
+}
+
+/// Up through an `OptionNode`, which adds no segment of its own.
+#[gtest]
+fn a_row_added_to_an_optional_list_returns_its_path() {
+    let mut form = form_for(
+        &MaybeQuiz {
+            answers: Some(vec!["alpha".to_string()]),
+        },
+        FormSpec::default(),
+    );
+    expect_that!(
+        form.edit(&add_row("answers", None)),
+        ok(some(eq("answers.#1")))
+    );
+}
+
+/// Only `AddRow` creates a row. Choosing a variant creates fields, which a
+/// caller finds by the path it already chose.
+#[gtest]
+fn no_other_edit_returns_a_path() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::MoveRow {
+            path: "answers".to_string(),
+            from: 0,
+            to: 1,
+        }),
+        ok(none())
+    );
+    expect_that!(
+        form.edit(&Edit::RemoveRow {
+            path: "answers".to_string(),
+            index: 0,
+        }),
+        ok(none())
+    );
+    let mut drawings = form_for(
+        &Drawings {
+            shapes: vec![Shape::Circle { radius: 1.0 }],
+        },
+        FormSpec::default(),
+    );
+    expect_that!(
+        drawings.edit(&Edit::new_choose_variant("shapes.#0", Some("Rectangle"))),
+        ok(none())
+    );
+}
+
+/// A filled row lands where `before` says, and the rows around it keep their
+/// keys and values. Read from the tree (`FormState::validate`), so this is
+/// `add_row` alone; the store's copy is `use_form`'s, tested through `Harness`.
+#[gtest]
+fn a_filled_row_inserted_mid_list_lands_there_with_its_value() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    form.edit(&Edit::AddRow {
+        path: "answers".to_string(),
+        before: Some(1),
+        value: Some(formoxus::nodes::RowValue::new("between".to_string())),
+    })
+    .expect("inserting before row 1 should succeed");
+    expect_that!(
+        form.collect_values().get("answers").map(String::as_str),
+        some(eq("#0,#2,#1")),
+        "the new row is #2, and it sits second"
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&Quiz {
+            title: "Unit 1".to_string(),
+            answers: vec![
+                "alpha".to_string(),
+                "between".to_string(),
+                "beta".to_string()
+            ],
+        }))
+    );
+}
+
+/// Nothing checks the type at compile time once an adder is a plain fn, so
+/// `add_row` does: the message names both types, and the list is untouched.
+#[gtest]
+fn a_row_value_of_the_wrong_type_is_refused() {
+    let mut form = form_for(&quiz(), FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::AddRow {
+            path: "answers".to_string(),
+            before: None,
+            value: Some(formoxus::nodes::RowValue::new(7_u8)),
+        }),
+        err(displays_as(contains_substring(
+            "cannot add a `u8` row to answers: its rows are `String`"
+        )))
+    );
+    expect_that!(
+        form.collect_values().get("answers").map(String::as_str),
+        some(eq("#0,#1"))
+    );
+    // And the key it would have taken is still free.
+    expect_that!(
+        form.edit(&add_row("answers", None)),
+        ok(some(eq("answers.#2")))
+    );
+}
+
+// ── A filled row through the live form ───────────────────────────────────
+//
+// `Form::edit` goes through `use_form`'s own `apply_edit`, the path a button
+// takes, so these see what `FormState::edit` alone cannot: the new row's
+// values copied into the STORE. Each probe adds its row once, then renders the
+// form beside what `Submission::accept` builds from `to_wire()`. `to_wire`
+// reads the store, so a value reaching `#accepted` is the proof the copy ran.
+
+/// The form, then `<pre id="accepted">` holding the server's model.
+fn with_accepted<T>(form: Form<T>, spec: FormSpec<T>) -> Element
+where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    let wire = form.to_wire();
+    let accepted = match Submission::accept(spec, wire.values()) {
+        Ok(sub) => format!("{:?}", sub.into_model()),
+        Err(errors) => format!("rejected: {errors:?}"),
+    };
+    rsx! {
+        {form.render(using_fns! {})}
+        pre { id: "accepted", "{accepted}" }
+    }
+}
+
+/// What the probe's `#accepted` holds, with SSR's `&#34;` back to `"` so it
+/// compares against the model's own `Debug`.
+fn accepted(html: &str) -> String {
+    let open = r#"<pre id="accepted">"#;
+    let start = html.find(open).expect("the probe renders #accepted") + open.len();
+    html[start..start + html[start..].find("</pre>").unwrap()].replace("&#34;", "\"")
+}
+
+fn add_filled(
+    form: Form<impl Clone + Debug + PartialEq + Facet<'static> + 'static>,
+    path: &str,
+    value: formoxus::nodes::RowValue,
+) {
+    form.edit(&add_row(path, Some(value)))
+        .expect("adding a filled row should succeed");
+}
+
+#[component]
+fn FilledLeafRowProbe() -> Element {
+    let form = use_form(|| form_for(&quiz(), FormSpec::default()));
+    use_hook(|| {
+        add_filled(
+            form,
+            "answers",
+            formoxus::nodes::RowValue::new("gamma".to_string()),
+        );
+    });
+    with_accepted(form, FormSpec::default())
+}
+
+#[gtest]
+fn a_filled_leaf_row_renders_and_submits_its_value() {
+    let html = super::render_to_html(FilledLeafRowProbe);
+    expect_that!(
+        html,
+        contains_substring(r#"name="answers.#2" value="gamma""#)
+    );
+    expect_that!(
+        accepted(&html),
+        eq(&format!(
+            "{:?}",
+            Quiz {
+                title: "Unit 1".to_string(),
+                answers: vec!["alpha".into(), "beta".into(), "gamma".into()],
+            }
+        ))
+    );
+}
+
+fn lyon() -> Location {
+    Location {
+        street: "2 Rue".to_string(),
+        city: "Lyon".to_string(),
+        zip: "69001".to_string(),
+    }
+}
+
+#[component]
+fn FilledStructRowProbe() -> Element {
+    let form = use_form(|| form_for(&venues(), FormSpec::default()));
+    use_hook(|| add_filled(form, "places", formoxus::nodes::RowValue::new(lyon())));
+    with_accepted(form, FormSpec::default())
+}
+
+/// Every leaf of a struct row, not just the first: the copy takes all of
+/// them under the row's path.
+#[gtest]
+fn a_filled_struct_row_renders_and_submits_every_field() {
+    let html = super::render_to_html(FilledStructRowProbe);
+    let n = venues().places.len();
+    for (field, value) in [("street", "2 Rue"), ("city", "Lyon"), ("zip", "69001")] {
+        expect_that!(
+            html,
+            contains_substring(format!(r#"name="places.#{n}.{field}" value="{value}""#))
+        );
+    }
+    let mut expected = venues();
+    expected.places.push(lyon());
+    expect_that!(accepted(&html), eq(&format!("{expected:?}")));
+}
+
+#[component]
+fn FilledEnumRowProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Drawings {
+                shapes: vec![Shape::Circle { radius: 1.0 }],
+            },
+            FormSpec::default(),
+        )
+    });
+    use_hook(|| {
+        add_filled(
+            form,
+            "shapes",
+            formoxus::nodes::RowValue::new(Shape::Rectangle {
+                width: 2.0,
+                height: 3.0,
+            }),
+        );
+    });
+    with_accepted(form, FormSpec::default())
+}
+
+/// The value picks the row's variant, as `form_for` would: built in
+/// `Populated` mode, not left unchosen as a blank row is.
+#[gtest]
+fn a_filled_enum_row_takes_the_values_variant() {
+    let html = super::render_to_html(FilledEnumRowProbe);
+    expect_that!(
+        html,
+        contains_substring(r#"name="shapes.#1.$Rectangle.width" value="2""#)
+    );
+    expect_that!(
+        accepted(&html),
+        eq(&format!(
+            "{:?}",
+            Drawings {
+                shapes: vec![
+                    Shape::Circle { radius: 1.0 },
+                    Shape::Rectangle {
+                        width: 2.0,
+                        height: 3.0
+                    },
+                ],
+            }
+        ))
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Nicknames {
+    names: Vec<Option<String>>,
+}
+
+#[component]
+fn FilledOptionRowsProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Nicknames {
+                names: vec![Some("Al".to_string())],
+            },
+            FormSpec::default(),
+        )
+    });
+    use_hook(|| {
+        add_filled(
+            form,
+            "names",
+            formoxus::nodes::RowValue::new(Some("Bo".to_string())),
+        );
+        add_filled(
+            form,
+            "names",
+            formoxus::nodes::RowValue::new(None::<String>),
+        );
+    });
+    with_accepted(form, FormSpec::default())
+}
+
+/// A `Vec<Option<T>>`'s row type is `Option<T>`, so that is what its value
+/// is; a `None` row is an answered absence, and stays one.
+#[gtest]
+fn filled_option_rows_keep_some_and_none() {
+    let html = super::render_to_html(FilledOptionRowsProbe);
+    expect_that!(
+        accepted(&html),
+        eq(&format!(
+            "{:?}",
+            Nicknames {
+                names: vec![Some("Al".into()), Some("Bo".into()), None],
+            }
+        ))
+    );
 }

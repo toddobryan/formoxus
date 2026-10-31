@@ -639,3 +639,283 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
         }))
     );
 }
+
+// ── Rows added to an Option<Vec<T>> ──
+//
+// `list_node` builds a list's first rows with `optional: false`, while
+// `ListSet::add_row` and `set_rows` pass the LIST's optionality, which for an
+// `Option<Vec<T>>` is `true`. Nothing visible differs, and these pin that: an
+// added row renders and validates exactly like one there from the start.
+
+#[component]
+fn TaggedWithAnAddedRow() -> Element {
+    let form = use_form(|| {
+        let mut state = form_for(
+            &Tagged {
+                tags: Some(vec!["x".to_string()]),
+            },
+            FormSpec::default(),
+        );
+        state
+            .edit(&formoxus::nodes::Edit::AddRow {
+                path: "tags".to_string(),
+                before: None,
+                value: None,
+            })
+            .expect("appending to `tags` should succeed");
+        state
+    });
+    form.render(using_fns! {})
+}
+
+/// Inside an `Option`, no leaf is marked `required` (see
+/// `an_optional_structs_leaves_are_not_marked_required`), and an added row is
+/// no exception in either direction.
+#[gtest]
+fn an_added_row_of_an_optional_list_is_marked_like_the_first() {
+    let html = super::render_to_html(TaggedWithAnAddedRow);
+    expect_that!(
+        input_tag(&html, "tags.#0"),
+        not(contains_substring("required")),
+        "the row built with the list"
+    );
+    expect_that!(
+        input_tag(&html, "tags.#1"),
+        not(contains_substring("required")),
+        "the row added after"
+    );
+}
+
+/// Left empty, an added row is refused as the first row would be, rather
+/// than read as an absent value of a `String` that cannot be absent.
+#[gtest]
+fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
+    let added = || {
+        let mut form = form_for(
+            &Tagged {
+                tags: Some(vec!["x".to_string()]),
+            },
+            FormSpec::default(),
+        );
+        form.edit(&formoxus::nodes::Edit::AddRow {
+            path: "tags".to_string(),
+            before: None,
+            value: None,
+        })
+        .expect("appending to `tags` should succeed");
+        form
+    };
+
+    let mut first_empty = added();
+    first_empty.distribute_values(&applied(&[
+        ("tags", "#0,#1"),
+        ("tags.#0", ""),
+        ("tags.#1", "y"),
+    ]));
+    expect_that!(first_empty.validate(), none(), "an empty first row");
+
+    let mut added_empty = added();
+    added_empty.distribute_values(&applied(&[
+        ("tags", "#0,#1"),
+        ("tags.#0", "x"),
+        ("tags.#1", ""),
+    ]));
+    expect_that!(added_empty.validate(), none(), "an empty added row");
+
+    let mut both = added();
+    both.distribute_values(&applied(&[
+        ("tags", "#0,#1"),
+        ("tags.#0", "x"),
+        ("tags.#1", "y"),
+    ]));
+    expect_that!(
+        both.validate(),
+        some(eq(&Tagged {
+            tags: Some(vec!["x".to_string(), "y".to_string()]),
+        }))
+    );
+}
+
+/// One `Roster` row's three leaves, keyed under row `key`.
+fn roster_row(key: &str, [street, city, zip]: [&str; 3]) -> Vec<(String, String)> {
+    [("street", street), ("city", city), ("zip", zip)]
+        .map(|(field, value)| (format!("nodes.{key}.{field}"), value.to_string()))
+        .to_vec()
+}
+
+/// The same for a struct row, where `optional` is what would decide whether
+/// an all-empty row reads as absent: it does not, added or not.
+#[gtest]
+fn an_empty_added_struct_row_of_an_optional_list_is_refused_like_the_first() {
+    let added = |rows: Vec<(String, String)>| {
+        let mut form = form_for(
+            &Roster {
+                nodes: Some(vec![Location {
+                    street: "1 Main".to_string(),
+                    city: "Paris".to_string(),
+                    zip: "75001".to_string(),
+                }]),
+            },
+            FormSpec::default(),
+        );
+        form.edit(&formoxus::nodes::Edit::AddRow {
+            path: "nodes".to_string(),
+            before: None,
+            value: None,
+        })
+        .expect("appending to `nodes` should succeed");
+        let mut values = vec![("nodes", "#0,#1")];
+        values.extend(rows.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        form.distribute_values(&applied(&values));
+        form.validate()
+    };
+    let full0 = || roster_row("#0", ["1 Main", "Paris", "75001"]);
+    let full1 = || roster_row("#1", ["2 Rue", "Lyon", "69001"]);
+
+    expect_that!(
+        added([roster_row("#0", ["", "", ""]), full1()].concat()),
+        none(),
+        "an empty first row"
+    );
+    expect_that!(
+        added([full0(), roster_row("#1", ["", "", ""])].concat()),
+        none(),
+        "an empty added row"
+    );
+    expect_that!(added([full0(), full1()].concat()), some(anything()));
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Flags {
+    flags: Option<Vec<bool>>,
+}
+
+#[component]
+fn FlagsWithAnAddedRow() -> Element {
+    let form = use_form(|| {
+        let mut state = form_for(
+            &Flags {
+                flags: Some(vec![true]),
+            },
+            FormSpec::default(),
+        );
+        state
+            .edit(&formoxus::nodes::Edit::AddRow {
+                path: "flags".to_string(),
+                before: None,
+                value: None,
+            })
+            .expect("appending to `flags` should succeed");
+        state
+    });
+    form.render(using_fns! {})
+}
+
+/// The case the `String` tests above cannot see. A row's `optional` says it
+/// is the `T` of an `Option<T>`, and a leaf's default widget follows it: an
+/// `Option<bool>` is a tri-state select, a `bool` a checkbox. Each row of an
+/// `Option<Vec<bool>>` is a `bool`, so the row added later must be a checkbox
+/// like the first, not inherit the LIST's optionality.
+#[gtest]
+fn an_added_row_of_an_optional_list_gets_the_same_widget_as_the_first() {
+    let html = super::render_to_html(FlagsWithAnAddedRow);
+    expect_that!(
+        input_tag(&html, "flags.#0"),
+        contains_substring(r#"type="checkbox""#),
+        "the row built with the list"
+    );
+    expect_that!(
+        html,
+        not(contains_substring(
+            r#"<select class="fx-control fx-select" id"#
+        )),
+        "no row is a tri-state select"
+    );
+    expect_that!(
+        input_tag(&html, "flags.#1"),
+        contains_substring(r#"type="checkbox""#),
+        "the row added after"
+    );
+}
+
+/// A server builds a wire's rows through `set_rows`, the other caller of
+/// `new_row`. A regression net for that path, not proof of the fix above: a
+/// row built as an `Option<bool>` also reads `"false"` as `Some(false)`, so
+/// this passed before rows were built with `optional: false`.
+#[gtest]
+fn an_optional_list_of_bools_round_trips() {
+    let value = Flags {
+        flags: Some(vec![true, false]),
+    };
+    expect_that!(across_the_wire(&value), ok(eq(&value)));
+}
+
+// ── A variant chosen inside an Option<enum> ──
+//
+// The enum version of the row case above: `enum_node` builds the chosen
+// variant's fields with `optional: false`, and `VariantSet::set_variant`, which
+// rebuilds them when the user picks a variant, must too.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Toggle {
+    On { loud: bool },
+    Off,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Alarm {
+    mode: Option<Toggle>,
+}
+
+#[component]
+fn AlarmFromAValue() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Alarm {
+                mode: Some(Toggle::On { loud: true }),
+            },
+            FormSpec::default(),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn AlarmWithAVariantChosen() -> Element {
+    let form = use_form(|| {
+        let mut state = empty_form::<Alarm>(FormSpec::default());
+        state
+            .edit(&formoxus::nodes::Edit::new_choose_variant(
+                "mode",
+                Some("On"),
+            ))
+            .expect("`On` is a variant of `mode`");
+        state
+    });
+    form.render(using_fns! {})
+}
+
+/// `loud` is a `bool`, so a checkbox, whether the variant came from a value
+/// or was chosen by the user; it is not the `T` of an `Option<T>` just because
+/// the enum around it is.
+#[gtest]
+fn a_chosen_variants_field_gets_the_same_widget_as_a_populated_one() {
+    let populated = super::render_to_html(AlarmFromAValue);
+    expect_that!(
+        input_tag(&populated, "mode.$On.loud"),
+        contains_substring(r#"type="checkbox""#),
+        "built from the value"
+    );
+    let chosen = super::render_to_html(AlarmWithAVariantChosen);
+    expect_that!(
+        chosen,
+        not(contains_substring(r#"name="mode.$On.loud"><option"#)),
+        "not a tri-state select"
+    );
+    expect_that!(
+        input_tag(&chosen, "mode.$On.loud"),
+        contains_substring(r#"type="checkbox""#),
+        "chosen by the user"
+    );
+}

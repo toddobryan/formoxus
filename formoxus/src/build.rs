@@ -388,7 +388,7 @@ fn node_for(
 
 /// The node for a shape that is *named separately* from where it came from.
 ///
-/// Split out of [`node_for`] because a list element has no [`Field`] and so no
+/// Split out of [`node_for`] because a list element has no [`Field`](FacetField) and so no
 /// `field.name` — its name is its index (`"0"`, `"1"`, …), supplied by the
 /// enclosing `ListSet`. Everything below is shape-driven and never looked at the
 /// `Field` for anything but those two things, so the split is pure motion.
@@ -442,9 +442,7 @@ pub(crate) fn node_for_shape(
 
     match &shape.ty {
         Type::User(UserType::Struct(_)) => struct_node(shape, name, peek, walk, prefix, optional),
-        Type::User(UserType::Enum(enum_type)) => {
-            enum_node(enum_type, name, peek, walk, prefix, optional)
-        }
+        Type::User(UserType::Enum(enum_type)) => enum_node(enum_type, name, peek, walk, prefix),
         other => panic!("field {name} has unsupported type {other:?}"),
     }
 }
@@ -697,7 +695,6 @@ fn enum_node(
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
     prefix: &str,
-    optional: bool,
 ) -> Box<dyn Node> {
     let peek_enum = peek.map(|p| {
         p.into_enum()
@@ -710,7 +707,6 @@ fn enum_node(
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         enum_type,
-        optional,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it
         choice: match variant {
             Some(v) => VariantChoice::Named(v.name.to_string()),

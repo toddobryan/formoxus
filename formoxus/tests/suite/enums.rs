@@ -743,6 +743,7 @@ fn a_row_edit_aimed_at_an_enum_is_rejected() {
         .edit(&Edit::AddRow {
             path: "shape".to_string(),
             before: None,
+            value: None,
         })
         .expect_err("an enum has no rows");
     expect_that!(error.0, contains_substring("shape is an enum, not a list"));

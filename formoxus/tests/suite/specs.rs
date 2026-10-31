@@ -541,6 +541,7 @@ fn RowAddedAfterTheSpec() -> Element {
             .edit(&Edit::AddRow {
                 path: "answers".to_string(),
                 before: None,
+                value: None,
             })
             .expect("appending to `answers` should succeed");
         state
@@ -571,6 +572,7 @@ fn RowFieldAddedAfterTheSpec() -> Element {
             .edit(&Edit::AddRow {
                 path: "venues".to_string(),
                 before: None,
+                value: None,
             })
             .expect("appending to `venues` should succeed");
         state
