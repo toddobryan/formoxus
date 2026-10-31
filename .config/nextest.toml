@@ -1,0 +1,10 @@
+# The browser tests share one dev server and each launches its own Chromium.
+# nextest runs tests from every binary at once, one per CPU, and at 32 at a time
+# every test timed out waiting for `#app-ready`. 8 passes in about 11 s; `cargo
+# test`, which ran one binary at a time, never had more than 9 going.
+[test-groups]
+browser = { max-threads = 8 }
+
+[[profile.default.overrides]]
+filter = "package(e2e)"
+test-group = "browser"

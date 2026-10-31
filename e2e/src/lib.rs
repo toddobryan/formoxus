@@ -16,7 +16,7 @@
 //! this. One feature each keeps selectors unambiguous — one field, one button, no
 //! scoping.
 //!
-//! Needs a browser once: `npx playwright@1.60.0 install chromium`.
+//! Needs a browser once: `npx playwright@1.64.1 install chromium`.
 
 mod config;
 pub mod focus;

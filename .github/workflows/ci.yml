@@ -36,10 +36,12 @@ jobs:
         with:
           toolchain: "1.99.1"
       - uses: Swatinem/rust-cache@v2
-      # --workspace, not a bare `cargo test`: the examples crate is a member
-      # but NOT a default member, and building it is the whole point of it
-      # being in the workspace at all.
-      - run: cargo test --workspace
+      - uses: taiki-e/install-action@nextest
+      # --workspace, not a bare run: the examples crate is a member but NOT a
+      # default member, and building it is the whole point of it being in the
+      # workspace at all. nextest skips doctests, so they run separately.
+      - run: cargo nextest run --workspace
+      - run: cargo test --doc --workspace
 
   lint:
     name: fmt + clippy

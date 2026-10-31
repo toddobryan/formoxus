@@ -20,10 +20,15 @@ fmt:
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 
-# --workspace, not a bare `cargo test`: the examples crate is a member but not
-# a DEFAULT member, and building it is the point of it being in the workspace.
+# --workspace, not a bare run: the examples crate is a member but not a
+# DEFAULT member, and building it is the point of it being in the workspace.
+#
+# nextest (`cargo install cargo-nextest --locked`) runs each test in its own
+# process, but it does not run doctests, so `cargo test --doc` follows. Every
+# doctest is `ignore`d today; this keeps a runnable one from being skipped.
 test:
-    cargo test --workspace
+    cargo nextest run --workspace
+    cargo test --doc --workspace
 
 docs:
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
@@ -42,7 +47,7 @@ check-server:
 
 # Run the browser tests against a throwaway server, then kill it (and its
 # children). Deliberately NOT part of `just ci`: it needs a browser, which CI
-# does not have. Install one once with `npx playwright@1.60.0 install chromium`.
+# does not have. Install one once with `npx playwright@1.64.1 install chromium`.
 #
 # `--features e2e-testing` is what renders the hidden `#app-ready` element every
 # test waits for. Without it the tests hang on a marker that never appears.
@@ -80,7 +85,7 @@ e2e *args:
         sleep 2
     done
     [ -n "$ready" ] || { echo "server never came up — see $log"; tail -40 "$log"; exit 1; }
-    cargo test -p e2e {{args}} -- --ignored
+    cargo nextest run -p e2e --run-ignored ignored-only {{args}}
 
 # Watch the browser tests run in a real window, one at a time and slowed down.
 #
@@ -91,10 +96,9 @@ e2e *args:
 #
 # Override the pace with E2E_SLOW_MO (milliseconds per action).
 e2e-watch *args:
-    # RUST_TEST_THREADS rather than `-- --test-threads=1`: the recipe below puts
-    # `{{{{args}}}}` BEFORE its own `--`, so a runner flag there would be read by
-    # cargo instead of by the test binary.
-    E2E_HEADED=1 E2E_SLOW_MO="${E2E_SLOW_MO:-150}" RUST_TEST_THREADS=1 just e2e {{args}}
+    # NEXTEST_TEST_THREADS rather than `--test-threads 1`, so the filter stays
+    # the only thing a caller passes.
+    E2E_HEADED=1 E2E_SLOW_MO="${E2E_SLOW_MO:-150}" NEXTEST_TEST_THREADS=1 just e2e {{args}}
 
 # Point git at the repo's committed hooks. Run once per clone.
 #

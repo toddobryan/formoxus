@@ -1,4 +1,4 @@
-//! Asserting focus, which `playwright-rs` 0.15.1 cannot do for most locators.
+//! Asserting focus, which `playwright-rs` (0.15.1 through 0.20.1 at least) cannot do for most locators.
 //!
 //! Its `to_be_focused` and `is_focused` hand the locator's WHOLE selector to
 //! `document.querySelectorAll`, so anything that is not plain CSS (a role

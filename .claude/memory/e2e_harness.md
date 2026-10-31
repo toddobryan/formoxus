@@ -24,8 +24,7 @@ about 7s once built.
   change together or watching does not work: headed (`E2E_HEADED=1`), slowed
   (`E2E_SLOW_MO`, default 400ms, Playwright's own `slowMo` so it paces ACTIONS),
   and SERIAL, or every test opens its own window at once. Serial comes from
-  `RUST_TEST_THREADS=1`, not `-- --test-threads=1`, because `just e2e` puts its
-  `{{args}}` BEFORE its own `--` and cargo would read the flag itself.
+  `NEXTEST_TEST_THREADS=1` (was `RUST_TEST_THREADS=1` under `cargo test`).
   Slow-mo multiplies per action, so pass a filter and watch ONE test.
 
 ## `get_by_label` vs `get_by_role`: the one that cost time
@@ -115,3 +114,16 @@ role lookup or any `nth()` fails as "not a valid selector". Use
 `e2e::focus::expect_focused(&locator)`, which polls `Locator::evaluate("el =>
 el === document.activeElement")`. Recheck on a playwright-rs bump; worth an
 upstream issue.
+
+## nextest, from 2026-10-31
+
+`just test`/`just e2e`/CI run `cargo nextest run` (plus `cargo test --doc`,
+which nextest skips). nextest runs EVERY binary's tests at once, one per CPU:
+at 32 parallel browsers each test timed out on `#app-ready` (5 s default
+`expect`), because each fetches and compiles the 102 MB debug wasm (release:
+4.2 MB). `.config/nextest.toml` caps `package(e2e)` at 8. Measured: wall time is
+~10-11 s at 8, 16 or 32 (with a 60 s wait), so the cap costs nothing. Filters
+match TEST names: `just e2e reorder` matches `…reorders_the_model`, not the file.
+playwright-rs is 0.20.1 (from 0.15.1); browsers via the bundled driver
+(`~/.cache/playwright-rust/<ver>/…/node …/package/cli.js install chromium`) or
+`npx playwright@1.64.1` once system Node is ≥ 20.
