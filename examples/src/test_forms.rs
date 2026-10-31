@@ -45,6 +45,7 @@ pub fn TestForm(slug: String) -> Element {
         "buttons" => rsx! { Buttons {} },
         "bare" => rsx! { Bare {} },
         "reorder" => rsx! { Reorder {} },
+        "struct-rows" => rsx! { StructRows {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -529,6 +530,34 @@ fn Reorder() -> Element {
         form! {
             Playlist {
                 songs => { allow_reordering },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── struct-rows ──────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Member {
+    name: String,
+    email: String,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Team {
+    members: Vec<Member>,
+}
+
+/// A list whose rows are structs, not reorderable. A row Add makes takes focus
+/// at its FIRST field, which a leaf row (`/t/reorder`) cannot show.
+#[component]
+fn StructRows() -> Element {
+    harness(
+        "struct-rows",
+        "A list of two-field rows. Add a row: focus lands in its Name field.",
+        form! {
+            Team {
                 buttons: { save: { type: submit } }
             }
         },

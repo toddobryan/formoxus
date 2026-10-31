@@ -59,7 +59,7 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
-## 37 tests, 8 files (35/7 until 2026-10-30; 29/6 until 2026-10-24; 24/5 until 2026-10-01)
+## 39 tests, 8 files (35/7 until 2026-10-30; 29/6 until 2026-10-24; 24/5 until 2026-10-01)
 
 **2026-10-30: `reorder` (2), for ORDERED_LISTS box 3**, on `/t/reorder`.
 A list ROW's input has no accessible name (the list's legend labels the
@@ -107,3 +107,11 @@ Two things worth knowing about writing more:
 - Negation is `expect(x).not().to_have_text(…)`, not a `not_to_*` method.
 - `maxlength` is enforced as you TYPE, so `fill` bypasses it — it sets the value
   directly. Use `press_sequentially` to test it.
+
+## playwright-rs 0.15.1: `to_be_focused` / `is_focused` are broken (2026-10-31)
+
+They pass the locator's whole selector to `document.querySelectorAll`, so a
+role lookup or any `nth()` fails as "not a valid selector". Use
+`e2e::focus::expect_focused(&locator)`, which polls `Locator::evaluate("el =>
+el === document.activeElement")`. Recheck on a playwright-rs bump; worth an
+upstream issue.

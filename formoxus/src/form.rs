@@ -705,6 +705,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // a real copy rather than another handle to the same thing — which is the
     // point, since `state` is about to be edited.
     let initial = use_signal(move || state.peek().clone());
+    let mut new_blank_row = use_signal(|| None::<String>);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
@@ -718,16 +719,31 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .collect::<HashMap<_, _>>()
     });
     let on_edit = use_callback(move |edit: Edit| {
-        if let Err(e) = apply_edit(state, values, &edit) {
-            // An unknown variant name has already been recorded against the
-            // `VariantSet`, so it renders beside the select. Anything else is a
-            // bug or a forged event — log rather than panic, since on wasm a
-            // panic aborts instead of reaching an `ErrorBoundary`.
-            warn!("rejected form edit: {e}");
+        match apply_edit(state, values, &edit) {
+            Ok(Some(row)) if matches!(edit, Edit::AddRow { value: None, .. }) => {
+                new_blank_row.set(Some(row));
+            }
+            Ok(_) => {}
+            Err(e) => {
+                // An unknown variant name has already been recorded against the
+                // `VariantSet`, so it renders beside the select. Anything else is a
+                // bug or a forged event — log rather than panic, since on wasm a
+                // panic aborts instead of reaching an `ErrorBoundary`.
+                warn!("rejected form edit: {e}");
+            }
         }
     });
 
     let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
+    let id = form_id.clone();
+    use_effect(move || {
+        if let Some(row) = new_blank_row() {
+            document::eval(&format!(
+                "document.querySelector(`[id^='{id}-'][name='{row}'], \
+                [id^='{id}-'][name^='{row}.']`)?.focus()"
+            ));
+        }
+    });
 
     Form {
         state_signal: state,

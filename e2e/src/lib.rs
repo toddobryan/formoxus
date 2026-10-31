@@ -19,6 +19,7 @@
 //! Needs a browser once: `npx playwright@1.60.0 install chromium`.
 
 mod config;
+pub mod focus;
 pub mod roles;
 mod session;
 

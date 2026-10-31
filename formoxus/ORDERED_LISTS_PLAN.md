@@ -269,7 +269,7 @@ or reordered without renaming".
     README's "cannot reorder yet" line dropped. `aria_hidden:` does not
     exist on dioxus's `svg`; it is written `"aria-hidden": "true"`.
 
-- [ ] **3a.** (unassigned, lower priority since H was reversed) Focus a
+- [x] **3a.** (Todd's code, Claude's tests; DONE 2026-10-31) Focus a
   new row: move focus into the first focusable element of a row that
   `AddRow` just made, via `onmounted`, on every list; not on rows present
   at first render, or the page would open focused on the last row. With
@@ -285,7 +285,13 @@ or reordered without renaming".
     signal to the new row's path; a `use_effect` in `use_form` focuses
     the row's first input with `document::eval`, scoped to the form, on
     `[name="p"], [name^="p."]` (a bare prefix would match `#20` for
-    `#2`), then clears it. Check playwright-rs has `to_be_focused`.
+    `#2`). Built without clearing the signal: keys never repeat.
+  - Decided (Todd, 2026-10-31): `Form::edit` does NOT focus; only the
+    buttons' `on_edit` does. Code that adds a row can focus what it likes.
+  - Tests: `e2e/tests/new_row_focus.rs` (leaf row on `/t/reorder`, struct
+    row on the new `/t/struct-rows`), mutation-checked. playwright-rs
+    0.15.1's `to_be_focused` is broken for non-CSS locators, so they use
+    `e2e::focus::expect_focused`.
 
 - [ ] **3b.** (PARKED) Per-row "insert before" (`AddRow { before:
   Some(i) }`, which the edit already supports; `row_buttons.rs:28`
