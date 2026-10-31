@@ -655,6 +655,7 @@ fn list_node(
         errors: Vec::new(),
         rejected_keys: None,
         allow_reordering: spec.is_some_and(|s| s.allow_reordering),
+        adder: spec.and_then(|s| s.adder).unwrap_or_default(),
     })
 }
 

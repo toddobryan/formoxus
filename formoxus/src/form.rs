@@ -760,11 +760,25 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 /// returns it.
 fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
-    values: ValuesStore,
+    mut values: ValuesStore,
     edit: &Edit,
 ) -> Result<Option<String>, FormAccessError> {
+    // Found before the edit, while the row is still there to look up.
+    let removed = match edit {
+        Edit::RemoveRow { path, index } => row_path(&state.peek(), path, *index),
+        _ => None,
+    };
     // Its own statement, so the write guard is dropped before `peek` below.
     let created = state.write().edit(edit)?;
+    // A removed row's leaves would otherwise outlive it in the store. Nothing
+    // reads them back by path, since a key is never reused and `to_wire` reads
+    // only the rows the state still has. But a widget reading the store WHOLE
+    // would see what the user deleted: an adder leaving out the choices already
+    // in its list would go on leaving out a removed one. By prefix rather than
+    // the row's current leaves, so an unchosen variant's values go too.
+    if let Some(row) = removed {
+        values.retain(|path, _| !crate::nodes::owns(&row, path));
+    }
     // A filled row was built from its value, so the TREE has its values, but
     // widgets, `validate` and `to_wire` read the STORE. Copy the new row's
     // leaves across, overwriting, so nothing stale can shadow them. A blank row
@@ -777,6 +791,19 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     }
     Ok(created)
+}
+
+/// The full path of row `index` of the list at `path`: the KEY the row has
+/// (`answers.#2`), not its place, read from the list's structure entry
+/// (`#0,#2,#1`). `None` if there is no such row, which the edit then reports.
+fn row_path<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
+    state: &FormState<T>,
+    path: &str,
+    index: usize,
+) -> Option<String> {
+    let keys = state.collect_values().shift_remove(path)?;
+    let key = keys.split(',').nth(index).filter(|key| !key.is_empty())?;
+    Some(format!("{path}.{key}"))
 }
 
 const ALPHANUMERIC: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

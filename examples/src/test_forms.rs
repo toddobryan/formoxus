@@ -46,6 +46,7 @@ pub fn TestForm(slug: String) -> Element {
         "bare" => rsx! { Bare {} },
         "reorder" => rsx! { Reorder {} },
         "struct-rows" => rsx! { StructRows {} },
+        "adder" => rsx! { Adder {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -558,6 +559,54 @@ fn StructRows() -> Element {
         "A list of two-field rows. Add a row: focus lands in its Name field.",
         form! {
             Team {
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── adder ────────────────────────────────────────────────────────────────
+
+/// What `/t/adder` offers, one button each.
+const SONGS: [&str; 3] = ["Alpha", "Bravo", "Charlie"];
+
+/// A custom adder (`adder:`): one button per song, each adding a row that
+/// arrives already holding it, in place of the blank row Add would make.
+#[component]
+fn SongPicker(props: formoxus::widgets::AddRowProps) -> Element {
+    rsx! {
+        for song in SONGS {
+            button { r#type: "button", onclick: pick(props.on_edit, props.path.clone(), song), "Add {song}" }
+        }
+    }
+}
+
+/// The click handler for one song's button, out here because an rsx `for`
+/// body cannot hold the `let` its clone would need.
+fn pick(
+    on_edit: Callback<formoxus::widgets::Edit>,
+    path: String,
+    song: &'static str,
+) -> impl FnMut(MouseEvent) {
+    move |_| {
+        on_edit.call(formoxus::widgets::Edit::AddRow {
+            path: path.clone(),
+            before: None,
+            value: Some(formoxus::widgets::RowValue::new(song.to_string())),
+        });
+    }
+}
+
+/// A list whose Add is replaced by `SongPicker`. Each click adds a filled row,
+/// and the submitted model shows the songs in the order they were picked.
+#[component]
+fn Adder() -> Element {
+    harness(
+        "adder",
+        "A list with a custom adder. Click a song's button: a row arrives holding it. Submit: the model lists them in the order picked.",
+        form! {
+            Playlist {
+                songs => { adder: SongPicker },
                 buttons: { save: { type: submit } }
             }
         },

@@ -385,6 +385,25 @@ fn allow_reordering_on_an_unknown_path_says_so_first() {
     let _ = FormSpec::<Lists>::default().with_allow_reordering("tagz");
 }
 
+/// `with_adder` shares `allow_reordering`'s list check, so these are the
+/// accepting case and one refusal, to show the message names `adder`.
+#[gtest]
+fn an_adder_is_accepted_on_every_kind_of_list() {
+    let adder = formoxus::widgets::RowAdder::default();
+    let _ = FormSpec::<Lists>::default()
+        .with_adder("tags", adder)
+        .with_adder("grid", adder)
+        .with_adder("grid[]", adder)
+        .with_adder("maybe", adder);
+}
+
+#[gtest]
+#[should_panic(expected = "tags[]: `adder` applies only to a list, not `String`")]
+fn an_adder_on_a_lists_rows_is_refused() {
+    let _ =
+        FormSpec::<Lists>::default().with_adder("tags[]", formoxus::widgets::RowAdder::default());
+}
+
 // ── `[]` — selecting every row of a list ─────────────────────────────────
 //
 // All of these go through `form_for` rather than `empty_form`: row count isn't in

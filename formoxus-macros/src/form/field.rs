@@ -31,6 +31,9 @@ pub(crate) struct FieldBody {
     /// The `allow_reordering` flag's key, kept so the list check can point
     /// at it.
     pub(crate) allow_reordering: Option<Ident>,
+    /// `adder: SomeComponent`, the component that adds the list's rows in
+    /// place of the Add button. The key is kept for the list check's span.
+    pub(crate) adder: Option<(Ident, syn::Path)>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -396,23 +399,7 @@ impl FieldBody {
                 );
             });
         }
-        if let Some(flag) = &self.allow_reordering {
-            // A path ending in `[]` is every row, which is where a label for
-            // the rows goes, so putting the flag there too is the likely
-            // mistake. The path is known here, so only one message is ever
-            // emitted, unlike `required_true`'s pair.
-            let msg = if key.ends_with("[]") {
-                "`allow_reordering` applies only to a list field, and a path ending in `[]` is \
-                 every ROW of a list: put it on the list's own path, without the `[]`"
-            } else {
-                "`allow_reordering` applies only to a list field"
-            };
-            checks.push(takes(
-                flag.span(),
-                quote!(::formoxus::field_kind::is_list(#shape)),
-                msg,
-            ));
-        }
+        checks.push(self.list_checks(&shape, key));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -425,6 +412,34 @@ impl FieldBody {
 }
 
 impl FieldBody {
+    /// One `const _` assertion per key that only a list takes,
+    /// `allow_reordering` and `adder`: that the field is a list. Spanned on
+    /// the key.
+    fn list_checks(&self, shape: &TokenStream2, key: &str) -> TokenStream2 {
+        // A path ending in `[]` is every row, which is where a label for the
+        // rows goes, so putting a list's key there too is the likely mistake.
+        // The path is known here, so only one message is ever emitted, unlike
+        // `required_true`'s pair.
+        let list_keys = self
+            .allow_reordering
+            .iter()
+            .chain(self.adder.as_ref().map(|(list_key, _)| list_key));
+        let checks = list_keys.map(|list_key| {
+            let message = if key.ends_with("[]") {
+                format!(
+                    "`{list_key}` applies only to a list field, and a path ending in `[]` is \
+                     every ROW of a list: put it on the list's own path, without the `[]`"
+                )
+            } else {
+                format!("`{list_key}` applies only to a list field")
+            };
+            quote_spanned! { list_key.span()=>
+                const _: () = ::core::assert!(::formoxus::field_kind::is_list(#shape), #message);
+            }
+        });
+        quote! { #(#checks)* }
+    }
+
     /// One `const _` assertion per attribute the widget must pass through:
     /// every table attribute but the validated ones, which are the field's
     /// settings and never reach the widget. Spanned on the key, since the
@@ -524,7 +539,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" | "choices" => {
+            "widget" | "label" | "choices" | "adder" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -538,6 +553,11 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.label = Some(body.parse()?);
+                } else if name == "adder" {
+                    if self.adder.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.adder = Some((key.clone(), body.parse()?));
                 } else {
                     assert!(name == "choices", "did you add another name to the match?");
                     if self.choices.is_some() {
@@ -576,6 +596,7 @@ impl FieldBody {
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.allow_reordering.is_none()
+            && self.adder.is_none()
     }
 }
 
@@ -1027,14 +1048,15 @@ fn owned(attr: Attr) -> String {
 }
 
 /// Every identifier key a field body accepts: `widget`, `label`, `choices`,
-/// `allow_reordering`, then each table attribute an author may set, in table
-/// order.
+/// `allow_reordering`, `adder`, then each table attribute an author may set,
+/// in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
         "label".to_string(),
         "choices".to_string(),
         "allow_reordering".to_string(),
+        "adder".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1207,6 +1229,7 @@ mod tests {
                 "label" => quote!(#ident: "A label"),
                 "choices" => quote!(#ident: STATES),
                 "allow_reordering" => quote!(#ident),
+                "adder" => quote!(#ident: SearchToAdd),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -1771,6 +1794,75 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { answers => { allow_reordering, allow_reordering } } }),
             eq("`allow_reordering` is given twice")
+        );
+    }
+
+    // ── adder ────────────────────────────────────────────────────────────
+
+    /// The component goes into a `RowAdder` on the list's own path. A path,
+    /// not just a name, so an adder from another crate can be named.
+    #[gtest]
+    fn adder_becomes_a_builder_call() {
+        let spec = parse(quote! { Source { answers => { adder: ui::SearchToAdd } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                ". with_adder (\"answers\" , :: formoxus :: widgets :: RowAdder (ui :: SearchToAdd))"
+            )
+        );
+    }
+
+    /// Beside `allow_reordering`, as a list's two keys are likely to be.
+    #[gtest]
+    fn adder_and_allow_reordering_go_together() {
+        let spec = parse(quote! {
+            Source { answers => { allow_reordering, adder: SearchToAdd } }
+        })
+        .unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring(". with_allow_reordering (\"answers\")")
+        );
+        expect_that!(tokens, contains_substring(". with_adder (\"answers\""));
+    }
+
+    #[gtest]
+    fn adder_asks_whether_the_field_is_a_list() {
+        let spec = parse(quote! { Source { answers => { adder: SearchToAdd } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens, contains_substring("field_kind :: is_list"));
+        expect_that!(
+            tokens,
+            contains_substring("`adder` applies only to a list field")
+        );
+    }
+
+    #[gtest]
+    fn adder_on_every_row_says_to_drop_the_brackets() {
+        let spec = parse(quote! { Source { answers[] => { adder: SearchToAdd } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                "`adder` applies only to a list field, and a path ending in `[]` is every ROW"
+            )
+        );
+    }
+
+    /// Not a flag: an adder names a component.
+    #[gtest]
+    fn adder_needs_a_component() {
+        expect_that!(
+            err_of(quote! { Source { answers => { adder } } }),
+            contains_substring("expected `:`")
+        );
+    }
+
+    #[gtest]
+    fn adder_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { answers => { adder: A, adder: B } } }),
+            eq("`adder` is given twice")
         );
     }
 

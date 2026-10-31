@@ -95,7 +95,8 @@ or reordered without renaming".
   nothing comes back." Both wrong: the callback is `use_form`'s, and it
   holds everything.
 - **C. The adder is a plain component fn, set as `add_row_button:` on the
-  list's entry** (`questions => { add_row_button: SearchToAdd }`),
+  list's entry** (`questions => { add_row_button: SearchToAdd }`; renamed
+  `adder:` on 2026-10-31, see box 5),
   defaulting to today's `AddRowButton`. Not a `Widget` impl: it isn't a
   leaf, so `Widget`'s consts mostly don't apply. Props: `path`, `on_edit`,
   `values`, `classes`, the row count.
@@ -407,11 +408,71 @@ or reordered without renaming".
     `rows.#1.#2`), and `None` for `RemoveRow`, `MoveRow` and
     `ChooseVariant`.
 
-- [ ] **5.** (Todd) `add_row_button:` per C, replacing `AddRowButton`
-  when set.
-  - Tests (Claude): a custom adder in the suite (a fixed list of options;
-    picking one adds a filled row); `form!` rejects `add_row_button:` and
-    `allow_reordering:` on a non-list path at compile time.
+- [x] **5.** A custom adder, per C, as `adder:` (renamed from
+  `add_row_button:`; apcsp's adder is a search box, not a button).
+  Decided (Todd, 2026-10-31): `AddRowButton` BECOMES the default adder,
+  with the same props (one function, not two); the adder types, `Edit`
+  and `RowValue` go in the `formoxus::widgets::*` glob, not the prelude;
+  the props gain `id`, the list's own `{form}-{path}`, so an adder can
+  build ids (a search box's `<label for>`) that cannot collide. Split as
+  box 2: Todd the runtime (5a–5e), Claude the macro, exports and tests.
+
+  Checked first: a component in a fn pointer renders through
+  `DynamicNode::Component(VComponent::new(f, props, "RowAdder"))`, and
+  Dioxus identifies a pointer-sized component by the pointer, so two
+  adders are two components. But a bare fn pointer cannot sit in
+  `FieldSpec`: `derive(PartialEq)` over one trips
+  `unpredictable_function_pointer_comparisons` (warn by default, so an
+  error under `-D warnings`), hence the newtype in 5b, like `NodeCtor`.
+
+  - [x] **5a.** (Todd) `AddRowProps` in `widgets/row_buttons.rs`,
+    `#[derive(Props, Clone, PartialEq)]`: `path`, `id`, `on_edit`,
+    `values`, `classes`, `rows: usize`. `AddRowButton` takes it.
+
+  - [x] **5b.** (Todd) `pub struct RowAdder(pub fn(AddRowProps) -> Element)`:
+    `Debug` by hand, `PartialEq` by `std::ptr::fn_addr_eq`, `Default`
+    is `AddRowButton`. The field must be `pub`: `form!` writes
+    `::formoxus::widgets::RowAdder(SomePath)` at the dev's call site.
+
+  - [x] **5c.** (Todd) `FieldSpec.adder: Option<RowAdder>` and
+    `FormSpec::with_adder(path, RowAdder)`, which panics on a non-list
+    path as `with_allow_reordering` does.
+
+  - [x] **5d.** (Todd) `build.rs`'s `list_node` passes it into a new
+    `ListSet.adder: RowAdder`, defaulted when the spec has none.
+
+  - [x] **5e.** (Todd) `ListSet::render` renders `self.adder` through
+    `VComponent` where it hard-codes `AddRowButton` today.
+
+  - [x] **5f.** (Claude) `form!`: `adder: SomePath` on a list's own path
+    or `x[]`, generating `.with_adder("path", RowAdder(SomePath))`,
+    spanned on the component's path so wrong props are reported there;
+    the list check is now `FieldBody::list_checks`, shared with
+    `allow_reordering` (its goldens unchanged). Six parse tests in
+    `field.rs` (part of 5t2); `adder` is in `legal_keys`, so a near miss
+    is suggested. Bare `adder` with no component is syn's "expected `:`".
+
+  - [x] **5g.** (Claude) Exports: `AddRowProps`, `RowAdder`, `Edit`,
+    `RowValue` in `formoxus::widgets::*`.
+
+  - [x] **5t1.** (Claude) Suite: with no adder every snapshot is
+    unchanged; a custom adder renders instead of Add, with the right
+    `path`, `id` and `rows`; a test adder sends a filled `AddRow`
+    through its `on_edit` and the row arrives filled and reaches
+    `to_wire`; `with_adder` on a non-list panics.
+
+  - [x] **5t2.** (Claude) `form!`: parse tests, and a golden for
+    `adder:` on a `String`.
+
+  - [x] **5t3.** (Claude) e2e pair: `/t/adder`, a fixed set of choices;
+    a click adds a filled row, and the submit shows its value.
+
+  - [x] **5h.** (Claude, found by 5t1) `RemoveRow` clears the row's
+    store entries. Before, they outlived it: harmless to `to_wire`, which
+    reads only live rows, but an adder reading `values` whole to leave
+    out choices already in the list kept leaving out a removed one.
+    Cleared by the row's path (`apply_edit` finds its key first), not by
+    its current leaves, so an unchosen variant's values go too.
 
 - [ ] **6.** (Todd, small, maybe nothing) Confirm a custom widget on a
   `String` leaf works as a display-only row: hidden input with the id,

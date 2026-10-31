@@ -80,14 +80,16 @@ pub use input::{
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
 pub use radio_group::RadioGroup;
-pub use row_buttons::{AddRowButton, MoveRowButtons, RemoveRowButton};
+pub use row_buttons::{AddRowButton, AddRowProps, MoveRowButtons, RemoveRowButton, RowAdder};
 pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
 pub use values::{get_current, write_value};
 // Defined in `nodes`, re-exported here because a custom widget cannot be
-// written without it — so `use formoxus::widgets::*` is the whole kit.
-pub use crate::nodes::ValuesStore;
+// written without them — so `use formoxus::widgets::*` is the whole kit. A
+// custom adder (`AddRowProps`, above) sends an `Edit`, and fills its row with
+// a `RowValue`.
+pub use crate::nodes::{Edit, RowValue, ValuesStore};
 pub use variant_select::VariantSelect;
 pub use widget::{AnyWidget, Widget};
 pub use widget_props::WidgetProps;

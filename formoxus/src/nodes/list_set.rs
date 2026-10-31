@@ -14,7 +14,8 @@ use crate::nodes::{
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::errors::errors_id;
-use crate::widgets::{AddRowButton, FieldErrors, MoveRowButtons, RemoveRowButton};
+use crate::widgets::{AddRowProps, FieldErrors, MoveRowButtons, RemoveRowButton, RowAdder};
+use dioxus::core::{DynamicNode, VComponent};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use formoxus_spec::FixedKey;
@@ -37,6 +38,7 @@ pub struct ListSet {
     /// `form!`. Such a list renders its rows as an `<ol>` of `<li>`s, so a
     /// screen reader announces each row's position, which here means something.
     pub allow_reordering: bool,
+    pub adder: RowAdder,
 }
 
 impl ListSet {
@@ -260,7 +262,20 @@ impl Node for ListSet {
                 } else {
                     { self.rows(ctx) }
                 }
-                AddRowButton { path: path.clone(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                {
+                    DynamicNode::Component(VComponent::new(
+                        self.adder.0,
+                        AddRowProps {
+                            path: path.clone(),
+                            id: id.clone(),
+                            values: ctx.values,
+                            on_edit: ctx.on_edit,
+                            classes: ctx.classes.clone(),
+                            rows: self.rows.len(),
+                        },
+                        "RowAdder",
+                    ))
+                }
             }
         }
     }

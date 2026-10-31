@@ -17,6 +17,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::field_kind::is_list;
 use crate::label_case::LabelCase;
 use crate::widgets::AnyWidget;
+use crate::widgets::row_buttons::RowAdder;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 
@@ -29,6 +30,7 @@ pub struct FieldSpec {
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
     pub allow_reordering: bool,
+    pub adder: Option<RowAdder>,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +100,21 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self.fields.entry(path.to_string()).or_default()
     }
 
+    /// The spec for `path`, as [`field`](Self::field) gives it, for a setting
+    /// only a list can take. `key` names the setting, for the message.
+    ///
+    /// # Panics
+    ///
+    /// As `field` does, and if `path` names anything but a list.
+    fn list_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
+        let shape = Self::shape_at(path);
+        assert!(
+            is_list(shape),
+            "{path}: `{key}` applies only to a list, not `{shape}`"
+        );
+        self.field(path)
+    }
+
     /// Set the casing every derived label in this form uses.
     ///
     /// Form-wide and not per-field, following `leptos_form`'s `rename_all`:
@@ -131,12 +148,12 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     }
 
     pub fn with_allow_reordering(mut self, path: &str) -> Self {
-        let shape = Self::shape_at(path);
-        assert!(
-            is_list(shape),
-            "{path}: `allow_reordering` applies only to a list, not `{shape}`"
-        );
-        self.field(path).allow_reordering = true;
+        self.list_field(path, "allow_reordering").allow_reordering = true;
+        self
+    }
+
+    pub fn with_adder(mut self, path: &str, adder: RowAdder) -> Self {
+        self.list_field(path, "adder").adder = Some(adder);
         self
     }
 

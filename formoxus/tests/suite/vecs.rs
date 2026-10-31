@@ -8,6 +8,7 @@ use facet::Facet;
 use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
+use formoxus::widgets::{AddRowButton, AddRowProps, RowAdder, RowValue, get_current};
 use googletest::prelude::*;
 use indexmap::IndexMap;
 use std::fmt::Debug;
@@ -1648,5 +1649,263 @@ fn filled_option_rows_keep_some_and_none() {
                 names: vec![Some("Al".into()), Some("Bo".into()), None],
             }
         ))
+    );
+}
+
+// ── A custom adder ───────────────────────────────────────────────────────
+//
+// `adder:` in `form!` swaps a list's Add for a dev's component taking
+// `AddRowProps`. With none, `AddRowButton` renders, so every other list test
+// in this file is also the no-adder case, unchanged.
+
+/// An adder that says what it was handed, and adds a filled `"gamma"` row
+/// when clicked. `first` is row `#0`'s value as the store has it, and
+/// `stored` how many store entries it finds under the list, read whole, as an
+/// adder leaving out the choices already in its list would.
+#[component]
+fn ProbeAdder(props: AddRowProps) -> Element {
+    let AddRowProps {
+        path,
+        id,
+        values,
+        on_edit,
+        rows,
+        ..
+    } = props;
+    let first = get_current(&format!("{path}.#0"), values);
+    let under = format!("{path}.");
+    let stored = values
+        .read()
+        .keys()
+        .filter(|k| k.starts_with(&under))
+        .count();
+    let says = format!("{path} has {rows}, first {first}, stored {stored}");
+    rsx! {
+        button {
+            r#type: "button",
+            id: "{id}-add",
+            onclick: move |_| {
+                on_edit.call(add_row(&path, Some(RowValue::new("gamma".to_string()))));
+            },
+            "{says}"
+        }
+    }
+}
+
+#[gtest]
+fn the_default_adder_is_add() {
+    expect_that!(RowAdder::default(), eq(RowAdder(AddRowButton)));
+    expect_that!(RowAdder::default(), not(eq(RowAdder(ProbeAdder))));
+}
+
+/// Not the address a derived `Debug` would print, which changes every run.
+#[gtest]
+fn an_adders_debug_is_the_same_every_run() {
+    expect_that!(format!("{:?}", RowAdder(ProbeAdder)), eq("RowAdder(..)"));
+}
+
+#[component]
+fn ProbeAdderForm() -> Element {
+    let form = use_form(|| form_for(&quiz(), form! { Quiz { answers => { adder: ProbeAdder } } }));
+    form.render(using_fns! {})
+}
+
+/// The adder renders where Add would, and Add does not render at all.
+#[gtest]
+fn a_custom_adder_renders_in_place_of_add() {
+    let html = super::render_to_html(ProbeAdderForm);
+    expect_that!(html, not(contains_substring("fx-button-add-row")));
+    expect_that!(html, contains_substring("answers has 2, first alpha"));
+}
+
+/// `id` is the list's own, the one on its `<fieldset>`, so an adder can build
+/// ids that are unique in the page from it.
+#[gtest]
+fn an_adder_is_handed_the_lists_own_id() {
+    let html = super::render_to_html(ProbeAdderForm);
+    let at = html.find("<fieldset").expect("the list is a <fieldset>");
+    let id_at = at + html[at..].find(r#"id=""#).unwrap() + r#"id=""#.len();
+    let list_id = &html[id_at..id_at + html[id_at..].find('"').unwrap()];
+    expect_that!(list_id, ends_with("-answers"));
+    expect_that!(html, contains_substring(format!(r#"id="{list_id}-add""#)));
+}
+
+#[component]
+fn BlankProbeAdderForm() -> Element {
+    let form = use_form(|| empty_form::<Quiz>(form! { Quiz { answers => { adder: ProbeAdder } } }));
+    with_accepted(form, FormSpec::default())
+}
+
+/// The adder's own `AddRow` takes the same road as Add's: the row arrives
+/// filled, its value reaches the store and so `to_wire`, and the adder,
+/// rendered again, sees the new count and the new value.
+#[gtest]
+fn a_custom_adders_filled_row_reaches_the_server() {
+    let mut app = Harness::mount(BlankProbeAdderForm);
+    // `title` is required, so the server rejects until it has one.
+    let title = app.only_listener("input");
+    app.fire("input", title, "Unit 1");
+    expect_that!(
+        app.html(),
+        contains_substring("answers has 0, first , stored 0")
+    );
+
+    app.click(app.only_listener("click"));
+
+    let html = app.html();
+    expect_that!(
+        html,
+        contains_substring(r#"name="answers.#0" value="gamma""#)
+    );
+    expect_that!(html, contains_substring("answers has 1, first gamma"));
+    expect_that!(
+        accepted(&html),
+        eq(&format!(
+            "{:?}",
+            Quiz {
+                title: "Unit 1".to_string(),
+                answers: vec!["gamma".to_string()],
+            }
+        ))
+    );
+}
+
+#[component]
+fn InnerListsAdderForm() -> Element {
+    let form = use_form(|| form_for(&grid(), form! { Grid { rows[] => { adder: ProbeAdder } } }));
+    form.render(using_fns! {})
+}
+
+/// As with `allow_reordering`, `rows[]` is every inner list and not `rows`
+/// itself, which keeps Add. Each inner list's adder is handed its own path.
+#[gtest]
+fn every_rows_adder_reaches_each_inner_list_and_not_the_outer_one() {
+    let html = super::render_to_html(InnerListsAdderForm);
+    expect_that!(html, contains_substring("rows.#0 has 2, first a"));
+    expect_that!(html, contains_substring("rows.#1 has 1, first c"));
+    expect_that!(html.matches("fx-button-add-row").count(), eq(1));
+}
+
+// ── A removed row leaves the store ───────────────────────────────────────
+//
+// `RemoveRow` drops every store entry under the row, so nothing reading the
+// store whole sees what the user deleted. Each probe edits through
+// `Form::edit`, the road a button takes, then lists the store's keys.
+
+/// The form, then `<pre id="store">` holding the store's keys, sorted.
+fn with_store_keys<T>(form: Form<T>) -> Element
+where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    let mut keys: Vec<String> = form.values().read().keys().cloned().collect();
+    keys.sort();
+    let keys = keys.join(" ");
+    rsx! {
+        {form.render(using_fns! {})}
+        pre { id: "store", "{keys}" }
+    }
+}
+
+fn store_keys(html: &str) -> &str {
+    let open = r#"<pre id="store">"#;
+    let start = html.find(open).expect("the probe renders #store") + open.len();
+    &html[start..start + html[start..].find("</pre>").unwrap()]
+}
+
+fn remove_row(path: &str, index: usize) -> Edit {
+    Edit::RemoveRow {
+        path: path.to_string(),
+        index,
+    }
+}
+
+#[component]
+fn RemovedLeafRowProbe() -> Element {
+    let form = use_form(|| form_for(&quiz(), FormSpec::default()));
+    use_hook(|| form.edit(&remove_row("answers", 0)).expect("row 0 exists"));
+    with_store_keys(form)
+}
+
+#[gtest]
+fn a_removed_rows_value_leaves_the_store() {
+    let html = super::render_to_html(RemovedLeafRowProbe);
+    expect_that!(store_keys(&html), eq("answers.#1 title"));
+}
+
+#[component]
+fn RemovedStructRowProbe() -> Element {
+    let form = use_form(|| form_for(&venues(), FormSpec::default()));
+    use_hook(|| form.edit(&remove_row("places", 0)).expect("row 0 exists"));
+    with_store_keys(form)
+}
+
+/// Every leaf under the row, and none of its neighbour's: `places.#1` is not
+/// inside `places.#0`, nor would `places.#10` be.
+#[gtest]
+fn a_removed_struct_rows_fields_all_leave_the_store() {
+    let html = super::render_to_html(RemovedStructRowProbe);
+    expect_that!(
+        store_keys(&html),
+        eq("places.#1.city places.#1.street places.#1.zip")
+    );
+}
+
+#[component]
+fn RemovedEnumRowProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Drawings {
+                shapes: vec![Shape::Circle { radius: 1.0 }, Shape::Circle { radius: 2.0 }],
+            },
+            FormSpec::default(),
+        )
+    });
+    let left_behind = use_hook(|| {
+        form.edit(&Edit::new_choose_variant("shapes.#0", Some("Rectangle")))
+            .expect("Rectangle is a variant");
+        let left_behind = form
+            .values()
+            .peek()
+            .contains_key("shapes.#0.$Circle.radius");
+        form.edit(&remove_row("shapes", 0)).expect("row 0 exists");
+        left_behind
+    });
+    rsx! {
+        output { id: "left-behind", "{left_behind}" }
+        {with_store_keys(form)}
+    }
+}
+
+/// Switching a row's variant keeps the old variant's values in the store, so
+/// switching back restores them. Removing the row must take those too, which
+/// is why the store is cleared by the row's path and not by its current leaves.
+#[gtest]
+fn a_removed_enum_rows_unchosen_values_leave_the_store_too() {
+    let html = super::render_to_html(RemovedEnumRowProbe);
+    expect_that!(
+        html,
+        contains_substring(r#"<output id="left-behind">true</output>"#),
+        "the Circle's radius outlived the switch to Rectangle"
+    );
+    expect_that!(store_keys(&html), eq("shapes.#1.$Circle.radius"));
+}
+
+/// The case that found this: an adder reading the store whole sees a removed
+/// row go, and renders again when it does.
+#[gtest]
+fn an_adder_reading_the_store_sees_a_removed_row_go() {
+    let mut app = Harness::mount(BlankProbeAdderForm);
+    let clicks = app.listeners("click");
+    app.click(app.only_listener("click"));
+    expect_that!(
+        app.html(),
+        contains_substring("answers has 1, first gamma, stored 1")
+    );
+
+    app.click(new_since(&clicks, app.listeners("click"))[0]);
+
+    expect_that!(
+        app.html(),
+        contains_substring("answers has 0, first , stored 0")
     );
 }

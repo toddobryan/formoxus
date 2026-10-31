@@ -3,17 +3,88 @@
 //! None reads the value store. Adding or dropping a row changes the form's
 //! SHAPE, and moving one changes its order, so all any of them does is put an [`Edit`] on the wire and let
 //! [`ListSet`](crate::nodes::ListSet) rebuild itself.
+//!
+//! Add is the one a dev can replace: `adder:` in `form!` names a component
+//! taking [`AddRowProps`], held as a [`RowAdder`], and [`AddRowButton`] is the
+//! default.
 
 use std::rc::Rc;
+use std::{fmt::Debug, ptr::fn_addr_eq};
 
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
+use crate::nodes::ValuesStore;
 use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 
-/// The widget that appends a row to a list.
+/// What a list's adder is handed: [`AddRowButton`], or a dev's own component
+/// named by `adder:` in `form!`.
+///
+/// An adder appends a row by sending an [`Edit::AddRow`] through `on_edit`.
+/// With `value: None` the row arrives blank and takes focus. With
+/// `value: Some(RowValue::new(row))` it arrives filled in, and focus is left
+/// alone, so a user picking several choices in a row stays on the adder.
+#[derive(Debug, Props, Clone, PartialEq)]
+pub struct AddRowProps {
+    /// The list's own path, which an `Edit::AddRow` is addressed to. Not a
+    /// row's: an adder acts on the list.
+    pub path: String,
+    /// The list's own id, `{form}-{path}`, a base for the ids of the adder's
+    /// elements (a `<select>` and the `<label for>` naming it). Suffix it
+    /// rather than using it as-is: the list's `<fieldset>` already has it.
+    pub id: String,
+    /// The whole form's values. Add ignores it; an adder offering a fixed set
+    /// of choices can read the rows already there, to leave those out. The
+    /// adder is a component of its own, so reading it re-renders only the
+    /// adder.
+    pub values: ValuesStore,
+    /// Where the adder sends its `Edit`.
+    pub on_edit: Callback<Edit>,
+    /// The form's resolved classes, so a custom adder can borrow the
+    /// built-in Add's slot (`classes.fixed_class(FixedKey::AddRowButton, false)`)
+    /// and follow the app's preset.
+    pub classes: Rc<Classes>,
+    /// How many rows the list has now, for an adder that stops at a maximum.
+    pub rows: usize,
+}
+
+/// A list's adder: the component that renders in place of Add.
+///
+/// A newtype rather than a bare `fn` pointer because [`FieldSpec`] derives
+/// `PartialEq`, and a derived comparison of a `fn` pointer trips the
+/// `unpredictable_function_pointer_comparisons` lint. The comparison is
+/// written out here instead, with [`fn_addr_eq`].
+///
+/// The field is `pub` because `form!` builds one in the dev's own crate:
+/// `adder: SearchToAdd` becomes `RowAdder(SearchToAdd)`.
+///
+/// [`FieldSpec`]: crate::form::FieldSpec
+#[derive(Clone, Copy)]
+pub struct RowAdder(pub fn(AddRowProps) -> Element);
+
+impl Default for RowAdder {
+    fn default() -> Self {
+        Self(AddRowButton)
+    }
+}
+
+// Not derived: a `fn` pointer's `Debug` is its address, which changes from
+// run to run and names nothing a reader could look up.
+impl Debug for RowAdder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RowAdder(..)")
+    }
+}
+
+impl PartialEq for RowAdder {
+    fn eq(&self, other: &Self) -> bool {
+        fn_addr_eq(self.0, other.0)
+    }
+}
+
+/// The widget that appends a row to a list, and the default [`RowAdder`].
 ///
 /// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the value store — adding a row
 /// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
@@ -21,7 +92,13 @@ use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 /// defaults to `type="submit"`, so omitting it would submit the form instead of
 /// adding a row.
 #[component]
-pub fn AddRowButton(path: String, on_edit: Callback<Edit>, classes: Rc<Classes>) -> Element {
+pub fn AddRowButton(props: AddRowProps) -> Element {
+    let AddRowProps {
+        path,
+        on_edit,
+        classes,
+        ..
+    } = props;
     rsx! {
         button {
             r#type: "button",

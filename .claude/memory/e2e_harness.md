@@ -112,8 +112,9 @@ Two things worth knowing about writing more:
 They pass the locator's whole selector to `document.querySelectorAll`, so a
 role lookup or any `nth()` fails as "not a valid selector". Use
 `e2e::focus::expect_focused(&locator)`, which polls `Locator::evaluate("el =>
-el === document.activeElement")`. Recheck on a playwright-rs bump; worth an
-upstream issue.
+el === document.activeElement")`. Reported 2026-10-31 as padamson/playwright-rust#180, fixed by #181 (Todd's fork,
+branch `fix-is-focused-playwright-selectors`). Once a release has it, delete
+`e2e/src/focus.rs` and go back to `expect(…).to_be_focused()`.
 
 ## nextest, from 2026-10-31
 

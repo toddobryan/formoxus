@@ -555,8 +555,9 @@ fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
 
 impl FieldSpec {
     /// The `FormSpec` builder calls one field body contributes, in order:
-    /// label, widget, choices, the field's settings (`with_node`), and the
-    /// attributes that only render (`with_attrs`). Each is omitted when the
+    /// label, widget, choices, the field's settings (`with_node`), the
+    /// attributes that only render (`with_attrs`), and a list's
+    /// `allow_reordering` and `adder`. Each is omitted when the
     /// body says nothing about it.
     fn builder_calls(&self, model: &Path) -> TokenStream2 {
         let key = self.path.key();
@@ -600,7 +601,15 @@ impl FieldSpec {
             .allow_reordering
             .as_ref()
             .map(|_| quote! { .with_allow_reordering(#key) });
-        quote! { #label #widget #node #attrs #allow_reordering }
+        // Spanned onto the component's path, so one whose props are not
+        // `AddRowProps` is reported where it is named.
+        let adder = self.body.adder.as_ref().map(|(_, component)| {
+            let ctor = quote_spanned! { syn::spanned::Spanned::span(component)=>
+                ::formoxus::widgets::RowAdder(#component)
+            };
+            quote! { .with_adder(#key, #ctor) }
+        });
+        quote! { #label #widget #node #attrs #allow_reordering #adder }
     }
 }
 
