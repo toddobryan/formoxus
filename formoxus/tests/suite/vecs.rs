@@ -713,7 +713,7 @@ fn each_row_renders_inside_its_own_wrapper() {
     // diffing behaviour, which needs a widget that can dispatch `AddRow`
     // before it can be driven. This guards the structure the key rides on.
     let html = super::render_to_html(QuizForm);
-    expect_that!(html.matches(r#"<div class="fx-form-row">"#).count(), eq(2));
+    expect_that!(html.matches(r#"<div class="fx-list-row">"#).count(), eq(2));
     expect_that!(html, contains_substring(r#"name="answers.#0""#));
     expect_that!(html, contains_substring(r#"name="answers.#1""#));
 }
@@ -969,4 +969,158 @@ fn the_row_widgets_never_submit_the_form() {
         eq(3),
         "two Remove, one Add"
     );
+}
+
+// ── Reorderable lists ────────────────────────────────────────────────────
+//
+// `allow_reordering` on a list's own path makes its rows an `<ol>` of `<li>`s;
+// every other list keeps its `div` rows. Each form is built through `form!`,
+// so these also prove the flag's path reaches the right `ListSet`.
+
+const ROWS_OL: &str = r#"<ol class="fx-list-rows">"#;
+const ROW_LI: &str = r#"<li class="fx-list-row">"#;
+const ROW_DIV: &str = r#"<div class="fx-list-row">"#;
+
+#[component]
+fn ReorderableQuizForm() -> Element {
+    let form = use_form(|| form_for(&quiz(), form! { Quiz { answers => { allow_reordering } } }));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_reorderable_list_renders_its_rows_as_an_ol() {
+    let html = super::render_to_html(ReorderableQuizForm);
+    expect_that!(html.matches(ROWS_OL).count(), eq(1));
+    expect_that!(html.matches(ROW_LI).count(), eq(2));
+    expect_that!(html, not(contains_substring(ROW_DIV)));
+}
+
+/// An `<ol>` may hold only `<li>`s, so Add stays outside it, after it (H in
+/// `ORDERED_LISTS_PLAN.md`); each row's Remove stays inside its `<li>`.
+#[gtest]
+fn a_reorderable_lists_add_button_follows_the_ol() {
+    let html = super::render_to_html(ReorderableQuizForm);
+    let ol_ends = html.find("</ol>").expect("the rows are an <ol>");
+    let add = html
+        .find("fx-button-add-row")
+        .expect("the list has an Add button");
+    expect_that!(add, gt(ol_ends));
+    expect_that!(
+        html[..ol_ends].matches("fx-button-remove-row").count(),
+        eq(2),
+        "both Removes are inside the <ol>"
+    );
+}
+
+/// The flag is off by default, so no existing form changes.
+#[gtest]
+fn a_list_without_the_flag_keeps_its_div_rows() {
+    let html = super::render_to_html(QuizForm);
+    expect_that!(html, not(contains_substring("<ol")));
+    expect_that!(html, not(contains_substring("<li")));
+    expect_that!(html.matches(ROW_DIV).count(), eq(2));
+}
+
+fn grid() -> Grid {
+    Grid {
+        rows: vec![
+            vec!["a".to_string(), "b".to_string()],
+            vec!["c".to_string()],
+        ],
+    }
+}
+
+#[component]
+fn ReorderableInnerListsForm() -> Element {
+    let form = use_form(|| form_for(&grid(), form! { Grid { rows[] => { allow_reordering } } }));
+    form.render(using_fns! {})
+}
+
+/// `rows[]` is every inner list, so each of those is an `<ol>`, while `rows`
+/// itself, not flagged, keeps `div` rows: the flag reaches exactly the lists
+/// its path names.
+#[gtest]
+fn every_rows_flag_reaches_each_inner_list_and_not_the_outer_one() {
+    let html = super::render_to_html(ReorderableInnerListsForm);
+    expect_that!(html.matches(ROWS_OL).count(), eq(2), "one per inner list");
+    expect_that!(html.matches(ROW_LI).count(), eq(3), "a, b and c");
+    expect_that!(
+        html.matches(ROW_DIV).count(),
+        eq(2),
+        "the outer list's rows"
+    );
+}
+
+/// apcsp's assignment shape: a list inside an enum variant inside a list's row.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Group {
+    All {
+        questions: Vec<String>,
+        shuffle: bool,
+    },
+    Random {
+        how_many: u8,
+    },
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Assignment {
+    groups: Vec<Group>,
+}
+
+#[component]
+fn ReorderableListInAVariantForm() -> Element {
+    let assignment = Assignment {
+        groups: vec![
+            Group::All {
+                questions: vec!["q1".to_string(), "q2".to_string()],
+                shuffle: false,
+            },
+            Group::Random { how_many: 3 },
+        ],
+    };
+    let form = use_form(move || {
+        form_for(
+            &assignment,
+            form! { Assignment { groups[].$Group::All.questions => { allow_reordering } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_list_inside_an_enum_row_can_be_reorderable() {
+    let html = super::render_to_html(ReorderableListInAVariantForm);
+    expect_that!(html.matches(ROWS_OL).count(), eq(1), "only `questions`");
+    expect_that!(html.matches(ROW_LI).count(), eq(2), "q1 and q2");
+    expect_that!(html.matches(ROW_DIV).count(), eq(2), "the two groups");
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct MaybeQuiz {
+    answers: Option<Vec<String>>,
+}
+
+#[component]
+fn ReorderableOptionalListForm() -> Element {
+    let value = MaybeQuiz {
+        answers: Some(vec!["alpha".to_string(), "beta".to_string()]),
+    };
+    let form = use_form(move || {
+        form_for(
+            &value,
+            form! { MaybeQuiz { answers? => { allow_reordering } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// Through an `Option`, written `answers?` in `form!` and keyed `answers`:
+/// `is_list` peels the `Option`, and the walk finds the spec under the same key.
+#[gtest]
+fn a_list_behind_an_option_can_be_reorderable() {
+    let html = super::render_to_html(ReorderableOptionalListForm);
+    expect_that!(html.matches(ROWS_OL).count(), eq(1));
+    expect_that!(html.matches(ROW_LI).count(), eq(2));
 }

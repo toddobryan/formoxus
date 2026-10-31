@@ -28,7 +28,7 @@ lose the widget-`ACCEPTS` check, see [[const-shape-walk-blocked]].
 5. In a body, a nested entry is told from a key by `starts_nested`: `$`, an index, or a name followed by `=>`/`.`/`[`. So a field named `widget` nests fine.
 
 **Runtime check (option C).** `FormSpec::field` (every `with_*` funnels through
-it) calls `build::spec_key_error(T::SHAPE, path)` and PANICS with why, like
+it) calls `build::spec_key_shape(T::SHAPE, path)` (`spec_key_error` until 2026-10-30) and PANICS with why, like
 `with_attrs` already did. It mirrors the node walk: `Option` transparent,
 newtype one leaf, `name[]` rows, `$V` enters a variant, a top-level enum's
 fields carry no `$V`. A `#n` row key is refused with a pointer to `[]`.

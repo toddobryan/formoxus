@@ -109,7 +109,7 @@ pub const fn applies(attr: Attr, shape: &Shape) -> bool {
         // no need to check Attr::Multiple since it's owned by Formoxus
         Kind::Enum => !attr.validated() && attr.is_valid_on(HtmlElement::Select),
         Kind::Unknown => true,
-        Kind::Other => false,
+        Kind::List | Kind::Other => false,
         _ => match field_type(shape) {
             Some(t) => attr.applies_to(t),
             None => false,
@@ -166,7 +166,12 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
 /// (a field set or list asserts) or silently ignored (an enum always renders its
 /// variant picker).
 pub const fn is_single_value(shape: &Shape) -> bool {
-    !matches!(kind(shape), Kind::Other | Kind::Enum)
+    !matches!(kind(shape), Kind::List | Kind::Other | Kind::Enum)
+}
+
+/// Whether the field is a list (`Vec` or `Option<Vec>`)
+pub const fn is_list(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::List)
 }
 
 /// Whether the widget `W` can render a single-value field of this type.
@@ -183,7 +188,7 @@ pub const fn is_single_value(shape: &Shape) -> bool {
 /// can read a trait's consts but not call its methods.
 pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
-        Kind::Enum | Kind::Other | Kind::Unknown => return true,
+        Kind::List | Kind::Enum | Kind::Other | Kind::Unknown => return true,
         Kind::Text => FieldType::Text,
         Kind::Int => FieldType::Int,
         Kind::Float => FieldType::Float,
@@ -221,7 +226,9 @@ enum Kind {
     Bool,
     /// An enum, which renders a `<select>` for the variants
     Enum,
-    /// Something that is not one value: a struct, a list, or a scalar
+    /// A Facet `List`, including `Vec` and `SmallVec`
+    List,
+    /// Something that is not one value: a struct, or a scalar
     /// formoxus does not support.
     Other,
     /// A newtype whose inner type is out of reach. A tuple struct's field shape
@@ -236,6 +243,9 @@ const fn kind(shape: &Shape) -> Kind {
     // `Option` layer can be peeled here exactly as `option_node` does.
     if let Def::Option(option) = &shape.def {
         return kind(option.t);
+    }
+    if matches!(shape.def, Def::List(_)) {
+        return Kind::List;
     }
     match shape.module_path {
         // Every user type has a module path, so `None` is a primitive: a user
@@ -296,7 +306,7 @@ const fn field_type(shape: &Shape) -> Option<FieldType> {
         Kind::Int => Some(FieldType::Int),
         Kind::Float => Some(FieldType::Float),
         Kind::Bool => Some(FieldType::Bool),
-        Kind::Enum | Kind::Other | Kind::Unknown => None,
+        Kind::List | Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
 }
 

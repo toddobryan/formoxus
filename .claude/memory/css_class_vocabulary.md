@@ -217,3 +217,11 @@ once #14 lands), never a bad cell's. Same reasoning as the radio group's
 fieldset. No `aria-invalid` on it (role `group` leaves it undefined); the
 link is `aria-describedby` to its `FieldErrors` list, `{id}-errors`.
 
+
+**2026-10-30 (ordered lists): a list's row is `fx-list-row`, no longer
+`fx-form-row`** (`FixedKey::ListRow`), so it reads with `fx-list-set` and
+the new **`fx-list-rows`** (`FixedKey::ListRows`), the `<ol>` around the
+rows of a list with `allow_reordering`, whose rows are then `<li>`s. A
+plain list has no wrapper: its rows sit straight in the fieldset. Older
+entries, `ATTRIBUTES_PLAN.md`'s class table and
+`emitted_classes_and_strings` say `form-row`; read them as `fx-list-row`.

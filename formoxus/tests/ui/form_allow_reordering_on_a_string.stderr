@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `allow_reordering` applies only to a list field
+  --> tests/ui/form_allow_reordering_on_a_string.rs:13:27
+   |
+13 |             nickname => { allow_reordering },
+   |                           ^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here

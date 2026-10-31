@@ -33,6 +33,10 @@ pub struct ListSet {
     /// the error, which a pushed error would not survive. The list's version of
     /// `VariantChoice::Unknown`.
     pub rejected_keys: Option<String>,
+    /// Whether the user may move rows: the list's `allow_reordering` flag in
+    /// `form!`. Such a list renders its rows as an `<ol>` of `<li>`s, so a
+    /// screen reader announces each row's position, which here means something.
+    pub allow_reordering: bool,
 }
 
 impl ListSet {
@@ -141,6 +145,33 @@ impl ListSet {
         self.rows.insert(to, row);
         Ok(())
     }
+
+    fn rows(&self, ctx: &NodeContext) -> Element {
+        let list_row_class = ctx.classes.fixed_class(FixedKey::ListRow, false);
+        let nested = ctx.nested(&self.name);
+        let path = ctx.path(&self.name);
+        rsx! {
+            // Keyed by the row's own name, which is stable across
+            // inserts, removals and reorders. Without a key dioxus diffs
+            // the list by position, so inserting at the top would
+            // re-render every row below it; with one it moves the nodes
+            // it already has. The wrapper exists because a key has to sit
+            // on an element, and it is what pairs a row with its widget.
+            for (index, row) in self.rows.iter().enumerate() {
+                if self.allow_reordering {
+                    li { class: &list_row_class, key: "{row.name()}",
+                        { row.render(&nested) }
+                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                    }
+                } else {
+                    div { class: &list_row_class, key: "{row.name()}",
+                        { row.render(&nested) }
+                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Node for ListSet {
@@ -169,7 +200,6 @@ impl Node for ListSet {
         // No required marker, unlike `VariantSet`: nothing enforces a minimum row
         // count yet (#14), so marking a list required would be a promise
         // `validate()` doesn't keep.
-        let nested = ctx.nested(&self.name);
         let id = ctx.id(&self.name);
         // The list's own path — where an `AddRow`/`RemoveRow` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on a row.
@@ -180,7 +210,7 @@ impl Node for ListSet {
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::ListSet, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::ListSetLegend, false);
-        let list_row_class = ctx.classes.fixed_class(FixedKey::ListRow, false);
+        let list_rows_class = ctx.classes.fixed_class(FixedKey::ListRows, false);
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -197,17 +227,12 @@ impl Node for ListSet {
                     errors: self.errors.clone(),
                     classes: ctx.classes.clone(),
                 }
-                for (index, row) in self.rows.iter().enumerate() {
-                    // Keyed by the row's own name, which is stable across
-                    // inserts, removals and reorders. Without a key dioxus diffs
-                    // the list by position, so inserting at the top would
-                    // re-render every row below it; with one it moves the nodes
-                    // it already has. The wrapper exists because a key has to sit
-                    // on an element, and it is what pairs a row with its widget.
-                    div { class: &list_row_class, key: "{row.name()}",
-                        { row.render(&nested) }
-                        RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                if self.allow_reordering {
+                    ol { class: &list_rows_class,
+                        { self.rows(ctx) }
                     }
+                } else {
+                    { self.rows(ctx) }
                 }
                 AddRowButton { path: path.clone(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
             }

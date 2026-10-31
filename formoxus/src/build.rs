@@ -83,8 +83,7 @@ pub(crate) fn spec_key(path: &str) -> String {
     out
 }
 
-/// Why the spec key `key` names no node in a form over `root`, or `None` if it
-/// names one.
+/// Returns the `Shape` a spec key names as `Ok`, or an `Err` explaining why, if it doesn't.
 ///
 /// What keeps a typo in `with_widget("venue.ctiy", …)` from storing a spec
 /// that is never looked up. It walks the shape the way the walk below
@@ -92,12 +91,12 @@ pub(crate) fn spec_key(path: &str) -> String {
 /// is every row of a list, and `$Variant` enters a variant of the enum before
 /// it. A top-level enum's fields have no `$Variant` in front (see
 /// `fields_from_enum`), so at the root a name may be any variant's field.
-pub(crate) fn spec_key_error(root: &'static Shape, key: &str) -> Option<String> {
+pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static Shape, String> {
     let mut at = At::Shape(root);
     let mut walked = String::new();
     for segment in key.split('.') {
         if segment.starts_with(ROW_SIGIL) {
-            return Some(format!(
+            return Err(format!(
                 "`{segment}` is one row's key — a spec names every row at once, with `[]` \
                  (`{walked}[]`)"
             ));
@@ -109,22 +108,19 @@ pub(crate) fn spec_key_error(root: &'static Shape, key: &str) -> Option<String> 
             let rows = (segment.len() - name.len()) / 2;
             field_named(at, name, &walked).and_then(|field| rows_of(field.shape(), name, rows))
         };
-        match next {
-            Ok(next) => at = next,
-            Err(why) => return Some(why),
-        }
+        at = next?;
         walked = qualify(&walked, segment);
     }
     match at {
-        At::Variant(_) => Some(format!(
+        At::Variant(_) => Err(format!(
             "`{key}` is a variant, which has no node of its own — name a field inside it, or \
              put this on the enum field before it"
         )),
-        At::Shape(_) => None,
+        At::Shape(shape) => Ok(shape),
     }
 }
 
-/// Where [`spec_key_error`]'s walk is: at a value of some shape, or inside a
+/// Where [`spec_key_shape`]'s walk is: at a value of some shape, or inside a
 /// variant.
 #[derive(Clone, Copy)]
 enum At {
@@ -660,6 +656,7 @@ fn list_node(
         rows,
         errors: Vec::new(),
         rejected_keys: None,
+        allow_reordering: spec.is_some_and(|s| s.allow_reordering),
     })
 }
 

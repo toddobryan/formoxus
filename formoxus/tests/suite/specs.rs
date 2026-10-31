@@ -331,6 +331,60 @@ fn a_variants_field_without_the_variant_is_refused() {
     let _ = FormSpec::<WithShape>::default().with_label("shape.radius", "R");
 }
 
+// ── `allow_reordering` — only on a list ──────────────────────────────────
+//
+// `form!` refuses it on a non-list at compile time (`tests/ui`); these are the
+// hand-built spec, which can only be refused when it is built.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Lists {
+    tags: Vec<String>,
+    grid: Vec<Vec<String>>,
+    maybe: Option<Vec<String>>,
+    venues: Vec<Location>,
+    title: String,
+}
+
+/// A list, the inner lists of a list of lists, and a list behind an `Option`,
+/// whose key has no `?`. Whether each one renders as a reorderable list is
+/// the render tests' question; this is only that none is refused.
+#[gtest]
+fn allow_reordering_is_accepted_on_every_kind_of_list() {
+    let _ = FormSpec::<Lists>::default()
+        .with_allow_reordering("tags")
+        .with_allow_reordering("grid")
+        .with_allow_reordering("grid[]")
+        .with_allow_reordering("maybe");
+}
+
+#[gtest]
+#[should_panic(expected = "title: `allow_reordering` applies only to a list, not `String`")]
+fn allow_reordering_on_a_scalar_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_allow_reordering("title");
+}
+
+/// `tags[]` is every ROW of `tags`, each a `String`: the mistake decision A
+/// in `ORDERED_LISTS_PLAN.md` warns about, since a label for the rows does
+/// go there.
+#[gtest]
+#[should_panic(expected = "tags[]: `allow_reordering` applies only to a list, not `String`")]
+fn allow_reordering_on_a_lists_rows_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_allow_reordering("tags[]");
+}
+
+#[gtest]
+#[should_panic(expected = "venues[]: `allow_reordering` applies only to a list, not `Location`")]
+fn allow_reordering_on_a_struct_row_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_allow_reordering("venues[]");
+}
+
+/// The path is checked before the list is, so a typo reads as a typo.
+#[gtest]
+#[should_panic(expected = "tagz: names nothing in a form over `Lists`")]
+fn allow_reordering_on_an_unknown_path_says_so_first() {
+    let _ = FormSpec::<Lists>::default().with_allow_reordering("tagz");
+}
+
 // ── `[]` — selecting every row of a list ─────────────────────────────────
 //
 // All of these go through `form_for` rather than `empty_form`: row count isn't in

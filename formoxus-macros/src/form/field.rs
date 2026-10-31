@@ -28,6 +28,9 @@ pub(crate) struct FieldBody {
     pub(crate) widget: Option<WidgetRef>,
     pub(crate) label: Option<Expr>,
     pub(crate) choices: Option<(Ident, Expr)>,
+    /// The `allow_reordering` flag's key, kept so the list check can point
+    /// at it.
+    pub(crate) allow_reordering: Option<Ident>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -284,7 +287,15 @@ impl FieldBody {
     ///
     /// A const panic takes a fixed `&'static str`, so the messages cannot
     /// name the field or the values; the span has to do that.
-    pub(crate) fn type_checks(&self, model: &impl ToTokens, place: &TokenStream2) -> TokenStream2 {
+    ///
+    /// `key` is the field's spec key, for a message that depends on how the
+    /// path was written rather than on the field's type.
+    pub(crate) fn type_checks(
+        &self,
+        model: &impl ToTokens,
+        place: &TokenStream2,
+        key: &str,
+    ) -> TokenStream2 {
         let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
         let takes = |span: Span, test: TokenStream2, message: &str| {
             quote_spanned! { span=>
@@ -384,6 +395,23 @@ impl FieldBody {
                     "`step` on an integer field must be a whole number"
                 );
             });
+        }
+        if let Some(flag) = &self.allow_reordering {
+            // A path ending in `[]` is every row, which is where a label for
+            // the rows goes, so putting the flag there too is the likely
+            // mistake. The path is known here, so only one message is ever
+            // emitted, unlike `required_true`'s pair.
+            let msg = if key.ends_with("[]") {
+                "`allow_reordering` applies only to a list field, and a path ending in `[]` is \
+                 every ROW of a list: put it on the list's own path, without the `[]`"
+            } else {
+                "`allow_reordering` applies only to a list field"
+            };
+            checks.push(takes(
+                flag.span(),
+                quote!(::formoxus::field_kind::is_list(#shape)),
+                msg,
+            ));
         }
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
@@ -519,6 +547,19 @@ impl FieldBody {
                 }
                 Ok(())
             }
+            "allow_reordering" => {
+                if body.peek(Token![:]) {
+                    return Err(flag_with_value(&key));
+                }
+                if self.allow_reordering.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        &key,
+                        format!("`{name}` is given twice"),
+                    ));
+                }
+                self.allow_reordering = Some(key);
+                Ok(())
+            }
             _ => {
                 let attr = table_key(&key)?;
                 let source = parse_value(attr, &key, body)?;
@@ -534,6 +575,7 @@ impl FieldBody {
             && self.label.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
+            && self.allow_reordering.is_none()
     }
 }
 
@@ -606,10 +648,7 @@ fn quoted_key(key: &LitStr) -> Result<String> {
 fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSource> {
     if attr.attr_type() == AttrType::Flag {
         if body.peek(Token![:]) {
-            return Err(syn::Error::new_spanned(
-                key,
-                format!("`{key}` is a flag: write it alone, with no `:` or value"),
-            ));
+            return Err(flag_with_value(key));
         }
         return Ok(AttrSource::Flag);
     }
@@ -634,6 +673,16 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
         }
         AttrType::Flag => unreachable!("handled above"),
     })
+}
+
+/// The refusal for a flag written with a value, as `required_true: true`.
+/// Shared by the table's flags and `allow_reordering`, so every flag refuses
+/// a value in the same words.
+fn flag_with_value(key: &Ident) -> syn::Error {
+    syn::Error::new_spanned(
+        key,
+        format!("`{key}` is a flag: write it alone, with no `:` or value"),
+    )
 }
 
 /// `[a, "b"]`: a bracketed list of class names, bare (`_` becomes `-`) or
@@ -977,13 +1026,15 @@ fn owned(attr: Attr) -> String {
     )
 }
 
-/// Every identifier key a field body accepts: `widget`, `label`, then each
-/// table attribute an author may set, in table order.
+/// Every identifier key a field body accepts: `widget`, `label`, `choices`,
+/// `allow_reordering`, then each table attribute an author may set, in table
+/// order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
         "label".to_string(),
         "choices".to_string(),
+        "allow_reordering".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1155,6 +1206,7 @@ mod tests {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
                 "choices" => quote!(#ident: STATES),
+                "allow_reordering" => quote!(#ident),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -1647,6 +1699,88 @@ mod tests {
         let msg = err_of(quote! { Source { agreed => { required: true } } });
         expect_that!(msg, contains_substring("`required` is set by formoxus"));
         expect_that!(msg, contains_substring("write `required_true`"));
+    }
+
+    // ── allow_reordering ─────────────────────────────────────────────────
+
+    /// A body holding only the flag is not empty, and the flag reaches the
+    /// spec as a builder call on the list's own path.
+    #[gtest]
+    fn allow_reordering_becomes_a_builder_call() {
+        let spec = parse(quote! { Source { answers => { allow_reordering } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(". with_allow_reordering (\"answers\")")
+        );
+    }
+
+    /// `rows[]` is every row of the outer list, which for a `Vec<Vec<_>>` is
+    /// each inner list: the key the spec gets is the path as written.
+    #[gtest]
+    fn allow_reordering_on_every_row_keeps_the_row_path() {
+        let spec = parse(quote! { Source { rows[] => { allow_reordering } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(". with_allow_reordering (\"rows[]\")")
+        );
+    }
+
+    /// Whether the field is a list is the shape's question, so it is asked
+    /// in a `const _`, not here; the parse only emits it.
+    #[gtest]
+    fn allow_reordering_asks_whether_the_field_is_a_list() {
+        let spec = parse(quote! { Source { answers => { allow_reordering } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens, contains_substring("field_kind :: is_list"));
+        expect_that!(
+            tokens,
+            contains_substring("`allow_reordering` applies only to a list field")
+        );
+    }
+
+    /// On `x[]`, the likely mistake is putting it with the rows' label, so
+    /// the refusal says where it goes instead. Only that message: the path is
+    /// known at expansion, so the plain one is not emitted beside it.
+    #[gtest]
+    fn allow_reordering_on_every_row_says_to_drop_the_brackets() {
+        let spec = parse(quote! { Source { answers[] => { allow_reordering } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring("put it on the list's own path, without the `[]`")
+        );
+        expect_that!(
+            tokens,
+            not(contains_substring(
+                "\"`allow_reordering` applies only to a list field\""
+            ))
+        );
+    }
+
+    /// A flag like the table's, so it refuses a value in the same words.
+    #[gtest]
+    fn allow_reordering_takes_no_value() {
+        expect_that!(
+            err_of(quote! { Source { answers => { allow_reordering: true } } }),
+            eq("`allow_reordering` is a flag: write it alone, with no `:` or value")
+        );
+    }
+
+    #[gtest]
+    fn allow_reordering_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { answers => { allow_reordering, allow_reordering } } }),
+            eq("`allow_reordering` is given twice")
+        );
+    }
+
+    /// In `legal_keys`, so a near miss is suggested like any other key.
+    #[gtest]
+    fn a_near_miss_of_allow_reordering_suggests_it() {
+        expect_that!(
+            err_of(quote! { Source { answers => { allow_reodering } } }),
+            contains_substring("Did you mean `allow_reordering`?")
+        );
     }
 
     /// A form that declares no constraint expands exactly as it did before

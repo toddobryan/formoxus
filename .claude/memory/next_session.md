@@ -1,9 +1,28 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-30: ORDERED_LISTS box 2 DONE (allow_reordering flag → <ol>/<li>, fx-form-row → fx-list-row), uncommitted, just ci green; box 3 (move buttons, Claude) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-10-30: BOX 2 DONE, uncommitted, `just ci` green; box 3 (Claude) next
+
+Todd decided 2-i (a BARE FLAG only: `allow_reordering`, never `: true`,
+like every other flag; first answered "both" from Claude's wrong claim
+about `required`), 2-ii (assert, in `with_allow_reordering` via
+`spec_key_error` returning the shape) and 2-iii (plain `bool` on
+`FieldSpec`). Split: Todd 2a–2d (runtime), Claude 2e–2g + all tests.
+Claude's macro side and 6 parse tests are in; `form!` using the flag
+won't compile until Todd's `is_list` and `with_allow_reordering` exist.
+Later the same day: 2a–2c DONE (Todd), 2t2 DONE (goldens + specs.rs
+panics); decision H: Add moves to the TOP of every list, rows still
+append at the bottom; REVERSED the same day: Add stays at the bottom,
+reach solved by sticky CSS in box 3, per-row insert parked as box 3b
+(Claude argued against over-engineering; Todd agreed). Box 3a (focus a
+new row) queued, lower priority. 2d adds `fx-list-rows` and renames
+`fx-form-row` → `fx-list-row`.
+All of box 2 then landed: 2d (Todd) and 2t3 (Claude, six render tests in
+`vecs.rs`). `just ci` green. Not yet committed.
 
 ## ▶ 2026-10-29: `formoxus/ORDERED_LISTS_PLAN.md`, box 1 DONE; box 2 next, Todd picks his steps
 
@@ -15,7 +34,7 @@ works (checked: `Vec<enum>` rows, nested lists, numbers, path errors, a
 widget reading the whole store).
 
 **Decided the same day, all recorded in the plan (A–G):** reordering is
-opt-in (`answers => { allow_reordering: true }`, the list's OWN path, not
+opt-in (`answers => { allow_reordering }`, the list's OWN path, not
 `answers[]`, which is every row); a reorderable list renders `<ol>`/`<li>`;
 a filled row comes from a TYPED value on `AddRow`; the adder is a plain
 component fn set by `add_row_button:`; ↑/↓ on a row's left, ✕ on its right;

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `allow_reordering` applies only to a list field, and a path ending in `[]` is every ROW of a list: put it on the list's own path, without the `[]`
+  --> tests/ui/form_allow_reordering_on_a_lists_rows.rs:14:28
+   |
+14 |             answers[] => { allow_reordering },
+   |                            ^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here

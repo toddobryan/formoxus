@@ -169,7 +169,9 @@ impl FormSpecInput {
             .field_specs
             .iter()
             .map(|f| {
-                let types = f.body.type_checks(&model_type, &project(&f.path.segments));
+                let types =
+                    f.body
+                        .type_checks(&model_type, &project(&f.path.segments), &f.path.key());
                 let options = option_checks(&f.path.segments, &model_type);
                 quote! { #types #options }
             })
@@ -593,7 +595,12 @@ impl FieldSpec {
             .body
             .attrs_tokens()
             .map(|c| quote! { .with_attrs(#key, #c) });
-        quote! { #label #widget #node #attrs }
+        let allow_reordering = self
+            .body
+            .allow_reordering
+            .as_ref()
+            .map(|_| quote! { .with_allow_reordering(#key) });
+        quote! { #label #widget #node #attrs #allow_reordering }
     }
 }
 

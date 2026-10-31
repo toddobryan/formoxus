@@ -5,6 +5,7 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use facet::Facet;
+use facet::Shape;
 use heck::ToSnakeCase;
 use indexmap::IndexMap;
 
@@ -13,6 +14,7 @@ use crate::classes::ClassEdit;
 use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
+use crate::field_kind::is_list;
 use crate::label_case::LabelCase;
 use crate::widgets::AnyWidget;
 
@@ -26,6 +28,7 @@ pub struct FieldSpec {
     /// Builds this leaf during the shape walk, instead of the default field
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
+    pub allow_reordering: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +74,30 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         }
     }
 
+    /// The shape `path` names, which every `with_*` taking a path checks,
+    /// through [`field`](Self::field) or directly.
+    ///
+    /// # Panics
+    ///
+    /// If `path` names no node in a form over `T`. The spec would be stored
+    /// and never looked up, so a typo would do nothing at all. `form!` only
+    /// writes paths it has already checked at compile time.
+    fn shape_at(path: &str) -> &'static Shape {
+        crate::build::spec_key_shape(T::SHAPE, path).unwrap_or_else(|why| {
+            panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE)
+        })
+    }
+
+    /// The spec for `path`, made empty the first time a `with_*` names it.
+    ///
+    /// # Panics
+    ///
+    /// As [`shape_at`](Self::shape_at) does, if `path` names nothing.
+    fn field(&mut self, path: &str) -> &mut FieldSpec {
+        Self::shape_at(path);
+        self.fields.entry(path.to_string()).or_default()
+    }
+
     /// Set the casing every derived label in this form uses.
     ///
     /// Form-wide and not per-field, following `leptos_form`'s `rename_all`:
@@ -103,6 +130,16 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
+    pub fn with_allow_reordering(mut self, path: &str) -> Self {
+        let shape = Self::shape_at(path);
+        assert!(
+            is_list(shape),
+            "{path}: `allow_reordering` applies only to a list, not `{shape}`"
+        );
+        self.field(path).allow_reordering = true;
+        self
+    }
+
     pub fn with_validator(mut self, f: fn(&T) -> Vec<ValidationError<T>>) -> Self {
         self.validator = Some(f);
         self
@@ -127,20 +164,6 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn buttons(&self) -> &[ButtonSpec] {
         &self.buttons
-    }
-
-    /// The spec for `path`, which every `with_*` taking a path goes through.
-    ///
-    /// # Panics
-    ///
-    /// If `path` names no node in a form over `T`. The spec would be stored
-    /// and never looked up, so a typo would do nothing at all. `form!` only
-    /// writes paths it has already checked at compile time.
-    fn field(&mut self, path: &str) -> &mut FieldSpec {
-        if let Some(why) = crate::build::spec_key_error(T::SHAPE, path) {
-            panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE);
-        }
-        self.fields.entry(path.to_string()).or_default()
     }
 
     /// Attributes to render on the field at `path`. They only render: what

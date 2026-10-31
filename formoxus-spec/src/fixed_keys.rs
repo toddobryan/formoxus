@@ -52,8 +52,11 @@ pub enum FixedKey {
     ListSet,
     /// Its `<legend>`: `fx-legend fx-field-label`.
     ListSetLegend,
-    /// The `<div>` around one row of a list: `fx-form-row`.
+    /// The `<div>` around one row of a list (or the `<li>` around an item
+    /// in a reorderable list): `fx-list-row`.
     ListRow,
+    /// The `<ol>` around a list that can be re-ordered: `fx-list-rows`.
+    ListRows,
     /// The `<fieldset>` around an enum field: `fx-group fx-variant-set`.
     VariantSet,
     /// Its `<legend>`: `fx-legend fx-field-label`.
@@ -88,6 +91,7 @@ impl FixedKey {
         Self::ListSet,
         Self::ListSetLegend,
         Self::ListRow,
+        Self::ListRows,
         Self::VariantSet,
         Self::VariantSetLegend,
         Self::RequiredMarker,
@@ -113,6 +117,7 @@ impl FixedKey {
             Self::ListSet => "list_set",
             Self::ListSetLegend => "list_set_legend",
             Self::ListRow => "list_row",
+            Self::ListRows => "list_rows",
             Self::VariantSet => "variant_set",
             Self::VariantSetLegend => "variant_set_legend",
             Self::RequiredMarker => "required_marker",
@@ -167,6 +172,7 @@ mod tests {
                 | FixedKey::ListSet
                 | FixedKey::ListSetLegend
                 | FixedKey::ListRow
+                | FixedKey::ListRows
                 | FixedKey::VariantSet
                 | FixedKey::VariantSetLegend
                 | FixedKey::RequiredMarker
@@ -181,7 +187,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(19 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(20 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

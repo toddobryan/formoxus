@@ -11,7 +11,7 @@
  * `Classes::bare()` emits no class at all. This gallery keeps the defaults.
  *
  * The complete default vocabulary, all prefixed `fx-`:
- *   structure   .fx-form  .fx-form-title  .fx-form-row
+ *   structure   .fx-form  .fx-form-title  .fx-list-row  .fx-list-rows
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
  *   a group     .fx-group + .fx-field-set .fx-variant-set .fx-list-set  .fx-legend
@@ -193,7 +193,7 @@ body {
     cursor: pointer;
 }
 
-.fx-form-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+.fx-list-row { display: flex; gap: 0.5rem; align-items: flex-end; }
 
 /* ── the gallery frame, not formoxus ─────────────────────────────────── */
 

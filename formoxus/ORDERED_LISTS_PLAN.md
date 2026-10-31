@@ -68,11 +68,11 @@ or reordered without renaming".
 
 ### Decisions (Todd, 2026-10-29)
 
-- **A. Moving is opt-in per list:** `allow_reordering: true` on the list's
-  entry in `form!` (`answer_choices => { allow_reordering: true }`).
+- **A. Moving is opt-in per list:** the bare flag `allow_reordering` on the list's
+  entry in `form!` (`answer_choices => { allow_reordering }`).
   Off by default, so no existing form changes. The list's OWN path, not
   `answer_choices[]`: in `form!`, `x` is the list (where its `label:`
-  goes) and `x[]` is every row. `rows[] => { allow_reordering: true }` is
+  goes) and `x[]` is every row. `rows[] => { allow_reordering }` is
   still right for the inner lists of a `Vec<Vec<_>>`.
 - **B. A new row's value is a TYPED value, built like construction builds
   a row.** `Edit::AddRow` gains an `Option` of the row's value: `None` is
@@ -117,6 +117,15 @@ or reordered without renaming".
   screen reader says "item 2 of 5" exactly where position means something.
 - **G. Box 3 is Claude's**, copied from apcsp's `OrderedPicker`, plus the
   new class keys. The macro work (box 2) comes first.
+- **H. Add stays at the BOTTOM, appending** (Todd, 2026-10-30, reversed
+  the same day). First decided as "Add at the top of every list", so a
+  long list couldn't push it out of reach; reversed because a top button
+  that appends drops the new row off-screen, and per-row "insert before"
+  buttons (considered next) cost a button per row, still don't reach
+  the end, and don't fit a one-per-list custom adder (box 5). Reach is
+  solved in CSS instead: `position: sticky; bottom: 0` on
+  `.fx-button-add-row` (box 3, `examples/assets/main.css`). Per-row
+  insert is box 3b, parked.
 
 ### Boxes
 
@@ -133,8 +142,9 @@ or reordered without renaming".
     values and errors following the row, the row-key order on the wire, a
     move inside a nested list (`rows[1][…]`).
 
-- [ ] **2.** Carry `allow_reordering: true` from a list's entry in `form!`
-  to `ListSet`. Split between Todd and Claude; steps a–g, each small.
+- [x] **2.** Carry the `allow_reordering` flag from a list's entry in `form!`
+  to `ListSet`. Steps a–g, each small: **Todd takes 2a–2d (runtime),
+  Claude 2e–2g (macro) and all of box 2's tests** (decided 2026-10-30).
   Today a list's entry reaches its node like this: `FieldBody::parse_entry`
   (`formoxus-macros/src/form/field.rs:476`) parses the key,
   `FieldSpec::builder_calls` (`formoxus-macros/src/form.rs:559`) emits a
@@ -145,46 +155,83 @@ or reordered without renaming".
   asserts from `FieldBody::type_checks` (`field.rs:287`), asking
   `formoxus::field_kind`'s `const fn`s about the field's shape.
 
-  - **2a.** `field_kind::is_list(shape)`, a `const fn`, `Option` peeled
-    the way `kind` peels it (`field_kind.rs:234`), so an `Option<Vec<_>>`
-    can be reordered too: `matches!(…def, Def::List(_))`.
-  - **2b.** Runtime: `allow_reordering: bool` on `FieldSpec`, and a
-    `FormSpec::with_allow_reordering(path)` builder beside `with_label`.
-  - **2c.** `list_node` copies it onto a new `ListSet.allow_reordering`
-    (`build.rs:652` is the only place a `ListSet` is built).
-  - **2d.** `ListSet::render` draws `<ol>`/`<li>` instead of the row
-    `div`s when it is set (F). Moved here from box 3 so this box shows up
-    in the rendered HTML, and so is testable from the suite, before any
-    button exists.
-  - **2e.** Macro parse: a `FieldBody.allow_reordering`, an arm in
-    `parse_entry` beside `widget`/`label`/`choices` (with "given twice"),
-    `is_empty` counting it, and `legal_keys` (`field.rs:982`) listing it,
-    so `allow_reorder:` gets "did you mean".
-  - **2f.** Macro codegen: `builder_calls` emits
-    `.with_allow_reordering(#key)`; `type_checks` emits
-    `const _: () = assert!(is_list(#shape), "`allow_reordering` applies
-    only to a list field")`, spanned on the key.
-  - **2g.** Docs: wherever `form!`'s keys are listed (the `form!` doc in
-    `formoxus-macros/src/lib.rs`, README).
-  - Tests (Claude): parse tests beside `every_legal_key_parses`; a
-    trybuild golden for `allow_reordering` on a `String`; suite tests
-    that `<ol>` renders for a top-level list, `rows[]` of a
-    `Vec<Vec<_>>`, a list inside an enum row, and an `Option<Vec<_>>`,
-    and that a list without it still renders `div`s.
+  - [x] **2a.** (Todd) `field_kind::is_list(shape)`, a `const fn`:
+    a new `Kind::List`, returned by `kind` for `Def::List` right after it
+    peels an `Option`, so an `Option<Vec<_>>` can be reordered too.
+    `is_single_value` (the one `matches!` the compiler wouldn't flag),
+    `applies`, `renders` and `field_type` treat it like `Other`.
 
-  Open, for Todd:
-  - **2-i.** Value: `allow_reordering: true` only, or also the bare flag
-    `allow_reordering`, as `required` is written? Claude leans both, with
-    the value a `bool` literal: `false` is then legal and does nothing,
-    which is harmless.
-  - **2-ii.** A hand-built `FormSpec` can still set it on a non-list,
-    where `form!` can't. Ignore it there, or assert, the way `list_node`
-    and `struct_node` assert on a `widget`? Asserting means touching each
-    non-list builder; ignoring is one line of doc.
-  - **2-iii.** One `bool` on `FieldSpec` now, and `add_row_button` as a
-    second field later, or a `list: Option<ListSpec>` grouping both?
-    `FieldSpec` already mixes leaf settings (`widget`, `node`, `attrs`)
-    with `label`, so a plain field fits what is there.
+  - [x] **2b.** (Todd) Runtime: `allow_reordering: bool` on `FieldSpec`,
+    and a `FormSpec::with_allow_reordering(path)` builder beside
+    `with_label`, asserting `is_list` per 2-ii below. `spec_key_error` is
+    now `spec_key_shape`, returning the shape, and `FormSpec::shape_at`
+    is the one place a bad path panics.
+
+  - [x] **2c.** (Todd) `list_node` copies it onto a new
+    `ListSet.allow_reordering` (`build.rs:652` is the only place a
+    `ListSet` is built).
+
+  - [x] **2d.** (Todd) `ListSet::render` draws `<ol>`/`<li>` instead of
+    the row `div`s when it is set (F). Moved here from box 3 so this box
+    shows up in the rendered HTML, and so is testable from the suite,
+    before any button exists. Adds `FixedKey::ListRows` (`fx-list-rows`)
+    for the `<ol>`, and renames `ListRow`'s class `fx-form-row` →
+    `fx-list-row` to match. `AddRowButton` stays below the rows (H).
+
+  - [x] **2e.** (Claude, 2026-10-30, uncommitted) Macro parse:
+    `FieldBody.allow_reordering: Option<Ident>` (the key, for the
+    assert's span), an arm in `parse_entry` with "given twice" and the
+    flag's "write it alone" error (now one `flag_with_value` fn shared
+    with the table's flags), `is_empty` counting it, `legal_keys` listing
+    it. A near miss within 2 edits gets "did you mean" (`allow_reodering`);
+    `allow_reorder` is 3 away and gets the general unknown-key message.
+
+  - [x] **2f.** (Claude, same) Macro codegen: `builder_calls` emits
+    `.with_allow_reordering(#key)`; `type_checks` emits
+    `const _: () = assert!(field_kind::is_list(#shape), "`allow_reordering`
+    applies only to a list field")`, spanned on the key. Both name items
+    2a/2b create, so a `form!` using the flag won't compile until 2b lands.
+
+  - [x] **2g.** (Claude, same) Docs. The only list of field-body keys is
+    the TODO above `form!` in `formoxus-macros/src/lib.rs`; added there.
+    The README lists no keys.
+
+  - [x] **2t1.** (Claude) Parse tests: six, in `field.rs`'s
+    "allow_reordering" section, plus an arm in `every_legal_key_parses`.
+
+  - [x] **2t2.** (Claude) Goldens `form_allow_reordering_on_a_string`
+    and `form_allow_reordering_on_a_lists_rows` (`answers[]`, decision
+    A's mistake); five `specs.rs` tests for the hand-built spec (every
+    kind of list accepted; a scalar, a list's rows, a struct row and a
+    bad path refused, the bad path first).
+
+  - [x] **2t3.** (Claude) Six render tests in `vecs.rs`'s "Reorderable
+    lists" section, each through `form!`: a top-level list is an `<ol>`
+    of `<li>`s with Add after the `</ol>` and each Remove inside its
+    `<li>`; an unflagged list keeps `div`s; `rows[]` reaches each inner
+    list and not the outer one; `groups[].$Group::All.questions` (the
+    apcsp shape); `answers?` on an `Option<Vec<_>>`. The two snapshots
+    re-blessed for the rename, diff read: one line each.
+
+  Decided (Todd, 2026-10-30):
+  - **2-i. A bare flag only:** `allow_reordering`, never
+    `allow_reordering: true`, which gets the "is a flag: write it alone"
+    error every other flag (`required_true`, `autofocus`, …) gives. First
+    decided as "both", from Claude's wrong claim that `required` is
+    written that way; reversed once `parse_value` showed no flag takes a
+    value.
+  - **2-ii. Assert** when a hand-built `FormSpec` sets it on a non-list,
+    which `form!` already refuses at compile time. Where (Claude's
+    proposal, OK'd by Todd): in `with_allow_reordering` itself,
+    not in each non-list builder. `FormSpec::field` already walks the
+    shape through `spec_key_error` (`build.rs:95`) and panics on a bad
+    path; that walk ends `At::Shape(shape)`, the shape the key names, so
+    `spec_key_error` becomes a `Result<&'static Shape, String>` returning
+    it, and `with_allow_reordering` asserts 2a's `is_list` on it. One
+    check, shared with the macro's `const _` assert, firing when the
+    spec is built rather than when the form is.
+  - **2-iii. A plain field:** `allow_reordering: bool` on `FieldSpec`;
+    `add_row_button` becomes a second field in box 5.
 
 - [ ] **3.** (Claude, from apcsp's `OrderedPicker`) Move buttons: a
   `MoveRowButtons` widget (↑/↓, `type="button"`, disabled at the ends,
@@ -200,9 +247,30 @@ or reordered without renaming".
   `classes.rs` (`fx-move-buttons`, `fx-button-move-up`,
   `fx-button-move-down`), under the `fx-` vocabulary
   (`css_class_vocabulary` memory). apcsp's grid CSS goes into
-  `examples/assets/main.css`.
+  `examples/assets/main.css`, with `position: sticky; bottom: 0` on
+  `.fx-button-add-row` so Add stays in reach on a long list (H).
   - Tests (Claude): render snapshot; disabled ends; e2e: move a row and
     submit, the server sees the new order.
+  - Then drop "A user cannot reorder a list's rows yet" from "What isn't
+    done" in the root `README.md` (`formoxus/README.md` is a symlink to it;
+    edit through the root, never `sed -i` the link, which replaces it).
+
+- [ ] **3a.** (unassigned, lower priority since H was reversed) Focus a
+  new row: move focus into the first focusable element of a row that
+  `AddRow` just made, via `onmounted`, on every list; not on rows present
+  at first render, or the page would open focused on the last row. With
+  Add below the rows the new row appears beside the button, so this is
+  for screen readers (focus says where the row went) more than for
+  sight. Lettered so boxes 4–8 keep their numbers.
+  - Tests: e2e only (focus is a browser fact).
+
+- [ ] **3b.** (PARKED) Per-row "insert before" (`AddRow { before:
+  Some(i) }`, which the edit already supports; `row_buttons.rs:28`
+  parks the UI question). If ever: opt-in, only on a list with
+  `allow_reordering`, since position barely matters elsewhere; an
+  accessible name that says "before" ("Insert a row before row 3");
+  and not until box 5 decides whether a custom adder can be told a
+  position, since a search adder is one per list.
 
 - [ ] **4.** (Todd) Add-with-value per B, steps 1–3. `Edit` derives
   `Clone, Debug, PartialEq` and isn't generic, so the typed value needs
