@@ -1,7 +1,7 @@
 use formoxus_spec::{FixedKey, Tag, WidgetName};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote, quote_spanned};
-use syn::{Ident, Result, Token, braced, parse::ParseStream, token};
+use syn::{Ident, Result, Token, braced, ext::IdentExt, parse::ParseStream, token};
 
 use super::button::unknown_button_type;
 use super::field::class_list;
@@ -179,7 +179,10 @@ fn selector(key: ClassKey) -> String {
 /// error about the whole selector can underline all of it, and the tag's
 /// span for that assert.
 fn parse_slot_key(input: ParseStream<'_>) -> Result<(ClassKey, TokenStream2, Span)> {
-    let first: Ident = input.parse()?;
+    // `parse_any`, not the plain `Ident` parse, as `buttons:` reads `type`:
+    // the `FixedKey` for a struct's `<fieldset>` is written `struct`, a
+    // keyword. Safe, since these tokens only ever underline an error.
+    let first = Ident::parse_any(input)?;
     if !input.peek(Token![.]) {
         return Ok((fixed_key(&first)?, quote! { #first }, first.span()));
     }
@@ -419,6 +422,21 @@ mod tests {
             key(quote!(required_marker)),
             ok(eq(&ClassKey::Fixed(FixedKey::RequiredMarker)))
         );
+    }
+
+    /// Every key's `form_name` parses back to that key, including `struct`,
+    /// a keyword, which a plain `Ident` parse refuses.
+    #[gtest]
+    fn every_fixed_key_parses_from_its_form_name() {
+        for &fixed in FixedKey::ALL {
+            let tokens: TokenStream2 = fixed.form_name().parse().unwrap();
+            expect_that!(
+                key(tokens),
+                ok(eq(&ClassKey::Fixed(fixed))),
+                "{}",
+                fixed.form_name()
+            );
+        }
     }
 
     #[gtest]

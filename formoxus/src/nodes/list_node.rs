@@ -22,7 +22,7 @@ use formoxus_spec::FixedKey;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
-pub struct ListSet {
+pub struct ListNode {
     pub name: String,
     pub label: Option<String>,
     pub shape: &'static Shape,
@@ -41,7 +41,7 @@ pub struct ListSet {
     pub adder: RowAdder,
 }
 
-impl ListSet {
+impl ListNode {
     /// Build one row under the next key, from `value` if there is one and
     /// blank if not, and put it *before* position `at`, or on the end. A value
     /// whose type is not the row type is refused, and nothing is added. The
@@ -84,7 +84,7 @@ impl ListSet {
     /// One row under `key`, built the way construction builds one: from
     /// `value` in `Populated` mode when there is one, as `form_for` would,
     /// else blank (`None` peek, `FormMode::Blank`, the pair
-    /// `VariantSet::set_variant` passes). Shared by `add_row`, which takes the
+    /// `VariantNode::set_variant` passes). Shared by `add_row`, which takes the
     /// next key, and `set_rows`, which takes the key the wire named.
     fn new_row(
         &self,
@@ -202,7 +202,7 @@ impl ListSet {
     }
 }
 
-impl Node for ListSet {
+impl Node for ListNode {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -214,18 +214,18 @@ impl Node for ListSet {
     }
 
     fn render(&self, ctx: &NodeContext) -> Element {
-        // A `fieldset` for the same reason `FieldSet` and `VariantSet` use one:
+        // A `fieldset` for the same reason `StructNode` and `VariantNode` use one:
         // the rows and the widgets that manage them read as one thing, and the
         // legend gives the list's label somewhere to appear.
         //
         // No `aria-labelledby`: a `<legend>` names its own fieldset, and unlike
-        // `VariantSet` there is no control inside that needs naming too. No
+        // `VariantNode` there is no control inside that needs naming too. No
         // `aria-invalid` either: a bare fieldset is role `group`, where ARIA
         // leaves it undefined (see `RadioGroupView`). So the list's own errors
         // reach assistive technology through `aria-describedby`, and CSS through
         // the fieldset's invalid class.
         //
-        // No required marker, unlike `VariantSet`: nothing enforces a minimum row
+        // No required marker, unlike `VariantNode`: nothing enforces a minimum row
         // count yet (#14), so marking a list required would be a promise
         // `validate()` doesn't keep.
         let id = ctx.id(&self.name);
@@ -236,8 +236,8 @@ impl Node for ListSet {
         let invalid = self.has_errors_here();
         let describedby = invalid.then(|| errors_id(&id));
 
-        let fieldset_class = ctx.classes.fixed_class(FixedKey::ListSet, invalid);
-        let legend_class = ctx.classes.fixed_class(FixedKey::ListSetLegend, false);
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::List, invalid);
+        let legend_class = ctx.classes.fixed_class(FixedKey::ListLegend, false);
         let list_rows_class = ctx.classes.fixed_class(FixedKey::ListRows, false);
         rsx! {
             fieldset {
@@ -299,7 +299,7 @@ impl Node for ListSet {
     fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
         let my_path = qualify(prefix, &self.name);
 
-        // The rows first, if the entry was sent, the way `VariantSet` applies
+        // The rows first, if the entry was sent, the way `VariantNode` applies
         // its choice first: on a server the list starts with no rows, and this
         // is what builds the ones the leaves below are about to fill. Absent
         // means "leave the rows alone", for a leaves-only map.
@@ -326,7 +326,7 @@ impl Node for ListSet {
 
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         // The list's own errors at its own path, before its rows', as
-        // `VariantSet` does. Before #13 nothing ever put one there, so this
+        // `VariantNode` does. Before #13 nothing ever put one there, so this
         // only recursed, and a rejected row-key entry came back as an `Err`
         // with no message anywhere.
         let nested = qualify(prefix, &self.name);
@@ -416,7 +416,7 @@ impl Node for ListSet {
         // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
         // node's own name, which the node qualifies on itself. Passing
         // the row's full path double-qualifies it into `shapes.#1.#1` — the
-        // same trap `FieldSet::choose_variant` fell into.
+        // same trap `StructNode::choose_variant` fell into.
         for m in &mut self.rows {
             if owns(&qualify(&my_path, &m.name()), path) {
                 return m.edit(&my_path, edit, specs);

@@ -726,7 +726,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             Ok(_) => {}
             Err(e) => {
                 // An unknown variant name has already been recorded against the
-                // `VariantSet`, so it renders beside the select. Anything else is a
+                // `VariantNode`, so it renders beside the select. Anything else is a
                 // bug or a forged event — log rather than panic, since on wasm a
                 // panic aborts instead of reaching an `ErrorBoundary`.
                 warn!("rejected form edit: {e}");

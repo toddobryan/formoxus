@@ -520,17 +520,16 @@ struct Playlist {
     songs: Vec<String>,
 }
 
-/// A reorderable list (`allow_reordering`): rows are added with Add, moved with
-/// their ↑/↓ buttons, and the submitted model shows the order they ended in.
-/// Blank, so a test builds the rows it moves.
+/// A list: rows are added with Add, moved with their ↑/↓ buttons, and the
+/// submitted model shows the order they ended in. Blank, so a test builds
+/// the rows it moves.
 #[component]
 fn Reorder() -> Element {
     harness(
         "reorder",
-        "A reorderable list. Add rows, move them with their arrow buttons, submit: the model keeps the new order.",
+        "A list. Add rows, move them with their arrow buttons, submit: the model keeps the new order.",
         form! {
             Playlist {
-                songs => { allow_reordering },
                 buttons: { save: { type: submit } }
             }
         },
@@ -550,7 +549,7 @@ struct Team {
     members: Vec<Member>,
 }
 
-/// A list whose rows are structs, not reorderable. A row Add makes takes focus
+/// A list whose rows are structs. A row Add makes takes focus
 /// at its FIRST field, which a leaf row (`/t/reorder`) cannot show.
 #[component]
 fn StructRows() -> Element {

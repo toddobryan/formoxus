@@ -10,8 +10,8 @@ use crate::buttons::ButtonType;
 /// `Classes::fx()` gives it.
 ///
 /// Keyed by the node or role that renders the element, not by the element:
-/// three keys render a `<fieldset>`, and the key says which. So `FieldSet` is
-/// `formoxus::nodes::FieldSet`'s `<fieldset>`, capitalized like that type,
+/// three keys render a `<fieldset>`, and the key says which. So `Struct` is
+/// `formoxus::nodes::Struct`'s `<fieldset>`, capitalized like that type,
 /// and not [`HtmlElement::Fieldset`](crate::HtmlElement::Fieldset), which is spelled
 /// as HTML spells the element.
 ///
@@ -44,29 +44,28 @@ pub enum FixedKey {
     AddRowButton,
     /// A row's remove button: `fx-button fx-button-remove-row`.
     RemoveRowButton,
-    /// The `<div>` around a reorderable row's move buttons: `fx-move-buttons`.
+    /// The `<div>` around a list row's move buttons: `fx-move-buttons`.
     MoveRowButtons,
     /// The button that moves a row up one: `fx-button fx-button-move-up`.
     MoveRowUpButton,
     /// The button that moves a row down one: `fx-button fx-button-move-down`.
     MoveRowDownButton,
-    /// The `<fieldset>` around a nested struct: `fx-group fx-field-set`.
-    FieldSet,
+    /// The `<fieldset>` around a nested struct: `fx-group fx-struct`.
+    Struct,
     /// Its `<legend>`: `fx-legend fx-field-label`.
-    FieldSetLegend,
-    /// The `<fieldset>` around a list: `fx-group fx-list-set`.
-    ListSet,
+    StructLegend,
+    /// The `<fieldset>` around a list: `fx-group fx-list`.
+    List,
     /// Its `<legend>`: `fx-legend fx-field-label`.
-    ListSetLegend,
-    /// The `<div>` around one row of a list (or the `<li>` around an item
-    /// in a reorderable list): `fx-list-row`.
+    ListLegend,
+    /// The `<li>` around one row of a list: `fx-list-row`.
     ListRow,
-    /// The `<ol>` around a list that can be re-ordered: `fx-list-rows`.
+    /// The `<ol>` around a list's rows: `fx-list-rows`.
     ListRows,
-    /// The `<fieldset>` around an enum field: `fx-group fx-variant-set`.
-    VariantSet,
+    /// The `<fieldset>` around an enum field: `fx-group fx-variant`.
+    Variant,
     /// Its `<legend>`: `fx-legend fx-field-label`.
-    VariantSetLegend,
+    VariantLegend,
     /// The ` *` after a required field's caption: `fx-required`.
     RequiredMarker,
     /// The `<ul>` of one field's errors: `fx-field-errors`.
@@ -95,14 +94,14 @@ impl FixedKey {
         Self::MoveRowButtons,
         Self::MoveRowUpButton,
         Self::MoveRowDownButton,
-        Self::FieldSet,
-        Self::FieldSetLegend,
-        Self::ListSet,
-        Self::ListSetLegend,
+        Self::Struct,
+        Self::StructLegend,
+        Self::List,
+        Self::ListLegend,
         Self::ListRow,
         Self::ListRows,
-        Self::VariantSet,
-        Self::VariantSetLegend,
+        Self::Variant,
+        Self::VariantLegend,
         Self::RequiredMarker,
         Self::FieldErrors,
         Self::FieldError,
@@ -124,14 +123,14 @@ impl FixedKey {
             Self::MoveRowButtons => "move_row_buttons",
             Self::MoveRowUpButton => "move_row_up_button",
             Self::MoveRowDownButton => "move_row_down_button",
-            Self::FieldSet => "field_set",
-            Self::FieldSetLegend => "field_set_legend",
-            Self::ListSet => "list_set",
-            Self::ListSetLegend => "list_set_legend",
+            Self::Struct => "struct",
+            Self::StructLegend => "struct_legend",
+            Self::List => "list",
+            Self::ListLegend => "list_legend",
             Self::ListRow => "list_row",
             Self::ListRows => "list_rows",
-            Self::VariantSet => "variant_set",
-            Self::VariantSetLegend => "variant_set_legend",
+            Self::Variant => "variant",
+            Self::VariantLegend => "variant_legend",
             Self::RequiredMarker => "required_marker",
             Self::FieldErrors => "field_errors",
             Self::FieldError => "field_error",
@@ -182,14 +181,14 @@ mod tests {
                 | FixedKey::MoveRowButtons
                 | FixedKey::MoveRowUpButton
                 | FixedKey::MoveRowDownButton
-                | FixedKey::FieldSet
-                | FixedKey::FieldSetLegend
-                | FixedKey::ListSet
-                | FixedKey::ListSetLegend
+                | FixedKey::Struct
+                | FixedKey::StructLegend
+                | FixedKey::List
+                | FixedKey::ListLegend
                 | FixedKey::ListRow
                 | FixedKey::ListRows
-                | FixedKey::VariantSet
-                | FixedKey::VariantSetLegend
+                | FixedKey::Variant
+                | FixedKey::VariantLegend
                 | FixedKey::RequiredMarker
                 | FixedKey::FieldErrors
                 | FixedKey::FieldError

@@ -148,7 +148,7 @@ fn component_mints_one_signal_per_leaf() {
     let html = render_to_html(EventFormView);
 
     // Nested paths are qualified, so `location.street` can't collide with
-    // a top-level `street` in some other field set.
+    // a top-level `street` in some other struct.
     for path in ["title", "location.street", "location.city", "location.zip"] {
         expect_that!(html, contains_substring(format!(r#"name="{path}""#)));
     }

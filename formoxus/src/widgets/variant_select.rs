@@ -11,7 +11,7 @@ use crate::widgets::widget_props::WidgetProps;
 use super::field_row::{LabelSide, field_row};
 use super::select::ABSENT_DISPLAY;
 
-/// The `<select>` a [`VariantSet`](crate::nodes::VariantSet) renders to ask which
+/// The `<select>` a [`VariantNode`](crate::nodes::VariantNode) renders to ask which
 /// variant a value takes.
 ///
 /// A SHAPE choice, not a value choice — contrast [`Select`],
@@ -61,7 +61,7 @@ pub fn VariantSelect(
         }
     };
     // The star annotates the LABEL, so it only appears when there is one.
-    // Rendered inside a `VariantSet`'s fieldset there isn't: the legend
+    // Rendered inside a `VariantNode`'s fieldset there isn't: the legend
     // carries both, and a lone `*` floating in front of the select reads as
     // belonging to nothing.
     field_row::<Select>(&props, required, LabelSide::Before, control)

@@ -77,8 +77,8 @@ fn only_the_failing_fields_appear() {
 }
 
 #[gtest]
-fn leaf_paths_are_qualified_through_nested_field_sets() {
-    // `FieldSet` contributes its name as a prefix and nothing of its own —
+fn leaf_paths_are_qualified_through_nested_struct_nodes() {
+    // `StructNode` contributes its name as a prefix and nothing of its own —
     // there is no `location` entry, only the leaves beneath it.
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
     expect_that!(form.validate(), none());
@@ -94,7 +94,7 @@ fn leaf_paths_are_qualified_through_nested_field_sets() {
     );
 }
 
-// ── VariantSet: the node with errors of its own ────────────────────────
+// ── VariantNode: the node with errors of its own ────────────────────────
 
 #[gtest]
 fn an_unchosen_enum_reports_at_its_own_path() {
@@ -157,7 +157,7 @@ fn choosing_a_variant_clears_the_enums_own_error() {
 #[gtest]
 fn a_server_verdict_about_the_choice_itself_comes_back_out() {
     // The rule `collect_errors` follows: whatever `push_field_error` accepts at
-    // a path has to be collectable from that path. `VariantSet` is the one
+    // a path has to be collectable from that path. `VariantNode` is the one
     // node where the two could disagree, because it accepts its OWN path.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     form.push_field_error("shape", "That shape is not available on this plan.")
@@ -210,7 +210,7 @@ struct Tally {
 
 #[gtest]
 fn list_rows_report_their_own_row_keys() {
-    // Row identity, not position — `#1` is the key `ListSet::rows` assigned,
+    // Row identity, not position — `#1` is the key `ListNode::rows` assigned,
     // which is what makes an error survive a sibling row being removed.
     let tally = Tally {
         label: "Votes".to_string(),

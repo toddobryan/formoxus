@@ -521,7 +521,7 @@ fn each_rows_choice_survives_the_wire() {
 // ── Lists: the rows have to cross the wire too ───────────────────────────
 //
 // Found while writing the enum tests above, and worse than #13 because it is
-// SILENT: `empty_form` builds a list with no rows, and `ListSet::
+// SILENT: `empty_form` builds a list with no rows, and `ListNode::
 // distribute_values` only fills rows that exist, so every row on the wire is
 // dropped and `accept` returns `Ok` with an empty `Vec`. The design notes
 // predicted "create mode yields zero rows" before `Submission` existed; nothing

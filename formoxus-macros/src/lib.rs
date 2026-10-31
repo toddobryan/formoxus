@@ -39,7 +39,7 @@ mod using_fns;
 // TODO: document the whole grammar here — the form-level keywords (`title`,
 // `label_case`, `browser_validation`, `validator`, `buttons`) and every
 // field-body key (`widget`, `label`, `min`, `max`, `min_length`, `max_length`,
-// `pattern`, `required`, `allow_reordering` on a list's own path), including
+// `pattern`, `required`, `adder` on a list's own path), including
 // which constraints are legal on which value kinds.
 // This is the only place a user can learn it: `FieldBody` holds the key table
 // but is `pub(crate)`, and a one-line summary is no substitute. Wait until the

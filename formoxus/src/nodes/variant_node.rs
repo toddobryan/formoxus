@@ -47,7 +47,7 @@ pub enum VariantChoice {
 /// when unchosen), because a server rebuilds the form from nothing and has no
 /// other way to learn which variant's fields to build.
 #[derive(Clone, Debug)]
-pub struct VariantSet {
+pub struct VariantNode {
     pub field_attrs: FieldAttrs,
     pub name: String,
     pub label: Option<String>,
@@ -57,7 +57,7 @@ pub struct VariantSet {
     pub errors: Vec<ValidationMessage>,
 }
 
-impl VariantSet {
+impl VariantNode {
     /// Where this node's *children* live: its own path plus a `$Variant`
     /// descriptor, so two variants that share a field name can't both claim
     /// `footprint.size`. `None` when unchosen — there are no children then.
@@ -179,13 +179,13 @@ impl VariantSet {
     }
 }
 
-/// The id of a variant set's `<legend>`, which its select names itself by with
+/// The id of a variant node's `<legend>`, which its select names itself by with
 /// `aria-labelledby`. One function for both ends, like `errors_id`.
 fn legend_id(field_id: &str) -> String {
     format!("{field_id}-legend")
 }
 
-impl Node for VariantSet {
+impl Node for VariantNode {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -198,7 +198,7 @@ impl Node for VariantSet {
 
     fn render(&self, ctx: &NodeContext) -> Element {
         // A `fieldset` so the picker and the fields it revealed read as one
-        // thing — same treatment `FieldSet` gives a nested struct, and the
+        // thing — same treatment `StructNode` gives a nested struct, and the
         // legend carries the label so the select doesn't repeat it.
         //
         // Both arms build the SAME rsx template: the select is unconditional
@@ -236,8 +236,8 @@ impl Node for VariantSet {
             &field_attrs,
         );
 
-        let fieldset_class = ctx.classes.fixed_class(FixedKey::VariantSet, false);
-        let legend_class = ctx.classes.fixed_class(FixedKey::VariantSetLegend, false);
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::Variant, false);
+        let legend_class = ctx.classes.fixed_class(FixedKey::VariantLegend, false);
         rsx! {
             fieldset { class: fieldset_class,
                 if let Some(text) = label {
@@ -458,7 +458,7 @@ impl Node for VariantSet {
     fn write_value_into<'p>(&self, mut partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         match &self.choice {
             VariantChoice::Named(variant) => {
-                // The one thing a plain field set doesn't do: lock in the
+                // The one thing a plain struct node doesn't do: lock in the
                 // variant before writing its fields, so `Partial::build`
                 // materializes the right one.
                 partial = partial.select_variant_named(variant)?;

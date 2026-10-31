@@ -16,7 +16,7 @@ fn leaf_row_input(s: &Session, index: i32) -> playwright_rs::Locator {
     s.page.locator("ol.fx-list-rows > li input").nth(index)
 }
 
-/// Each new row, not the first one again. A reorderable row starts with its
+/// Each new row, not the first one again. A row starts with its
 /// ↑/↓ buttons, and the second row's ↑ is enabled, so landing on the input
 /// shows those buttons are skipped (they carry no `name`).
 #[tokio::test(flavor = "multi_thread")]

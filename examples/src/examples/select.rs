@@ -79,7 +79,7 @@ const STATES: &[(&str, &str)] = &[
 /// A second choice list, for the radio group.
 ///
 /// A `String` field rather than a three-variant `enum`, which is what it wants
-/// to be: an enum field is a SHAPE choice, so it becomes a `VariantSet` with a
+/// to be: an enum field is a SHAPE choice, so it becomes a `VariantNode` with a
 /// `<select>` over its variant names and cannot take a widget at all. A radio
 /// group is a VALUE choice, and a value is a string on the wire. The stored
 /// value is lowercase so it reads as data rather than as a label.

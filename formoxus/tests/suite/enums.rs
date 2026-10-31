@@ -234,13 +234,13 @@ fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
 fn the_select_and_the_fields_it_reveals_render_as_one_group() {
     // The picker and the fields it produced belong together, so they share a
     // `fieldset` and the legend carries the label — the same treatment
-    // `FieldSet` gives a nested struct. The label lives on the legend and NOT
+    // `StructNode` gives a nested struct. The label lives on the legend and NOT
     // beside the select, so it appears exactly once.
     let html = render_to_html(DocWithChosenOuter);
     expect_that!(
         html,
         contains_regex(format!(
-            r#"<fieldset class="fx-group fx-variant-set"><legend class="fx-legend fx-field-label" id="{FORM_ID}-outer-legend">Outer<span class="fx-required" aria-hidden="true"> \*</span></legend><div class="fx-form-field"><select"#
+            r#"<fieldset class="fx-group fx-variant"><legend class="fx-legend fx-field-label" id="{FORM_ID}-outer-legend">Outer<span class="fx-required" aria-hidden="true"> \*</span></legend><div class="fx-form-field"><select"#
         ))
     );
     expect_that!(
@@ -310,7 +310,7 @@ fn a_nested_enum_dispatches_under_its_qualified_path() {
     // It has to be a NESTED enum to mean anything. `Sketch.shape` sits at the
     // root, where `qualify("", "shape")` and the bare name are the same string,
     // so a double-qualified prefix would pass unnoticed. `Doc` gives us
-    // `outer.$First.inner`, which differs — and if `VariantSet` handed the
+    // `outer.$First.inner`, which differs — and if `VariantNode` handed the
     // select the wrong path, `ensure_owned` would reject the edit and no fields
     // would appear at all.
     let mut app = Harness::mount(UnchosenDocForm);
@@ -325,7 +325,7 @@ fn a_nested_enum_dispatches_under_its_qualified_path() {
         after,
         contains(eq(&outer)),
         "the outer select must survive its own edit, not be torn down and rebuilt — \
-         both arms of `VariantSet::render` are one template so the browser keeps focus"
+         both arms of `VariantNode::render` are one template so the browser keeps focus"
     );
     let inner = new_since(&[outer], after);
     expect_that!(
@@ -416,7 +416,7 @@ fn choosing_a_variant_reveals_its_fields() {
 #[gtest]
 fn choosing_a_variant_behind_an_option_builds_a_some() {
     // The `begin_some` frame still has to happen, but `OptionNode` owns it now
-    // rather than `VariantSet` knowing it is optional.
+    // rather than `VariantNode` knowing it is optional.
     let mut form = empty_form::<Sketch>(FormSpec::default());
     form.choose_variant("shape", Some("Circle"))
         .expect("Circle is a variant of Shape");
@@ -491,8 +491,8 @@ fn switching_a_variant_replaces_the_subtree() {
 
 // ── Reaching the enum through other containers ──
 //
-// The tests above all reach a `VariantSet` that is either a direct node of the
-// `FormState` or nested in another `VariantSet`. These cover the two remaining
+// The tests above all reach a `VariantNode` that is either a direct node of the
+// `FormState` or nested in another `VariantNode`. These cover the two remaining
 // dispatchers, which are otherwise never exercised.
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -501,8 +501,8 @@ struct Gallery {
 }
 
 #[gtest]
-fn choosing_a_variant_through_a_field_set() {
-    // `drawing.shape` — the path crosses a `FieldSet` on its way down.
+fn choosing_a_variant_through_a_struct_node() {
+    // `drawing.shape` — the path crosses a `StructNode` on its way down.
     let mut form = empty_form::<Outer>(FormSpec::default());
     form.choose_variant("drawing.shape", Some("Circle"))
         .expect("Circle is a variant of Shape");
@@ -529,7 +529,7 @@ fn choosing_a_variant_through_a_field_set() {
 
 #[gtest]
 fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
-    // `shapes.#1` — the path crosses a `ListSet`, whose rows are named by key.
+    // `shapes.#1` — the path crosses a `ListNode`, whose rows are named by key.
     // Edit mode, because a blank form has no rows until create-mode lengths land.
     let gallery = Gallery {
         shapes: vec![Shape::Circle { radius: 1.0 }, Shape::Circle { radius: 2.0 }],
@@ -701,7 +701,7 @@ fn model_path_strips_variant_descriptors() {
 
     // A row KEY survives: it names a real element of the model. Which element
     // is a question the string can't answer — a key is an identity, not a
-    // position, and only `ListSet::rows` knows the order.
+    // position, and only `ListNode::rows` knows the order.
     expect_that!(
         model_path("shapes.#0.$Circle.radius"),
         eq("shapes.#0.radius")
@@ -927,7 +927,7 @@ fn DrawingWithABadRadius() -> Element {
 /// **A bad field INSIDE the chosen variant does not mark the variant
 /// `<select>` invalid.** The choice itself is fine; it is `radius` that is
 /// wrong, and it carries its own `aria-invalid`. So the select keys off the
-/// `VariantSet`'s `has_errors_here`, never `has_errors_within`, which also
+/// `VariantNode`'s `has_errors_here`, never `has_errors_within`, which also
 /// counts its children's.
 #[gtest]
 fn a_bad_field_in_the_variant_does_not_mark_the_choice_invalid() {
@@ -960,7 +960,7 @@ fn a_variant_select_points_at_its_legend() {
         .split(r#"<legend class="fx-legend fx-field-label" id=""#)
         .nth(1)
         .and_then(|rest| rest.split('"').next())
-        .expect("the variant set renders a legend with an id");
+        .expect("the variant node renders a legend with an id");
     expect_that!(legend_id, ends_with("-shape-legend"));
     expect_that!(
         html,

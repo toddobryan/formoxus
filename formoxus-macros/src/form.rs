@@ -556,9 +556,8 @@ fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
 impl FieldSpec {
     /// The `FormSpec` builder calls one field body contributes, in order:
     /// label, widget, choices, the field's settings (`with_node`), the
-    /// attributes that only render (`with_attrs`), and a list's
-    /// `allow_reordering` and `adder`. Each is omitted when the
-    /// body says nothing about it.
+    /// attributes that only render (`with_attrs`), and a list's `adder`.
+    /// Each is omitted when the body says nothing about it.
     fn builder_calls(&self, model: &Path) -> TokenStream2 {
         let key = self.path.key();
         let label = self
@@ -596,11 +595,6 @@ impl FieldSpec {
             .body
             .attrs_tokens()
             .map(|c| quote! { .with_attrs(#key, #c) });
-        let allow_reordering = self
-            .body
-            .allow_reordering
-            .as_ref()
-            .map(|_| quote! { .with_allow_reordering(#key) });
         // Spanned onto the component's path, so one whose props are not
         // `AddRowProps` is reported where it is named.
         let adder = self.body.adder.as_ref().map(|(_, component)| {
@@ -609,7 +603,7 @@ impl FieldSpec {
             };
             quote! { .with_adder(#key, #ctor) }
         });
-        quote! { #label #widget #node #attrs #allow_reordering #adder }
+        quote! { #label #widget #node #attrs #adder }
     }
 }
 
@@ -943,7 +937,7 @@ pub(crate) mod tests {
 
     #[gtest]
     fn a_list_and_its_rows_are_different_paths() {
-        // The collision that must NOT fire. `answers` is the `ListSet` (its
+        // The collision that must NOT fire. `answers` is the `ListNode` (its
         // legend) and `answers[]` is every row; naming both in one spec is the
         // normal way to label a list and give its rows a widget. A dedup on the
         // idents alone would reject this.

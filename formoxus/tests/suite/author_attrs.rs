@@ -204,7 +204,7 @@ fn a_custom_widget_receives_the_fields_attributes() {
 // attribute beside the widget's, and a browser keeps only the first. So every
 // test here reads ALL the `class` attributes on the tag, not just one.
 
-/// An enum field, for the variant `<select>` a `VariantSet` renders.
+/// An enum field, for the variant `<select>` a `VariantNode` renders.
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Drawing {
     shape: Shape,
@@ -285,7 +285,7 @@ fn class_and_class_plus_on_the_select() {
     );
 }
 
-/// **An enum field's attributes reach its variant `<select>`.** `VariantSet`
+/// **An enum field's attributes reach its variant `<select>`.** `VariantNode`
 /// took no attributes at all until step 4, and `form!` refused `class` on an
 /// enum field until `field_kind` gave enums their own kind: an enum takes the
 /// unvalidated attributes a `<select>` can carry.

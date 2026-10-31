@@ -14,7 +14,7 @@
  *   structure   .fx-form  .fx-form-title  .fx-list-row  .fx-list-rows
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
- *   a group     .fx-group + .fx-field-set .fx-variant-set .fx-list-set  .fx-legend
+ *   a group     .fx-group + .fx-struct .fx-variant .fx-list  .fx-legend
  *   radios      .fx-radio-group  .fx-choice  .fx-choice-label
  *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
  *               .fx-problems  .fx-problem

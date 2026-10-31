@@ -110,7 +110,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
     // radio needs its OWN `path` to move into its own `onchange` and an rsx
-    // loop body takes nodes, not statements. `FieldSet` splices its children
+    // loop body takes nodes, not statements. `StructNode` splices its children
     // the same way.
     let radios: Vec<Element> = choices
         .into_iter()

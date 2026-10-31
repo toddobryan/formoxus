@@ -12,7 +12,7 @@ use facet::{Partial, ReflectError};
 use formoxus_spec::FixedKey;
 
 #[derive(Clone, Debug)]
-pub struct FieldSet {
+pub struct StructNode {
     pub name: String,
     pub optional: bool,
     pub label: Option<String>,
@@ -20,7 +20,7 @@ pub struct FieldSet {
     pub errors: Vec<ValidationMessage>,
 }
 
-impl Node for FieldSet {
+impl Node for StructNode {
     fn name(&self) -> String {
         self.name.clone()
     }
@@ -34,8 +34,8 @@ impl Node for FieldSet {
     fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
         let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
-        let fieldset_class = ctx.classes.fixed_class(FixedKey::FieldSet, false);
-        let legend_class = ctx.classes.fixed_class(FixedKey::FieldSetLegend, false);
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, false);
+        let legend_class = ctx.classes.fixed_class(FixedKey::StructLegend, false);
         rsx! {
             fieldset { class: fieldset_class,
                 if let Some(text) = self.label(ctx.label_case) {
@@ -66,7 +66,7 @@ impl Node for FieldSet {
     }
 
     fn raw_value(&self) -> String {
-        // A field set isn't a scalar — it has no single input of its own.
+        // A struct isn't a scalar — it has no single input of its own.
         String::new()
     }
 

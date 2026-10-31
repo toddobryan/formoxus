@@ -126,7 +126,7 @@ async fn a_multiline_value_round_trips_through_a_textarea() -> Result<()> {
 // ── an enum field ────────────────────────────────────────────────────────
 
 /// **An enum's variant select is named by the field's label.** The label is
-/// rendered once, as the variant set's `<legend>`, and a legend names its
+/// rendered once, as the variant node's `<legend>`, and a legend names its
 /// fieldset, not the controls inside it; so the select needs
 /// `aria-labelledby` pointing at the legend, or a screen reader announces a
 /// nameless combo box and axe fails it (`select-name`).

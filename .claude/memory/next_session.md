@@ -1,9 +1,31 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-10-31, later: lists vs sets, on branch `sets`
+
+Todd decided a collection is a LIST (`Vec`, order matters: always `<ol>`
+with ↑/↓) or a SET (`Def::Set`, or `set` on a `Vec`: no duplicates,
+canonical order, display-only members edited through the adder).
+`allow_reordering` is gone. Plan: `formoxus/SETS_PLAN.md`, decisions A–G
+and settled H–M; memory [[lists-and-sets]].
+
+Same day, Todd: SEPARATE nodes, not a kind switch. `ListSet` -> `ListNode`,
+`VariantSet` -> `VariantNode`, a new `SetNode`, the shared row machinery in
+`nodes/rows.rs`, and the "set"-named classes/`FixedKey`s renamed
+(`fx-list-set` -> `fx-list`, …). That is now box 2, first; the old box 2
+(every list ordered) is box 3. `on_duplicate` is the duplicate closure.
+
+Box 1 (branch) done. Box 3b (was 2b), Claude's half, done uncommitted: the `form!`
+key, its goldens (the `[]` one converted to `adder`), the specs.rs panics
+moved to `with_adder`, vecs.rs's reorderable tests rewritten as every-list
+tests, `/t/reorder` without the key. **10 vecs tests are red on purpose
+until Todd's 3a** (every list `<ol>` + ↑/↓, `FieldSpec.allow_reordering` and
+`with_allow_reordering` deleted). After 3a (box 3c): re-bless any snapshot that
+gains an `<ol>`, run `just e2e`.
 
 ## ▶ 2026-10-30/31: BOX 2 DONE (ec05880); BOX 3 DONE (ebe4437); BOX 4 DONE, uncommitted
 

@@ -1,7 +1,7 @@
-//! `/t/reorder`: a reorderable list's ↑/↓ buttons, from the browser's side.
+//! `/t/reorder`: a list's ↑/↓ buttons, from the browser's side.
 //!
 //! The suite proves the markup (which rows get buttons, which are disabled)
-//! and `ListSet::move_row` proves the edit. Only a browser proves the click:
+//! and `ListNode::move_row` proves the edit. Only a browser proves the click:
 //! that each button sends the move it is named for, and that the order the
 //! user sees is the order the model is built in.
 

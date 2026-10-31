@@ -10,15 +10,15 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-mod field_set;
-mod list_set;
+mod list_node;
 mod option_node;
-mod variant_set;
+mod struct_node;
+mod variant_node;
 
-pub use field_set::FieldSet;
-pub use list_set::ListSet;
+pub use list_node::ListNode;
 pub use option_node::OptionNode;
-pub use variant_set::{VariantChoice, VariantSet};
+pub use struct_node::StructNode;
+pub use variant_node::{VariantChoice, VariantNode};
 
 use crate::classes::Classes;
 use crate::error::FormAccessError;
@@ -39,7 +39,7 @@ pub trait Node: Debug {
     fn raw_value(&self) -> String;
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
-    /// two field sets in one form can each have a `street`.
+    /// two structs in one form can each have a `street`.
     fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>);
     /// The reverse of [`collect_values`](Self::collect_values): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
@@ -50,7 +50,7 @@ pub trait Node: Debug {
     /// `FormState::validate` asks before building a model.
     ///
     /// Not the question a widget asks; see [`has_errors_here`](Self::has_errors_here).
-    /// A `VariantSet` whose chosen variant has a bad `radius` has errors
+    /// A `VariantNode` whose chosen variant has a bad `radius` has errors
     /// within, but its `<select>` is fine and must not render `aria-invalid`.
     /// A leaf counts an unvalidated `Invalid` value too, which `validate` has
     /// not yet turned into an error message.
@@ -83,17 +83,17 @@ pub trait Node: Debug {
     ///
     /// **A container reports its OWN path too, when it has errors of its own.**
     /// The rule is `distribute_errors`'s, mirrored: whatever can be delivered
-    /// to a path has to be collectable from it. `VariantSet` is the one node where
+    /// to a path has to be collectable from it. `VariantNode` is the one node where
     /// that bites today — its `errors` render beside the `<select>` at its own
     /// path, not under a child.
     ///
-    /// `FieldSet` and `ListSet` also hold a `Vec<ValidationMessage>` of their
+    /// `StructNode` and `ListNode` also hold a `Vec<ValidationMessage>` of their
     /// own, and do NOT report it. Not for want of somewhere to put it — since
     /// the error types merged it is exactly what `ErrorsByPath` holds — but
     /// because nothing writes one yet: `validate` only clears them, and neither
-    /// container renders them. The first writer (a `ListSet` min/max-rows
+    /// container renders them. The first writer (a `ListNode` min/max-rows
     /// check, say) needs three things at once: report them here at the
-    /// container's own path, as `VariantSet` does; claim them in
+    /// container's own path, as `VariantNode` does; claim them in
     /// `distribute_errors`; and render them.
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath);
 
@@ -161,7 +161,7 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
 /// — the shape carries a field's name but no prose for it. Reuses the derive
 /// path's [`crate::label_case`], so both paths title-case identically.
 ///
-/// `None` for a `ListSet` row key (`#3`) and for an all-digit name. Neither is
+/// `None` for a `ListNode` row key (`#3`) and for an all-digit name. Neither is
 /// prose: a row key is an identity, and a tuple-struct field's "0" is a
 /// position. The list itself is what carries the label.
 pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
@@ -197,7 +197,7 @@ pub(crate) const ROW_SIGIL: char = '#';
 /// switch.
 ///
 /// The cost is that a row's *position* is no longer recoverable from its path.
-/// Order lives in `ListSet::rows` and nowhere else — see [`model_path`].
+/// Order lives in `ListNode::rows` and nowhere else — see [`model_path`].
 pub(crate) fn row_segment(key: usize) -> String {
     format!("{ROW_SIGIL}{key}")
 }
@@ -213,7 +213,7 @@ pub(crate) fn row_segment(key: usize) -> String {
 /// A list-row key (`answers.#3.text`) is left alone: it *is* a real element of
 /// the model, just identified by identity rather than position. Which element
 /// it is cannot be read off the string —
-/// only `ListSet::rows` knows that — so the result names the row without
+/// only `ListNode::rows` knows that — so the result names the row without
 /// placing it.
 pub fn model_path(path: &str) -> String {
     path.split('.')

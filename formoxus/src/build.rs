@@ -11,7 +11,7 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    FieldSet, ListSet, Node, OptionNode, ROW_SIGIL, SpecsByPath, VariantChoice, VariantSet,
+    ListNode, Node, OptionNode, ROW_SIGIL, SpecsByPath, StructNode, VariantChoice, VariantNode,
     qualify, row_segment, variant_segment,
 };
 
@@ -356,7 +356,7 @@ pub(crate) fn variant_nodes(
 }
 
 /// Nodes for a top-level enum model (the whole `FormState<T>` is an enum). Enum
-/// *fields* don't come through here — `node_for` builds a `VariantSet` for
+/// *fields* don't come through here — `node_for` builds a `VariantNode` for
 /// those; this is only the `nodes_for` dispatch for a bare-enum `T`.
 fn fields_from_enum(
     enum_type: &EnumType,
@@ -390,7 +390,7 @@ fn node_for(
 ///
 /// Split out of [`node_for`] because a list element has no [`Field`](FacetField) and so no
 /// `field.name` — its name is its index (`"0"`, `"1"`, …), supplied by the
-/// enclosing `ListSet`. Everything below is shape-driven and never looked at the
+/// enclosing `ListNode`. Everything below is shape-driven and never looked at the
 /// `Field` for anything but those two things, so the split is pure motion.
 pub(crate) fn node_for_shape(
     shape: &'static Shape,
@@ -587,12 +587,12 @@ fn scalar_node(
     }
 }
 
-/// A list-typed field: a [`ListSet`] whose rows are named by a `#`-prefixed key,
+/// A list-typed field: a [`ListNode`] whose rows are named by a `#`-prefixed key,
 /// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
 /// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the
-/// `ListSet` keeps it: `Edit::AddRow` has to build a node for a row that has
+/// `ListNode` keeps it: `Edit::AddRow` has to build a node for a row that has
 /// no value to peek at, and this is the only thing that says what kind.
 ///
 /// Edit mode takes the row count from the value. Create mode has no value to
@@ -643,7 +643,7 @@ fn list_node(
              write `{name}[]` to give every ROW a widget, or did you mean `label`?",
         );
     }
-    Box::new(ListSet {
+    Box::new(ListNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         shape,
@@ -659,7 +659,7 @@ fn list_node(
     })
 }
 
-/// A struct-typed field: a [`FieldSet`] over that struct's own fields, whose
+/// A struct-typed field: a [`StructNode`] over that struct's own fields, whose
 /// paths accumulate under this field's name.
 fn struct_node(
     shape: &'static Shape,
@@ -673,11 +673,11 @@ fn struct_node(
     if let Some(spec) = spec {
         assert!(
             spec.widget.is_none(),
-            "{prefix} is a field set, which has no single widget to override \
+            "{prefix} is a struct, which has no single widget to override \
              (a composite widget for one isn't supported yet) — did you mean `label`?"
         );
     }
-    Box::new(FieldSet {
+    Box::new(StructNode {
         name: name.to_string(),
         optional,
         label: spec.and_then(|s| s.label.clone()),
@@ -686,7 +686,7 @@ fn struct_node(
     })
 }
 
-/// An enum-typed field: a [`VariantSet`] locked to one already-decided variant.
+/// An enum-typed field: a [`VariantNode`] locked to one already-decided variant.
 ///
 /// [`FormMode`] comes from the root, not from `peek` — see its docs for why
 /// deriving it here was the bug that made absent optional enums panic.
@@ -703,7 +703,7 @@ fn enum_node(
     });
     let variant = chosen_variant(enum_type, peek_enum, walk, prefix);
     let spec = walk.spec_for(prefix);
-    Box::new(VariantSet {
+    Box::new(VariantNode {
         field_attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),

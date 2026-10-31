@@ -16,7 +16,7 @@ use formoxus::field_node::FieldNode;
 use formoxus::fields::StringField;
 use formoxus::label_case::LabelCase;
 use formoxus::nodes::ValuesByPath;
-use formoxus::nodes::{FieldSet, Node};
+use formoxus::nodes::{Node, StructNode};
 use formoxus::prelude::*;
 use formoxus::widgets::TextInput;
 use googletest::prelude::*;
@@ -50,12 +50,12 @@ fn location_nodes(
     ]
 }
 
-fn location_field_set(
+fn location_struct_node(
     street: FieldValue<String>,
     city: FieldValue<String>,
     zip: FieldValue<String>,
 ) -> Box<dyn Node> {
-    Box::new(FieldSet {
+    Box::new(StructNode {
         name: "location".to_string(),
         optional: false,
         label: Some("Location".to_string()),
@@ -118,10 +118,10 @@ fn form_for_none_walks_the_shape_into_empty_nodes() {
         elements_are![eq("title"), eq("location")]
     );
 
-    // The nested struct field became a FieldSet with its own nodes,
+    // The nested struct field became a StructNode with its own nodes,
     // discovered purely from `Location`'s shape. The inner names are now
     // QUALIFIED (`location.street`, not `street`) — that changed when `render`
-    // started threading a prefix, and it's what stops two field sets in one
+    // started threading a prefix, and it's what stops two structs in one
     // form from both claiming `street`.
     let rendered = render_to_html(EmptyEventForm);
     for name in ["title", "location.street", "location.city", "location.zip"] {
@@ -344,7 +344,7 @@ fn empty_event_form_is_invalid() {
         spec: FormSpec::new().with_title("New Event"),
         nodes: vec![
             text_field("title", FieldValue::Empty),
-            location_field_set(FieldValue::Empty, FieldValue::Empty, FieldValue::Empty),
+            location_struct_node(FieldValue::Empty, FieldValue::Empty, FieldValue::Empty),
         ],
         errors: Vec::new(),
         _type: PhantomData,
@@ -387,7 +387,7 @@ fn event_for_create_form_round_trips_to_model() {
         spec: FormSpec::new().with_title("New Event"),
         nodes: vec![
             text_field("title", FieldValue::Valid("Board Game Night".to_string())),
-            location_field_set(
+            location_struct_node(
                 FieldValue::Valid("123 Main St".to_string()),
                 FieldValue::Valid("Springfield".to_string()),
                 FieldValue::Valid("12345".to_string()),

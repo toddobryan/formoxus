@@ -67,7 +67,7 @@ fn a_nested_path_reaches_exactly_one_field() {
 }
 
 #[component]
-fn RelabelledFieldSet() -> Element {
+fn RelabelledStructNode() -> Element {
     let form = use_form(|| {
         empty_form(FormSpec::<EventForCreate>::default().with_label("location", "Where"))
     });
@@ -75,10 +75,10 @@ fn RelabelledFieldSet() -> Element {
 }
 
 #[gtest]
-fn a_field_sets_own_label_becomes_its_legend() {
+fn a_structs_own_label_becomes_its_legend() {
     // A container is addressable in its own right, not just as a prefix — so
     // the walk has to look the container itself up, not only its leaves.
-    let html = render_to_html(RelabelledFieldSet);
+    let html = render_to_html(RelabelledStructNode);
     expect_that!(
         html,
         contains_substring(r#"<legend class="fx-legend fx-field-label">Where</legend>"#)
@@ -224,9 +224,9 @@ fn an_unticked_checkbox_widget_type_validates() {
 }
 
 #[gtest]
-#[should_panic(expected = "location is a field set")]
-fn a_widget_type_on_a_field_set_is_rejected() {
-    // A field set has no single widget to be, and silently ignoring the entry
+#[should_panic(expected = "location is a struct")]
+fn a_widget_type_on_a_struct_is_rejected() {
+    // A struct has no single widget to be, and silently ignoring the entry
     // would leave the author with no thread to pull. The message names the path
     // because a nested form has more than one candidate.
     let _ = empty_form(FormSpec::<EventForCreate>::default().with_widget("location", Textarea));
@@ -274,7 +274,7 @@ fn brackets_on_a_scalar_are_refused() {
 
 #[gtest]
 fn every_kind_of_node_is_accepted() {
-    // A leaf, a field set, a field in it, a list, its rows, a row's field: each
+    // A leaf, a struct, a field in it, a list, its rows, a row's field: each
     // names a node, so none of these panics.
     let _ = FormSpec::<EventForCreate>::default()
         .with_label("title", "Headline")
@@ -331,7 +331,7 @@ fn a_variants_field_without_the_variant_is_refused() {
     let _ = FormSpec::<WithShape>::default().with_label("shape.radius", "R");
 }
 
-// ── `allow_reordering` — only on a list ──────────────────────────────────
+// ── `adder` — only on a list ────────────────────────────────────────────
 //
 // `form!` refuses it on a non-list at compile time (`tests/ui`); these are the
 // hand-built spec, which can only be refused when it is built.
@@ -345,63 +345,48 @@ struct Lists {
     title: String,
 }
 
+fn adder() -> formoxus::widgets::RowAdder {
+    formoxus::widgets::RowAdder::default()
+}
+
 /// A list, the inner lists of a list of lists, and a list behind an `Option`,
-/// whose key has no `?`. Whether each one renders as a reorderable list is
-/// the render tests' question; this is only that none is refused.
+/// whose key has no `?`. Whether each one renders its adder is the render
+/// tests' question; this is only that none is refused.
 #[gtest]
-fn allow_reordering_is_accepted_on_every_kind_of_list() {
+fn an_adder_is_accepted_on_every_kind_of_list() {
     let _ = FormSpec::<Lists>::default()
-        .with_allow_reordering("tags")
-        .with_allow_reordering("grid")
-        .with_allow_reordering("grid[]")
-        .with_allow_reordering("maybe");
+        .with_adder("tags", adder())
+        .with_adder("grid", adder())
+        .with_adder("grid[]", adder())
+        .with_adder("maybe", adder());
 }
 
 #[gtest]
-#[should_panic(expected = "title: `allow_reordering` applies only to a list, not `String`")]
-fn allow_reordering_on_a_scalar_is_refused() {
-    let _ = FormSpec::<Lists>::default().with_allow_reordering("title");
+#[should_panic(expected = "title: `adder` applies only to a list, not `String`")]
+fn an_adder_on_a_scalar_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_adder("title", adder());
 }
 
 /// `tags[]` is every ROW of `tags`, each a `String`: the mistake decision A
 /// in `ORDERED_LISTS_PLAN.md` warns about, since a label for the rows does
 /// go there.
 #[gtest]
-#[should_panic(expected = "tags[]: `allow_reordering` applies only to a list, not `String`")]
-fn allow_reordering_on_a_lists_rows_is_refused() {
-    let _ = FormSpec::<Lists>::default().with_allow_reordering("tags[]");
+#[should_panic(expected = "tags[]: `adder` applies only to a list, not `String`")]
+fn an_adder_on_a_lists_rows_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_adder("tags[]", adder());
 }
 
 #[gtest]
-#[should_panic(expected = "venues[]: `allow_reordering` applies only to a list, not `Location`")]
-fn allow_reordering_on_a_struct_row_is_refused() {
-    let _ = FormSpec::<Lists>::default().with_allow_reordering("venues[]");
+#[should_panic(expected = "venues[]: `adder` applies only to a list, not `Location`")]
+fn an_adder_on_a_struct_row_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_adder("venues[]", adder());
 }
 
 /// The path is checked before the list is, so a typo reads as a typo.
 #[gtest]
 #[should_panic(expected = "tagz: names nothing in a form over `Lists`")]
-fn allow_reordering_on_an_unknown_path_says_so_first() {
-    let _ = FormSpec::<Lists>::default().with_allow_reordering("tagz");
-}
-
-/// `with_adder` shares `allow_reordering`'s list check, so these are the
-/// accepting case and one refusal, to show the message names `adder`.
-#[gtest]
-fn an_adder_is_accepted_on_every_kind_of_list() {
-    let adder = formoxus::widgets::RowAdder::default();
-    let _ = FormSpec::<Lists>::default()
-        .with_adder("tags", adder)
-        .with_adder("grid", adder)
-        .with_adder("grid[]", adder)
-        .with_adder("maybe", adder);
-}
-
-#[gtest]
-#[should_panic(expected = "tags[]: `adder` applies only to a list, not `String`")]
-fn an_adder_on_a_lists_rows_is_refused() {
-    let _ =
-        FormSpec::<Lists>::default().with_adder("tags[]", formoxus::widgets::RowAdder::default());
+fn an_adder_on_an_unknown_path_says_so_first() {
+    let _ = FormSpec::<Lists>::default().with_adder("tagz", adder());
 }
 
 // ── `[]` — selecting every row of a list ─────────────────────────────────
@@ -501,7 +486,7 @@ fn ListWithItsOwnLabel() -> Element {
 
 #[gtest]
 fn a_bare_list_path_labels_the_list_not_the_rows() {
-    // The distinction the bracket buys: without it, `venues` is the `ListSet`
+    // The distinction the bracket buys: without it, `venues` is the `ListNode`
     // itself, so exactly one legend and nothing per row.
     let html = render_to_html(ListWithItsOwnLabel);
     expect_that!(html.matches("Where we went").count(), eq(1));
@@ -528,7 +513,7 @@ fn RowWidgetsOverridden() -> Element {
 #[gtest]
 fn a_bracket_selector_can_set_each_rows_widget() {
     // A `Vec<bool>` derives a checkbox per row; the selector replaces all of
-    // them. This is the half Todd's reading of `ListSet` predicted: a list has no
+    // them. This is the half Todd's reading of `ListNode` predicted: a list has no
     // widget of its own, but it has N rows that each do.
     let html = render_to_html(RowWidgetsOverridden);
     expect_that!(html.matches("<select").count(), eq(2));
@@ -601,7 +586,7 @@ fn RowFieldAddedAfterTheSpec() -> Element {
 
 #[gtest]
 fn a_new_rows_nested_field_gets_the_spec_too() {
-    // One level deeper: the new row is a whole `FieldSet`, and the selector has to
+    // One level deeper: the new row is a whole `StructNode`, and the selector has to
     // reach inside it. Three "Town"s for two original rows plus the new one.
     let html = render_to_html(RowFieldAddedAfterTheSpec);
     expect_that!(html.matches("Town").count(), eq(3));

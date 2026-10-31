@@ -16,7 +16,7 @@
 //!
 //! Optional *enums* stay covered by `enums` (`edit_mode_round_trips_an_optional_
 //! enum`, `create_mode_absent_builds_a_none`, …) — the guard for having retired
-//! `VariantSet::optional`, which `OptionNode` subsumes. `VariantChoice::Absent`
+//! `VariantNode::optional`, which `OptionNode` subsumes. `VariantChoice::Absent`
 //! deliberately survives: a chosen unit variant has no leaves, so presence there
 //! cannot be derived the way it is for structs and lists.
 
@@ -266,7 +266,7 @@ fn an_optional_list_of_structs_round_trips() {
 #[gtest]
 fn option_peels_one_layer_at_a_time() {
     // `Option<Vec<Option<String>>>` →
-    // `OptionNode(ListSet(rows of OptionNode(Field)))`, each
+    // `OptionNode(ListNode(rows of OptionNode(Field)))`, each
     // layer contributing exactly one frame. Row 1 is empty, so it's `None`
     // by the same rule that makes the whole list present: some leaf under
     // `cells` is non-empty.
@@ -289,7 +289,7 @@ fn option_peels_one_layer_at_a_time() {
 // Every other node kind answers `is_present` from something a leaf carries, so
 // a wrapper that scans leaves itself gets the same answer by accident. A chosen
 // FIELDLESS variant breaks that: it contributes no leaves at all, and only
-// `VariantSet` knows it was chosen. These are the tests that fail if
+// `VariantNode` knows it was chosen. These are the tests that fail if
 // `OptionNode::is_present` inspects leaves instead of asking its inner node.
 
 /// `Option<Enum>` where the chosen variant carries no fields.
@@ -336,7 +336,7 @@ fn an_absent_optional_unit_variant_stays_absent() {
 
 #[gtest]
 fn a_chosen_unit_variant_survives_two_containers_deep() {
-    // `OptionNode` -> `ListSet` -> `VariantSet`, none of which has a leaf to
+    // `OptionNode` -> `ListNode` -> `VariantNode`, none of which has a leaf to
     // its name. Presence has to be asked for, one node at a time, the whole
     // way down.
     let value = Schedule {
@@ -561,7 +561,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
 // `""` means "unfilled" everywhere else, but a checkbox posts nothing when it is
 // unticked and `false` is a complete answer. The obvious fix — read `""` as
 // `"false"` in `distribute_values` — was TRIED and reverted: it makes the field
-// permanently present, and since `FieldSet::is_present` is `any` over its
+// permanently present, and since `StructNode::is_present` is `any` over its
 // nodes, an `Option<Struct>` whose only field is a checkbox then builds
 // `Some(..)` for a section the user never opened. The second test below is that
 // bug, and it was red against exactly that version.
@@ -617,7 +617,7 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     // `apply`, so `venue` reports itself absent and builds `None` — a user who
     // never opened the venue section doesn't silently create one. Synthesise
     // `false` any earlier than `write_value_into` and this goes red: `open`
-    // becomes present, `FieldSet::is_present` is `any` over its nodes, and out
+    // becomes present, `StructNode::is_present` is `any` over its nodes, and out
     // comes `Some(Venue { open: false })`.
     //
     // `published` proves the same run still submits its top-level `bool`, so a
@@ -643,7 +643,7 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
 // ── Rows added to an Option<Vec<T>> ──
 //
 // `list_node` builds a list's first rows with `optional: false`, while
-// `ListSet::add_row` and `set_rows` pass the LIST's optionality, which for an
+// `ListNode::add_row` and `set_rows` pass the LIST's optionality, which for an
 // `Option<Vec<T>>` is `true`. Nothing visible differs, and these pin that: an
 // added row renders and validates exactly like one there from the start.
 
@@ -853,7 +853,7 @@ fn an_optional_list_of_bools_round_trips() {
 // ── A variant chosen inside an Option<enum> ──
 //
 // The enum version of the row case above: `enum_node` builds the chosen
-// variant's fields with `optional: false`, and `VariantSet::set_variant`, which
+// variant's fields with `optional: false`, and `VariantNode::set_variant`, which
 // rebuilds them when the user picks a variant, must too.
 
 #[derive(Facet, Clone, Debug, PartialEq)]

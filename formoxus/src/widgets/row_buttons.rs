@@ -2,7 +2,7 @@
 //!
 //! None reads the value store. Adding or dropping a row changes the form's
 //! SHAPE, and moving one changes its order, so all any of them does is put an [`Edit`] on the wire and let
-//! [`ListSet`](crate::nodes::ListSet) rebuild itself.
+//! [`ListNode`](crate::nodes::ListNode) rebuild itself.
 //!
 //! Add is the one a dev can replace: `adder:` in `form!` names a component
 //! taking [`AddRowProps`], held as a [`RowAdder`], and [`AddRowButton`] is the

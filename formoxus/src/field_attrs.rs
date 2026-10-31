@@ -32,7 +32,7 @@ impl FieldAttrs {
     }
 
     /// A copy with `attr` set to `value` unless the author already set it, for
-    /// a value formoxus supplies but an author may replace (`VariantSet`'s
+    /// a value formoxus supplies but an author may replace (`VariantNode`'s
     /// `aria-labelledby`). The author's entry wins and keeps its position, so
     /// the attribute is never emitted twice.
     pub fn with_default(&self, attr: Attr, value: AttrValue) -> FieldAttrs {

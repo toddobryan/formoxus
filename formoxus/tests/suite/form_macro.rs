@@ -438,7 +438,7 @@ fn a_dotted_path_reaches_exactly_one_nested_field() {
 #[component]
 fn ListLabelAndRowWidgets() -> Element {
     // Both halves of the list vocabulary in one spec: `stops` addresses the
-    // `ListSet` itself (its legend), `stops[]` every row. That they can coexist is
+    // `ListNode` itself (its legend), `stops[]` every row. That they can coexist is
     // the reason the parser compares on the rendered key rather than on idents.
     use_form(|| {
         form_for(

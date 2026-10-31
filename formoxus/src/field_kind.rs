@@ -163,7 +163,7 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
 
 /// Whether the field is one value, and so can have a widget at all. A struct,
 /// list or enum is several, and a widget on one is either rejected at runtime
-/// (a field set or list asserts) or silently ignored (an enum always renders its
+/// (a struct or list asserts) or silently ignored (an enum always renders its
 /// variant picker).
 pub const fn is_single_value(shape: &Shape) -> bool {
     !matches!(kind(shape), Kind::List | Kind::Other | Kind::Enum)
@@ -619,7 +619,7 @@ mod tests {
     }
 
     /// The reason `Kind::Enum` is its own kind rather than a loosened
-    /// `Kind::Other`: a struct's field set renders nothing an attribute could
+    /// `Kind::Other`: a struct's node renders nothing an attribute could
     /// land on, so `class` on one must stay a compile error.
     #[gtest]
     fn a_struct_and_a_list_still_take_nothing_not_even_class() {

@@ -82,7 +82,7 @@ fn an_empty_list_round_trips() {
 #[gtest]
 fn struct_rows_round_trip() {
     // The case that proves the `write_value_into` split: a row is a
-    // `FieldSet`, so this nests `begin_list_item` → `begin_field` per struct
+    // `StructNode`, so this nests `begin_list_item` → `begin_field` per struct
     // field. Confusing the two halves fails exactly here.
     let mut form = form_for(&venues(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&venues())));
@@ -216,7 +216,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 #[gtest]
 fn create_mode_yields_no_rows_yet() {
     // Characterization, not an endorsement: `list_node` has no length to
-    // work from without a value, so it builds an empty `ListSet` and
+    // work from without a value, so it builds an empty `ListNode` and
     // `validate` produces `vec![]` with no complaint. This test exists to
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>(FormSpec::default());
@@ -471,7 +471,7 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
 
 #[gtest]
 fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
-    // Regression: before `ListSet::edit` grew an "is it me?" branch, an edit
+    // Regression: before `ListNode::edit` grew an "is it me?" branch, an edit
     // addressed to the list itself fell through the row loop and came back as
     // `no such path: answers` — a lie, since the list is precisely what owns it.
     let mut form = form_for(&quiz(), FormSpec::default());
@@ -723,7 +723,7 @@ fn each_row_renders_inside_its_own_wrapper() {
     // diffing behaviour, which needs a widget that can dispatch `AddRow`
     // before it can be driven. This guards the structure the key rides on.
     let html = super::render_to_html(QuizForm);
-    expect_that!(html.matches(r#"<div class="fx-list-row">"#).count(), eq(2));
+    expect_that!(html.matches(ROW_LI).count(), eq(2));
     expect_that!(html, contains_substring(r#"name="answers.#0""#));
     expect_that!(html, contains_substring(r#"name="answers.#1""#));
 }
@@ -920,7 +920,7 @@ fn a_lists_own_error_renders_under_its_legend_and_describes_it() {
     expect_that!(
         html,
         contains_substring(
-            r#"<fieldset class="fx-group fx-list-set fx-invalid" id="FORMID-answers" aria-describedby="FORMID-answers-errors">"#
+            r#"<fieldset class="fx-group fx-list fx-invalid" id="FORMID-answers" aria-describedby="FORMID-answers-errors">"#
         )
     );
     expect_that!(
@@ -950,7 +950,7 @@ fn a_bad_cell_does_not_mark_the_list_invalid() {
     expect_that!(html, contains_substring("Too short."));
     expect_that!(
         html,
-        contains_substring(r#"<fieldset class="fx-group fx-list-set" id="FORMID-answers">"#),
+        contains_substring(r#"<fieldset class="fx-group fx-list" id="FORMID-answers">"#),
         "no fx-invalid and no aria-describedby: the error is the cell's"
     );
     expect_that!(html, not(contains_substring("FORMID-answers-errors")));
@@ -958,7 +958,7 @@ fn a_bad_cell_does_not_mark_the_list_invalid() {
 
 #[gtest]
 fn a_list_renders_its_own_label() {
-    // Until the list got a `fieldset`, no container but `FieldSet` rendered its
+    // Until the list got a `fieldset`, no container but `StructNode` rendered its
     // label, so `answers` appeared on the page as an unexplained stack of inputs.
     let html = super::render_to_html(QuizForm);
     expect_that!(
@@ -981,35 +981,31 @@ fn the_row_widgets_never_submit_the_form() {
     );
 }
 
-// ── Reorderable lists ────────────────────────────────────────────────────
+// ── Every list is ordered ───────────────────────────────────────────────
 //
-// `allow_reordering` on a list's own path makes its rows an `<ol>` of `<li>`s;
-// every other list keeps its `div` rows. Each form is built through `form!`,
-// so these also prove the flag's path reaches the right `ListSet`.
+// A `Vec` is a list, and a list's order means something, so every list
+// renders its rows as an `<ol>` of `<li>`s, each with ↑/↓
+// (`SETS_PLAN.md` A). A screen reader then announces each row's position.
 
 const ROWS_OL: &str = r#"<ol class="fx-list-rows">"#;
 const ROW_LI: &str = r#"<li class="fx-list-row">"#;
-const ROW_DIV: &str = r#"<div class="fx-list-row">"#;
-
-#[component]
-fn ReorderableQuizForm() -> Element {
-    let form = use_form(|| form_for(&quiz(), form! { Quiz { answers => { allow_reordering } } }));
-    form.render(using_fns! {})
-}
 
 #[gtest]
-fn a_reorderable_list_renders_its_rows_as_an_ol() {
-    let html = super::render_to_html(ReorderableQuizForm);
+fn a_list_renders_its_rows_as_an_ol() {
+    let html = super::render_to_html(QuizForm);
     expect_that!(html.matches(ROWS_OL).count(), eq(1));
     expect_that!(html.matches(ROW_LI).count(), eq(2));
-    expect_that!(html, not(contains_substring(ROW_DIV)));
+    expect_that!(
+        html,
+        not(contains_substring(r#"<div class="fx-list-row">"#))
+    );
 }
 
 /// An `<ol>` may hold only `<li>`s, so Add stays outside it, after it (H in
 /// `ORDERED_LISTS_PLAN.md`); each row's Remove stays inside its `<li>`.
 #[gtest]
-fn a_reorderable_lists_add_button_follows_the_ol() {
-    let html = super::render_to_html(ReorderableQuizForm);
+fn a_lists_add_button_follows_the_ol() {
+    let html = super::render_to_html(QuizForm);
     let ol_ends = html.find("</ol>").expect("the rows are an <ol>");
     let add = html
         .find("fx-button-add-row")
@@ -1022,15 +1018,6 @@ fn a_reorderable_lists_add_button_follows_the_ol() {
     );
 }
 
-/// The flag is off by default, so no existing form changes.
-#[gtest]
-fn a_list_without_the_flag_keeps_its_div_rows() {
-    let html = super::render_to_html(QuizForm);
-    expect_that!(html, not(contains_substring("<ol")));
-    expect_that!(html, not(contains_substring("<li")));
-    expect_that!(html.matches(ROW_DIV).count(), eq(2));
-}
-
 fn grid() -> Grid {
     Grid {
         rows: vec![
@@ -1041,23 +1028,24 @@ fn grid() -> Grid {
 }
 
 #[component]
-fn ReorderableInnerListsForm() -> Element {
-    let form = use_form(|| form_for(&grid(), form! { Grid { rows[] => { allow_reordering } } }));
+fn GridForm() -> Element {
+    let form = use_form(|| form_for(&grid(), FormSpec::default()));
     form.render(using_fns! {})
 }
 
-/// `rows[]` is every inner list, so each of those is an `<ol>`, while `rows`
-/// itself, not flagged, keeps `div` rows: the flag reaches exactly the lists
-/// its path names.
+/// The outer list and each inner one: an `<li>` holding an `<ol>`.
 #[gtest]
-fn every_rows_flag_reaches_each_inner_list_and_not_the_outer_one() {
-    let html = super::render_to_html(ReorderableInnerListsForm);
-    expect_that!(html.matches(ROWS_OL).count(), eq(2), "one per inner list");
-    expect_that!(html.matches(ROW_LI).count(), eq(3), "a, b and c");
+fn a_list_of_lists_is_an_ol_of_ols() {
+    let html = super::render_to_html(GridForm);
     expect_that!(
-        html.matches(ROW_DIV).count(),
-        eq(2),
-        "the outer list's rows"
+        html.matches(ROWS_OL).count(),
+        eq(3),
+        "the outer list and two inner"
+    );
+    expect_that!(
+        html.matches(ROW_LI).count(),
+        eq(5),
+        "two outer rows, then a, b and c"
     );
 }
 
@@ -1080,7 +1068,7 @@ struct Assignment {
 }
 
 #[component]
-fn ReorderableListInAVariantForm() -> Element {
+fn ListInAVariantForm() -> Element {
     let assignment = Assignment {
         groups: vec![
             Group::All {
@@ -1090,21 +1078,23 @@ fn ReorderableListInAVariantForm() -> Element {
             Group::Random { how_many: 3 },
         ],
     };
-    let form = use_form(move || {
-        form_for(
-            &assignment,
-            form! { Assignment { groups[].$Group::All.questions => { allow_reordering } } },
-        )
-    });
+    let form = use_form(move || form_for(&assignment, FormSpec::default()));
     form.render(using_fns! {})
 }
 
 #[gtest]
-fn a_list_inside_an_enum_row_can_be_reorderable() {
-    let html = super::render_to_html(ReorderableListInAVariantForm);
-    expect_that!(html.matches(ROWS_OL).count(), eq(1), "only `questions`");
-    expect_that!(html.matches(ROW_LI).count(), eq(2), "q1 and q2");
-    expect_that!(html.matches(ROW_DIV).count(), eq(2), "the two groups");
+fn a_list_inside_an_enum_row_is_an_ol_too() {
+    let html = super::render_to_html(ListInAVariantForm);
+    expect_that!(
+        html.matches(ROWS_OL).count(),
+        eq(2),
+        "`groups` and `questions`"
+    );
+    expect_that!(
+        html.matches(ROW_LI).count(),
+        eq(4),
+        "two groups, then q1 and q2"
+    );
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -1113,24 +1103,19 @@ struct MaybeQuiz {
 }
 
 #[component]
-fn ReorderableOptionalListForm() -> Element {
+fn OptionalListForm() -> Element {
     let value = MaybeQuiz {
         answers: Some(vec!["alpha".to_string(), "beta".to_string()]),
     };
-    let form = use_form(move || {
-        form_for(
-            &value,
-            form! { MaybeQuiz { answers? => { allow_reordering } } },
-        )
-    });
+    let form = use_form(move || form_for(&value, FormSpec::default()));
     form.render(using_fns! {})
 }
 
-/// Through an `Option`, written `answers?` in `form!` and keyed `answers`:
-/// `is_list` peels the `Option`, and the walk finds the spec under the same key.
+/// Through an `Option`: `OptionNode` wraps the list, and the list inside is
+/// rendered like any other.
 #[gtest]
-fn a_list_behind_an_option_can_be_reorderable() {
-    let html = super::render_to_html(ReorderableOptionalListForm);
+fn a_list_behind_an_option_is_an_ol_too() {
+    let html = super::render_to_html(OptionalListForm);
     expect_that!(html.matches(ROWS_OL).count(), eq(1));
     expect_that!(html.matches(ROW_LI).count(), eq(2));
 }
@@ -1138,7 +1123,7 @@ fn a_list_behind_an_option_can_be_reorderable() {
 // ── The move buttons ─────────────────────────────────────────────────────
 //
 // What each button SENDS is a click, so it is the e2e suite's
-// (`e2e/tests/reorder.rs`); `ListSet::move_row` itself is "Moving rows" above.
+// (`e2e/tests/reorder.rs`); `ListNode::move_row` itself is "Moving rows" above.
 // These are the markup: which rows get buttons, which are disabled, and what
 // each one is called.
 
@@ -1153,23 +1138,19 @@ fn button_tag<'a>(html: &'a str, label: &str) -> &'a str {
 }
 
 #[gtest]
-fn only_a_reorderable_lists_rows_get_move_buttons() {
+fn every_row_gets_move_buttons() {
     expect_that!(
-        super::render_to_html(ReorderableQuizForm)
+        super::render_to_html(QuizForm)
             .matches(r#"<div class="fx-move-buttons">"#)
             .count(),
         eq(2)
-    );
-    expect_that!(
-        super::render_to_html(QuizForm),
-        not(contains_substring("fx-move-buttons"))
     );
 }
 
 /// Disabled at the ends rather than left out, so every row's buttons line up.
 #[gtest]
 fn the_first_row_cannot_move_up_nor_the_last_down() {
-    let html = super::render_to_html(ReorderableQuizForm);
+    let html = super::render_to_html(QuizForm);
     expect_that!(
         button_tag(&html, "Move row 1 up"),
         contains_substring("disabled=true")
@@ -1191,7 +1172,7 @@ fn the_first_row_cannot_move_up_nor_the_last_down() {
 /// Icon-only, so the `aria-label` is the whole of each button's name.
 #[gtest]
 fn each_move_button_is_named_for_its_row_and_direction() {
-    let html = super::render_to_html(ReorderableQuizForm);
+    let html = super::render_to_html(QuizForm);
     for label in [
         "Move row 1 up",
         "Move row 1 down",
@@ -1209,8 +1190,8 @@ fn each_move_button_is_named_for_its_row_and_direction() {
 /// Move buttons, then the row, then Remove: D in `ORDERED_LISTS_PLAN.md`, so
 /// Remove is never next to a move.
 #[gtest]
-fn a_reorderable_row_is_moves_then_the_row_then_remove() {
-    let html = super::render_to_html(ReorderableQuizForm);
+fn a_row_is_moves_then_the_row_then_remove() {
+    let html = super::render_to_html(QuizForm);
     let first_row = &html[html.find(ROW_LI).unwrap()..html.find("</li>").unwrap()];
     let moves = first_row.find("fx-move-buttons").unwrap();
     let input = first_row.find(r#"name="answers.#0""#).unwrap();
@@ -1331,7 +1312,7 @@ fn a_row_added_to_a_nested_list_returns_its_full_path() {
     );
 }
 
-/// Up through a variant (`VariantSet::forward_to_child`) and the list's row.
+/// Up through a variant (`VariantNode::forward_to_child`) and the list's row.
 #[gtest]
 fn a_row_added_to_a_list_inside_a_variant_returns_its_full_path() {
     let mut form = form_for(
@@ -1776,7 +1757,7 @@ fn InnerListsAdderForm() -> Element {
     form.render(using_fns! {})
 }
 
-/// As with `allow_reordering`, `rows[]` is every inner list and not `rows`
+/// `rows[]` is every inner list and not `rows`
 /// itself, which keeps Add. Each inner list's adder is handed its own path.
 #[gtest]
 fn every_rows_adder_reaches_each_inner_list_and_not_the_outer_one() {

@@ -226,6 +226,20 @@ plain list has no wrapper: its rows sit straight in the fieldset. Older
 entries, `ATTRIBUTES_PLAN.md`'s class table and
 `emitted_classes_and_strings` say `form-row`; read them as `fx-list-row`.
 
+**2026-10-31 (lists and sets): `allow_reordering` is gone; EVERY list is
+an `<ol class="fx-list-rows">` of `<li class="fx-list-row">`s**, each with
+↑/↓, so "a plain list has no wrapper" above is history. A set will be a
+`<ul class="fx-set-members">` of `<li class="fx-set-member">`s, with
+`fx-button-edit-member` on Edit (`formoxus/SETS_PLAN.md` M). See
+[[lists-and-sets]]. Same day, box 2b: **`fx-list-set` → `fx-list` and
+`fx-variant-set` → `fx-variant`** (`FixedKey::List`/`Variant`, written
+`list`/`variant` in `classes_plus:`), so no class says "set" unless it
+belongs to a set; a set's `<fieldset>` will be `fx-set`. Then, also
+2026-10-31, **`fx-field-set` → `fx-struct`** (`FixedKey::Struct`, written
+`struct` in `classes_plus:`, a keyword, so the selector parse is
+`Ident::parse_any`), since "field set" was also easy to confuse with HTML's
+`<fieldset>`, which every one of these nodes renders.
+
 Same day, box 3: **`fx-move-buttons`** (the `<div>` holding a reorderable
 row's ↑/↓, `FixedKey::MoveRowButtons`) and **`fx-button fx-button-move-up`
 / `fx-button-move-down`** (`MoveRowUpButton`/`MoveRowDownButton`), shaped

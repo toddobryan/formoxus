@@ -14,7 +14,7 @@ use syn::{
 /// "what this `Option` holds", and a `$Enum::Variant` segment enters one
 /// variant of the enum field before it.
 ///
-/// `venues` addresses the `ListSet` (its legend); `venues[]` addresses every
+/// `venues` addresses the `ListNode` (its legend); `venues[]` addresses every
 /// row; `venues[].city` addresses the `city` field of every row. That third one
 /// is the reason `[]` exists — a row's fields are otherwise unnameable, since a
 /// row's real path contains a generated key (`venues.#0.city`) that no author
@@ -554,7 +554,7 @@ mod tests {
 
     #[gtest]
     fn a_bare_list_path_addresses_the_list_itself() {
-        // No brackets: this is the `ListSet`, so it gets the legend. A widget
+        // No brackets: this is the `ListNode`, so it gets the legend. A widget
         // here is rejected at apply time, since a list has no single widget.
         let spec = parse(quote! { Quiz { answers => { label: "Answers" } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("answers"));
