@@ -59,7 +59,14 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
-## 35 tests, 7 files (29/6 until 2026-10-24; 24/5 until 2026-10-01)
+## 37 tests, 8 files (35/7 until 2026-10-30; 29/6 until 2026-10-24; 24/5 until 2026-10-01)
+
+**2026-10-30: `reorder` (2), for ORDERED_LISTS box 3**, on `/t/reorder`.
+A list ROW's input has no accessible name (the list's legend labels the
+list), so rows are found by position: `ol.fx-list-rows > li input`, `nth`.
+Icon-only buttons are found by `aria-label` through the new
+`roles::button`. Mutation-checked: a ↑ that moves nothing fails it.
+
 
 **2026-10-24: `wire` (2), for issue #13**, on `/t/enum-submit`. That form also
 shows `#accepted`, what `Submission::accept` builds from `form.to_wire()` run

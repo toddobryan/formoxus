@@ -44,6 +44,12 @@ pub enum FixedKey {
     AddRowButton,
     /// A row's remove button: `fx-button fx-button-remove-row`.
     RemoveRowButton,
+    /// The `<div>` around a reorderable row's move buttons: `fx-move-buttons`.
+    MoveRowButtons,
+    /// The button that moves a row up one: `fx-button fx-button-move-up`.
+    MoveRowUpButton,
+    /// The button that moves a row down one: `fx-button fx-button-move-down`.
+    MoveRowDownButton,
     /// The `<fieldset>` around a nested struct: `fx-group fx-field-set`.
     FieldSet,
     /// Its `<legend>`: `fx-legend fx-field-label`.
@@ -86,6 +92,9 @@ impl FixedKey {
         Self::Button(ButtonType::Action),
         Self::AddRowButton,
         Self::RemoveRowButton,
+        Self::MoveRowButtons,
+        Self::MoveRowUpButton,
+        Self::MoveRowDownButton,
         Self::FieldSet,
         Self::FieldSetLegend,
         Self::ListSet,
@@ -112,6 +121,9 @@ impl FixedKey {
             Self::ButtonRow => "button_row",
             Self::AddRowButton => "add_row_button",
             Self::RemoveRowButton => "remove_row_button",
+            Self::MoveRowButtons => "move_row_buttons",
+            Self::MoveRowUpButton => "move_row_up_button",
+            Self::MoveRowDownButton => "move_row_down_button",
             Self::FieldSet => "field_set",
             Self::FieldSetLegend => "field_set_legend",
             Self::ListSet => "list_set",
@@ -167,6 +179,9 @@ mod tests {
                 | FixedKey::ButtonRow
                 | FixedKey::AddRowButton
                 | FixedKey::RemoveRowButton
+                | FixedKey::MoveRowButtons
+                | FixedKey::MoveRowUpButton
+                | FixedKey::MoveRowDownButton
                 | FixedKey::FieldSet
                 | FixedKey::FieldSetLegend
                 | FixedKey::ListSet
@@ -187,7 +202,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(20 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(23 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

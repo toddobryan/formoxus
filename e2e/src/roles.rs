@@ -53,6 +53,12 @@ pub fn radio(s: &Session, name: &str) -> Locator {
     named(s, AriaRole::Radio, name)
 }
 
+/// A button, by accessible name: its text, or its `aria-label` when it
+/// draws only an icon, as a list's move and remove buttons do.
+pub fn button(s: &Session, name: &str) -> Locator {
+    named(s, AriaRole::Button, name)
+}
+
 /// The submit button every test form carries.
 pub fn submit(s: &Session) -> Locator {
     s.page.locator("button[type=\"submit\"]")

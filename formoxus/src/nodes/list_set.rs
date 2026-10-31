@@ -14,7 +14,7 @@ use crate::nodes::{
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::errors::errors_id;
-use crate::widgets::{AddRowButton, FieldErrors, RemoveRowButton};
+use crate::widgets::{AddRowButton, FieldErrors, MoveRowButtons, RemoveRowButton};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError, Shape};
 use formoxus_spec::FixedKey;
@@ -159,7 +159,10 @@ impl ListSet {
             // on an element, and it is what pairs a row with its widget.
             for (index, row) in self.rows.iter().enumerate() {
                 if self.allow_reordering {
+                    // Move buttons on the left, Remove on the right, so Remove
+                    // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
                     li { class: &list_row_class, key: "{row.name()}",
+                        MoveRowButtons { path: path.clone(), index, count: self.rows.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                         { row.render(&nested) }
                         RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                     }

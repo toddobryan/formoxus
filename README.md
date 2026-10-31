@@ -134,9 +134,6 @@ Being explicit, since this is pre-release:
   `cargo run -p formoxus-examples --bin widget_matrix` for the current table.
 - **No file upload**, which is the `file` widget above.
 - **No live/as-you-type validation** — validation runs on submit.
-- **A user cannot reorder a list's rows yet.** Rows are keyed by identity, not
-  index, so a row keeps its path when others are added, removed or moved,
-  and `Edit::MoveRow` moves one; nothing renders a button that sends it.
 - Error rendering is not yet configurable; `FieldErrors` is the component to
   swap when it becomes so.
 

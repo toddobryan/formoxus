@@ -59,6 +59,7 @@
 
 pub mod errors;
 pub mod field_row;
+pub(crate) mod icons;
 pub mod input;
 pub mod radio_group;
 pub mod row_buttons;
@@ -79,7 +80,7 @@ pub use input::{
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
 pub use radio_group::RadioGroup;
-pub use row_buttons::{AddRowButton, RemoveRowButton};
+pub use row_buttons::{AddRowButton, MoveRowButtons, RemoveRowButton};
 pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};

@@ -1,11 +1,11 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-30: ORDERED_LISTS box 2 DONE (allow_reordering flag → <ol>/<li>, fx-form-row → fx-list-row), uncommitted, just ci green; box 3 (move buttons, Claude) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE uncommitted (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-10-30: BOX 2 DONE, uncommitted, `just ci` green; box 3 (Claude) next
+## ▶ 2026-10-30: BOX 2 DONE (ec05880, pushed); BOX 3 DONE, uncommitted; box 4 (Todd) next
 
 Todd decided 2-i (a BARE FLAG only: `allow_reordering`, never `: true`,
 like every other flag; first answered "both" from Claude's wrong claim
@@ -22,7 +22,9 @@ reach solved by sticky CSS in box 3, per-row insert parked as box 3b
 new row) queued, lower priority. 2d adds `fx-list-rows` and renames
 `fx-form-row` → `fx-list-row`.
 All of box 2 then landed: 2d (Todd) and 2t3 (Claude, six render tests in
-`vecs.rs`). `just ci` green. Not yet committed.
+`vecs.rs`). Committed and pushed as ec05880. Then box 3 (Claude): move
+buttons, icons on Add/Remove for every list, `/t/reorder` e2e; details in
+the plan's box 3. Uncommitted. Next: box 4 (Todd), or 3a.
 
 ## ▶ 2026-10-29: `formoxus/ORDERED_LISTS_PLAN.md`, box 1 DONE; box 2 next, Todd picks his steps
 

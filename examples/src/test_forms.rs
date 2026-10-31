@@ -44,6 +44,7 @@ pub fn TestForm(slug: String) -> Element {
         "enum-submit" => rsx! { EnumSubmit {} },
         "buttons" => rsx! { Buttons {} },
         "bare" => rsx! { Bare {} },
+        "reorder" => rsx! { Reorder {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -504,6 +505,30 @@ fn Bare() -> Element {
             OneField {
                 classes: Classes::bare(),
                 browser_validation: off,
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── reorder ──────────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Playlist {
+    songs: Vec<String>,
+}
+
+/// A reorderable list (`allow_reordering`): rows are added with Add, moved with
+/// their ↑/↓ buttons, and the submitted model shows the order they ended in.
+/// Blank, so a test builds the rows it moves.
+#[component]
+fn Reorder() -> Element {
+    harness(
+        "reorder",
+        "A reorderable list. Add rows, move them with their arrow buttons, submit: the model keeps the new order.",
+        form! {
+            Playlist {
+                songs => { allow_reordering },
                 buttons: { save: { type: submit } }
             }
         },

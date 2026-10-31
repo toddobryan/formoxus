@@ -233,7 +233,7 @@ or reordered without renaming".
   - **2-iii. A plain field:** `allow_reordering: bool` on `FieldSpec`;
     `add_row_button` becomes a second field in box 5.
 
-- [ ] **3.** (Claude, from apcsp's `OrderedPicker`) Move buttons: a
+- [x] **3.** (Claude, from apcsp's `OrderedPicker`) Move buttons: a
   `MoveRowButtons` widget (↑/↓, `type="button"`, disabled at the ends,
   an accessible name like "Move row 2 up") rendered by `ListSet` on the
   row's left when `allow_reordering` is set, with ✕ on the row's right
@@ -254,6 +254,20 @@ or reordered without renaming".
   - Then drop "A user cannot reorder a list's rows yet" from "What isn't
     done" in the root `README.md` (`formoxus/README.md` is a symlink to it;
     edit through the root, never `sed -i` the link, which replaces it).
+  - Decided (Todd, 2026-10-30): Add is icon PLUS the word "Add" (once per
+    list, so the text costs nothing; ↑/↓/✕ repeat per row, so they are
+    icon-only with an `aria-label`). The `<svg>`s get no class: CSS
+    reaches them as `.fx-button svg`.
+  - DONE 2026-10-30 (Claude), uncommitted. `MoveRowButtons` in
+    `widgets/row_buttons.rs` (exported beside Add/Remove); icons in
+    `widgets/icons.rs` (`pub(crate)`, an `icon(&[path data])` fn);
+    `FixedKey::{MoveRowButtons, MoveRowUpButton, MoveRowDownButton}`.
+    Remove is icon-only on EVERY list now, Add icon + "Add"; three
+    snapshots re-blessed for it. Suite: five markup tests in `vecs.rs`'s
+    "The move buttons". e2e: `/t/reorder` + `e2e/tests/reorder.rs` (2),
+    mutation-checked (a ↑ that moves nothing fails it); full e2e 37/37.
+    README's "cannot reorder yet" line dropped. `aria_hidden:` does not
+    exist on dioxus's `svg`; it is written `"aria-hidden": "true"`.
 
 - [ ] **3a.** (unassigned, lower priority since H was reversed) Focus a
   new row: move focus into the first focusable element of a row that

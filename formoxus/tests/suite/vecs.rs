@@ -1124,3 +1124,98 @@ fn a_list_behind_an_option_can_be_reorderable() {
     expect_that!(html.matches(ROWS_OL).count(), eq(1));
     expect_that!(html.matches(ROW_LI).count(), eq(2));
 }
+
+// ── The move buttons ─────────────────────────────────────────────────────
+//
+// What each button SENDS is a click, so it is the e2e suite's
+// (`e2e/tests/reorder.rs`); `ListSet::move_row` itself is "Moving rows" above.
+// These are the markup: which rows get buttons, which are disabled, and what
+// each one is called.
+
+/// The opening `<button …>` tag of the button named `label`.
+fn button_tag<'a>(html: &'a str, label: &str) -> &'a str {
+    let at = html
+        .find(&format!(r#"aria-label="{label}""#))
+        .unwrap_or_else(|| panic!("no button named {label:?}"));
+    let start = html[..at].rfind("<button").expect("inside a <button>");
+    let end = at + html[at..].find('>').expect("the tag closes");
+    &html[start..=end]
+}
+
+#[gtest]
+fn only_a_reorderable_lists_rows_get_move_buttons() {
+    expect_that!(
+        super::render_to_html(ReorderableQuizForm)
+            .matches(r#"<div class="fx-move-buttons">"#)
+            .count(),
+        eq(2)
+    );
+    expect_that!(
+        super::render_to_html(QuizForm),
+        not(contains_substring("fx-move-buttons"))
+    );
+}
+
+/// Disabled at the ends rather than left out, so every row's buttons line up.
+#[gtest]
+fn the_first_row_cannot_move_up_nor_the_last_down() {
+    let html = super::render_to_html(ReorderableQuizForm);
+    expect_that!(
+        button_tag(&html, "Move row 1 up"),
+        contains_substring("disabled=true")
+    );
+    expect_that!(
+        button_tag(&html, "Move row 1 down"),
+        not(contains_substring("disabled"))
+    );
+    expect_that!(
+        button_tag(&html, "Move row 2 up"),
+        not(contains_substring("disabled"))
+    );
+    expect_that!(
+        button_tag(&html, "Move row 2 down"),
+        contains_substring("disabled=true")
+    );
+}
+
+/// Icon-only, so the `aria-label` is the whole of each button's name.
+#[gtest]
+fn each_move_button_is_named_for_its_row_and_direction() {
+    let html = super::render_to_html(ReorderableQuizForm);
+    for label in [
+        "Move row 1 up",
+        "Move row 1 down",
+        "Move row 2 up",
+        "Move row 2 down",
+    ] {
+        expect_that!(
+            button_tag(&html, label),
+            contains_substring(r#"type="button""#),
+            "{label} must not submit the form"
+        );
+    }
+}
+
+/// Move buttons, then the row, then Remove: D in `ORDERED_LISTS_PLAN.md`, so
+/// Remove is never next to a move.
+#[gtest]
+fn a_reorderable_row_is_moves_then_the_row_then_remove() {
+    let html = super::render_to_html(ReorderableQuizForm);
+    let first_row = &html[html.find(ROW_LI).unwrap()..html.find("</li>").unwrap()];
+    let moves = first_row.find("fx-move-buttons").unwrap();
+    let input = first_row.find(r#"name="answers.#0""#).unwrap();
+    let remove = first_row.find("fx-button-remove-row").unwrap();
+    expect_that!(moves, lt(input));
+    expect_that!(input, lt(remove));
+}
+
+/// Icon plus the word, unlike the per-row buttons: one per list, so the text
+/// costs nothing. The icon is hidden, so the word is the name.
+#[gtest]
+fn add_shows_its_word_beside_its_icon() {
+    let html = super::render_to_html(QuizForm);
+    let add = &html[html.find("fx-button-add-row").unwrap()..];
+    let add = &add[..add.find("</button>").unwrap()];
+    expect_that!(add, contains_substring(r#"aria-hidden="true""#));
+    expect_that!(add, ends_with("</svg>Add"));
+}

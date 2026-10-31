@@ -225,3 +225,9 @@ rows of a list with `allow_reordering`, whose rows are then `<li>`s. A
 plain list has no wrapper: its rows sit straight in the fieldset. Older
 entries, `ATTRIBUTES_PLAN.md`'s class table and
 `emitted_classes_and_strings` say `form-row`; read them as `fx-list-row`.
+
+Same day, box 3: **`fx-move-buttons`** (the `<div>` holding a reorderable
+row's ↑/↓, `FixedKey::MoveRowButtons`) and **`fx-button fx-button-move-up`
+/ `fx-button-move-down`** (`MoveRowUpButton`/`MoveRowDownButton`), shaped
+like `fx-button-add-row`. The icons inside the row buttons (`<svg>`) get
+NO class, by Todd's decision: CSS reaches them as `.fx-button svg`.

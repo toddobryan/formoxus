@@ -21,6 +21,7 @@
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
  *               .fx-button-add-row .fx-button-remove-row
+ *               .fx-move-buttons + .fx-button-move-up .fx-button-move-down
  *
  * How they nest. A field's caption is a `<label for>` BESIDE its control, not
  * wrapped around it (issue #9: text inside a wrapping label joins the control's
@@ -51,6 +52,7 @@
     --fx-border: #ccc;
     --fx-error: #b3261e;
     --fx-radius: 0.25rem;
+    --fx-bg: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,11 +61,12 @@
         --fx-muted: #a0a0a0;
         --fx-border: #555;
         --fx-error: #f2b8b5;
+        --fx-bg: #161616;
     }
-    body { background: #161616; }
 }
 
 body {
+    background: var(--fx-bg);
     color: var(--fx-text);
     font-family: system-ui, sans-serif;
     line-height: 1.5;
@@ -194,6 +197,47 @@ body {
 }
 
 .fx-list-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+
+/* A row's buttons draw icons (an `<svg>` with no class of its own). */
+.fx-button svg { vertical-align: -0.125em; }
+.fx-button-add-row svg { margin-inline-end: 0.25rem; }
+
+/* Add stays in reach while a long list scrolls past. It needs a background,
+ * or the rows show through it. */
+.fx-button-add-row {
+    position: sticky;
+    bottom: 0.5rem;
+    background: var(--fx-bg);
+    margin-top: 0.5rem;
+}
+
+/* A reorderable list (`allow_reordering`): an `<ol>` of `<li>` rows, laid out
+ * as moves | the row | Remove, so Remove is never next to a move. `> li`, not
+ * `li`: a row can hold a list of its own. */
+.fx-list-rows { padding: 0; margin: 0; }
+.fx-list-rows > .fx-list-row {
+    list-style: none;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+    align-items: start;
+    padding-block: 0.25rem;
+    border-bottom: 1px solid var(--fx-border);
+}
+.fx-move-buttons { display: flex; flex-direction: column; }
+
+/* Small, borderless icon buttons: one set per row, so the page's own button
+ * size would swamp the rows. */
+.fx-move-buttons .fx-button,
+.fx-button-remove-row {
+    padding: 0.125rem;
+    line-height: 0;
+    border: none;
+    color: var(--fx-muted);
+}
+.fx-move-buttons .fx-button:hover:not(:disabled),
+.fx-button-remove-row:hover { color: var(--fx-text); }
+.fx-move-buttons .fx-button:disabled { opacity: 0.25; cursor: default; }
 
 /* ── the gallery frame, not formoxus ─────────────────────────────────── */
 

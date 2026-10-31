@@ -376,6 +376,15 @@ impl Classes {
                 FixedKey::RemoveRowButton,
                 Slot::new("fx-button fx-button-remove-row"),
             ),
+            (FixedKey::MoveRowButtons, Slot::new("fx-move-buttons")),
+            (
+                FixedKey::MoveRowUpButton,
+                Slot::new("fx-button fx-button-move-up"),
+            ),
+            (
+                FixedKey::MoveRowDownButton,
+                Slot::new("fx-button fx-button-move-down"),
+            ),
             (FixedKey::FieldSet, Slot::new("fx-group fx-field-set")),
             (
                 FixedKey::FieldSetLegend,
@@ -711,6 +720,9 @@ mod tests {
             ),
             (FixedKey::AddRowButton, "fx-button fx-button-add-row"),
             (FixedKey::RemoveRowButton, "fx-button fx-button-remove-row"),
+            (FixedKey::MoveRowButtons, "fx-move-buttons"),
+            (FixedKey::MoveRowUpButton, "fx-button fx-button-move-up"),
+            (FixedKey::MoveRowDownButton, "fx-button fx-button-move-down"),
             (FixedKey::FieldSet, "fx-group fx-field-set"),
             (FixedKey::FieldSetLegend, "fx-legend fx-field-label"),
             (FixedKey::ListSet, "fx-group fx-list-set"),
