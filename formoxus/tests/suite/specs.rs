@@ -542,7 +542,7 @@ fn RowAddedAfterTheSpec() -> Element {
             FormSpec::<Quiz>::default().with_label("answers[]", "Answer"),
         );
         state
-            .edit(&Edit::AddRow {
+            .edit(&Edit::AddItem {
                 path: "answers".to_string(),
                 before: None,
                 value: None,
@@ -555,7 +555,7 @@ fn RowAddedAfterTheSpec() -> Element {
 
 #[gtest]
 fn a_row_added_after_mount_still_gets_the_spec() {
-    // `add_row` builds the new row from the shape alone, so without re-applying
+    // `add_item` builds the new row from the shape alone, so without re-applying
     // it would come up with a derived label — none, for a `#`-keyed row — while
     // the three original rows carry "Answer". Four rows, four labels.
     //
@@ -573,7 +573,7 @@ fn RowFieldAddedAfterTheSpec() -> Element {
             FormSpec::<Trip>::default().with_label("venues[].city", "Town"),
         );
         state
-            .edit(&Edit::AddRow {
+            .edit(&Edit::AddItem {
                 path: "venues".to_string(),
                 before: None,
                 value: None,

@@ -215,7 +215,22 @@
 <fieldset class="fx-group fx-list" id="FORMID-pets">
 <legend class="fx-legend fx-field-label">Pets
 </legend>
-<div class="fx-list-row">
+<ol class="fx-list-rows">
+<li class="fx-list-row">
+<div class="fx-move-buttons">
+<button type="button" class="fx-button fx-button-move-up" aria-label="Move row 1 up" disabled=true>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m18 15-6-6-6 6">
+</path>
+</svg>
+</button>
+<button type="button" class="fx-button fx-button-move-down" aria-label="Move row 1 down" disabled=true>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m6 9 6 6 6-6">
+</path>
+</svg>
+</button>
+</div>
 <fieldset class="fx-group fx-struct">
 <div class="fx-form-field">
 <label class="fx-field-label" for="FORMID-pets.#0.name">Name
@@ -233,7 +248,8 @@
 </path>
 </svg>
 </button>
-</div>
+</li>
+</ol>
 <button type="button" class="fx-button fx-button-add-row">
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 <path d="M5 12h14">

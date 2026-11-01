@@ -22,13 +22,13 @@ use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 /// What a list's adder is handed: [`AddRowButton`], or a dev's own component
 /// named by `adder:` in `form!`.
 ///
-/// An adder appends a row by sending an [`Edit::AddRow`] through `on_edit`.
+/// An adder appends a row by sending an [`Edit::AddItem`] through `on_edit`.
 /// With `value: None` the row arrives blank and takes focus. With
-/// `value: Some(RowValue::new(row))` it arrives filled in, and focus is left
+/// `value: Some(ItemValue::new(item))` it arrives filled in, and focus is left
 /// alone, so a user picking several choices in a row stays on the adder.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct AddRowProps {
-    /// The list's own path, which an `Edit::AddRow` is addressed to. Not a
+    /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
     /// row's: an adder acts on the list.
     pub path: String,
     /// The list's own id, `{form}-{path}`, a base for the ids of the adder's
@@ -107,7 +107,7 @@ pub fn AddRowButton(props: AddRowProps) -> Element {
                 // Append. `before` exists for mid-list insertion, which needs a
                 // widget between every pair of rows — a UI question that hasn't
                 // been answered yet, not a limitation of the edit.
-                on_edit.call(Edit::AddRow { path: path.clone(), value: None, before: None });
+                on_edit.call(Edit::AddItem { path: path.clone(), value: None, before: None });
             },
             // Icon and word: there is one Add per list, so the text costs
             // nothing, and a lone "+" under a list says less than "+ Add".
@@ -139,7 +139,7 @@ pub fn RemoveRowButton(
             class: classes.fixed_class(FixedKey::RemoveRowButton, false),
             aria_label: "Remove row {ordinal}",
             onclick: move |_| {
-                on_edit.call(Edit::RemoveRow { path: path.clone(), index });
+                on_edit.call(Edit::RemoveItem { path: path.clone(), index });
             },
             {icon(X)}
         }
@@ -172,7 +172,7 @@ pub fn MoveRowButtons(
                 aria_label: "Move row {ordinal} up",
                 disabled: index == 0,
                 onclick: move |_| {
-                    on_edit.call(Edit::MoveRow { path: up_path.clone(), from: index, to: index - 1 });
+                    on_edit.call(Edit::MoveItem { path: up_path.clone(), from: index, to: index - 1 });
                 },
                 {icon(CHEVRON_UP)}
             }
@@ -182,7 +182,7 @@ pub fn MoveRowButtons(
                 aria_label: "Move row {ordinal} down",
                 disabled: index + 1 == count,
                 onclick: move |_| {
-                    on_edit.call(Edit::MoveRow { path: path.clone(), from: index, to: index + 1 });
+                    on_edit.call(Edit::MoveItem { path: path.clone(), from: index, to: index + 1 });
                 },
                 {icon(CHEVRON_DOWN)}
             }

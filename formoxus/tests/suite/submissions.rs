@@ -613,7 +613,7 @@ fn a_row_inserted_at_the_front_arrives_at_the_front() {
         },
         FormSpec::default(),
     );
-    form.edit(&formoxus::nodes::Edit::AddRow {
+    form.edit(&formoxus::nodes::Edit::AddItem {
         path: "tags".to_string(),
         before: Some(0),
         value: None,
@@ -671,6 +671,6 @@ fn a_malformed_row_list_is_an_error_at_the_lists_path() {
     .expect_err("a repeated key is not a list of rows");
     expect_that!(
         errors.messages_at(Some(path!(Tagged.tags))),
-        elements_are![contains_substring("not a list of row keys")]
+        elements_are![contains_substring("not a list of item keys")]
     );
 }

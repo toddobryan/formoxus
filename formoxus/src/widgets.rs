@@ -88,8 +88,8 @@ pub use values::{get_current, write_value};
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddRowProps`, above) sends an `Edit`, and fills its row with
-// a `RowValue`.
-pub use crate::nodes::{Edit, RowValue, ValuesStore};
+// an `ItemValue`.
+pub use crate::nodes::{Edit, ItemValue, ValuesStore};
 pub use variant_select::VariantSelect;
 pub use widget::{AnyWidget, Widget};
 pub use widget_props::WidgetProps;

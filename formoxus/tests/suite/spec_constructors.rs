@@ -6,7 +6,7 @@
 //! gives it a field the default walk would never build (`CapField`, with a
 //! setting baked in, the way `min: 3` would be), and checks the field's own
 //! `check` runs. A row's leaves come to exist three ways, so the spec has
-//! three routes to reach: built by `form_for` from a value, added by `AddRow`,
+//! three routes to reach: built by `form_for` from a value, added by `AddItem`,
 //! and revealed by `ChooseVariant` inside a row.
 
 use facet::Facet;
@@ -132,14 +132,14 @@ fn a_constructor_reaches_a_row_built_from_the_value() {
     );
 }
 
-/// Route 2: a row added after the form exists, which `AddRow` builds through
+/// Route 2: a row added after the form exists, which `AddItem` builds through
 /// the same walk, spec and all.
 #[gtest]
 fn a_constructor_reaches_a_row_added_later() {
     let spec = FormSpec::default().with_node("venues[].capacity", cap_at_100());
     let mut state = empty_form::<Trip>(spec);
     state
-        .edit(&Edit::AddRow {
+        .edit(&Edit::AddItem {
             path: "venues".into(),
             before: None,
             value: None,
@@ -162,7 +162,7 @@ fn a_constructor_reaches_a_variant_chosen_inside_an_added_row() {
     let spec = FormSpec::default().with_node("shapes[].$Circle.radius", cap_at_100());
     let mut state = empty_form::<Drawing>(spec);
     state
-        .edit(&Edit::AddRow {
+        .edit(&Edit::AddItem {
             path: "shapes".into(),
             before: None,
             value: None,

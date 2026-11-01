@@ -1,6 +1,6 @@
 //! `/t/adder`: a custom adder, from the browser's side.
 //!
-//! The suite proves the adder renders in place of Add and that its `AddRow`
+//! The suite proves the adder renders in place of Add and that its `AddItem`
 //! reaches `to_wire`. Only a browser proves the click lands, and what focus
 //! does: a blank row takes it, but a filled row leaves it on the adder, so a
 //! user picking several songs can keep clicking.

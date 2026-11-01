@@ -245,7 +245,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
             return Err(no_such_path(path));
         };
-        // A structural edit can CREATE nodes: `AddRow` builds a fresh row and
+        // A structural edit can CREATE nodes: `AddItem` builds a fresh row and
         // choosing a variant reveals that variant's fields. Handing the edit the
         // spec is what builds them the way the walk built their siblings, so a
         // row added after mount carries the spec's labels and widgets too.

@@ -11,8 +11,8 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    ListNode, Node, OptionNode, ROW_SIGIL, SpecsByPath, StructNode, VariantChoice, VariantNode,
-    qualify, row_segment, variant_segment,
+    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SpecsByPath, StructNode, VariantChoice,
+    VariantNode, item_segment, qualify, variant_segment,
 };
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
@@ -47,7 +47,7 @@ pub(crate) enum FormMode {
 /// **The walk applies the spec as it builds.** Each node looks itself up by
 /// its path when it is constructed, so it is right the first time: there is
 /// no second pass that visits the tree and mutates it, and a structural edit
-/// (`AddRow`, `ChooseVariant`) builds its new nodes through this same walk, so
+/// (`AddItem`, `ChooseVariant`) builds its new nodes through this same walk, so
 /// they come out the same way as the rest.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Walk<'s> {
@@ -71,7 +71,7 @@ impl<'s> Walk<'s> {
 pub(crate) fn spec_key(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
     for segment in path.split('.') {
-        if segment.starts_with(ROW_SIGIL) {
+        if segment.starts_with(ITEM_SIGIL) {
             out.push_str("[]");
         } else {
             if !out.is_empty() {
@@ -95,7 +95,7 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
     let mut at = At::Shape(root);
     let mut walked = String::new();
     for segment in key.split('.') {
-        if segment.starts_with(ROW_SIGIL) {
+        if segment.starts_with(ITEM_SIGIL) {
             return Err(format!(
                 "`{segment}` is one row's key — a spec names every row at once, with `[]` \
                  (`{walked}[]`)"
@@ -592,12 +592,12 @@ fn scalar_node(
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
 /// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the
-/// `ListNode` keeps it: `Edit::AddRow` has to build a node for a row that has
+/// `ListNode` keeps it: `Edit::AddItem` has to build a node for a row that has
 /// no value to peek at, and this is the only thing that says what kind.
 ///
 /// Edit mode takes the row count from the value. Create mode has no value to
 /// count and so starts empty — which is now an answer rather than a gap, since
-/// `AddRow` is how a blank list gets its rows.
+/// `AddItem` is how a blank list gets its rows.
 fn list_node(
     shape: &'static Shape,
     name: &str,
@@ -606,7 +606,7 @@ fn list_node(
     prefix: &str,
     optional: bool,
 ) -> Box<dyn Node> {
-    let rows: Vec<Box<dyn Node>> = peek
+    let items: Vec<Box<dyn Node>> = peek
         .map(|p| {
             let list = p
                 .into_list()
@@ -616,12 +616,12 @@ fn list_node(
                 .map(|(i, element)| {
                     // A row's KEY is its name — not its index. At construction
                     // the two coincide, but they part company the moment a row
-                    // is inserted or removed; see `row_segment`. And unlike
+                    // is inserted or removed; see `item_segment`. And unlike
                     // `struct_node`, which passes `prefix` straight through,
                     // nothing upstream has qualified this on yet, so do it here.
                     // Keeping this in step with `collect_values` is what keeps
                     // the leaf paths and the store keys the same strings.
-                    let row = row_segment(i);
+                    let row = item_segment(i);
                     node_for_shape(
                         shape,
                         &row,
@@ -646,16 +646,9 @@ fn list_node(
     Box::new(ListNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
-        shape,
         optional,
-        // The next key to hand out. Starts past the rows built here so a key is
-        // never reused, which is the whole point of keying by identity.
-        next_key: rows.len(),
-        rows,
-        errors: Vec::new(),
-        rejected_keys: None,
-        allow_reordering: spec.is_some_and(|s| s.allow_reordering),
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
+        items: Items::new(shape, items),
     })
 }
 

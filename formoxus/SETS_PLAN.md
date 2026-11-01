@@ -161,12 +161,57 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     CSS and the memory. apcsp's SCSS is checked for `fx-list-set` and
     `fx-variant-set` first. It doesn't style them, but three e2e
     selectors in `crates/e2e/tests/questions.rs` use `.fx-list-set`;
-    those are fixed when work moves back to apcsp (box 11), per Todd.
+    those are fixed when work moves back to apcsp (box 12), per Todd.
 
-  - [ ] **2c.** (Todd) `nodes/rows.rs`: the keyed rows (keys never reused,
-    `next_key`), the structure entry on the wire, the forged-key refusal
-    and the list's own errors, moved out of `ListNode`, which then holds
-    one. No behavior changes; the suite says so.
+  - [x] **2c.** (Todd) `nodes/items.rs`: a `pub(crate) struct Items`
+    that `ListNode` holds, and `SetNode` will. No behavior changes: `just
+    test` gives exactly what it gives now (the ten 3b failures), and the
+    three `parse_row_keys` tests pass in their new home.
+
+    Done 2026-11-01, with every field private and the names already
+    items (`add_item`, `ItemValue`, `ITEM_SIGIL`, `item_segment`,
+    `parse_item_keys`). One thing deferred: `Items::edit_within`. The
+    forwarding loop is still in `ListNode::edit`, to move when `SetNode`
+    (2d) needs the same loop.
+
+    **Moves into `Items`:**
+
+    1. The fields `shape`, `rows`, `next_key`, `rejected_keys`, and
+       `errors` (the list's own: a set's work the same way, and the
+       rejected-keys message is one of them). `ListNode` keeps `name`,
+       `label`, `optional` and `adder`.
+    2. `Items::new(shape, rows)`, setting `next_key` to `rows.len()`, so
+       `build.rs`'s `list_node` (the one place a `ListNode` is built) no
+       longer restates the never-reuse-a-key rule.
+    3. `add_row` → `Items::add`: the row-type check, the bounds check on
+       `before`, the next key, the insert, the returned path. A set calls
+       it with `before: None` after its own duplicate check, then sorts.
+    4. `new_row`, `set_rows`, `remove_row`, as they are.
+    5. `parse_row_keys` and its three tests.
+    6. The halves of the `Node` methods that only walk the rows and the own
+       errors, so each node's method becomes a delegation:
+       `collect_values` (the `#0,#2` entry, then each row),
+       `distribute_values` (parse the keys, `set_rows` or `rejected_keys`,
+       then each row), `collect_errors`, `distribute_errors`,
+       `clear_errors`, `validate` (clear, the rejected-keys message, each
+       row), `has_errors_here`, `has_errors_within`, `is_present`, and
+       `edit`'s second half, forwarding to the row that owns the path, as
+       `Items::edit_within`, with its prefix-trap comment.
+
+    **Stays in `ListNode`, as list-only:** `move_row`; `edit`'s first half,
+    the match on an edit aimed at the list itself (a set has its own,
+    refusing `MoveRow` and a blank `AddRow`); `rows()` and `render`, with
+    the `<ol>`, ↑/↓ and the `List*` classes; `write_value_into`
+    (`init_list`, where a set's is `init_set`: a four-line loop, not worth a
+    parameter); `name`, `label`, `raw_value`.
+
+    **Not shared yet:** building the adder (`AddRowProps` and the
+    `VComponent`). A set's props grow a duplicate message (I) and a draft
+    (box 8), so sharing it before `SetNode` exists would be guessing.
+
+    **Unchanged:** the store cleanup on `RemoveRow` in `form.rs` finds the
+    row through `collect_values`' entry, so any node writing that entry
+    gets it.
 
   - [ ] **2d.** (Todd) `field_kind::is_set` (`Def::Set`), and a `SetNode`
     holding the same rows: built in the shape walk, read and written
@@ -190,7 +235,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
 - [ ] **3.** Every list is ordered.
 
-  - [ ] **3a.** (Todd) `ListNode` always renders `<ol>` and ↑/↓;
+  - [x] **3a.** (Todd) `ListNode` always renders `<ol>` and ↑/↓;
     `FieldSpec.allow_reordering` and `with_allow_reordering` go.
 
   - [x] **3b.** (Claude) `form!`: the `allow_reordering` key goes, so
@@ -200,8 +245,15 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     tests become every-list tests, `/t/reorder` loses the key, and the
     docs and memory say so. Ten `vecs.rs` tests fail until 3a, on purpose.
 
-  - [ ] **3c.** (Claude, after 3a) Re-bless any snapshot that gains an
+  - [x] **3c.** (Claude, after 3a) Re-bless any snapshot that gains an
     `<ol>` and ↑/↓, check those ten go green, run `just e2e`.
+
+    Done 2026-11-01. Three snapshots re-blessed; an empty list now renders
+    an empty `<ol>`. Two `vecs.rs` counts grew to take in ↑/↓, plus a new
+    `only_the_ends_of_a_list_are_disabled` over lists of 1, 2 and 3 rows.
+    The three tests that took "the first new click listener" as Remove
+    now find it by name, with a new `Harness::labelled`, since one row
+    brings three buttons at once.
 
 - [ ] **4.** The order (G).
 
@@ -240,7 +292,37 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   duplicate's message, edit then add, edit then cancel, the submitted
   order), and a gallery example.
 
-- [ ] **11.** (Claude) Merge prep: `ORDERED_LISTS_PLAN.md` marked as
+- [ ] **11.** (Claude) Rows become items, everywhere a dev or a Formoxus
+  dev can see the word (Todd, 2026-10-31: "one term used internally and
+  another externally just leads to confusion"). **Item**, after facet's
+  `begin_list_item`/`begin_set_item`: not "element", which is Dioxus's
+  `Element` and HTML's, nor "member", which was this crate's word for a
+  node until 2026-10-16.
+
+  Done in 2c (2026-11-01): `add_row`, `new_row`, `set_rows`,
+  `remove_row`, `move_row`, `parse_row_keys`, `row_segment`, `ROW_SIGIL`,
+  the `rows` field, all of item 2, `RowValue` → `ItemValue`, and the
+  runtime messages. What is left in items 1, 3 and 6 is the rest.
+
+  1. Internals: `row_path`, `new_blank_row` (both `form.rs`), and
+     `widgets/row_buttons.rs`.
+  2. [x] The edits: `Edit::AddRow`/`RemoveRow`/`MoveRow` → `AddItem`/
+     `RemoveItem`/`MoveItem`.
+  3. The widgets: `AddRowProps` (its `rows` prop too), `RowAdder`,
+     `AddRowButton`, `RemoveRowButton`, `MoveRowButtons`.
+  4. The `FixedKey`s and their `classes_plus:` names: `ListRow`,
+     `ListRows`, `AddRowButton`, `RemoveRowButton`, `MoveRowButtons`,
+     `MoveRowUpButton`, `MoveRowDownButton`.
+  5. The classes: `fx-list-row(s)`, `fx-button-add-row`,
+     `fx-button-remove-row`.
+  6. The messages: `form!`'s "a path ending in `[]` is every ROW", the
+     runtime's "cannot remove row …", and the docs and tests around them.
+
+  **Not touched:** `field_row` (a widget's caption/control/errors
+  layout) and `ButtonRow`/`fx-button-row`, where "row" is a horizontal
+  layout, not an item of a list.
+
+- [ ] **12.** (Claude) Merge prep: `ORDERED_LISTS_PLAN.md` marked as
   superseded where it is (boxes 2–3), its boxes 6–8 checked against this
   plan, the memory updated, and `just ci` and `just e2e` green. apcsp
   builds formoxus by PATH, so it follows whatever branch is checked out

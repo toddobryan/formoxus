@@ -573,7 +573,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     /// Apply a structural edit from code: add, remove or move a row, or choose
     /// a variant. It goes the way formoxus's own buttons send theirs, so a row
-    /// added with a [`RowValue`](crate::nodes::RowValue) has its values in the
+    /// added with a [`ItemValue`](crate::nodes::ItemValue) has its values in the
     /// store, where `validate` and `to_wire` read them, as well as in the tree.
     ///
     /// Unlike a button, which can only log a rejected edit, this returns it.
@@ -720,7 +720,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     });
     let on_edit = use_callback(move |edit: Edit| {
         match apply_edit(state, values, &edit) {
-            Ok(Some(row)) if matches!(edit, Edit::AddRow { value: None, .. }) => {
+            Ok(Some(row)) if matches!(edit, Edit::AddItem { value: None, .. }) => {
                 new_blank_row.set(Some(row));
             }
             Ok(_) => {}
@@ -765,7 +765,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 ) -> Result<Option<String>, FormAccessError> {
     // Found before the edit, while the row is still there to look up.
     let removed = match edit {
-        Edit::RemoveRow { path, index } => row_path(&state.peek(), path, *index),
+        Edit::RemoveItem { path, index } => row_path(&state.peek(), path, *index),
         _ => None,
     };
     // Its own statement, so the write guard is dropped before `peek` below.
@@ -783,7 +783,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // widgets, `validate` and `to_wire` read the STORE. Copy the new row's
     // leaves across, overwriting, so nothing stale can shadow them. A blank row
     // needs nothing: absent is already `""`.
-    if let (Some(row), Edit::AddRow { value: Some(_), .. }) = (&created, edit) {
+    if let (Some(row), Edit::AddItem { value: Some(_), .. }) = (&created, edit) {
         for (path, raw) in state.peek().leaf_values() {
             if crate::nodes::owns(row, &path) {
                 crate::widgets::values::write_value(&path, values, raw);

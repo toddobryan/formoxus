@@ -133,7 +133,7 @@ pub fn without_form_id(html: &str) -> String {
 // *does*: a DOM event goes in, an `Edit` travels through `use_form`'s callback
 // into `FormState`, the schema rebuilds, and the new subtree comes back out.
 
-use dioxus::core::{ElementId, Mutation, Mutations};
+use dioxus::core::{AttributeValue, ElementId, Mutation, Mutations};
 use dioxus_html::{
     PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, SerializedMouseData,
     set_event_converter,
@@ -151,6 +151,10 @@ use std::rc::Rc;
 pub struct Harness {
     dom: VirtualDom,
     listeners: Vec<(String, ElementId)>,
+    /// Each element's `aria-label`, for the ones whose label is dynamic (a
+    /// formatted string, as every row button's is). A static attribute lives
+    /// in the template and never crosses as a mutation, so it is not here.
+    labels: Vec<(ElementId, String)>,
 }
 
 // `VirtualDom` is not `Debug`, so it is left out rather than the whole impl
@@ -160,6 +164,7 @@ impl std::fmt::Debug for Harness {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Harness")
             .field("listeners", &self.listeners)
+            .field("labels", &self.labels)
             .finish_non_exhaustive()
     }
 }
@@ -176,6 +181,7 @@ impl Harness {
         let mut harness = Harness {
             dom,
             listeners: Vec::new(),
+            labels: Vec::new(),
         };
         harness.absorb(&mutations);
         harness
@@ -194,7 +200,21 @@ impl Harness {
                 // recycles the id — so dropping these matters for correctness,
                 // not tidiness: a stale entry could name an element that is now
                 // something else entirely.
-                Mutation::Remove { id } => self.listeners.retain(|(_, i)| i != id),
+                Mutation::Remove { id } => {
+                    self.listeners.retain(|(_, i)| i != id);
+                    self.labels.retain(|(i, _)| i != id);
+                }
+                Mutation::SetAttribute {
+                    name: "aria-label",
+                    value,
+                    id,
+                    ..
+                } => {
+                    self.labels.retain(|(i, _)| i != id);
+                    if let AttributeValue::Text(label) = value {
+                        self.labels.push((*id, label.clone()));
+                    }
+                }
                 _ => {}
             }
         }
@@ -218,6 +238,25 @@ impl Harness {
             found.len(),
             1,
             "expected exactly one `{event}` listener, found {}",
+            found.len()
+        );
+        found[0]
+    }
+
+    /// The one element listening for `event` whose `aria-label` is `label`.
+    ///
+    /// How a test picks one of several buttons a single edit revealed, which
+    /// registration order cannot do: a list row brings ↑, ↓ and Remove at once.
+    pub fn labelled(&self, event: &str, label: &str) -> ElementId {
+        let found: Vec<ElementId> = self
+            .listeners(event)
+            .into_iter()
+            .filter(|id| self.labels.iter().any(|(i, l)| i == id && l == label))
+            .collect();
+        assert_eq!(
+            found.len(),
+            1,
+            "expected exactly one `{event}` listener labelled {label:?}, found {}",
             found.len()
         );
         found[0]

@@ -29,7 +29,6 @@ pub struct FieldSpec {
     /// Builds this leaf during the shape walk, instead of the default field
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
-    pub allow_reordering: bool,
     pub adder: Option<RowAdder>,
 }
 
@@ -144,11 +143,6 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_label(mut self, path: &str, l: &str) -> Self {
         self.field(path).label = Some(l.to_string());
-        self
-    }
-
-    pub fn with_allow_reordering(mut self, path: &str) -> Self {
-        self.list_field(path, "allow_reordering").allow_reordering = true;
         self
     }
 

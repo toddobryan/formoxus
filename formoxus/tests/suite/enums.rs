@@ -740,7 +740,7 @@ fn a_row_edit_aimed_at_an_enum_is_rejected() {
     // "right path, wrong kind of node" couldn't be expressed at all.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     let error = form
-        .edit(&Edit::AddRow {
+        .edit(&Edit::AddItem {
             path: "shape".to_string(),
             before: None,
             value: None,

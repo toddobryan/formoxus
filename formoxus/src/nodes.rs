@@ -2,19 +2,20 @@
 //! kinds that make a form a tree rather than a flat list.
 
 use dioxus::prelude::*;
-use facet::{Facet, Peek, Shape};
 use facet::{Partial, ReflectError};
 use indexmap::IndexMap;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 
+mod items;
 mod list_node;
 mod option_node;
 mod struct_node;
 mod variant_node;
 
+pub use items::ItemValue;
+pub(crate) use items::{ITEM_SIGIL, Items, item_segment};
 pub use list_node::ListNode;
 pub use option_node::OptionNode;
 pub use struct_node::StructNode;
@@ -109,12 +110,12 @@ pub trait Node: Debug {
     /// node that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
     ///
-    /// `Ok(Some(path))` is the full path of the row an `AddRow` created
+    /// `Ok(Some(path))` is the full path of the row an `AddItem` created
     /// (`answers.#3`), which is how a caller finds a row whose key it could
     /// not have known in advance. Every other edit, which creates no row, is
     /// `Ok(None)`. `Err` when no node owns the path or when the edit does not
     /// fit the node that does: an out-of-range row, a variant the enum lacks,
-    /// a `RowValue` of the wrong type. A refused edit changes nothing.
+    /// an `ItemValue` of the wrong type. A refused edit changes nothing.
     fn edit(
         &mut self,
         prefix: &str,
@@ -165,7 +166,7 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
 /// prose: a row key is an identity, and a tuple-struct field's "0" is a
 /// position. The list itself is what carries the label.
 pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
-    if name.starts_with(ROW_SIGIL) || name.chars().all(|c| c.is_ascii_digit()) {
+    if name.starts_with(ITEM_SIGIL) || name.chars().all(|c| c.is_ascii_digit()) {
         None
     } else {
         Some(name.to_case(case))
@@ -179,27 +180,6 @@ pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
 /// `size` without both claiming `footprint.size` — see [`model_path`].
 pub(crate) fn variant_segment(variant: &str) -> String {
     format!("${variant}")
-}
-
-/// Row keys are `#`-prefixed for the same reason variants are `$`-prefixed:
-/// neither character can begin a Rust identifier, so a key can never be mistaken
-/// for a field name.
-pub(crate) const ROW_SIGIL: char = '#';
-
-/// A list-row key segment: `3` -> `#3`.
-///
-/// A row's name is its *identity*, not its position — which is what lets a row
-/// be inserted in the middle, removed, or reordered without renaming its
-/// neighbours. Renaming them would move every leaf beneath them to a different
-/// key in the value store, and the values would have to be shuffled to match:
-/// the same silent-corruption hazard [`variant_segment`] exists to prevent,
-/// except recurring on every insert and remove rather than only on a variant
-/// switch.
-///
-/// The cost is that a row's *position* is no longer recoverable from its path.
-/// Order lives in `ListNode::rows` and nowhere else — see [`model_path`].
-pub(crate) fn row_segment(key: usize) -> String {
-    format!("{ROW_SIGIL}{key}")
 }
 
 /// Strip variant descriptors from a leaf path, giving the path through the
@@ -371,75 +351,6 @@ impl NodeContext {
     }
 }
 
-/// The value a new row arrives filled in with: [`Edit::AddRow`]'s `value`.
-///
-/// **Type-erased** because `Edit` is not generic and cannot be. It crosses
-/// the widget boundary as a `Callback<Edit>`, and one `Edit` type serves
-/// every form, whatever its model. A list's row type is known only from its
-/// shape, at runtime, so the value is a `T` behind `dyn Any`.
-///
-/// **The shape is kept** because nothing checks the type at compile time.
-/// An edit names its list by a string path, so a `RowValue` of any type can
-/// be aimed at any list. `add_row` compares [`shape`](Self::shape) with the
-/// list's row shape and refuses a mismatch, rather than building a row from
-/// a value it would misread.
-///
-/// The rest serves `Edit`'s derives. `Rc`, not `Box`, makes `Clone` cheap
-/// (the value is only ever read). The `peek` fn pointer, made in `new` where
-/// `T` is still known, is how an erased value gets back to a
-/// [`Peek`]: that is how the row is built, and how `Debug` and
-/// `PartialEq` work without requiring either of `T`. Equality goes through
-/// facet, so two values are equal only if they have the same shape and
-/// facet can compare them. A `T` whose shape has no `PartialEq` is never
-/// equal, not even to itself.
-#[derive(Clone)]
-pub struct RowValue {
-    value: Rc<dyn Any>,
-    shape: &'static Shape,
-    peek: for<'a> fn(&'a dyn Any) -> Peek<'a, 'static>,
-}
-
-impl RowValue {
-    /// Wrap a row's value. `T` is the list's ROW type: a `String` for a
-    /// `Vec<String>` or an `Option<Vec<String>>`, an `Option<String>` for a
-    /// `Vec<Option<String>>`.
-    pub fn new<T: Facet<'static> + 'static>(value: T) -> Self {
-        Self {
-            value: Rc::new(value),
-            shape: T::SHAPE,
-            peek: |any| {
-                Peek::new(
-                    any.downcast_ref::<T>()
-                        .expect("a RowValue holds the T it was made from"),
-                )
-            },
-        }
-    }
-
-    /// The shape of the `T` this was made from, which `add_row` checks
-    /// against the list's rows.
-    pub fn shape(&self) -> &'static Shape {
-        self.shape
-    }
-
-    /// The value, readable by reflection: what the row is built from.
-    pub(crate) fn peek(&self) -> Peek<'_, 'static> {
-        (self.peek)(self.value.as_ref())
-    }
-}
-
-impl Debug for RowValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("RowValue").field(&self.peek()).finish()
-    }
-}
-
-impl PartialEq for RowValue {
-    fn eq(&self, other: &Self) -> bool {
-        self.shape == other.shape && self.peek() == other.peek()
-    }
-}
-
 /// A change to the form's *shape*, as opposed to its values — the counterpart
 /// to `apply`. Crosses the widget boundary in a `Callback<Edit>`, which is why
 /// it owns its strings rather than borrowing.
@@ -449,7 +360,7 @@ pub enum Edit {
         path: String,
         variant: Option<String>,
     },
-    AddRow {
+    AddItem {
         path: String,
         /// What the new row holds. `None` is a blank row, the one the Add
         /// button makes: every leaf empty, an enum row with no variant chosen.
@@ -457,13 +368,13 @@ pub enum Edit {
         /// form from a model, so its leaves show the value and an enum row
         /// starts on the value's variant.
         ///
-        /// The value must be of the list's row type (see [`RowValue::new`]),
+        /// The value must be of the list's row type (see [`ItemValue::new`]),
         /// or the edit is refused and nothing changes. Through
         /// [`Form::edit`](crate::form::Form::edit) or a button, a filled row's
         /// values also reach the store, which `validate` and `to_wire` read.
         /// [`FormState::edit`](crate::form::FormState::edit) alone puts them
         /// only in the tree.
-        value: Option<RowValue>,
+        value: Option<ItemValue>,
         /// Insert the new row *before* the row currently at this position, or
         /// append when `None`. A position rather than a key because that is what
         /// the widget knows: an "insert here" button sits between two rendered
@@ -471,14 +382,14 @@ pub enum Edit {
         /// positions locate a gap at one instant, which is all an insert needs.
         before: Option<usize>,
     },
-    RemoveRow {
+    RemoveItem {
         path: String,
         index: usize,
     },
-    MoveRow {
+    MoveItem {
         path: String,
         /// The position of the row to move. Positions, not keys, for the same
-        /// reason as `AddRow::before`: a ↑/↓ button knows where its row is.
+        /// reason as `AddItem::before`: a ↑/↓ button knows where its row is.
         from: usize,
         /// The row's position AFTER the move, so the rows between shift to close
         /// the gap: in `a,b,c`, `from: 0, to: 2` gives `b,c,a`, not the swap
@@ -493,9 +404,9 @@ impl Edit {
     pub fn path(&self) -> &str {
         match self {
             Edit::ChooseVariant { path, .. }
-            | Edit::AddRow { path, .. }
-            | Edit::RemoveRow { path, .. }
-            | Edit::MoveRow { path, .. } => path,
+            | Edit::AddItem { path, .. }
+            | Edit::RemoveItem { path, .. }
+            | Edit::MoveItem { path, .. } => path,
         }
     }
 

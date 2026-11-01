@@ -5,10 +5,10 @@ use super::models::{Location, Shape};
 use super::{Harness, new_since};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
+use formoxus::nodes::{Edit, ItemValue};
 use formoxus::prelude::*;
-use formoxus::widgets::{AddRowButton, AddRowProps, RowAdder, RowValue, get_current};
+use formoxus::widgets::{AddRowButton, AddRowProps, RowAdder, get_current};
 use googletest::prelude::*;
 use indexmap::IndexMap;
 use std::fmt::Debug;
@@ -249,7 +249,7 @@ fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
 #[gtest]
 fn adding_a_row_appends_by_default() {
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: None,
         value: None,
@@ -274,7 +274,7 @@ fn a_new_row_is_blank_and_buildable() {
     // has to come out as a working node rather than a placeholder: fill it and
     // the model builds.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: None,
         value: None,
@@ -299,7 +299,7 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
     // survives structural edits) would hand row 1 the text the user typed into
     // row 0. Keys make the insert a pure addition: nobody else is touched.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: Some(0),
         value: None,
@@ -331,7 +331,7 @@ fn the_list_builds_in_row_order_not_key_order() {
     // reads a row's name, so a row inserted at the front lands at the front of
     // the model even though its key is the highest.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: Some(0),
         value: None,
@@ -358,7 +358,7 @@ fn removing_a_row_leaves_the_survivors_keys_untouched() {
     // row 1's paths; keys mean the survivor is still `#1` and still owns the
     // values already sitting under `places.#1.*` in the store.
     let mut form = form_for(&venues(), FormSpec::default());
-    form.edit(&Edit::RemoveRow {
+    form.edit(&Edit::RemoveItem {
         path: "places".to_string(),
         index: 0,
     })
@@ -387,12 +387,12 @@ fn a_key_is_never_reused() {
     // row's key, or the value store's leftovers from the removed row would
     // silently populate the new one.
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::RemoveRow {
+    form.edit(&Edit::RemoveItem {
         path: "answers".to_string(),
         index: 1,
     })
     .expect("places is a list");
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: None,
         value: None,
@@ -414,11 +414,11 @@ fn a_key_is_never_reused() {
 
 #[gtest]
 fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
-    // A row built by `AddRow` has to be indistinguishable from one built at
+    // A row built by `AddItem` has to be indistinguishable from one built at
     // construction — including being reachable by the containment walk, which
     // means its prefix has to match what `list_node` would have produced.
     let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "shapes".to_string(),
         before: None,
         value: None,
@@ -443,7 +443,7 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     // aborts instead of reaching an `ErrorBoundary` — so these are checked.
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow {
+        form.edit(&Edit::AddItem {
             path: "answers".to_string(),
             before: Some(9),
             value: None,
@@ -451,7 +451,7 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
         err(anything())
     );
     expect_that!(
-        form.edit(&Edit::RemoveRow {
+        form.edit(&Edit::RemoveItem {
             path: "answers".to_string(),
             index: 9
         }),
@@ -476,7 +476,7 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     // `no such path: answers` — a lie, since the list is precisely what owns it.
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow {
+        form.edit(&Edit::AddItem {
             path: "answers".to_string(),
             before: None,
             value: None,
@@ -500,7 +500,7 @@ fn abc() -> Quiz {
 }
 
 fn move_answer(form: &mut FormState<Quiz>, from: usize, to: usize) {
-    form.edit(&Edit::MoveRow {
+    form.edit(&Edit::MoveItem {
         path: "answers".to_string(),
         from,
         to,
@@ -571,13 +571,13 @@ fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
     let mut form = form_for(&abc(), FormSpec::default());
     for (from, to) in [(3, 0), (0, 3), (9, 9)] {
         expect_that!(
-            form.edit(&Edit::MoveRow {
+            form.edit(&Edit::MoveItem {
                 path: "answers".to_string(),
                 from,
                 to
             })
             .map_err(|e| e.0),
-            err(contains_substring("cannot move row")),
+            err(contains_substring("cannot move item")),
             "{from} → {to}"
         );
     }
@@ -595,7 +595,7 @@ fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
         FormSpec::default(),
     );
     expect_that!(
-        empty.edit(&Edit::MoveRow {
+        empty.edit(&Edit::MoveItem {
             path: "answers".to_string(),
             from: 0,
             to: 0
@@ -608,7 +608,7 @@ fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
 fn a_move_aimed_at_a_field_says_it_is_not_a_list() {
     let mut form = form_for(&abc(), FormSpec::default());
     let error = form
-        .edit(&Edit::MoveRow {
+        .edit(&Edit::MoveItem {
             path: "title".to_string(),
             from: 0,
             to: 1,
@@ -625,7 +625,7 @@ fn a_moved_row_takes_its_values_and_errors_with_it() {
     let mut form = form_for(&venues(), FormSpec::default());
     form.push_field_error("places.#0.city", "No such city.")
         .expect("places.#0.city is a path of this form");
-    form.edit(&Edit::MoveRow {
+    form.edit(&Edit::MoveItem {
         path: "places".to_string(),
         from: 0,
         to: 1,
@@ -679,7 +679,7 @@ fn a_move_inside_a_nested_list_reorders_only_that_list() {
         ],
     };
     let mut form = form_for(&grid, FormSpec::default());
-    form.edit(&Edit::MoveRow {
+    form.edit(&Edit::MoveItem {
         path: "rows.#0".to_string(),
         from: 0,
         to: 2,
@@ -720,7 +720,7 @@ fn each_row_renders_inside_its_own_wrapper() {
     // The wrapper exists so a row has an element to carry dioxus's `key:` — and
     // it is where a per-row remove widget will go. The key itself is NOT
     // visible here: dioxus keys aren't DOM attributes, they only show up in
-    // diffing behaviour, which needs a widget that can dispatch `AddRow`
+    // diffing behaviour, which needs a widget that can dispatch `AddItem`
     // before it can be driven. This guards the structure the key rides on.
     let html = super::render_to_html(QuizForm);
     expect_that!(html.matches(ROW_LI).count(), eq(2));
@@ -734,7 +734,9 @@ fn each_row_renders_inside_its_own_wrapper() {
 // because that is the only way to know which button is which: listener
 // registration order is the order dioxus creates dynamic nodes, not document
 // order, so "the first click listener" is not "the Add button." Built this way,
-// every widget is identified by the click that produced it.
+// every widget is identified by the click that produced it, and where one click
+// produces several (a row's ↑, ↓ and Remove) by its name, with
+// `Harness::labelled`.
 //
 // None of these prove the row `key:` earns its keep — appending diffs correctly
 // by position too, so removing the key fails nothing here. The key's payoff is
@@ -775,11 +777,11 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     let mut app = Harness::mount(BlankQuizForm);
     let add = app.only_listener("click");
 
-    // Row one. The widget it reveals is the one that wasn't there before.
-    let clicks = app.listeners("click");
+    // Row one. The input it reveals is the one that wasn't there before; its
+    // Remove is one of three new buttons, so it is found by name.
     let inputs = app.listeners("input");
     app.click(add);
-    let remove_first = new_since(&clicks, app.listeners("click"))[0];
+    let remove_first = app.labelled("click", "Remove row 1");
     app.fire(
         "input",
         new_since(&inputs, app.listeners("input"))[0],
@@ -803,8 +805,8 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     );
     expect_that!(
         new_since(&clicks, app.listeners("click")).len(),
-        eq(1),
-        "one new Remove"
+        eq(3),
+        "row two's ↑, ↓ and Remove, and nothing of row one's rebuilt"
     );
 
     app.click(remove_first);
@@ -848,10 +850,9 @@ fn rows_added_and_removed_in_the_browser_reach_the_server() {
     app.fire("input", title, "Unit 1");
     let add = app.only_listener("click");
 
-    let clicks = app.listeners("click");
     let inputs = app.listeners("input");
     app.click(add);
-    let remove_first = new_since(&clicks, app.listeners("click"))[0];
+    let remove_first = app.labelled("click", "Remove row 1");
     app.fire(
         "input",
         new_since(&inputs, app.listeners("input"))[0],
@@ -969,15 +970,15 @@ fn a_list_renders_its_own_label() {
 
 #[gtest]
 fn the_row_widgets_never_submit_the_form() {
-    // Inside a `<form>` a bare `<button>` is `type="submit"`. Both widgets
+    // Inside a `<form>` a bare `<button>` is `type="submit"`. Every widget
     // would then submit the form instead of editing the list — and since the
     // demo page's Check button is a real submit, that failure would look like
     // "adding a row validates the form."
     let html = super::render_to_html(QuizForm);
     expect_that!(
         html.matches(r#"<button type="button""#).count(),
-        eq(3),
-        "two Remove, one Add"
+        eq(7),
+        "two rows of ↑, ↓ and Remove, then one Add"
     );
 }
 
@@ -1169,6 +1170,47 @@ fn the_first_row_cannot_move_up_nor_the_last_down() {
     );
 }
 
+#[component]
+fn OneAnswerQuiz() -> Element {
+    let one = Quiz {
+        title: "Unit 1".to_string(),
+        answers: vec!["a".to_string()],
+    };
+    let form = use_form(|| form_for(&one, FormSpec::default()));
+    form.render(using_fns! {})
+}
+
+#[component]
+fn ThreeAnswerQuiz() -> Element {
+    let form = use_form(|| form_for(&abc(), FormSpec::default()));
+    form.render(using_fns! {})
+}
+
+/// However long the list, exactly two buttons are disabled: ↑ on the first
+/// row and ↓ on the last. A one-row list is both ends at once, and a middle
+/// row has neither. Remove and Add are never disabled.
+#[gtest]
+fn only_the_ends_of_a_list_are_disabled() {
+    let lists: [(fn() -> Element, usize); 3] =
+        [(OneAnswerQuiz, 1), (QuizForm, 2), (ThreeAnswerQuiz, 3)];
+    for (app, rows) in lists {
+        let html = super::render_to_html(app);
+        expect_that!(html.matches("disabled=true").count(), eq(2), "{rows} rows");
+        for row in 1..=rows {
+            expect_that!(
+                button_tag(&html, &format!("Move row {row} up")).contains("disabled=true"),
+                eq(row == 1),
+                "{rows} rows: row {row}'s ↑"
+            );
+            expect_that!(
+                button_tag(&html, &format!("Move row {row} down")).contains("disabled=true"),
+                eq(row == rows),
+                "{rows} rows: row {row}'s ↓"
+            );
+        }
+    }
+}
+
 /// Icon-only, so the `aria-label` is the whole of each button's name.
 #[gtest]
 fn each_move_button_is_named_for_its_row_and_direction() {
@@ -1217,14 +1259,14 @@ fn add_shows_its_word_beside_its_icon() {
 /// build the `Edit` it expects: comparing the `Rc`s instead would never match.
 #[gtest]
 fn row_values_compare_by_value() {
-    use formoxus::nodes::RowValue;
+    use formoxus::nodes::ItemValue;
     expect_that!(
-        RowValue::new("q1".to_string()),
-        eq(&RowValue::new("q1".to_string()))
+        ItemValue::new("q1".to_string()),
+        eq(&ItemValue::new("q1".to_string()))
     );
     expect_that!(
-        RowValue::new("q1".to_string()),
-        not(eq(&RowValue::new("q2".to_string())))
+        ItemValue::new("q1".to_string()),
+        not(eq(&ItemValue::new("q2".to_string())))
     );
 }
 
@@ -1232,23 +1274,23 @@ fn row_values_compare_by_value() {
 /// compared first.
 #[gtest]
 fn row_values_of_different_types_are_unequal() {
-    use formoxus::nodes::RowValue;
-    expect_that!(RowValue::new(3_u8), not(eq(&RowValue::new(3_u16))));
+    use formoxus::nodes::ItemValue;
+    expect_that!(ItemValue::new(3_u8), not(eq(&ItemValue::new(3_u16))));
 }
 
 #[gtest]
 fn a_row_values_debug_shows_the_value() {
-    use formoxus::nodes::RowValue;
+    use formoxus::nodes::ItemValue;
     expect_that!(
         format!(
             "{:?}",
-            RowValue::new(Location {
+            ItemValue::new(Location {
                 street: "1 Main".to_string(),
                 city: "Paris".to_string(),
                 zip: "75001".to_string(),
             })
         ),
-        eq(r#"RowValue(Location { street: "1 Main", city: "Paris", zip: "75001" })"#)
+        eq(r#"ItemValue(Location { street: "1 Main", city: "Paris", zip: "75001" })"#)
     );
 }
 
@@ -1258,8 +1300,8 @@ fn a_row_values_debug_shows_the_value() {
 // how `use_form` finds a filled row to copy into the store (and, later, a blank
 // one to focus). Every container passes it up from where the row was made.
 
-fn add_row(path: &str, value: Option<formoxus::nodes::RowValue>) -> Edit {
-    Edit::AddRow {
+fn add_row(path: &str, value: Option<formoxus::nodes::ItemValue>) -> Edit {
+    Edit::AddItem {
         path: path.to_string(),
         before: None,
         value,
@@ -1281,7 +1323,7 @@ fn adding_a_filled_row_returns_its_path() {
     expect_that!(
         form.edit(&add_row(
             "answers",
-            Some(formoxus::nodes::RowValue::new("gamma".to_string()))
+            Some(formoxus::nodes::ItemValue::new("gamma".to_string()))
         )),
         ok(some(eq("answers.#2")))
     );
@@ -1293,7 +1335,7 @@ fn adding_a_filled_row_returns_its_path() {
 fn a_row_inserted_mid_list_returns_its_key_not_its_position() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow {
+        form.edit(&Edit::AddItem {
             path: "answers".to_string(),
             before: Some(0),
             value: None,
@@ -1345,13 +1387,13 @@ fn a_row_added_to_an_optional_list_returns_its_path() {
     );
 }
 
-/// Only `AddRow` creates a row. Choosing a variant creates fields, which a
+/// Only `AddItem` creates a row. Choosing a variant creates fields, which a
 /// caller finds by the path it already chose.
 #[gtest]
 fn no_other_edit_returns_a_path() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::MoveRow {
+        form.edit(&Edit::MoveItem {
             path: "answers".to_string(),
             from: 0,
             to: 1,
@@ -1359,7 +1401,7 @@ fn no_other_edit_returns_a_path() {
         ok(none())
     );
     expect_that!(
-        form.edit(&Edit::RemoveRow {
+        form.edit(&Edit::RemoveItem {
             path: "answers".to_string(),
             index: 0,
         }),
@@ -1379,14 +1421,14 @@ fn no_other_edit_returns_a_path() {
 
 /// A filled row lands where `before` says, and the rows around it keep their
 /// keys and values. Read from the tree (`FormState::validate`), so this is
-/// `add_row` alone; the store's copy is `use_form`'s, tested through `Harness`.
+/// `add_item` alone; the store's copy is `use_form`'s, tested through `Harness`.
 #[gtest]
 fn a_filled_row_inserted_mid_list_lands_there_with_its_value() {
     let mut form = form_for(&quiz(), FormSpec::default());
-    form.edit(&Edit::AddRow {
+    form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: Some(1),
-        value: Some(formoxus::nodes::RowValue::new("between".to_string())),
+        value: Some(formoxus::nodes::ItemValue::new("between".to_string())),
     })
     .expect("inserting before row 1 should succeed");
     expect_that!(
@@ -1408,18 +1450,18 @@ fn a_filled_row_inserted_mid_list_lands_there_with_its_value() {
 }
 
 /// Nothing checks the type at compile time once an adder is a plain fn, so
-/// `add_row` does: the message names both types, and the list is untouched.
+/// `add_item` does: the message names both types, and the list is untouched.
 #[gtest]
 fn a_row_value_of_the_wrong_type_is_refused() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&Edit::AddRow {
+        form.edit(&Edit::AddItem {
             path: "answers".to_string(),
             before: None,
-            value: Some(formoxus::nodes::RowValue::new(7_u8)),
+            value: Some(formoxus::nodes::ItemValue::new(7_u8)),
         }),
         err(displays_as(contains_substring(
-            "cannot add a `u8` row to answers: its rows are `String`"
+            "cannot add a `u8` item to answers: its items are `String`"
         )))
     );
     expect_that!(
@@ -1468,7 +1510,7 @@ fn accepted(html: &str) -> String {
 fn add_filled(
     form: Form<impl Clone + Debug + PartialEq + Facet<'static> + 'static>,
     path: &str,
-    value: formoxus::nodes::RowValue,
+    value: formoxus::nodes::ItemValue,
 ) {
     form.edit(&add_row(path, Some(value)))
         .expect("adding a filled row should succeed");
@@ -1481,7 +1523,7 @@ fn FilledLeafRowProbe() -> Element {
         add_filled(
             form,
             "answers",
-            formoxus::nodes::RowValue::new("gamma".to_string()),
+            formoxus::nodes::ItemValue::new("gamma".to_string()),
         );
     });
     with_accepted(form, FormSpec::default())
@@ -1517,7 +1559,7 @@ fn lyon() -> Location {
 #[component]
 fn FilledStructRowProbe() -> Element {
     let form = use_form(|| form_for(&venues(), FormSpec::default()));
-    use_hook(|| add_filled(form, "places", formoxus::nodes::RowValue::new(lyon())));
+    use_hook(|| add_filled(form, "places", formoxus::nodes::ItemValue::new(lyon())));
     with_accepted(form, FormSpec::default())
 }
 
@@ -1552,7 +1594,7 @@ fn FilledEnumRowProbe() -> Element {
         add_filled(
             form,
             "shapes",
-            formoxus::nodes::RowValue::new(Shape::Rectangle {
+            formoxus::nodes::ItemValue::new(Shape::Rectangle {
                 width: 2.0,
                 height: 3.0,
             }),
@@ -1606,12 +1648,12 @@ fn FilledOptionRowsProbe() -> Element {
         add_filled(
             form,
             "names",
-            formoxus::nodes::RowValue::new(Some("Bo".to_string())),
+            formoxus::nodes::ItemValue::new(Some("Bo".to_string())),
         );
         add_filled(
             form,
             "names",
-            formoxus::nodes::RowValue::new(None::<String>),
+            formoxus::nodes::ItemValue::new(None::<String>),
         );
     });
     with_accepted(form, FormSpec::default())
@@ -1666,7 +1708,7 @@ fn ProbeAdder(props: AddRowProps) -> Element {
             r#type: "button",
             id: "{id}-add",
             onclick: move |_| {
-                on_edit.call(add_row(&path, Some(RowValue::new("gamma".to_string()))));
+                on_edit.call(add_row(&path, Some(ItemValue::new("gamma".to_string()))));
             },
             "{says}"
         }
@@ -1717,7 +1759,7 @@ fn BlankProbeAdderForm() -> Element {
     with_accepted(form, FormSpec::default())
 }
 
-/// The adder's own `AddRow` takes the same road as Add's: the row arrives
+/// The adder's own `AddItem` takes the same road as Add's: the row arrives
 /// filled, its value reaches the store and so `to_wire`, and the adder,
 /// rendered again, sees the new count and the new value.
 #[gtest]
@@ -1769,7 +1811,7 @@ fn every_rows_adder_reaches_each_inner_list_and_not_the_outer_one() {
 
 // ── A removed row leaves the store ───────────────────────────────────────
 //
-// `RemoveRow` drops every store entry under the row, so nothing reading the
+// `RemoveItem` drops every store entry under the row, so nothing reading the
 // store whole sees what the user deleted. Each probe edits through
 // `Form::edit`, the road a button takes, then lists the store's keys.
 
@@ -1794,7 +1836,7 @@ fn store_keys(html: &str) -> &str {
 }
 
 fn remove_row(path: &str, index: usize) -> Edit {
-    Edit::RemoveRow {
+    Edit::RemoveItem {
         path: path.to_string(),
         index,
     }
@@ -1876,14 +1918,13 @@ fn a_removed_enum_rows_unchosen_values_leave_the_store_too() {
 #[gtest]
 fn an_adder_reading_the_store_sees_a_removed_row_go() {
     let mut app = Harness::mount(BlankProbeAdderForm);
-    let clicks = app.listeners("click");
     app.click(app.only_listener("click"));
     expect_that!(
         app.html(),
         contains_substring("answers has 1, first gamma, stored 1")
     );
 
-    app.click(new_since(&clicks, app.listeners("click"))[0]);
+    app.click(app.labelled("click", "Remove row 1"));
 
     expect_that!(
         app.html(),

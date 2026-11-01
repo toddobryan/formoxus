@@ -21,7 +21,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::prelude::*;
+use formoxus::{nodes::ItemValue, prelude::*};
 use std::fmt::Debug;
 
 /// Dispatch on the slug. Every form is listed here and nowhere else.
@@ -588,10 +588,10 @@ fn pick(
     song: &'static str,
 ) -> impl FnMut(MouseEvent) {
     move |_| {
-        on_edit.call(formoxus::widgets::Edit::AddRow {
+        on_edit.call(formoxus::widgets::Edit::AddItem {
             path: path.clone(),
             before: None,
-            value: Some(formoxus::widgets::RowValue::new(song.to_string())),
+            value: Some(ItemValue::new(song.to_string())),
         });
     }
 }

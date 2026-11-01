@@ -1,9 +1,22 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-11-01: 2c and box 3 done
+
+Todd built `nodes/items.rs`: `Items` (every field private) holds the rows
+and the own errors; `ListNode`'s `Node` methods delegate to it, and the
+row names are already items (`add_item`, `ItemValue`, `ITEM_SIGIL`,
+`item_segment`, `Edit::AddItem`/`RemoveItem`/`MoveItem`). `ITEM_SIGIL` and
+`item_segment` are re-exported `pub(crate)` from `nodes`, because `mod
+items` is private. Box 3 done: every list renders `<ol>` + ↑/↓, snapshots
+re-blessed. Tests now pick a row's button by `aria-label` with
+`Harness::labelled`; one row brings ↑, ↓ and Remove, so "the first new
+click listener" no longer means Remove. Next: Todd's 2d (`SetNode`), then
+`Items::edit_within` when the set needs the same forwarding loop.
 
 ## ▶ 2026-10-31, later: lists vs sets, on branch `sets`
 

@@ -24,6 +24,13 @@ box 5 of `ORDERED_LISTS_PLAN.md` shipped (`314bcd4`). Build plan:
   would re-sort while the user types.
 - **A duplicate** is refused with a message beside the adder.
 
+- **Vocabulary: an element of a list or set is an ITEM** (`Items` in
+  `nodes/items.rs`, `add_item`, …), after facet's `begin_list_item`/
+  `begin_set_item`. NOT "element" (Dioxus's `Element`, the return type of
+  every `render`, and HTML's; Todd picked it first and dropped it) and NOT
+  "member" (this crate's word for a node until 2026-10-16, all over old
+  memory). A set's items are still shown as `fx-set-member`s.
+
 **Why:** the question was never "may the user reorder this?" but "does
 its order mean anything?" Django splits the same way (formsets with
 `can_order` and sortedm2m, vs `MultipleChoiceField` and django-taggit, whose

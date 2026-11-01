@@ -657,7 +657,7 @@ fn TaggedWithAnAddedRow() -> Element {
             FormSpec::default(),
         );
         state
-            .edit(&formoxus::nodes::Edit::AddRow {
+            .edit(&formoxus::nodes::Edit::AddItem {
                 path: "tags".to_string(),
                 before: None,
                 value: None,
@@ -697,7 +697,7 @@ fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
             },
             FormSpec::default(),
         );
-        form.edit(&formoxus::nodes::Edit::AddRow {
+        form.edit(&formoxus::nodes::Edit::AddItem {
             path: "tags".to_string(),
             before: None,
             value: None,
@@ -758,7 +758,7 @@ fn an_empty_added_struct_row_of_an_optional_list_is_refused_like_the_first() {
             },
             FormSpec::default(),
         );
-        form.edit(&formoxus::nodes::Edit::AddRow {
+        form.edit(&formoxus::nodes::Edit::AddItem {
             path: "nodes".to_string(),
             before: None,
             value: None,
@@ -800,7 +800,7 @@ fn FlagsWithAnAddedRow() -> Element {
             FormSpec::default(),
         );
         state
-            .edit(&formoxus::nodes::Edit::AddRow {
+            .edit(&formoxus::nodes::Edit::AddItem {
                 path: "flags".to_string(),
                 before: None,
                 value: None,
