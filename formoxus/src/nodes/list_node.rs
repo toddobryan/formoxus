@@ -83,23 +83,25 @@ impl Node for ListNode {
                     errors: self.items.errors().to_vec(),
                     classes: ctx.classes.clone(),
                 }
-                ol { class: &class_for_list_rows,
-                    // Keyed by the row's own name, which is stable across
-                    // inserts, removals and reorders. Without a key dioxus diffs
-                    // the list by position, so inserting at the top would
-                    // re-render every row below it; with one it moves the nodes
-                    // it already has. The wrapper exists because a key has to sit
-                    // on an element, and it is what pairs a row with its widget.
-                    for (index, row) in self.items.iter().enumerate() {
-                        // Move buttons on the left, Remove on the right, so Remove
-                        // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
-                        li { class: &list_row_class, key: "{row.name()}",
-                            MoveRowButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
-                            { row.render(&nested) }
-                            RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                if !self.items.is_empty() {
+                    ol { class: &class_for_list_rows,
+                        // Keyed by the row's own name, which is stable across
+                        // inserts, removals and reorders. Without a key dioxus diffs
+                        // the list by position, so inserting at the top would
+                        // re-render every row below it; with one it moves the nodes
+                        // it already has. The wrapper exists because a key has to sit
+                        // on an element, and it is what pairs a row with its widget.
+                        for (index, row) in self.items.iter().enumerate() {
+                            // Move buttons on the left, Remove on the right, so Remove
+                            // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
+                            li { class: &list_row_class, key: "{row.name()}",
+                                MoveRowButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                { row.render(&nested) }
+                                RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                            }
                         }
-                    }
-                },
+                    },
+                }
                 {
                     DynamicNode::Component(VComponent::new(
                         self.adder.0,

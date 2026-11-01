@@ -172,7 +172,9 @@ pub fn MoveRowButtons(
                 aria_label: "Move row {ordinal} up",
                 disabled: index == 0,
                 onclick: move |_| {
-                    on_edit.call(Edit::MoveItem { path: up_path.clone(), from: index, to: index - 1 });
+                    if let Some(to) = index.checked_sub(1) {
+                        on_edit.call(Edit::MoveItem { path: up_path.clone(), from: index, to });
+                    }
                 },
                 {icon(CHEVRON_UP)}
             }

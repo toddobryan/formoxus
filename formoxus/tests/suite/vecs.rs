@@ -1002,6 +1002,16 @@ fn a_list_renders_its_rows_as_an_ol() {
     );
 }
 
+/// An empty `<ol>` is valid HTML, but some screen readers announce it as
+/// "list, 0 items", so a list with no rows has no `<ol>` at all. Its Add is
+/// still there: it is how the first row arrives.
+#[gtest]
+fn an_empty_list_renders_no_ol_but_still_its_add() {
+    let html = super::render_to_html(BlankQuizForm);
+    expect_that!(html, not(contains_substring("<ol")));
+    expect_that!(html, contains_substring("fx-button-add-row"));
+}
+
 /// An `<ol>` may hold only `<li>`s, so Add stays outside it, after it (H in
 /// `ORDERED_LISTS_PLAN.md`); each row's Remove stays inside its `<li>`.
 #[gtest]
@@ -1209,6 +1219,20 @@ fn only_the_ends_of_a_list_are_disabled() {
             );
         }
     }
+}
+
+/// A browser never clicks a disabled button, but nothing else is stopped: a
+/// script, an assistive tool, this harness. ↑ on the first row sends no edit
+/// at all, and ↓ on the last sends one the list refuses, which `use_form`
+/// logs. Either way the row stays put, and nothing panics.
+#[gtest]
+fn clicking_a_disabled_move_button_changes_nothing() {
+    let mut app = Harness::mount(OneAnswerQuiz);
+    let before = app.html();
+    app.click(app.labelled("click", "Move row 1 up"));
+    expect_that!(app.html(), eq(&before), "↑ on the first row");
+    app.click(app.labelled("click", "Move row 1 down"));
+    expect_that!(app.html(), eq(&before), "↓ on the last row");
 }
 
 /// Icon-only, so the `aria-label` is the whole of each button's name.
