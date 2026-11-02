@@ -2,7 +2,7 @@
 //! kinds that make a form a tree rather than a flat list.
 
 use dioxus::prelude::*;
-use facet::{Partial, ReflectError};
+use facet::{Partial, Peek, ReflectError};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -11,6 +11,7 @@ use std::rc::Rc;
 mod items;
 mod list_node;
 mod option_node;
+mod set_node;
 mod struct_node;
 mod variant_node;
 
@@ -18,6 +19,7 @@ pub use items::ItemValue;
 pub(crate) use items::{ITEM_SIGIL, Items, item_segment};
 pub use list_node::ListNode;
 pub use option_node::OptionNode;
+pub use set_node::{SetNode, SetOrder};
 pub use struct_node::StructNode;
 pub use variant_node::{VariantChoice, VariantNode};
 
@@ -62,6 +64,17 @@ pub trait Node: Debug {
     fn has_errors_here(&self) -> bool;
     fn clone_box(&self) -> Box<dyn Node>;
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError>;
+
+    /// The value this node holds, readable by reflection, or `None` if it has
+    /// none to give: what a set sorts its items by.
+    ///
+    /// Only a leaf holding a valid value has one. A container holds nodes, not
+    /// a value, and a leaf that is `Empty` or `Invalid` has nothing to
+    /// compare, so `Items::sort_by` puts those last. A newtype's leaf gives
+    /// its INNER value, since that is what it holds.
+    fn peek_value(&self) -> Option<Peek<'_, 'static>> {
+        None
+    }
 
     fn write_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         let mut partial = partial.begin_field(&self.name())?;

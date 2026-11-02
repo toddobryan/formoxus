@@ -174,6 +174,66 @@ pub const fn is_list(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::List)
 }
 
+/// Whether the field is a set (`HashSet` or `BTreeSet` or an Option<_> of one)
+pub const fn is_set(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Set)
+}
+
+/// Whether the field is a list (`Vec` or `Option<Vec>`) whose items are each
+/// one value, which is what `set` on a `Vec` needs: a set's items are shown,
+/// not edited, and only a leaf has a text to show.
+///
+/// A leaf is a string, number, bool, an enum none of whose variants carries
+/// data, or a newtype over one of those. A newtype whose inside is out of
+/// reach counts, for the reason `Kind::Unknown` gives. An `Option` item does
+/// not: a set refuses a blank item, so its `None` could never be added.
+///
+/// `false` for anything that is not a list, so `form!` asserts it as
+/// `!is_list(..) || is_list_of_leaves(..)`, and a non-list reports once, from
+/// [`is_list`].
+pub const fn is_list_of_leaves(shape: &Shape) -> bool {
+    let shape = match &shape.def {
+        Def::Option(option) => option.t,
+        _ => shape,
+    };
+    match &shape.def {
+        Def::List(list) => is_leaf(list.t),
+        _ => false,
+    }
+}
+
+const fn is_leaf(shape: &Shape) -> bool {
+    if is_optional(shape) {
+        return false;
+    }
+    match kind(shape) {
+        Kind::Text | Kind::Int | Kind::Float | Kind::Bool | Kind::Unknown => true,
+        Kind::Enum => is_unit_enum(shape),
+        Kind::List | Kind::Set | Kind::Other => false,
+    }
+}
+
+/// Whether no variant carries data, looking through a transparent newtype as
+/// `kind` does, since that is how `kind` came to say `Enum`.
+const fn is_unit_enum(shape: &Shape) -> bool {
+    match &shape.ty {
+        Type::User(UserType::Enum(enum_type)) => {
+            let mut i = 0;
+            while i < enum_type.variants.len() {
+                if !enum_type.variants[i].data.fields.is_empty() {
+                    return false;
+                }
+                i += 1;
+            }
+            true
+        }
+        _ => match shape.inner {
+            Some(inner) => is_unit_enum(inner),
+            None => false,
+        },
+    }
+}
+
 /// Whether the widget `W` can render a single-value field of this type.
 /// `has_choices` is whether `form!` was given `choices` for it.
 ///
@@ -188,7 +248,7 @@ pub const fn is_list(shape: &Shape) -> bool {
 /// can read a trait's consts but not call its methods.
 pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
-        Kind::List | Kind::Enum | Kind::Other | Kind::Unknown => return true,
+        Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => return true,
         Kind::Text => FieldType::Text,
         Kind::Int => FieldType::Int,
         Kind::Float => FieldType::Float,
@@ -228,6 +288,8 @@ enum Kind {
     Enum,
     /// A Facet `List`, including `Vec` and `SmallVec`
     List,
+    /// A Facet `Set`, including `HashSet` and `BTreeSet`
+    Set,
     /// Something that is not one value: a struct, or a scalar
     /// formoxus does not support.
     Other,
@@ -246,6 +308,9 @@ const fn kind(shape: &Shape) -> Kind {
     }
     if matches!(shape.def, Def::List(_)) {
         return Kind::List;
+    }
+    if matches!(shape.def, Def::Set(_)) {
+        return Kind::Set;
     }
     match shape.module_path {
         // Every user type has a module path, so `None` is a primitive: a user
@@ -306,7 +371,7 @@ const fn field_type(shape: &Shape) -> Option<FieldType> {
         Kind::Int => Some(FieldType::Int),
         Kind::Float => Some(FieldType::Float),
         Kind::Bool => Some(FieldType::Bool),
-        Kind::List | Kind::Enum | Kind::Other | Kind::Unknown => None,
+        Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
 }
 
@@ -331,8 +396,8 @@ mod tests {
     use crate::widgets::{CheckboxInput, Select, TextInput, Textarea};
 
     use super::{
-        applies, is_enum, is_optional, is_single_value, renders, required_is_not_optional,
-        takes_bound, takes_length, takes_pattern, takes_required,
+        applies, is_enum, is_list_of_leaves, is_optional, is_single_value, renders,
+        required_is_not_optional, takes_bound, takes_length, takes_pattern, takes_required,
     };
     use facet::Facet;
     use formoxus_spec::Attr;
@@ -403,6 +468,59 @@ mod tests {
         ] {
             expect_that!(takes_bound(shape), eq(true), "{shape}");
             expect_that!(takes_length(shape), eq(false), "{shape}");
+        }
+    }
+
+    // ── Lists of leaves ──────────────────────────────────────────────────
+
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct Speed(Shipping);
+
+    #[gtest]
+    fn a_list_of_single_values_is_a_list_of_leaves() {
+        for shape in [
+            Vec::<std::string::String>::SHAPE,
+            Vec::<i32>::SHAPE,
+            Vec::<f64>::SHAPE,
+            Vec::<bool>::SHAPE,
+            Vec::<Shipping>::SHAPE,
+            Vec::<Slug>::SHAPE,
+            Vec::<Speed>::SHAPE,
+            Option::<Vec<std::string::String>>::SHAPE,
+        ] {
+            expect_that!(is_list_of_leaves(shape), eq(true), "{shape}");
+        }
+    }
+
+    /// Out of reach, so given the benefit of the doubt, as `Kind::Unknown`
+    /// is everywhere else.
+    #[gtest]
+    fn a_list_of_opaque_newtypes_counts_as_leaves() {
+        expect_that!(is_list_of_leaves(Vec::<Markdown>::SHAPE), eq(true));
+    }
+
+    #[gtest]
+    fn a_list_of_several_values_is_not() {
+        for shape in [
+            Vec::<Footprint>::SHAPE,
+            Vec::<Address>::SHAPE,
+            Vec::<Vec<std::string::String>>::SHAPE,
+            Vec::<std::collections::BTreeSet<std::string::String>>::SHAPE,
+            Vec::<Option<std::string::String>>::SHAPE,
+        ] {
+            expect_that!(is_list_of_leaves(shape), eq(false), "{shape}");
+        }
+    }
+
+    #[gtest]
+    fn what_is_not_a_list_is_not_a_list_of_leaves() {
+        for shape in [
+            std::string::String::SHAPE,
+            std::collections::BTreeSet::<std::string::String>::SHAPE,
+            Address::SHAPE,
+        ] {
+            expect_that!(is_list_of_leaves(shape), eq(false), "{shape}");
         }
     }
 

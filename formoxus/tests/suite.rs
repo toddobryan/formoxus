@@ -55,6 +55,8 @@ mod newtypes;
 mod optional_containers;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
+#[path = "suite/sets.rs"]
+mod sets;
 #[path = "suite/snapshot.rs"]
 mod snapshot;
 #[path = "suite/spec_constructors.rs"]
@@ -103,6 +105,28 @@ pub fn render_to_html(app: fn() -> Element) -> String {
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
     dioxus_ssr::render(&dom)
+}
+
+/// The form, then `<pre id="store">` holding the store's keys, sorted: how a
+/// test sees what a structural edit left in the value store.
+pub fn with_store_keys<T>(form: formoxus::Form<T>) -> Element
+where
+    T: Clone + std::fmt::Debug + PartialEq + facet::Facet<'static> + 'static,
+{
+    let mut keys: Vec<String> = form.values().read().keys().cloned().collect();
+    keys.sort();
+    let keys = keys.join(" ");
+    rsx! {
+        {form.render(formoxus::using_fns! {})}
+        pre { id: "store", "{keys}" }
+    }
+}
+
+/// The keys `with_store_keys` rendered.
+pub fn store_keys(html: &str) -> &str {
+    let open = r#"<pre id="store">"#;
+    let start = html.find(open).expect("the probe renders #store") + open.len();
+    &html[start..start + html[start..].find("</pre>").unwrap()]
 }
 
 /// `html` with its form's random id replaced by `FORMID`, so two renders of

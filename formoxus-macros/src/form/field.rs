@@ -31,6 +31,9 @@ pub(crate) struct FieldBody {
     /// `adder: SomeComponent`, the component that adds the list's rows in
     /// place of the Add button. The key is kept for the list check's span.
     pub(crate) adder: Option<(Ident, syn::Path)>,
+    /// The bare flag `set`, rendering a `Vec` of leaves as a set (K). The
+    /// key, since a flag has nothing else, is what its checks are spanned on.
+    pub(crate) set: Option<Ident>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -397,6 +400,7 @@ impl FieldBody {
             });
         }
         checks.push(self.list_checks(&shape, key));
+        checks.push(self.set_checks(&shape));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -409,28 +413,58 @@ impl FieldBody {
 }
 
 impl FieldBody {
-    /// One `const _` assertion per key that only a list takes, today just
-    /// `adder`: that the field is a list. Spanned on the key.
+    /// One `const _` assertion per key that only a list or set takes, today
+    /// just `adder`: that the field is one. Spanned on the key.
     fn list_checks(&self, shape: &TokenStream2, key: &str) -> TokenStream2 {
-        // A path ending in `[]` is every row, which is where a label for the
-        // rows goes, so putting a list's key there too is the likely mistake.
+        // A path ending in `[]` is every item, which is where a label for the
+        // items goes, so putting the collection's key there too is the likely
+        // mistake.
         // The path is known here, so only one message is ever emitted, unlike
         // `required_true`'s pair.
         let list_keys = self.adder.iter().map(|(list_key, _)| list_key);
         let checks = list_keys.map(|list_key| {
             let message = if key.ends_with("[]") {
                 format!(
-                    "`{list_key}` applies only to a list field, and a path ending in `[]` is \
-                     every ROW of a list: put it on the list's own path, without the `[]`"
+                    "`{list_key}` applies only to list or set fields, and a path ending in \
+                     `[]` is every ITEM of one: put it on the field's own path, without the `[]`"
                 )
             } else {
-                format!("`{list_key}` applies only to a list field")
+                format!("`{list_key}` applies only to list or set fields")
             };
             quote_spanned! { list_key.span()=>
-                const _: () = ::core::assert!(::formoxus::field_kind::is_list(#shape), #message);
+                const _: () = ::core::assert!(
+                    ::formoxus::field_kind::is_list(#shape) || ::formoxus::field_kind::is_set(#shape),
+                    #message
+                );
             }
         });
         quote! { #(#checks)* }
+    }
+
+    /// `set`'s three `const _` assertions, spanned on the key: that the field
+    /// is not already a set, that it is a list, and that its items are
+    /// leaves. Each is written so only the first that fails reports: a set
+    /// passes the second and third, and a non-list the third.
+    fn set_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let Some(set) = &self.set else {
+            return TokenStream2::new();
+        };
+        let fk = quote! { ::formoxus::field_kind };
+        quote_spanned! { set.span()=>
+            const _: () = ::core::assert!(
+                !#fk::is_set(#shape),
+                "`set` is for a list field, and this one is already a set: leave `set` out"
+            );
+            const _: () = ::core::assert!(
+                #fk::is_set(#shape) || #fk::is_list(#shape),
+                "`set` applies only to list fields"
+            );
+            const _: () = ::core::assert!(
+                !#fk::is_list(#shape) || #fk::is_list_of_leaves(#shape),
+                "`set` applies only to a list of single values (a string, number, bool, enum \
+                 without data, or newtype over one): a set's items are shown, not edited"
+            );
+        }
     }
 
     /// One `const _` assertion per attribute the widget must pass through:
@@ -506,9 +540,9 @@ impl Parse for FieldBody {
 }
 
 impl FieldBody {
-    /// One `key: value` (or bare flag) entry: `widget`, `label`, a table
-    /// attribute by its `snake_case` variant name, or a quoted key passed
-    /// through as written.
+    /// One `key: value` (or bare flag) entry: `widget`, `label`, `choices`,
+    /// `adder`, `set`, a table attribute by its `snake_case` variant name, or
+    /// a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
         if starts_nested(body) {
             let path: SpecPath = body.parse()?;
@@ -560,6 +594,16 @@ impl FieldBody {
                 }
                 Ok(())
             }
+            "set" => {
+                if body.peek(Token![:]) {
+                    return Err(flag_with_value(&key));
+                }
+                if self.set.is_some() {
+                    return Err(syn::Error::new_spanned(&key, "`set` is given twice"));
+                }
+                self.set = Some(key);
+                Ok(())
+            }
             _ => {
                 let attr = table_key(&key)?;
                 let source = parse_value(attr, &key, body)?;
@@ -576,6 +620,7 @@ impl FieldBody {
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
+            && self.set.is_none()
     }
 }
 
@@ -676,7 +721,8 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
 }
 
 /// The refusal for a flag written with a value, as `required_true: true`.
-/// Shared by every table flag, so each refuses a value in the same words.
+/// Shared by every flag, the table's and `set`, so each refuses a value in
+/// the same words.
 fn flag_with_value(key: &Ident) -> syn::Error {
     syn::Error::new_spanned(
         key,
@@ -1026,14 +1072,15 @@ fn owned(attr: Attr) -> String {
 }
 
 /// Every identifier key a field body accepts: `widget`, `label`, `choices`,
-/// `adder`, then each table attribute an author may set,
-/// in table order.
+/// `adder`, `set`, then each table attribute an author may set, in table
+/// order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
         "label".to_string(),
         "choices".to_string(),
         "adder".to_string(),
+        "set".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1130,7 +1177,7 @@ fn conflicting(attr: Attr) -> Option<Attr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AttrSource, legal_keys, parse_value};
+    use super::{AttrSource, FieldBody, legal_keys, parse_value};
     use crate::form::tests::{err_of, parse};
     use googletest::prelude::*;
     use quote::quote;
@@ -1206,6 +1253,7 @@ mod tests {
                 "label" => quote!(#ident: "A label"),
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
+                "set" => quote!(#ident),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -1702,7 +1750,7 @@ mod tests {
 
     // ── adder ────────────────────────────────────────────────────────────
 
-    /// The component goes into a `RowAdder` on the list's own path. A path,
+    /// The component goes into an `ItemAdder` on the list's own path. A path,
     /// not just a name, so an adder from another crate can be named.
     #[gtest]
     fn adder_becomes_a_builder_call() {
@@ -1710,7 +1758,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". with_adder (\"answers\" , :: formoxus :: widgets :: RowAdder (ui :: SearchToAdd))"
+                ". with_adder (\"answers\" , :: formoxus :: widgets :: ItemAdder (ui :: SearchToAdd))"
             )
         );
     }
@@ -1727,13 +1775,14 @@ mod tests {
     }
 
     #[gtest]
-    fn adder_asks_whether_the_field_is_a_list() {
+    fn adder_asks_whether_the_field_is_a_list_or_set() {
         let spec = parse(quote! { Source { answers => { adder: SearchToAdd } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(tokens, contains_substring("field_kind :: is_list"));
+        expect_that!(tokens, contains_substring("field_kind :: is_set"));
         expect_that!(
             tokens,
-            contains_substring("`adder` applies only to a list field")
+            contains_substring("`adder` applies only to list or set fields")
         );
     }
 
@@ -1747,13 +1796,13 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                "`adder` applies only to a list field, and a path ending in `[]` is every ROW"
+                "`adder` applies only to list or set fields, and a path ending in `[]` is every ITEM"
             )
         );
         expect_that!(
             tokens,
             not(contains_substring(
-                "\"`adder` applies only to a list field\""
+                "\"`adder` applies only to list or set fields\""
             ))
         );
     }
@@ -1781,6 +1830,79 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { answers => { addder: SearchToAdd } } }),
             contains_substring("Did you mean `adder`?")
+        );
+    }
+
+    // ── `set` ────────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn set_is_a_bare_flag() {
+        let body: FieldBody = syn::parse2(quote! { { set } }).unwrap();
+        expect_that!(body.set, some(anything()));
+    }
+
+    #[gtest]
+    fn set_with_a_value_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { tags => { set: true } } }),
+            eq("`set` is a flag: write it alone, with no `:` or value")
+        );
+    }
+
+    #[gtest]
+    fn set_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { tags => { set, set } } }),
+            eq("`set` is given twice")
+        );
+    }
+
+    /// A field named `set` still nests: only a bare `set` is the flag.
+    #[gtest]
+    fn a_field_named_set_still_nests() {
+        let body: FieldBody = syn::parse2(quote! { { set => { label: "Set" } } }).unwrap();
+        expect_that!(body.set, none());
+        expect_that!(body.nested.len(), eq(1));
+    }
+
+    #[gtest]
+    fn set_asks_the_three_questions() {
+        let spec = parse(quote! { Source { tags => { set } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring("! :: formoxus :: field_kind :: is_set")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("field_kind :: is_list_of_leaves")
+        );
+        expect_that!(tokens, contains_substring("this one is already a set"));
+        expect_that!(
+            tokens,
+            contains_substring("`set` applies only to list fields")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("a set's items are shown, not edited")
+        );
+    }
+
+    #[gtest]
+    fn without_set_none_are_asked() {
+        let spec = parse(quote! { Source { tags => { label: "Tags" } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            not(contains_substring("is_list_of_leaves"))
+        );
+    }
+
+    /// In `legal_keys`, so a near miss is suggested like any other key.
+    #[gtest]
+    fn a_near_miss_of_set_suggests_it() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sett } } }),
+            contains_substring("Did you mean `set`?")
         );
     }
 

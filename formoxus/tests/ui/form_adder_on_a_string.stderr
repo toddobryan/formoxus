@@ -1,5 +1,5 @@
-error[E0080]: evaluation panicked: `adder` applies only to a list field
+error[E0080]: evaluation panicked: `adder` applies only to list or set fields
   --> tests/ui/form_adder_on_a_string.rs:14:27
    |
-14 |             nickname => { adder: AddRowButton },
+14 |             nickname => { adder: AddItemButton },
    |                           ^^^^^ evaluation of `main::_` failed here

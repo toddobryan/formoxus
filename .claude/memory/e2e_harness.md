@@ -113,8 +113,10 @@ They pass the locator's whole selector to `document.querySelectorAll`, so a
 role lookup or any `nth()` fails as "not a valid selector". Use
 `e2e::focus::expect_focused(&locator)`, which polls `Locator::evaluate("el =>
 el === document.activeElement")`. Reported 2026-10-31 as padamson/playwright-rust#180, fixed by #181 (Todd's fork,
-branch `fix-is-focused-playwright-selectors`). Once a release has it, delete
-`e2e/src/focus.rs` and go back to `expect(…).to_be_focused()`.
+branch `fix-is-focused-playwright-selectors`), MERGED upstream by 2026-11-01.
+Not released yet: crates.io's newest was still 0.20.1 (2026-10-17) that day.
+Once a release after 0.20.1 is out, bump to it, delete `e2e/src/focus.rs`, and
+go back to `expect(…).to_be_focused()`.
 
 ## nextest, from 2026-10-31
 

@@ -1,5 +1,5 @@
-error[E0080]: evaluation panicked: `adder` applies only to a list field, and a path ending in `[]` is every ROW of a list: put it on the list's own path, without the `[]`
+error[E0080]: evaluation panicked: `adder` applies only to list or set fields, and a path ending in `[]` is every ITEM of one: put it on the field's own path, without the `[]`
   --> tests/ui/form_adder_on_a_lists_rows.rs:15:28
    |
-15 |             answers[] => { adder: AddRowButton },
+15 |             answers[] => { adder: AddItemButton },
    |                            ^^^^^ evaluation of `main::_` failed here

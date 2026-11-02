@@ -15,9 +15,11 @@ use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
 use crate::field_kind::is_list;
+use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
+use crate::nodes::SetOrder;
 use crate::widgets::AnyWidget;
-use crate::widgets::row_buttons::RowAdder;
+use crate::widgets::item_buttons::ItemAdder;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 
@@ -29,7 +31,8 @@ pub struct FieldSpec {
     /// Builds this leaf during the shape walk, instead of the default field
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
-    pub adder: Option<RowAdder>,
+    pub adder: Option<ItemAdder>,
+    pub sort_by: Option<SetOrder>,
 }
 
 #[derive(Clone, Debug)]
@@ -105,11 +108,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// # Panics
     ///
     /// As `field` does, and if `path` names anything but a list.
-    fn list_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
+    fn collection_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
-            is_list(shape),
-            "{path}: `{key}` applies only to a list, not `{shape}`"
+            is_list(shape) || is_set(shape),
+            "{path}: `{key}` applies only to list or set, not `{shape}`"
         );
         self.field(path)
     }
@@ -146,8 +149,8 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_adder(mut self, path: &str, adder: RowAdder) -> Self {
-        self.list_field(path, "adder").adder = Some(adder);
+    pub fn with_adder(mut self, path: &str, adder: ItemAdder) -> Self {
+        self.collection_field(path, "adder").adder = Some(adder);
         self
     }
 

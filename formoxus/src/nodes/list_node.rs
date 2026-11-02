@@ -1,19 +1,18 @@
-//! A list-typed node. Rows are nodes named by a `#`-prefixed KEY, which is
+//! A list-typed node. Items are nodes named by a `#`-prefixed KEY, which is
 //! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
 //! nesting — and, because a key is an identity rather than a position, what lets
-//! a row be inserted mid-list, removed, or reordered without renaming its
+//! an item be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `item_segment` for why renaming would be a data hazard.
 
 use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
-    qualify,
+    Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::errors::errors_id;
-use crate::widgets::{AddRowProps, FieldErrors, MoveRowButtons, RemoveRowButton, RowAdder};
+use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
 use dioxus::core::{DynamicNode, VComponent};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
@@ -24,7 +23,7 @@ pub struct ListNode {
     pub name: String,
     pub label: Option<String>,
     pub optional: bool,
-    pub adder: RowAdder,
+    pub adder: ItemAdder,
     pub items: Items,
 }
 
@@ -95,9 +94,9 @@ impl Node for ListNode {
                             // Move buttons on the left, Remove on the right, so Remove
                             // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
                             li { class: &list_row_class, key: "{row.name()}",
-                                MoveRowButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                MoveItemButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                                 { row.render(&nested) }
-                                RemoveRowButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                RemoveItemButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                             }
                         }
                     },
@@ -105,7 +104,7 @@ impl Node for ListNode {
                 {
                     DynamicNode::Component(VComponent::new(
                         self.adder.0,
-                        AddRowProps {
+                        AddItemProps {
                             path: path.clone(),
                             id: id.clone(),
                             values: ctx.values,
@@ -199,20 +198,7 @@ impl Node for ListNode {
             };
         }
 
-        // Paths are unique, so at most one row can own this one. Dispatching by
-        // containment rather than trying each in turn is what lets a row's real
-        // error reach the caller intact.
-        // `my_path`, NOT the row's own path: `edit`'s prefix excludes the
-        // node's own name, which the node qualifies on itself. Passing
-        // the row's full path double-qualifies it into `shapes.#1.#1` — the
-        // same trap `StructNode::choose_variant` fell into.
-        for m in &mut self.items {
-            if owns(&qualify(&my_path, &m.name()), path) {
-                return m.edit(&my_path, edit, specs);
-            }
-        }
-
-        Err(no_such_path(path))
+        self.items.edit_within(&my_path, edit, specs)
     }
 
     fn clear_errors(&mut self) {

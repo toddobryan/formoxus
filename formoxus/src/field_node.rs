@@ -364,6 +364,15 @@ impl<F: Field> Node for FieldNode<F> {
         Ok(partial)
     }
 
+    // The inner value for a newtype, not the wrapper: `value` is all this node
+    // holds, and `wrapper` is only a shape.
+    fn peek_value(&self) -> Option<Peek<'_, 'static>> {
+        match &self.value {
+            FieldValue::Valid(t) => Some(Peek::new(t)),
+            FieldValue::Empty | FieldValue::Invalid { .. } => None,
+        }
+    }
+
     fn is_present(&self) -> bool {
         self.value != FieldValue::Empty
     }

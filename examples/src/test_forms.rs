@@ -572,7 +572,7 @@ const SONGS: [&str; 3] = ["Alpha", "Bravo", "Charlie"];
 /// A custom adder (`adder:`): one button per song, each adding a row that
 /// arrives already holding it, in place of the blank row Add would make.
 #[component]
-fn SongPicker(props: formoxus::widgets::AddRowProps) -> Element {
+fn SongPicker(props: formoxus::widgets::AddItemProps) -> Element {
     rsx! {
         for song in SONGS {
             button { r#type: "button", onclick: pick(props.on_edit, props.path.clone(), song), "Add {song}" }

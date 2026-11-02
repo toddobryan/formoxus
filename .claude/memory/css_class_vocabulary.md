@@ -229,8 +229,8 @@ entries, `ATTRIBUTES_PLAN.md`'s class table and
 **2026-10-31 (lists and sets): `allow_reordering` is gone; EVERY list is
 an `<ol class="fx-list-rows">` of `<li class="fx-list-row">`s**, each with
 ↑/↓, so "a plain list has no wrapper" above is history. A set will be a
-`<ul class="fx-set-members">` of `<li class="fx-set-member">`s, with
-`fx-button-edit-member` on Edit (`formoxus/SETS_PLAN.md` M). See
+`<ul class="fx-set-items">` of `<li class="fx-set-item">`s, with
+`fx-button-edit-item` on Edit (`formoxus/SETS_PLAN.md` M). See
 [[lists-and-sets]]. Same day, box 2b: **`fx-list-set` → `fx-list` and
 `fx-variant-set` → `fx-variant`** (`FixedKey::List`/`Variant`, written
 `list`/`variant` in `classes_plus:`), so no class says "set" unless it

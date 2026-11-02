@@ -53,7 +53,7 @@
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
-//! - [`variant_select`] and [`row_buttons`] — the widgets that change a form's
+//! - [`variant_select`] and [`item_buttons`] — the widgets that change a form's
 //!   SHAPE rather than a value: which variant is chosen, and the rows of a list.
 //! - [`errors`] — the error list rendered under every widget.
 
@@ -61,8 +61,8 @@ pub mod errors;
 pub mod field_row;
 pub(crate) mod icons;
 pub mod input;
+pub mod item_buttons;
 pub mod radio_group;
-pub mod row_buttons;
 pub mod select;
 pub mod textarea;
 pub mod types;
@@ -79,15 +79,15 @@ pub use input::{
     CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
+pub use item_buttons::{AddItemButton, AddItemProps, ItemAdder, MoveItemButtons, RemoveItemButton};
 pub use radio_group::RadioGroup;
-pub use row_buttons::{AddRowButton, AddRowProps, MoveRowButtons, RemoveRowButton, RowAdder};
 pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
 pub use values::{get_current, write_value};
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
-// custom adder (`AddRowProps`, above) sends an `Edit`, and fills its row with
+// custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with
 // an `ItemValue`.
 pub use crate::nodes::{Edit, ItemValue, ValuesStore};
 pub use variant_select::VariantSelect;

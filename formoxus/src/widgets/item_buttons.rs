@@ -5,7 +5,7 @@
 //! [`ListNode`](crate::nodes::ListNode) rebuild itself.
 //!
 //! Add is the one a dev can replace: `adder:` in `form!` names a component
-//! taking [`AddRowProps`], held as a [`RowAdder`], and [`AddRowButton`] is the
+//! taking [`AddItemProps`], held as a [`ItemAdder`], and [`AddItemButton`] is the
 //! default.
 
 use std::rc::Rc;
@@ -19,7 +19,7 @@ use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 
-/// What a list's adder is handed: [`AddRowButton`], or a dev's own component
+/// What a list's adder is handed: [`AddItemButton`], or a dev's own component
 /// named by `adder:` in `form!`.
 ///
 /// An adder appends a row by sending an [`Edit::AddItem`] through `on_edit`.
@@ -27,7 +27,7 @@ use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 /// `value: Some(ItemValue::new(item))` it arrives filled in, and focus is left
 /// alone, so a user picking several choices in a row stays on the adder.
 #[derive(Debug, Props, Clone, PartialEq)]
-pub struct AddRowProps {
+pub struct AddItemProps {
     /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
     /// row's: an adder acts on the list.
     pub path: String,
@@ -58,33 +58,33 @@ pub struct AddRowProps {
 /// written out here instead, with [`fn_addr_eq`].
 ///
 /// The field is `pub` because `form!` builds one in the dev's own crate:
-/// `adder: SearchToAdd` becomes `RowAdder(SearchToAdd)`.
+/// `adder: SearchToAdd` becomes `ItemAdder(SearchToAdd)`.
 ///
 /// [`FieldSpec`]: crate::form::FieldSpec
 #[derive(Clone, Copy)]
-pub struct RowAdder(pub fn(AddRowProps) -> Element);
+pub struct ItemAdder(pub fn(AddItemProps) -> Element);
 
-impl Default for RowAdder {
+impl Default for ItemAdder {
     fn default() -> Self {
-        Self(AddRowButton)
+        Self(AddItemButton)
     }
 }
 
 // Not derived: a `fn` pointer's `Debug` is its address, which changes from
 // run to run and names nothing a reader could look up.
-impl Debug for RowAdder {
+impl Debug for ItemAdder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("RowAdder(..)")
+        f.write_str("ItemAdder(..)")
     }
 }
 
-impl PartialEq for RowAdder {
+impl PartialEq for ItemAdder {
     fn eq(&self, other: &Self) -> bool {
         fn_addr_eq(self.0, other.0)
     }
 }
 
-/// The widget that appends a row to a list, and the default [`RowAdder`].
+/// The widget that appends a row to a list, and the default [`ItemAdder`].
 ///
 /// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the value store — adding a row
 /// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
@@ -92,8 +92,8 @@ impl PartialEq for RowAdder {
 /// defaults to `type="submit"`, so omitting it would submit the form instead of
 /// adding a row.
 #[component]
-pub fn AddRowButton(props: AddRowProps) -> Element {
-    let AddRowProps {
+pub fn AddItemButton(props: AddItemProps) -> Element {
+    let AddItemProps {
         path,
         on_edit,
         classes,
@@ -124,7 +124,7 @@ pub fn AddRowButton(props: AddRowProps) -> Element {
 /// directly. Keys identify a row across edits; a position locates one at an
 /// instant, which is all a click needs to say.
 #[component]
-pub fn RemoveRowButton(
+pub fn RemoveItemButton(
     path: String,
     index: usize,
     on_edit: Callback<Edit>,
@@ -149,12 +149,12 @@ pub fn RemoveRowButton(
 /// The ↑ and ↓ buttons that move one row of a reorderable list, rendered on
 /// the row's left, so neither is ever next to its Remove.
 ///
-/// Each moves the row one place, by position as [`RemoveRowButton`] removes
+/// Each moves the row one place, by position as [`RemoveItemButton`] removes
 /// one. ↑ is disabled on the first row and ↓ on the last rather than left out,
 /// so every row's controls line up and a keyboard user tabbing down the list
 /// meets the same buttons in each.
 #[component]
-pub fn MoveRowButtons(
+pub fn MoveItemButtons(
     path: String,
     index: usize,
     /// How many rows the list has, which is what says this one is the last.

@@ -2,13 +2,13 @@
 
 use super::across_the_wire;
 use super::models::{Location, Shape};
-use super::{Harness, new_since};
+use super::{Harness, new_since, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::prelude::*;
-use formoxus::widgets::{AddRowButton, AddRowProps, RowAdder, get_current};
+use formoxus::widgets::{AddItemButton, AddItemProps, ItemAdder, get_current};
 use googletest::prelude::*;
 use indexmap::IndexMap;
 use std::fmt::Debug;
@@ -1702,7 +1702,7 @@ fn filled_option_rows_keep_some_and_none() {
 // ── A custom adder ───────────────────────────────────────────────────────
 //
 // `adder:` in `form!` swaps a list's Add for a dev's component taking
-// `AddRowProps`. With none, `AddRowButton` renders, so every other list test
+// `AddItemProps`. With none, `AddItemButton` renders, so every other list test
 // in this file is also the no-adder case, unchanged.
 
 /// An adder that says what it was handed, and adds a filled `"gamma"` row
@@ -1710,8 +1710,8 @@ fn filled_option_rows_keep_some_and_none() {
 /// `stored` how many store entries it finds under the list, read whole, as an
 /// adder leaving out the choices already in its list would.
 #[component]
-fn ProbeAdder(props: AddRowProps) -> Element {
-    let AddRowProps {
+fn ProbeAdder(props: AddItemProps) -> Element {
+    let AddItemProps {
         path,
         id,
         values,
@@ -1741,14 +1741,14 @@ fn ProbeAdder(props: AddRowProps) -> Element {
 
 #[gtest]
 fn the_default_adder_is_add() {
-    expect_that!(RowAdder::default(), eq(RowAdder(AddRowButton)));
-    expect_that!(RowAdder::default(), not(eq(RowAdder(ProbeAdder))));
+    expect_that!(ItemAdder::default(), eq(ItemAdder(AddItemButton)));
+    expect_that!(ItemAdder::default(), not(eq(ItemAdder(ProbeAdder))));
 }
 
 /// Not the address a derived `Debug` would print, which changes every run.
 #[gtest]
 fn an_adders_debug_is_the_same_every_run() {
-    expect_that!(format!("{:?}", RowAdder(ProbeAdder)), eq("RowAdder(..)"));
+    expect_that!(format!("{:?}", ItemAdder(ProbeAdder)), eq("ItemAdder(..)"));
 }
 
 #[component]
@@ -1838,26 +1838,6 @@ fn every_rows_adder_reaches_each_inner_list_and_not_the_outer_one() {
 // `RemoveItem` drops every store entry under the row, so nothing reading the
 // store whole sees what the user deleted. Each probe edits through
 // `Form::edit`, the road a button takes, then lists the store's keys.
-
-/// The form, then `<pre id="store">` holding the store's keys, sorted.
-fn with_store_keys<T>(form: Form<T>) -> Element
-where
-    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
-{
-    let mut keys: Vec<String> = form.values().read().keys().cloned().collect();
-    keys.sort();
-    let keys = keys.join(" ");
-    rsx! {
-        {form.render(using_fns! {})}
-        pre { id: "store", "{keys}" }
-    }
-}
-
-fn store_keys(html: &str) -> &str {
-    let open = r#"<pre id="store">"#;
-    let start = html.find(open).expect("the probe renders #store") + open.len();
-    &html[start..start + html[start..].find("</pre>").unwrap()]
-}
 
 fn remove_row(path: &str, index: usize) -> Edit {
     Edit::RemoveItem {

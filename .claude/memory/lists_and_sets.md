@@ -14,14 +14,15 @@ box 5 of `ORDERED_LISTS_PLAN.md` shipped (`314bcd4`). Build plan:
   set; a `set` key (name not yet confirmed) makes a `Vec` a set. No override
   the other way.
 - **Every list** is an `<ol>` with ↑/↓; a set is a `<ul>` of display-only
-  members with Edit and Remove.
+  items with Edit and Remove.
 - **Order, one rule:** the dev's comparator, else `T: PartialOrd` via facet,
   else `Debug` string. Todd REJECTED a case-insensitive default for strings
   ("no exception, make the common case easy"): strings sort by `Ord`, and
   formoxus exports a `case_insensitive` comparator.
 - **Edit goes through the adder:** Edit copies the value into the adder's
   text box, Add replaces the original, cancelling keeps it. Editing in place
-  would re-sort while the user types.
+  would re-sort while the user types. The item being edited is MARKED, not
+  removed (Todd, 2026-11-01), so a submit mid-edit still sends it.
 - **A duplicate** is refused with a message beside the adder.
 
 - **Vocabulary: an element of a list or set is an ITEM** (`Items` in
@@ -29,7 +30,7 @@ box 5 of `ORDERED_LISTS_PLAN.md` shipped (`314bcd4`). Build plan:
   `begin_set_item`. NOT "element" (Dioxus's `Element`, the return type of
   every `render`, and HTML's; Todd picked it first and dropped it) and NOT
   "member" (this crate's word for a node until 2026-10-16, all over old
-  memory). A set's items are still shown as `fx-set-member`s.
+  memory). A set's classes follow: `fx-set-items` on the `<ul>`, `fx-set-item` on each `<li>`, `fx-button-edit-item` (2026-11-01; M first said `member`).
 
 **Why:** the question was never "may the user reorder this?" but "does
 its order mean anything?" Django splits the same way (formsets with
@@ -39,3 +40,20 @@ parser dedups and sorts).
 **How to apply:** don't propose per-list ordering flags again; anything
 saying `allow_reordering` predates this. Related:
 [[structure-on-the-wire]], [[django-parallel-design]].
+
+- **`sort_by` (2026-11-01, decision L in the plan):** any expression of
+  type `fn(&T, &T) -> Ordering`, or `(order, name)` with the name any
+  expression; unnamed, the name is `stringify!(order)`. Checked by type
+  through `field_kind::set_order_for(|m| row(&m.tags), order, name)`, not
+  `const`: a `Shape`'s `ConstTypeId` is not comparable in const code. An
+  optional set is `tags? => { sort_by: … }` (explicit `?`), so no trait
+  peels `Option`.
+
+- **Default order is for SCALAR items only (2026-11-01):** every other
+  item needs `sort_by` (`sort_by: Tag::cmp` for an `Ord` type); `set_node`
+  panics without one, `form!` checks named fields (4c4). Reason: nodes can
+  give back only a leaf's value (`Node::peek_value`), a newtype's leaf
+  holds its INNER value, and re-wrapping without a `T` needs `alloc_shape`,
+  which is `unsafe` (denied workspace-wide). `sort_by`'s `Custom<T>`
+  rebuilds whole `T`s safely with `Partial::alloc::<T>()`. No `unsafe`
+  anywhere in formoxus; keep it that way.

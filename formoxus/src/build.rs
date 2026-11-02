@@ -11,7 +11,7 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SpecsByPath, StructNode, VariantChoice,
+    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SetNode, SpecsByPath, StructNode, VariantChoice,
     VariantNode, item_segment, qualify, variant_segment,
 };
 
@@ -438,6 +438,8 @@ pub(crate) fn node_for_shape(
         // building one row per element via `node_for_shape` with the index as
         // the row's name. See VEC_PLAN.md.
         return list_node(list_def.t, name, peek, walk, prefix, optional);
+    } else if let Ok(set_def) = shape.def.into_set() {
+        return set_node(set_def.t, name, peek, walk, prefix, optional);
     }
 
     match &shape.ty {
@@ -649,6 +651,77 @@ fn list_node(
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
         items: Items::new(shape, items),
+    })
+}
+
+/// A set-typed field: a [`SetNode`] whose items are named by a `#`-prefixed key,
+/// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
+/// nesting a struct's fields use — no special casing anywhere downstream.
+///
+/// `shape` is the *element* shape (`SetDef::t`), not the `Vec`'s, and the
+/// `SetNode` keeps it: `Edit::AddItem` only allows adding a real value. It is
+/// illegal to add an empty value.
+///
+/// Edit mode takes the item count from the value. Create mode has no value to
+/// count and so starts empty — which is now an answer rather than a gap, since
+/// `AddItem` is how a blank set gets items added.
+fn set_node(
+    shape: &'static Shape,
+    name: &str,
+    peek: Option<Peek<'_, 'static>>,
+    walk: Walk<'_>,
+    prefix: &str,
+    optional: bool,
+) -> Box<dyn Node> {
+    let spec = walk.spec_for(prefix);
+    let comparator = spec.and_then(|s| s.sort_by.clone()).unwrap_or_default();
+
+    let items: Vec<Box<dyn Node>> = peek
+        .map(|p| {
+            let set = p
+                .into_set()
+                .expect("shape said set, so the value peeks as one");
+            let mut items: Vec<Peek<'_, 'static>> = set.iter().collect();
+            items.sort_by(|a, b| (comparator.f)(*a, *b));
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(i, element)| {
+                    // An item's KEY is its name — not its index. At construction
+                    // the two coincide, but they part company the moment an item
+                    // is added or removed; see `item_segment`. And unlike
+                    // `struct_node`, which passes `prefix` straight through,
+                    // nothing upstream has qualified this on yet, so do it here.
+                    // Keeping this in step with `collect_values` is what keeps
+                    // the leaf paths and the store keys the same strings.
+                    let item = item_segment(i);
+                    node_for_shape(
+                        shape,
+                        &item,
+                        Some(element),
+                        walk,
+                        &qualify(prefix, &item),
+                        /* optional */ false,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(spec) = spec {
+        assert!(
+            spec.widget.is_none(),
+            "{prefix} is a set, which has no single widget to override — \
+             write `{name}[]` to give every item a widget, or did you mean `label`?",
+        );
+    }
+    Box::new(SetNode {
+        name: name.to_string(),
+        label: spec.and_then(|s| s.label.clone()),
+        optional,
+        adder: spec.and_then(|s| s.adder).unwrap_or_default(),
+        items: Items::new(shape, items),
+        comparator,
     })
 }
 

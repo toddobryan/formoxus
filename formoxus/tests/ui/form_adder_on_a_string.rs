@@ -1,6 +1,6 @@
-//! `adder` applies only to a list field.
+//! `adder` applies only to list or set fields.
 use facet::Facet;
-use formoxus::widgets::AddRowButton;
+use formoxus::widgets::AddItemButton;
 use formoxus::{empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -11,7 +11,7 @@ struct Profile {
 fn main() {
     let _ = empty_form::<Profile>(form! {
         Profile {
-            nickname => { adder: AddRowButton },
+            nickname => { adder: AddItemButton },
         }
     });
 }

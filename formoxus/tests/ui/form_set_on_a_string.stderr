@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `set` applies only to list fields
+  --> tests/ui/form_set_on_a_string.rs:13:27
+   |
+13 |             nickname => { set },
+   |                           ^^^ evaluation of `main::_` failed here

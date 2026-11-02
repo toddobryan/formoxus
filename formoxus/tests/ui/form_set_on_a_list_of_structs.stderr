@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `set` applies only to a list of single values (a string, number, bool, enum without data, or newtype over one): a set's items are shown, not edited
+  --> tests/ui/form_set_on_a_list_of_structs.rs:20:26
+   |
+20 |             answers => { set },
+   |                          ^^^ evaluation of `main::_` failed here

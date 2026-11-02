@@ -596,10 +596,10 @@ impl FieldSpec {
             .attrs_tokens()
             .map(|c| quote! { .with_attrs(#key, #c) });
         // Spanned onto the component's path, so one whose props are not
-        // `AddRowProps` is reported where it is named.
+        // `AddItemProps` is reported where it is named.
         let adder = self.body.adder.as_ref().map(|(_, component)| {
             let ctor = quote_spanned! { syn::spanned::Spanned::span(component)=>
-                ::formoxus::widgets::RowAdder(#component)
+                ::formoxus::widgets::ItemAdder(#component)
             };
             quote! { .with_adder(#key, #ctor) }
         });

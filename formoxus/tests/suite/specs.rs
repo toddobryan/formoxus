@@ -345,8 +345,8 @@ struct Lists {
     title: String,
 }
 
-fn adder() -> formoxus::widgets::RowAdder {
-    formoxus::widgets::RowAdder::default()
+fn adder() -> formoxus::widgets::ItemAdder {
+    formoxus::widgets::ItemAdder::default()
 }
 
 /// A list, the inner lists of a list of lists, and a list behind an `Option`,
@@ -362,7 +362,7 @@ fn an_adder_is_accepted_on_every_kind_of_list() {
 }
 
 #[gtest]
-#[should_panic(expected = "title: `adder` applies only to a list, not `String`")]
+#[should_panic(expected = "title: `adder` applies only to list or set, not `String`")]
 fn an_adder_on_a_scalar_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("title", adder());
 }
@@ -371,13 +371,13 @@ fn an_adder_on_a_scalar_is_refused() {
 /// in `ORDERED_LISTS_PLAN.md` warns about, since a label for the rows does
 /// go there.
 #[gtest]
-#[should_panic(expected = "tags[]: `adder` applies only to a list, not `String`")]
+#[should_panic(expected = "tags[]: `adder` applies only to list or set, not `String`")]
 fn an_adder_on_a_lists_rows_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("tags[]", adder());
 }
 
 #[gtest]
-#[should_panic(expected = "venues[]: `adder` applies only to a list, not `Location`")]
+#[should_panic(expected = "venues[]: `adder` applies only to list or set, not `Location`")]
 fn an_adder_on_a_struct_row_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("venues[]", adder());
 }

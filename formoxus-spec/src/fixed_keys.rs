@@ -50,6 +50,14 @@ pub enum FixedKey {
     MoveRowUpButton,
     /// The button that moves a row down one: `fx-button fx-button-move-down`.
     MoveRowDownButton,
+    /// The `<fieldset>` around a set: `fx-group fx-set`.
+    Set,
+    /// The `<li>` around one item of a set: `fx-set-item`.
+    SetItem,
+    /// The `<ul>` of a set's items: `fx-set-items`.
+    SetItems,
+    /// The set's `<legend>`: `fx-legend fx-field-label`.
+    SetLegend,
     /// The `<fieldset>` around a nested struct: `fx-group fx-struct`.
     Struct,
     /// Its `<legend>`: `fx-legend fx-field-label`.
@@ -100,6 +108,10 @@ impl FixedKey {
         Self::ListLegend,
         Self::ListRow,
         Self::ListRows,
+        Self::Set,
+        Self::SetItem,
+        Self::SetItems,
+        Self::SetLegend,
         Self::Variant,
         Self::VariantLegend,
         Self::RequiredMarker,
@@ -129,6 +141,10 @@ impl FixedKey {
             Self::ListLegend => "list_legend",
             Self::ListRow => "list_row",
             Self::ListRows => "list_rows",
+            Self::Set => "set",
+            Self::SetItem => "set_item",
+            Self::SetItems => "set_items",
+            Self::SetLegend => "set_legend",
             Self::Variant => "variant",
             Self::VariantLegend => "variant_legend",
             Self::RequiredMarker => "required_marker",
@@ -187,6 +203,10 @@ mod tests {
                 | FixedKey::ListLegend
                 | FixedKey::ListRow
                 | FixedKey::ListRows
+                | FixedKey::Set
+                | FixedKey::SetItem
+                | FixedKey::SetItems
+                | FixedKey::SetLegend
                 | FixedKey::Variant
                 | FixedKey::VariantLegend
                 | FixedKey::RequiredMarker
@@ -201,7 +221,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(23 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(27 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     fmt::Debug,
     rc::Rc,
@@ -12,7 +13,9 @@ use crate::{
     build::{FormMode, Walk, node_for_shape},
     error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
-    nodes::{Node, RawValue, SpecsByPath, ValuesByPath, qualify},
+    nodes::{
+        Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path, owns, qualify,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -276,6 +279,47 @@ impl Items {
 
     pub(crate) fn iter(&self) -> Iter<'_, Box<dyn Node>> {
         self.collection.iter()
+    }
+
+    // Paths are unique, so at most one item can own this one. Dispatching by
+    // containment rather than trying each in turn is what lets a row's real
+    // error reach the caller intact.
+    // `my_path`, NOT the items's own path: `edit`'s prefix excludes the
+    // node's own name, which the node qualifies on itself. Passing
+    // the item's full path double-qualifies it into `shapes.#1.#1` — the
+    // same trap `StructNode::choose_variant` fell into.
+    pub(crate) fn edit_within(
+        &mut self,
+        my_path: &str,
+        edit: &Edit,
+        specs: &SpecsByPath,
+    ) -> Result<Option<String>, FormAccessError> {
+        let edit_path = edit.path();
+        for m in &mut self.collection {
+            if owns(&qualify(my_path, &m.name()), edit_path) {
+                return m.edit(my_path, edit, specs);
+            }
+        }
+
+        Err(no_such_path(edit_path))
+    }
+
+    /// Sort the items by `order`. Only their order on screen changes: every
+    /// key stays, since a key is an identity, not a position.
+    ///
+    /// `order` compares values, read from each item's
+    /// [`peek_value`](Node::peek_value). An item without one (an `Invalid`
+    /// leaf after a failed submit, say) has nothing to compare, so it goes
+    /// after every item that has one, in the order it was already in
+    /// (`sort_by` is stable).
+    pub(crate) fn sort_by(&mut self, order: &SetOrder) {
+        self.collection
+            .sort_by(|a, b| match (a.peek_value(), b.peek_value()) {
+                (Some(a), Some(b)) => (order.f)(a, b),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            });
     }
 }
 

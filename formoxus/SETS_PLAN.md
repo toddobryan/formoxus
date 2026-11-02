@@ -22,7 +22,7 @@ anything:
 - If it does (the questions in an assignment), the user needs a way to
   change it, so every list gets ↑/↓, not just the flagged ones.
 - If it doesn't (tags), there should be no order for the user to manage.
-  The members show in one canonical order, which makes it easy to see what
+  The items show in one canonical order, which makes it easy to see what
   is and isn't there, and a duplicate is a mistake.
 
 Django splits the same way, though not as fields (a Django form is flat;
@@ -30,7 +30,7 @@ repeats are formsets). Ordered lists: core formsets with `can_order` (a
 typed `ORDER` rank per row) and django-sortedm2m's `SortedManyToManyField`
 (drag and drop). Sets: core `MultipleChoiceField` (tick boxes, choices
 order) and django-taggit's `TagField`, whose parser dedups and sorts: "a
-sorted list of unique tag names". None lets a user edit a set's member in
+sorted list of unique tag names". None lets a user edit a set's item in
 place, which is why E below edits through the adder.
 
 ## Decisions (Todd, 2026-10-31)
@@ -49,15 +49,15 @@ C. **A duplicate is refused with a message**, shown beside the adder.
 
 D. **On a branch.**
 
-E. **A member is edited through the adder, so nothing moves while the
-   user types.** Each member has Edit and Remove. Edit copies the value into
-   the adder's text box (Claude's refinement: and marks the member as being
+E. **An item is edited through the adder, so nothing moves while the
+   user types.** Each item has Edit and Remove. Edit copies the value into
+   the adder's text box (Claude's refinement: and marks the item as being
    edited, instead of removing it straight away). Adding the edited text
    replaces the original; cancelling leaves the original as it was. So a
    user who clicks Edit and then submits loses nothing.
 
 F. **Display is customizable.** The default is a plain `<ul>`; an inline,
-   alphabetized row of tags is a matter of classes (CSS), and a member's
+   alphabetized row of tags is a matter of classes (CSS), and an item's
    own markup is a row widget.
 
 G. **The order: one rule for every type, no exception for strings.**
@@ -77,7 +77,7 @@ G. **The order: one rule for every type, no exception for strings.**
 ## Scope
 
 **Sets of leaves only, for now:** strings, numbers, unit enums, newtypes
-over those. That covers tags, it makes display-only members natural, and
+over those. That covers tags, it makes display-only items natural, and
 "a set of structs sorted by …" can wait until something needs one. A `set`
 on a `Vec` of structs or enums with data is a compile error.
 
@@ -95,7 +95,7 @@ on a `Vec` of structs or enums with data is a compile error.
 
 H. **A duplicate is by the model's own equality** (facet's `PartialEq`
    through `Peek`), never the comparator. The comparator only orders, so
-   with `case_insensitive` both `Apple` and `apple` can be members, as a
+   with `case_insensitive` both `Apple` and `apple` can be items, as a
    `BTreeSet<String>` would also hold both.
 
 I. **The duplicate message: `on_duplicate`, a closure with a default.**
@@ -105,17 +105,26 @@ I. **The duplicate message: `on_duplicate`, a closure with a default.**
    (`on_duplicate: …`); apcsp will, with one calling its `add_message` once
    it has messaging.
 
-J. **A set keeps its members' typed values**, if that is not too hard, so
-   a member rebuilt from the wire sorts as `T` without reparsing its raw
+J. **A set keeps its items' typed values**, if that is not too hard, so
+   an item rebuilt from the wire sorts as `T` without reparsing its raw
    string every time. If it turns out hard, parsing as `build` does is the
    fallback.
 
 K. **`set`** is the override's name: `tags => { set }`.
 
 L. **`sort_by`** is the comparator key: `sort_by: case_insensitive`.
+   (2026-11-01) Its value is any expression of type `fn(&T, &T) ->
+   Ordering` (a fn, `String::cmp`, a non-capturing closure, a `const`),
+   optionally paired with a name: `sort_by: (String::cmp, "ascending
+   byte-order")`. The name is any expression, as `label:`'s is; without
+   one it is `stringify!` of the order. A two-element tuple is always
+   `(order, name)`, which cannot be ambiguous since a tuple is never a
+   `fn` pointer; any other tuple is a parse error. The name is
+   `SetOrder`'s, for its `Debug`.
 
-M. **Classes:** `fx-set-members` on the `<ul>`, `fx-set-member` on each
-   `<li>`, `fx-button-edit-member` on Edit.
+M. **Classes:** `fx-set-items` on the `<ul>`, `fx-set-item` on each
+   `<li>`, `fx-button-edit-item` on Edit. (Written `member` until
+   2026-11-01, when box 11 made "item" the one word.)
 
 N. **Separate nodes, shared rows.** `ListSet` becomes `ListNode` and
    `VariantSet` becomes `VariantNode`, like `OptionNode` and `FieldNode`:
@@ -123,7 +132,7 @@ N. **Separate nodes, shared rows.** `ListSet` becomes `ListNode` and
    concept. A set gets its own `SetNode` rather than a kind switch on the
    list's node, because the two differ in more than they share (a list:
    moves, a blank Add, rows edited in place; a set: sorting, duplicates,
-   edit by draft, typed members, a `<ul>`, `init_set`). What they DO share
+   edit by draft, typed items, a `<ul>`, `init_set`). What they DO share
    (row keys never reused, the structure entry on the wire, refusing a
    forged key, the store cleanup on `RemoveRow`, the adder, the list's own
    errors under its legend) moves into `nodes/rows.rs`, which both hold,
@@ -215,23 +224,93 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
   - [ ] **2d.** (Todd) `field_kind::is_set` (`Def::Set`), and a `SetNode`
     holding the same rows: built in the shape walk, read and written
-    through `init_set`/`begin_set_item` in `build`, and its members in
+    through `init_set`/`begin_set_item` in `build`, and its items in
     `distribute_values`/`collect_values`. A `MoveRow` or a blank `AddRow`
     aimed at a set is refused with an error that says why.
 
-  - [ ] **2e.** (Todd) `SetNode` renders a `<fieldset class="fx-set">` with
-    its legend, a `<ul class="fx-set-members">` of display-only
-    `<li class="fx-set-member">`s, each with Remove (Edit comes in box 8),
-    then the adder.
+    2026-11-01: `SetNode` (`nodes/set_node.rs`) and `Items::edit_within`
+    are in. Left: `kind()` returning `Kind::Set` for `Def::Set`,
+    `node_for_shape` calling `set_node`, `set_node` building a `SetNode`
+    (it builds a `ListNode`), and `with_adder` accepting a set. Known and
+    accepted (Todd): until box 7, a set's default Add sends a blank
+    `AddItem`, which the set refuses, so it only logs.
+
+  - [x] **2e.** (Todd) `SetNode` renders a `<fieldset class="fx-set">` with
+    its legend, a `<ul class="fx-set-items">` of display-only
+    `<li class="fx-set-item">`s, each with Remove (Edit comes in box 8),
+    then the adder. Like a list, no `<ul>` when the set is empty.
+
+    2026-11-01: with the `FixedKey`s `Set`, `SetLegend`, `SetItems` and
+    `SetItem` (`set`, `set_legend`, `set_items`, `set_item`), which no box
+    had listed: decision O named `Set` and `SetLegend`, and M's classes
+    were left to box 9.
 
   - [ ] **2f.** (Claude) `form!`: `set` on a `Vec` of leaves (K); a compile
     error for `set` on a set type ("already a set"), on a non-list, or on
-    a `Vec` of non-leaves. Parse tests and goldens.
+    a `Vec` of non-leaves. Parse tests and goldens. After 2g.
 
-  - [ ] **2g.** (Claude) Tests for 2d–2e: a `BTreeSet<String>` and a
+    - [x] **2f1.** `adder:` on a set: the `const` check becomes
+      `is_list(..) || is_set(..)`, both messages say "list or set" (no
+      article, as `with_adder`'s does), the parse tests and the two
+      `form_adder_*` goldens follow, and a suite test that a set takes
+      `adder:`. (Done 2026-11-01: "applies only to list or set fields";
+      the `[]` message says "every ITEM of one". The suite test is
+      `sets::a_set_takes_a_custom_adder`, now rendering both `with_adder`
+      and `form!`; dropping `|| is_set` fails the suite's compile.)
+
+    - [x] **2f2.** The bare flag `set`, with a near-miss suggestion, and
+      its parse tests. (Done 2026-11-01: `FieldBody::set: Option<Ident>`,
+      the key kept for 2f3's spans; refuses a value and a second `set`; a
+      field named `set` still nests. Parsed but not yet expanded, so until
+      2f4 a `set` does nothing.)
+
+    - [x] **2f3.** Its three `const` checks, each spanned on the key and
+      with a golden: not already a set ("already a set"), a list, and a
+      list of leaves. The last needs a `const fn is_list_of_leaves` in
+      `field_kind` (B below). A leaf is a string, number, bool, unit
+      enum, or newtype over one; an enum with data is not. (Done
+      2026-11-01, Claude writing `is_list_of_leaves` at Todd's go. Also
+      not a leaf: an `Option` item, since a set refuses a blank one, so
+      its `None` could never be added. An opaque newtype counts, as
+      `Kind::Unknown` does everywhere. The checks are chained so only the
+      first failure reports; goldens `form_set_on_a_set`,
+      `form_set_on_a_string`, `form_set_on_a_list_of_structs`.)
+
+    - [ ] **2f4.** The expansion, `.with_set("path")`, against `pub fn
+      with_set(self, path: &str) -> Self` (agreed 2026-11-01). Waits on
+      box 5's builder: until it exists, nothing using `set` compiles.
+
+  - [x] **2g.** (Claude) Tests for 2d–2e: a `BTreeSet<String>` and a
     `HashSet<String>` round-trip, a set's markup, a refused move and blank
-    add, a removed member leaving the store, and a set behind an `Option`
-    and inside an enum row.
+    add, a removed item leaving the store, and a set behind an `Option`
+    and inside an enum row. Until box 4 sorts, a `HashSet` test compares
+    as a set or uses one item, never iteration order.
+
+    - [x] **2g1.** Round-trips, `BTreeSet<String>` and `HashSet<String>`:
+      `form_for` then `validate`, and across the wire with
+      `Submission::accept`.
+
+    - [x] **2g2.** Markup: `fx-group fx-set`, its legend, the
+      `fx-set-items` `<ul>` of `fx-set-item` `<li>`s, each with Remove; no
+      ↑/↓; no `<ul>` when empty, but still the adder.
+
+    - [x] **2g3.** Edits: `MoveItem` and a blank `AddItem` refused with
+      messages that say why, an `AddItem` with a value accepted, one of
+      the wrong type refused.
+
+    - [x] **2g4.** A removed item's store entries go, as a list row's do.
+
+    - [x] **2g5.** A set behind an `Option`, and inside an enum row.
+
+    - [x] **2g6.** `with_adder` accepts a set.
+
+    Done 2026-11-01, in `tests/suite/sets.rs` (15 tests). `with_store_keys`
+    and `store_keys` moved from `vecs.rs` up to `suite.rs`, shared. Checked
+    by building a set as a `ListNode`: 12 fail; the 3 that still pass test
+    what the two share (store cleanup, custom adder, no empty container).
+    The markup tests leave what an item renders as alone: until box 8 it
+    is the leaf's own, editable, widget (Todd: "leave it in a broken
+    state").
 
 - [ ] **3.** Every list is ordered.
 
@@ -259,19 +338,114 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
   - [ ] **4a.** (Todd) An erased comparator, `SetOrder`, built from a
     `fn(&T, &T) -> Ordering`, and the default chain. The set sorts its
-    members with it once, however the order was chosen. Keeps the typed
+    items with it once, however the order was chosen. Keeps the typed
     values, per J.
+
+    **What gets sorted is the `Items` themselves, not a view in
+    `render`** (Todd, 2026-11-01), because Remove addresses an item by
+    its position on screen, and a sorted view over unsorted items would
+    remove the wrong one. And it happens wherever items arrive, on the
+    server as much as the client:
+
+    1. In `set_node`, BEFORE the keys are assigned. A `HashSet` iterates
+       in an order that differs between processes, so assigning `#0`,
+       `#1`, … in iteration order would give the server's render and
+       the client's hydration different keys for the same values.
+    2. After `add_item`.
+    3. After `distribute_values`, once the leaves are filled, not straight
+       after `set_items`, whose new items are still empty. This is the
+       server's case: it rebuilds the items in wire order and renders
+       them again when a submit fails.
+
+    **Which items sort by default** (decided 2026-11-01): only SCALAR
+    items, `String`, the integers, `bool` and the floats. Every other
+    item (a newtype, a unit enum, a struct, an `Option`, an enum with
+    data) needs a `sort_by`; for an `Ord` type that is one line,
+    `sort_by: Tag::cmp`. A spec without one panics in `set_node`, since a
+    hand-built `FormSpec` broke the contract; `form!` catches it at
+    compile time for the fields it names (4c4), but it never walks the
+    model, so an unnamed set field reaches only the panic.
+
+    Why: the build-time sort sees whole items as `Peek`s, and the later
+    two see nodes, which can give back only what a leaf holds
+    (`Node::peek_value`, built 2026-11-01). For a scalar the two agree.
+    A newtype's leaf holds its INNER value, and cannot re-wrap it without
+    a `T` (`alloc_shape` is `unsafe`, denied workspace-wide); a
+    `VariantNode` or `StructNode` holds no value at all. The unwrapping
+    is forced, not a mistake: `dispatch!` turns a shape into a type only
+    for the scalars it knows. With `T` from a `sort_by`, every kind of
+    item works safely.
+
+    So `SetOrder` wraps `Arc<dyn ItemOrder>`, a trait with
+    `sort_peeks(&mut Vec<Peek>)` (build, before keys) and
+    `sort_nodes(&mut Vec<Box<dyn Node>>)` (after add and distribute),
+    plus `name()` for `Debug`; `PartialEq` is `Arc::ptr_eq` and the name.
+    Two impls:
+
+    - **`DefaultOrder`**, scalars only: `partial_cmp` (total, since every
+      non-float scalar is `Ord`), `total_cmp` for `f32`/`f64`. No `Debug`
+      fallback: nothing reaches it any more. `sort_nodes` reads
+      `peek_value`; an item without one (`Empty`, `Invalid`) goes last,
+      in place (`Items::sort_by` does this today).
+    - **`Custom<T>`**, from `set_order_for` (4c): `sort_peeks` compares
+      `peek.get::<T>()`; `sort_nodes` rebuilds each item's `T` ONCE with
+      the safe `Partial::alloc::<T>()` + `write_value_into` + `build` +
+      `materialize::<T>()`, then sorts by the dev's fn. It must skip an
+      item with `has_errors_within()` (or no value) before rebuilding:
+      `FieldNode::write_value_into` hits `unreachable!` on an `Invalid`
+      leaf. Skipped items go last, in place.
 
   - [ ] **4b.** (Todd) `formoxus::sets::case_insensitive`, exported in the
     prelude.
 
   - [ ] **4c.** (Claude) `form!`: `sort_by: path::to::comparator`, only on
-    a set, its `T` inferred from the field.
+    a set, its `T` inferred from the field. Waits on 4a's builder.
+
+    Checked by TYPE, not `const` (a `Shape`'s `ConstTypeId` wraps a fn
+    const code cannot call). The expansion is
+
+    ```rust
+    ::formoxus::field_kind::set_order_for(
+        |__m: &Post| ::formoxus::field_kind::row(&__m.tags),
+        by_length,
+        ::core::stringify!(by_length),
+    )
+    ```
+
+    against `pub fn set_order_for<M, T: Facet<'static>>(_: fn(&M) -> &T,
+    order: fn(&T, &T) -> Ordering, name: …) -> SetOrder`, which also
+    builds the erased comparator (`peek.get::<T>()` on each side). A
+    wrong `T` is rustc's mismatched-types error at the order. An
+    `Option<BTreeSet<_>>` is written `tags? => { sort_by: … }`, per the
+    2026-10-25 explicit-`?` rule, and peeled through `some()`; no trait
+    looks through `Option`.
+
+    - [ ] **4c1.** The key, with `(order, name)` (L), the near-miss and
+      given-twice tests, and the bad-tuple error.
+
+    - [ ] **4c2.** The expansion, and a `const` check that the field is a
+      set or carries `set`, with a golden.
+
+    - [ ] **4c3.** Goldens for a mismatched `T` and a bad tuple; suite
+      tests for a fn, `String::cmp`, an un-annotated closure (pins that
+      the item type is inferred before the closure is checked), and a
+      named order's `Debug`.
+
+    - [ ] **4c4.** A `const` check that a set's items are scalars when no
+      `sort_by` is given: on every named field that is a set, or carries
+      `set`, without `sort_by`. Spanned on the path (or on `set`), with a
+      golden. Message along the lines of "the items of `tags` have no
+      default order: give `sort_by: …` (for an `Ord` type,
+      `sort_by: Tag::cmp`)". Needs a `const fn` in `field_kind` asking
+      whether the item shape is a scalar, written directly rather than
+      through `kind`, which peels both `Option` and transparent newtypes,
+      exactly what must NOT count here. Suite tests that a newtype and a
+      unit-enum set sort by their `sort_by`, before and after a submit.
 
 - [ ] **5.** A `Vec` treated as a set reaches the model sorted and
   deduplicated. (Todd, Claude tests)
 
-- [ ] **6.** Duplicates (C): an `AddRow` whose value equals a member is
+- [ ] **6.** Duplicates (C): an `AddRow` whose value equals an item is
   refused, with a message beside the adder, per H and I. (Todd,
   Claude tests)
 
@@ -279,14 +453,17 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   string-like `T`, a select over the choices for a unit enum or
   `choices:`. (Todd, Claude tests)
 
-- [ ] **8.** Edit through the adder (E): a draft the set owns, handed to
-  the adder (`AddRowProps` gains an optional `draft`; a list's adder
-  ignores it); the member being edited is marked; Add replaces it
+- [ ] **8.** (Decided 2026-11-01: Edit MARKS the item, not removes it,
+  so a user who clicks Edit and then submits loses nothing, and "the top"
+  is the adder's text box.)
+  Edit through the adder (E): a draft the set owns, handed to
+  the adder (`AddItemProps` gains an optional `draft`; a list's adder
+  ignores it); the item being edited is marked; Add replaces it
   atomically; Escape or Cancel restores it; the adder's text box takes
   focus. Edit appears only when the adder takes text. (Todd, Claude tests)
 
-- [ ] **9.** (Claude) Display (F): the classes from M, a tags preset in
-  the gallery's CSS, and a test that a member's row widget renders.
+- [ ] **9.** (Claude) Display (F): a tags preset in
+  the gallery's CSS, and a test that an item's row widget renders.
 
 - [ ] **10.** (Claude) End to end: `/t/tags` and its e2e tests (add, a
   duplicate's message, edit then add, edit then cancel, the submitted
@@ -308,8 +485,9 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
      `widgets/row_buttons.rs`.
   2. [x] The edits: `Edit::AddRow`/`RemoveRow`/`MoveRow` → `AddItem`/
      `RemoveItem`/`MoveItem`.
-  3. The widgets: `AddRowProps` (its `rows` prop too), `RowAdder`,
-     `AddRowButton`, `RemoveRowButton`, `MoveRowButtons`.
+  3. The widgets: `AddItemProps`' `rows` prop. Done 2026-11-01 (Todd):
+     `AddRowProps` → `AddItemProps`, `RowAdder` → `ItemAdder`, and
+     `AddItemButton`, `RemoveItemButton`, `MoveItemButtons`.
   4. The `FixedKey`s and their `classes_plus:` names: `ListRow`,
      `ListRows`, `AddRowButton`, `RemoveRowButton`, `MoveRowButtons`,
      `MoveRowUpButton`, `MoveRowDownButton`.
