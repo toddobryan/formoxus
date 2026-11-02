@@ -5,6 +5,30 @@ metadata:
   type: project
 ---
 
+## ▶ 2026-11-02: 4a built; next `with_sort_by`, then Claude's tests A/B, then 4b
+
+4a (Todd, with Claude's hints): `SetOrder { item_order: Arc<dyn ItemOrder> }`;
+trait `ItemOrder: Debug + Send + Sync` with `sort_peeks(&mut Vec<Peek<'_,
+'static>>)` and `sort_nodes`. `DefaultOrder { scalar_type, peek_cmp: fn ptr }`
+(total_cmp for floats, `Peek::partial_cmp` otherwise); `CustomOrder<T>`
+rebuilds each item's `T` once via `value_of`, which VALIDATES A CLONE first
+(`write_value_into` hits `unreachable!` on `Empty` as well as `Invalid`), then
+`expect`s, since a validated item failing to build is a formoxus bug (Todd
+agreed). `SetOrder::default_for(item_shape)` panics for non-scalars, even on
+an EMPTY set; `SetOrder::custom(fn, name)`. All green, 926 tests.
+
+Claude wrote test C (`a_set_of_non_scalars_without_sort_by_fails_at_construction`).
+BLOCKED: tests A (newtype set in custom order at build, after AddItem, after a
+failed submit via `empty_form` + `distribute_values`) and B (struct item with
+a blank field sorts last, no panic) need a `FormSpec::with_sort_by`, which
+does not exist (`FormSpec.fields` is `pub(super)`). Set-only, unlike
+`collection_field`. OPEN for Todd: (A) who writes `with_sort_by`; (B)
+`default_for`'s panic prints `{:?}` of `shape.ty`, a big dump; `{shape}` plus
+the path would be better. Then 4b (`case_insensitive`).
+
+#18 filed (walk a model's whole SHAPE up front, registry via `inventory`):
+PARKED by Todd until there is more time; don't fold it into sets.
+
 ## ▶ 2026-11-01, later: SetNode, its tests, `form!`'s `set`
 
 Todd built `SetNode` (2d) and the `Set`/`SetItem`/`SetItems`/`SetLegend`

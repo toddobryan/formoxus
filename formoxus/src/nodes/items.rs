@@ -1,6 +1,5 @@
 use std::{
     any::Any,
-    cmp::Ordering,
     collections::{HashMap, HashSet},
     fmt::Debug,
     rc::Rc,
@@ -305,21 +304,12 @@ impl Items {
     }
 
     /// Sort the items by `order`. Only their order on screen changes: every
-    /// key stays, since a key is an identity, not a position.
-    ///
-    /// `order` compares values, read from each item's
-    /// [`peek_value`](Node::peek_value). An item without one (an `Invalid`
-    /// leaf after a failed submit, say) has nothing to compare, so it goes
-    /// after every item that has one, in the order it was already in
-    /// (`sort_by` is stable).
+    /// key stays, since a key is an identity, not a position. How items are
+    /// compared, and where an item with nothing to compare goes, is
+    /// [`ItemOrder::sort_nodes`](crate::nodes::set_node::ItemOrder::sort_nodes)'s
+    /// business.
     pub(crate) fn sort_by(&mut self, order: &SetOrder) {
-        self.collection
-            .sort_by(|a, b| match (a.peek_value(), b.peek_value()) {
-                (Some(a), Some(b)) => (order.f)(a, b),
-                (Some(_), None) => Ordering::Less,
-                (None, Some(_)) => Ordering::Greater,
-                (None, None) => Ordering::Equal,
-            });
+        order.item_order.sort_nodes(&mut self.collection);
     }
 }
 

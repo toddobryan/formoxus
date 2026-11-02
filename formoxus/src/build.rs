@@ -11,8 +11,8 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SetNode, SpecsByPath, StructNode, VariantChoice,
-    VariantNode, item_segment, qualify, variant_segment,
+    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode,
+    VariantChoice, VariantNode, item_segment, qualify, variant_segment,
 };
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
@@ -674,7 +674,9 @@ fn set_node(
     optional: bool,
 ) -> Box<dyn Node> {
     let spec = walk.spec_for(prefix);
-    let comparator = spec.and_then(|s| s.sort_by.clone()).unwrap_or_default();
+    let comparator = spec
+        .and_then(|s| s.sort_by.clone())
+        .unwrap_or_else(|| SetOrder::default_for(shape));
 
     let items: Vec<Box<dyn Node>> = peek
         .map(|p| {
@@ -682,7 +684,7 @@ fn set_node(
                 .into_set()
                 .expect("shape said set, so the value peeks as one");
             let mut items: Vec<Peek<'_, 'static>> = set.iter().collect();
-            items.sort_by(|a, b| (comparator.f)(*a, *b));
+            comparator.item_order.sort_peeks(&mut items);
             items
                 .into_iter()
                 .enumerate()

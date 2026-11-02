@@ -1,18 +1,24 @@
 //! A set-typed node. Items are nodes named by a `#`-prefixed KEY, which is
 //! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
 //! nesting — and, because a key is an identity rather than a position, what lets
-//! an item be inserted anywhere. If the item type implements Ord, then the items
-//! are displayed in ascending order. If not, they are displayed in ascending order
-//! of their Debug string output. The ordering can be overridden using the `sort_by`
-//! attribute in the form! macro.
+//! an item be inserted anywhere.
+//!
+//! Items are kept sorted by a [`SetOrder`]. A set of scalars (`String`, the
+//! integers, `bool`, the floats) has a default order; any other item type
+//! needs one given, by `sort_by:` in `form!` (for an `Ord` type,
+//! `sort_by: Tag::cmp`), and [`SetOrder::default_for`] panics without it.
 
-use std::{cmp::Ordering, fmt::Debug, sync::Arc};
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
 
 use dioxus::{
     core::{DynamicNode, VComponent},
     prelude::*,
 };
-use facet::{Partial, Peek, ReflectError};
+use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
 use formoxus_spec::FixedKey;
 
 use crate::{
@@ -27,21 +33,177 @@ use crate::{
 
 #[derive(Clone)]
 pub struct SetOrder {
-    pub f: Arc<dyn Fn(Peek<'_, '_>, Peek<'_, '_>) -> Ordering + Send + Sync>,
-    pub name: String,
+    pub item_order: Arc<dyn ItemOrder>,
+}
+
+impl SetOrder {
+    pub fn default_for(shape: &'static Shape) -> Self {
+        if let Some(scalar_type) = shape.scalar_type() {
+            let default_order = DefaultOrder::for_type(scalar_type);
+            SetOrder {
+                item_order: Arc::new(default_order),
+            }
+        } else {
+            panic!(
+                "you must provide a sort_by function for type {:?}",
+                shape.ty
+            );
+        }
+    }
+
+    pub fn custom<T: Facet<'static> + 'static>(cmp: fn(&T, &T) -> Ordering, name: &str) -> Self {
+        Self {
+            item_order: Arc::new(CustomOrder {
+                cmp_value: cmp,
+                name: name.to_string(),
+            }),
+        }
+    }
 }
 
 impl Debug for SetOrder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SetOrder")
-            .field("name", &self.name)
+            .field("item_order", &self.item_order)
             .finish()
     }
 }
 
 impl PartialEq for SetOrder {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.f, &other.f) && self.name == other.name
+        Arc::ptr_eq(&self.item_order, &other.item_order)
+    }
+}
+
+pub trait ItemOrder: Debug + Send + Sync {
+    fn name(&self) -> String;
+
+    /// Sort a set's values as `set_node` found them, BEFORE their keys are
+    /// assigned: a `HashSet` iterates in an order that differs between
+    /// processes, so keys assigned in iteration order would differ between
+    /// the server's render and the client's hydration.
+    fn sort_peeks(&self, peeks: &mut Vec<Peek<'_, 'static>>);
+
+    /// Sort built items in place, after an `AddItem` and after
+    /// `distribute_values`. An item with nothing to compare (an `Empty` or
+    /// `Invalid` leaf, say, after a failed submit) goes after every item that
+    /// has a value, in the order it was already in (`sort_by` is stable).
+    fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
+}
+
+struct DefaultOrder {
+    scalar_type: ScalarType,
+    peek_cmp: fn(&Peek<'_, '_>, &Peek<'_, '_>) -> Ordering,
+}
+
+impl DefaultOrder {
+    fn for_type(scalar_type: ScalarType) -> Self {
+        let peek_cmp: fn(&Peek<'_, '_>, &Peek<'_, '_>) -> Ordering = match scalar_type {
+            ScalarType::F32 => |a, b| {
+                a.get::<f32>()
+                    .expect("type checked")
+                    .total_cmp(b.get::<f32>().expect("type checked"))
+            },
+            ScalarType::F64 => |a, b| {
+                a.get::<f64>()
+                    .expect("type checked")
+                    .total_cmp(b.get::<f64>().expect("type checked"))
+            },
+            _ => |a, b| {
+                a.partial_cmp(b)
+                    .unwrap_or_else(|e| panic!("cannot compare {}: {e}", a.shape()))
+                    .unwrap_or_else(|| panic!("{} has no ordering", a.shape()))
+            },
+        };
+        Self {
+            scalar_type,
+            peek_cmp,
+        }
+    }
+}
+
+impl Debug for DefaultOrder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DefaultOrder({:?})", self.scalar_type)
+    }
+}
+
+impl ItemOrder for DefaultOrder {
+    fn name(&self) -> String {
+        format!("{self:?}")
+    }
+
+    fn sort_peeks(&self, peeks: &mut Vec<Peek<'_, 'static>>) {
+        peeks.sort_by(self.peek_cmp);
+    }
+
+    fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        let cmp = self.peek_cmp;
+        nodes.sort_by(|a, b| match (a.peek_value(), b.peek_value()) {
+            (Some(a), Some(b)) => cmp(&a, &b),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        });
+    }
+}
+
+struct CustomOrder<T> {
+    cmp_value: fn(&T, &T) -> Ordering,
+    name: String,
+}
+
+impl<T: Facet<'static>> CustomOrder<T> {
+    fn value_of(node: &dyn Node) -> Option<T> {
+        let mut probe = node.clone_box();
+        probe.validate();
+        if probe.has_errors_within() {
+            return None;
+        }
+        let partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
+        probe
+            .write_value_into(partial)
+            .expect("write_value_into should succeed once validate() found no errors")
+            .build()
+            .expect("build should succeed once the item was written")
+            .materialize::<T>()
+            .expect("materialized shape should match T")
+            .into()
+    }
+}
+
+impl<T> Debug for CustomOrder<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CustomOrder")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T: Facet<'static> + 'static> ItemOrder for CustomOrder<T> {
+    fn name(&self) -> String {
+        format!("CustomOrder({})", self.name)
+    }
+
+    fn sort_peeks(&self, peeks: &mut Vec<Peek<'_, 'static>>) {
+        peeks.sort_by(|a, b| {
+            (self.cmp_value)(
+                a.get::<T>().expect("should have been typechecked"),
+                b.get::<T>().expect("should have been typechecked"),
+            )
+        });
+    }
+
+    fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        let mut keyed: Vec<(Option<T>, Box<dyn Node>)> =
+            nodes.drain(..).map(|n| (Self::value_of(&*n), n)).collect();
+        keyed.sort_by(|(a, _), (b, _)| match (a, b) {
+            (Some(a), Some(b)) => (self.cmp_value)(a, b),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        });
+        nodes.extend(keyed.into_iter().map(|(_, n)| n));
     }
 }
 

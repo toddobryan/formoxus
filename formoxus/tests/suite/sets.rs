@@ -323,3 +323,23 @@ fn a_set_takes_a_custom_adder() {
         expect_that!(html, not(contains_substring("fx-button-add-row")));
     }
 }
+
+// ── Order ────────────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Tag(String);
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Shelf {
+    tags: BTreeSet<Tag>,
+}
+
+/// Only a set of scalars has a default order (`SETS_PLAN.md` 4a); a newtype
+/// needs `sort_by`. Empty on purpose: the order is chosen from the item
+/// SHAPE when the set is built, so a missing one fails at the first render,
+/// not when a user's first Add gives the set something to sort.
+#[gtest]
+#[should_panic(expected = "you must provide a sort_by function")]
+fn a_set_of_non_scalars_without_sort_by_fails_at_construction() {
+    let _ = empty_form::<Shelf>(FormSpec::default());
+}
