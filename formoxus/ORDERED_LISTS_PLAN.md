@@ -1,5 +1,19 @@
 # Ordered lists: moving rows, and adding a row with a value
 
+> **Status 2026-11-03: partly superseded by `SETS_PLAN.md`** (branch `sets`).
+> Read this plan's names through that branch's renames: a row is an
+> **item** (`MoveRow` → `MoveItem`, `AddRow` → `AddItem`, `RowValue` →
+> `ItemValue`, `RowAdder` → `ItemAdder`, `fx-list-row` → `fx-list-item`),
+> and `ListSet` is `ListNode`. Box by box:
+> 1. **Boxes 2–3, superseded:** `allow_reordering` is gone. Every `Vec`
+>    is an ordered list with ↑/↓, and a set (`Def::Set`, or `set` in
+>    `form!`) has no order to change (`SETS_PLAN.md` box 3).
+> 2. **Boxes 1, 4, 5, done,** and carried through the renames.
+> 3. **3b, still parked.**
+> 4. **Boxes 6–8, still open,** and all for apcsp: nothing in
+>    `SETS_PLAN.md` covers them. (Box 9 there gives a SET item a
+>    display-only view, `item:`; box 6 here asks the same of a LIST item.)
+
 Written 2026-10-29 by Claude, from apcsp-dioxus, for Todd to build. apcsp
 wants its "new assignment" page to be a formoxus form, and formoxus lists
 can't yet do two things that page needs: **move a row** and **add a row
@@ -302,7 +316,7 @@ or reordered without renaming".
   and not until box 5 decides whether a custom adder can be told a
   position, since a search adder is one per list.
 
-- [ ] **4.** (Todd) Add a row that arrives filled in, per B: a TYPED
+- [x] **4.** (Todd) Add a row that arrives filled in, per B: a TYPED
   value on `AddRow`, erased so `Edit` stays non-generic and keeps its
   `Clone, Debug, PartialEq`. Today `Edit::AddRow { path, before }`
   (`nodes.rs:373`), `ListSet::add_row` (`list_set.rs:47`) always builds

@@ -116,3 +116,12 @@ either.
 not implemented for `WidgetProps`". Name it anything else
 (`widget_props: WidgetProps`) and rebind it; with two or more parameters,
 `props` is an ordinary name again.
+
+**A `<textarea>`'s value needs `value` AND `dangerous_inner_html` (2026-11-03).**
+A textarea's initial text is its content, and it ignores a `value` attribute;
+hydration never sets the property, so `value` alone is blank after SSR. A text
+child (`"{current}"`) is wrong too: `pre_render` wraps dynamic text in
+`<!--node-id…--><!--#-->`, which inside a textarea is literal text. Escape the
+value and set it as `dangerous_inner_html`. Keep `value`: Dioxus sets it as the
+property on change, and content can't move a typed-in textarea. A plain
+`dioxus_ssr::render` shows none of the markers; test with `pre_render`.

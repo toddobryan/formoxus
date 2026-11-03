@@ -181,7 +181,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
 - [x] **1.** Branch `sets`.
 
-- [ ] **2.** Renames, the shared rows, and a set node (N, O). First,
+- [x] **2.** Renames, the shared rows, and a set node (N, O). First,
   so 3a and everything after it is written against the new names.
 
   - [x] **2a.** (Claude, mechanical; Todd reviews) `ListSet` → `ListNode`,
@@ -248,7 +248,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     row through `collect_values`' entry, so any node writing that entry
     gets it.
 
-  - [ ] **2d.** (Todd) `field_kind::is_set` (`Def::Set`), and a `SetNode`
+  - [x] **2d.** (Todd) `field_kind::is_set` (`Def::Set`), and a `SetNode`
     holding the same rows: built in the shape walk, read and written
     through `init_set`/`begin_set_item` in `build`, and its items in
     `distribute_values`/`collect_values`. A `MoveRow` or a blank `AddRow`
@@ -271,7 +271,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     had listed: decision O named `Set` and `SetLegend`, and M's classes
     were left to box 9.
 
-  - [ ] **2f.** (Claude) `form!`: `set` on a `Vec` of leaves (K); a compile
+  - [x] **2f.** (Claude) `form!`: `set` on a `Vec` of leaves (K); a compile
     error for `set` on a set type ("already a set"), on a non-list, or on
     a `Vec` of non-leaves. Parse tests and goldens. After 2g.
 
@@ -338,7 +338,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     is the leaf's own, editable, widget (Todd: "leave it in a broken
     state").
 
-- [ ] **3.** Every list is ordered.
+- [x] **3.** Every list is ordered.
 
   - [x] **3a.** (Todd) `ListNode` always renders `<ol>` and ↑/↓;
     `FieldSpec.allow_reordering` and `with_allow_reordering` go.
@@ -360,7 +360,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     now find it by name, with a new `Harness::labelled`, since one row
     brings three buttons at once.
 
-- [ ] **4.** The order (G).
+- [x] **4.** The order (G).
 
   - [x] **4a.** (Todd) An erased comparator, `SetOrder`, built from a
     `fn(&T, &T) -> Ordering`, and the default chain. The set sorts its
@@ -504,7 +504,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
       exactly what must NOT count here. Suite tests that a newtype and a
       unit-enum set sort by their `sort_by`, before and after a submit.
 
-- [ ] **5.** A `Vec` treated as a set reaches the model sorted and
+- [x] **5.** A `Vec` treated as a set reaches the model sorted and
   deduplicated. (Todd, Claude tests)
 
   Expanded 2026-11-03. A `Vec` marked `set` is built as a `SetNode`, not a
@@ -556,7 +556,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     `Def::Set`, closing box 4's open item. On a `Vec` not (yet) marked, its
     panic says to call `treat_as_set` first (B).
 
-  - [ ] **5b.** (Todd) `build`: a `Def::List` field whose spec has `set`
+  - [x] **5b.** (Todd) `build`: a `Def::List` field whose spec has `set`
     goes to `set_node`, not `list_node`, found with
     `walk.spec_for(prefix)`. `set_node` peeks a `Vec` with `into_list` and
     a set with `into_set`, deciding from the peek's own shape. `SetNode`
@@ -1049,7 +1049,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
   `just ci` 1051 and `just e2e` 52/52 green.
 
-- [ ] **12.** (Claude) Merge prep, **LAST: after boxes 13 and 14** (Todd,
+- [x] **12.** (Claude) Merge prep, **LAST: after boxes 13 and 14** (Todd,
   2026-11-03). `ORDERED_LISTS_PLAN.md` marked as superseded where it is
   (boxes 2–3), its boxes 6–8 checked against this plan, the memory updated,
   and `just ci` and `just e2e` green.
@@ -1065,7 +1065,22 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   `crates/e2e/tests/questions.rs` uses `.fx-list-set`,
   `button.fx-button-add-row` and `.fx-list-row`.
 
-- [ ] **13.** (Claude) Gallery examples for a set and a list (Todd,
+  **Done 2026-11-03** (Claude). Boxes 2–5 ticked: every sub-box was
+  already built and tested (2d's `Kind::Set` and `set_node`, 2f's four
+  parts, 5b's `treat_as_set` routing and `items_of` through a set), only
+  the parent boxes had been left open. `main` has not moved since the
+  branch point (314bcd4), so the merge is a fast-forward. Checked
+  `ORDERED_LISTS_PLAN.md` against this plan and marked it:
+  1. Boxes 2–3 (`allow_reordering`) are superseded by box 3 here.
+  2. Its box 4 was done with every sub-box ticked; ticked.
+  3. Its 3b ("insert before") stays parked, unchanged by this plan.
+  4. Its boxes 6–8 are NOT covered here and stay open, all for apcsp:
+     6 (a custom widget as a display-only LIST item; a SET item's `item:`
+     view, box 9, covers only sets), 7 (the apcsp shape end to end; 2g5's
+     set inside an enum item is the only piece of it here), 8 (apcsp
+     itself, after the merge).
+
+- [x] **13.** (Claude) Gallery examples for a set and a list (Todd,
   2026-11-03: both together, before box 12), using the
   `fx-tags` preset for the set. Replaces box 10's gallery example, and is
   where the box 9 CSS is first seen in a browser. **Decide here:** the gallery CSS sets

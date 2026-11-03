@@ -1,6 +1,6 @@
 ---
 name: lists-and-sets
-description: "2026-10-31 DECIDED: lists vs sets replaces allow_reordering; Vec = list (always <ol> + ↑/↓), Def::Set = set (<ul>, canonical order, no dups); plan in formoxus/SETS_PLAN.md"
+description: "2026-11-03 BUILT on branch `sets`, merge-ready (2026-10-31 decided): lists vs sets replaces allow_reordering; Vec = list (always <ol> + ↑/↓), Def::Set = set (<ul>, canonical order, no dups); plan in formoxus/SETS_PLAN.md"
 metadata:
   type: project
 ---
@@ -9,6 +9,16 @@ metadata:
 duplicates, canonical order). `allow_reordering` goes away**, a day after
 box 5 of `ORDERED_LISTS_PLAN.md` shipped (`314bcd4`). Build plan:
 `formoxus/SETS_PLAN.md`, on a branch.
+
+**Status 2026-11-03: BUILT, every box of `SETS_PLAN.md` done,** branch
+`sets` ready to fast-forward onto `main`. What shipped, beyond the
+decisions below: the `set` key in `form!` (`treat_as_set` on `FormSpec`)
+makes a `Vec` a set; a set's adder is a DRAFT item rendered by the item
+type's own widget, outside the wire and validation, with its constraint
+attributes off its input but checked on Add (`maxlength` kept); Edit
+copies an item into the draft, whose Add becomes Replace, with Cancel and
+Escape; `item:` swaps the item's text view; "row" became "item" everywhere.
+`ORDERED_LISTS_PLAN.md` boxes 6–8 are still open, for apcsp after the merge.
 
 - **Type-driven:** `Vec<T>` is a list, `BTreeSet`/`HashSet` (`Def::Set`) a
   set; a `set` key (name not yet confirmed) makes a `Vec` a set. No override

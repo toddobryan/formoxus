@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 6 committed (d3d4852); box 7 committed (213f67b); box 8 committed (9ad5461); box 9 committed (55e50ed); box 10 (e2e) committed; box 11 committed (be86884); box 14 built, UNCOMMITTED; next 13, THEN 12; apcsp after merge; boxes 13 (galleries), 14 (pattern gap) added. #18 parked
+- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets` MERGE-READY** (`formoxus/SETS_PLAN.md`, every box done, fast-forward onto `main`); then apcsp: renames, `ORDERED_LISTS_PLAN` 6–8
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -29,7 +29,7 @@
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
 - [Structure on the wire](structure_on_the_wire.md) — #13 DESIGN: variant name + row keys cross at the container's path; state owns them, store holds leaves; `RawValue`
 - [Trim by default](trim_by_default.md) — #16 DECIDED, not built: trim at parse (raw kept), `trim: false` opts out, password defaults to no-trim; check numbers
-- [Lists and sets](lists_and_sets.md) — 2026-10-31 DECIDED: replaces `allow_reordering`; `Vec` = list (`<ol>` + ↑/↓), `Def::Set` = set (`<ul>`, sorted, no dups); `formoxus/SETS_PLAN.md`
+- [Lists and sets](lists_and_sets.md) — BUILT 2026-11-03 (decided 10-31): replaces `allow_reordering`; `Vec` = list (`<ol>` + ↑/↓), `Def::Set` = set (`<ul>`, sorted, no dups); `formoxus/SETS_PLAN.md`
 - [Variant paths in form!](variant_paths_in_form_macro.md) — #15: `$Enum::Variant` (enum named for the `match`), REQUIRED `?` on Options, `.0` tuple fields, nested blocks, FormSpec panics on bad paths
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
