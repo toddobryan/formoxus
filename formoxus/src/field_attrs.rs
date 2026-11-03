@@ -31,6 +31,22 @@ impl FieldAttrs {
         FieldAttrs(map)
     }
 
+    /// A copy keeping only the standard attributes `keep` accepts, and every
+    /// other key. For a set's draft, which leaves out the constraints that
+    /// would make the browser block a submit (`SETS_PLAN.md` box 14).
+    pub fn keeping(&self, keep: impl Fn(Attr) -> bool) -> FieldAttrs {
+        FieldAttrs(
+            self.0
+                .iter()
+                .filter(|(key, _)| match key {
+                    AttrKey::Std(attr) => keep(*attr),
+                    AttrKey::NonStd(_) => true,
+                })
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        )
+    }
+
     /// A copy with `attr` set to `value` unless the author already set it, for
     /// a value formoxus supplies but an author may replace (`VariantNode`'s
     /// `aria-labelledby`). The author's entry wins and keeps its position, so

@@ -1049,19 +1049,24 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
   `just ci` 1051 and `just e2e` 52/52 green.
 
-- [ ] **12.** (Claude) Merge prep: `ORDERED_LISTS_PLAN.md` marked as
-  superseded where it is (boxes 2–3), its boxes 6–8 checked against this
-  plan, the memory updated, and `just ci` and `just e2e` green. apcsp
-  builds formoxus by PATH, so it follows whatever branch is checked out
-  here: its three `.fx-list-set` selectors (2b) become `.fx-list`, and
-  its comment naming `ListSet` becomes `ListNode`. From box 11 (checked 2026-11-03):
+- [ ] **12.** (Claude) Merge prep, **LAST: after boxes 13 and 14** (Todd,
+  2026-11-03). `ORDERED_LISTS_PLAN.md` marked as superseded where it is
+  (boxes 2–3), its boxes 6–8 checked against this plan, the memory updated,
+  and `just ci` and `just e2e` green.
+
+  **apcsp waits until this branch is merged into `main`** (Todd, the same
+  day), so it is not part of this box. apcsp builds formoxus by PATH, so it
+  follows whatever branch is checked out here, and breaks while `sets` is
+  checked out. What it will need: its three `.fx-list-set` selectors (2b)
+  become `.fx-list`, and its comment naming `ListSet` becomes `ListNode`.
+  From box 11 (checked 2026-11-03):
   `crates/web/assets/main.css` has `fx-button-add-row` and
   `fx-button-remove-row` 20 times each and `fx-list-row` 3 times, and
   `crates/e2e/tests/questions.rs` uses `.fx-list-set`,
   `button.fx-button-add-row` and `.fx-list-row`.
 
 - [ ] **13.** (Claude) Gallery examples for a set and a list (Todd,
-  2026-11-03: both together, after the rest of this plan), using the
+  2026-11-03: both together, before box 12), using the
   `fx-tags` preset for the set. Replaces box 10's gallery example, and is
   where the box 9 CSS is first seen in a browser. **Decide here:** the gallery CSS sets
   `list-style: none` on `.fx-list-items > .fx-list-item` (for its grid of
@@ -1070,11 +1075,29 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   numbers (a `::marker` or a counter in the grid's first column), or accept
   it.
 
-- [ ] **14.** A draft's constraint attributes must not block a submit:
+- [x] **14.** A draft's constraint attributes must not block a submit:
   box 10 confirmed that a draft breaking its items' `pattern` does, under
   browser validation. Probably the draft's input takes a `form` attribute
   naming no form, which also keeps it out of a native submit; a leaf widget
   has no way to be given one yet. Design first.
+
+  **Decided and built 2026-11-03 (Todd's design):** leave the constraints
+  OFF the draft's input and check them on Add/Replace, which already
+  validates the draft. A `Draft(...)` newtype for `validate` was not
+  needed: the draft's values are `RawValue::Draft`, which `validate` and
+  `to_wire` never see, so only the browser was blocking. `NodeContext`
+  gains `in_draft` (set by `SetNode` for its draft; dropped by `nested`
+  and `optional`); `FieldNode::render` then keeps only `maxlength` of the
+  field's own attributes (`FieldAttrs::keeping`), since typing cannot
+  break it. An allow-list, so a constraint added later stays off the draft
+  by default. Lost, accepted ("we can be more clever later"): the number
+  spinner's limits and `:invalid` styling while typing. The `form`-
+  attribute idea above is the cleverer option if that feedback is wanted.
+
+  Tests: 3 in `sets.rs` (constraints off, `maxlength` kept, Add still
+  refuses, a list's items keep theirs), mutation-checked; the e2e `_yet`
+  test became `a_draft_breaking_its_pattern_does_not_block_the_submit`,
+  plus `add_refuses_a_draft_breaking_its_pattern`. e2e 53/53.
 
 ## Not in this plan
 

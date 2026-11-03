@@ -198,30 +198,34 @@ async fn remove_is_named_by_its_item() -> Result<()> {
     s.close().await
 }
 
-/// Box 7's known gap, CONFIRMED here 2026-11-03: formoxus ignores text left
-/// in the draft at submit, but the draft's input is still in the `<form>`, so
-/// the browser checks its `pattern` first and blocks the submit. Pins what
-/// happens today; `_yet` because the plan means to fix it. A draft that
-/// MATCHES goes through, which is what keeps the blocked half from being
-/// vacuous.
+/// Box 7's gap, closed by box 14: text left in the draft is not in the set,
+/// so the browser must not block a submit over it. The draft's input carries
+/// none of its items' constraints, so "Rust" under `pattern: "[a-z]+"` goes
+/// through, and the set stays empty.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
-async fn a_draft_breaking_its_pattern_blocks_the_submit_yet() -> Result<()> {
+async fn a_draft_breaking_its_pattern_does_not_block_the_submit() -> Result<()> {
     let s = Session::open("/t/tags-pattern").await?;
     draft(&s).fill("Rust", None).await?;
-    submit(&s).click(None).await?;
-    let mismatch: bool = draft(&s)
-        .evaluate("el => el.validity.patternMismatch", None::<()>)
-        .await?;
-    assert!(mismatch, "the browser should flag the draft's pattern");
-    expect(s.page.locator("#submitted"))
-        .to_have_text("")
-        .await?;
-
-    draft(&s).fill("rust", None).await?;
     submit(&s).click(None).await?;
     expect(s.page.locator("#submitted"))
         .to_contain_text("tags: {}")
         .await?;
+    s.close().await
+}
+
+/// The constraint still applies where it belongs: Add refuses "Rust", with
+/// formoxus's own error on the draft, and keeps the text to fix.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
+async fn add_refuses_a_draft_breaking_its_pattern() -> Result<()> {
+    let s = Session::open("/t/tags-pattern").await?;
+    draft(&s).fill("Rust", None).await?;
+    button(&s, "Add").click(None).await?;
+    expect(s.page.locator(".fx-set-adder .fx-field-error"))
+        .to_have_count(1)
+        .await?;
+    expect(items(&s)).to_have_count(0).await?;
+    expect(draft(&s)).to_have_value("Rust").await?;
     s.close().await
 }

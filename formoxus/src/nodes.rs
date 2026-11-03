@@ -313,6 +313,15 @@ pub struct NodeContext {
     /// [`optional`](Self::optional) drop it, so it reaches only the node it
     /// was given to.
     pub label_if_unnamed: Option<String>,
+    /// Rendering a set's draft (`SETS_PLAN.md` box 14): a leaf leaves its
+    /// field's constraint attributes (`pattern`, `min`, `minlength`, …) off
+    /// its input, keeping only `maxlength`, which typing cannot break. The
+    /// draft's input is inside the `<form>`, so the browser would otherwise
+    /// check it at submit and block one formoxus would allow, since text left
+    /// in the draft is not in the set. The constraints still apply: Add
+    /// validates the draft. Dropped by [`nested`](Self::nested) and
+    /// [`optional`](Self::optional), like `label_if_unnamed`.
+    pub in_draft: bool,
 }
 
 impl NodeContext {
@@ -334,6 +343,7 @@ impl NodeContext {
             label_case,
             classes: Rc::new(classes),
             label_if_unnamed: None,
+            in_draft: false,
         }
     }
 
@@ -348,6 +358,7 @@ impl NodeContext {
             label_case: self.label_case,
             classes: self.classes.clone(),
             label_if_unnamed: None,
+            in_draft: false,
         }
     }
 
@@ -364,6 +375,7 @@ impl NodeContext {
             label_case: self.label_case,
             classes: self.classes.clone(),
             label_if_unnamed: None,
+            in_draft: false,
         }
     }
 

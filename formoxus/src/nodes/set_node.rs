@@ -833,6 +833,7 @@ impl Node for SetNode {
         // nothing being added, and a `required` box would block the submit.
         // Named for the set, since items have no labels of their own.
         let mut draft_ctx = nested.optional();
+        draft_ctx.in_draft = true;
         draft_ctx.label_if_unnamed = Some(match self.label(ctx.label_case) {
             Some(label) => format!("Add to {label}"),
             None => "Add".to_string(),

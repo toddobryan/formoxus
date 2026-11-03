@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 6 committed (d3d4852); box 7 committed (213f67b); box 8 committed (9ad5461); box 9 committed (55e50ed); box 10 (e2e) committed; box 11 (rows → items) built, UNCOMMITTED; boxes 13 (galleries), 14 (pattern gap) added. #18 parked
+- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 6 committed (d3d4852); box 7 committed (213f67b); box 8 committed (9ad5461); box 9 committed (55e50ed); box 10 (e2e) committed; box 11 committed (be86884); box 14 built, UNCOMMITTED; next 13, THEN 12; apcsp after merge; boxes 13 (galleries), 14 (pattern gap) added. #18 parked
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets

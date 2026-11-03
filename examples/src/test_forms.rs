@@ -638,14 +638,14 @@ fn Tags() -> Element {
     )
 }
 
-/// The same set, its items constrained by a `pattern` the browser checks,
-/// with browser validation ON: is text left in the draft, which formoxus
-/// ignores at submit, blocked by the browser anyway?
+/// The same set, its items constrained by a `pattern`, with browser
+/// validation ON. Text left in the draft is not in the set, so it must not
+/// block the submit (box 14); Add still checks it.
 #[component]
 fn TagsPattern() -> Element {
     harness(
         "tags-pattern",
-        "A set of lowercase tags, pattern [a-z]+, browser validation ON. Leave \"Rust\" in Add to Tags and submit.",
+        "A set of lowercase tags, pattern [a-z]+, browser validation ON. Leave \"Rust\" in Add to Tags and submit: it goes through. Press Add: it is refused.",
         form! {
             Tagged {
                 browser_validation: on,

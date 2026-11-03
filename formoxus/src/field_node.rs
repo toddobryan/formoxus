@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
-use formoxus_spec::FieldType;
+use formoxus_spec::{Attr, FieldType};
 
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
@@ -254,12 +254,20 @@ impl<F: Field> Node for FieldNode<F> {
         // The field's own attributes (`min`, `pattern`, …), so the browser
         // checks what `check` does, then the author's, which only render.
         // Bounds resolved to the field's kind here, so no widget needs it.
+        // In a set's draft, only `maxlength` of the field's own: see
+        // `NodeContext::in_draft`.
+        let own = self.field.widget_attrs();
+        let own = if ctx.in_draft {
+            own.keeping(|attr| attr == Attr::MaxLength)
+        } else {
+            own
+        };
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
             self.is_checkbox(),
             ctx.required,
             self.has_errors_here(),
-            &self.field.widget_attrs().then(&self.attrs),
+            &own.then(&self.attrs),
         )
         .resolve_bounds(self.field_type());
 

@@ -2230,3 +2230,73 @@ fn replace_is_named_for_the_item_it_replaces() {
     expect_that!(html, contains_substring("Replace</button>"));
     expect_that!(html, not(contains_substring("Save")));
 }
+
+// ── The draft and the browser's constraint checks (box 14) ───────────────
+
+#[component]
+fn PatternDraftForm() -> Element {
+    let form = use_form(|| {
+        empty_form(form! { Tagged { tags[] => { pattern: "[a-z]+", max_length: 6 } } })
+    });
+    with_wire(form, rsx! {})
+}
+
+/// The draft's input is inside the `<form>`, so a constraint on it would let
+/// the browser block a submit that formoxus allows (text left in the draft
+/// is not in the set). So its field's constraints stay off it, all but
+/// `maxlength`, which typing cannot break.
+#[gtest]
+fn the_draft_leaves_its_items_constraints_off_but_keeps_maxlength() {
+    let html = super::render_to_html(PatternDraftForm);
+    expect_that!(html, not(contains_substring("pattern=")));
+    expect_that!(html, contains_substring("maxlength=6"));
+}
+
+/// Off the input, not off the item: Add checks the pattern, and the error
+/// is the draft's own.
+#[gtest]
+fn add_still_checks_a_drafts_pattern() {
+    let mut app = super::Harness::mount(PatternDraftForm);
+    app.fire("input", draft_input(&app), "Rust");
+    app.click(add_button(&app));
+    let html = app.html();
+    expect_that!(html, contains_substring(wire("tags=")));
+    expect_that!(html, contains_substring(draft_value("tags.#0", "Rust")));
+    expect_that!(html, contains_substring(r#"<li class="fx-field-error">"#));
+}
+
+#[component]
+fn PatternItemsForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &tagged(),
+            form! { Tagged { tags[] => { pattern: "[a-z]+" } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// Only the draft: a list's items, edited in place, keep theirs. Here a set's
+/// items have no inputs at all, so the draft is the only one.
+#[gtest]
+fn a_lists_items_keep_their_constraints() {
+    expect_that!(
+        super::render_to_html(ListPatternForm),
+        contains_substring(r#"pattern="[a-z]+""#)
+    );
+    expect_that!(
+        super::render_to_html(PatternItemsForm),
+        not(contains_substring("pattern="))
+    );
+}
+
+#[component]
+fn ListPatternForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Draft { tags: tags(&["a"]) },
+            form! { Draft { tags[] => { pattern: "[a-z]+" } } },
+        )
+    });
+    form.render(using_fns! {})
+}
