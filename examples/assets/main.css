@@ -14,7 +14,8 @@
  *   structure   .fx-form  .fx-form-title  .fx-list-row  .fx-list-rows
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
- *   a group     .fx-group + .fx-struct .fx-variant .fx-list  .fx-legend
+ *   a group     .fx-group + .fx-struct .fx-variant .fx-list .fx-set  .fx-legend
+ *   a set       .fx-set-items  .fx-set-item  .fx-set-adder  (+ the gallery's .fx-tags)
  *   radios      .fx-radio-group  .fx-choice  .fx-choice-label
  *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
  *               .fx-problems  .fx-problem  .fx-set-message
@@ -247,6 +248,48 @@ body {
 /* The item being edited: its Edit stays lit while its value is in the draft. */
 .fx-button-edit-item[aria-pressed="true"] { color: var(--fx-text); }
 .fx-move-buttons .fx-button:disabled { opacity: 0.25; cursor: default; }
+
+/* A set: a `<ul>` of items, each its text then Edit and Remove, and below it
+ * the adder, the draft (an ordinary field) then Add, or Save and Cancel while
+ * an item is being edited. Add is not sticky here: a set's items do not
+ * scroll past it the way a long list's rows do. */
+.fx-set-items { padding: 0; margin: 0; }
+.fx-set-items > .fx-set-item {
+    list-style: none;
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+    padding-block: 0.125rem;
+}
+.fx-set-item > .fx-field-errors { flex-basis: 100%; }
+.fx-set-adder {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-end;
+}
+.fx-set-adder > :first-child { flex: 1 1 12rem; }
+.fx-set-adder .fx-form-field { margin-block-end: 0; }
+.fx-set-adder .fx-button-add-row { position: static; margin-top: 0; }
+
+/* The tags preset: a set's items as chips in a wrapping row. Opt-in, per set
+ * for every set in a form, through `classes_plus: { set: + ["fx-tags"] }`, or
+ * for an app's, through its `Formoxus` classes. The default above is a plain
+ * list, which reads better for long items. */
+.fx-set.fx-tags .fx-set-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-block-end: 0.5rem;
+}
+.fx-set.fx-tags .fx-set-items > .fx-set-item {
+    gap: 0.125rem;
+    padding: 0.125rem 0.25rem 0.125rem 0.625rem;
+    border: 1px solid var(--fx-border);
+    border-radius: 999px;
+    font-size: 0.9em;
+}
+.fx-set.fx-tags .fx-set-item > .fx-field-errors { flex-basis: auto; }
 
 /* ── the gallery frame, not formoxus ─────────────────────────────────── */
 

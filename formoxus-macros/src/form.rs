@@ -640,6 +640,14 @@ impl FieldSpec {
                 .with_feedback(#key, #items.feedback(#describe))
             }
         });
+        // Spanned onto the component's path, as `adder`'s is, so one whose
+        // props are not `SetItemProps` is reported where it is named.
+        let item = self.body.item.as_ref().map(|(_, component)| {
+            let ctor = quote_spanned! { syn::spanned::Spanned::span(component)=>
+                ::formoxus::widgets::ItemView(#component)
+            };
+            quote! { .with_item_view(#key, #ctor) }
+        });
         // Before `sort_by` and `feedback`, whose run-time checks on a `Vec` ask
         // whether it is already treated as a set.
         let set = self
@@ -647,7 +655,7 @@ impl FieldSpec {
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #widget #node #attrs #adder #set #sort_by #feedback }
+        quote! { #label #widget #node #attrs #adder #set #sort_by #feedback #item }
     }
 }
 

@@ -259,3 +259,8 @@ item's Edit (`FixedKey::EditItemButton`, `classes_plus:` name
 `edit_item_button`). The item being edited is marked by Edit's
 `aria-pressed="true"`, not by a class; Cancel while editing reuses the form
 buttons' `fx-button-cancel` slot.
+Box 9, same day: `fx-set-adder` (`FixedKey::SetAdder`, `set_adder`), a `<div>`
+around a set's draft and its Add/Save/Cancel. `fx-tags` is the GALLERY's
+class (examples `main.css`), not formoxus's: `classes_plus: { set: +
+["fx-tags"] }` turns its chips preset on. A hyphenated class must be quoted
+in `classes_plus:`.

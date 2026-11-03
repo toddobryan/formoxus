@@ -31,8 +31,8 @@ use crate::{
         ensure_owned, owns, qualify,
     },
     widgets::{
-        AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, RemoveItemButton,
-        errors::errors_id,
+        AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
+        RemoveItemButton, SetItemProps, errors::errors_id,
     },
 };
 
@@ -285,6 +285,8 @@ pub struct SetNode {
     /// a name stays with its item. The item stays in the set until Add
     /// replaces it, so a submit while editing loses nothing.
     pub editing: Option<String>,
+    /// What shows each item's text (`item:`, box 9).
+    pub item_view: ItemView,
     pub comparator: SetOrder,
     /// What the set's last edit did, or why it was refused, for its live
     /// region. Every edit to the set replaces it.
@@ -402,6 +404,67 @@ pub struct SetMessage {
 }
 
 impl SetNode {
+    /// One item's `<li>`, keyed by its name. Shown, not edited in place
+    /// (decision E): its text through the item view, then its own errors (a
+    /// dev's validator or a server can still name one), then Edit, where the
+    /// adder shows the draft Edit fills, and Remove.
+    fn render_item(
+        &self,
+        ctx: &NodeContext,
+        item: &dyn Node,
+        index: usize,
+        editable: bool,
+    ) -> Element {
+        // The set's own path: the item buttons' edits are addressed to it.
+        let path = ctx.path(&self.name);
+        let name = item.name();
+        let text = item_text(item);
+        let editing = self.editing.as_deref() == Some(name.as_str());
+        let mut errors = ErrorsByPath::default();
+        item.collect_errors(&path, &mut errors);
+        let errors: Vec<ValidationMessage> = errors.into_values().flatten().collect();
+        rsx! {
+            li { class: ctx.classes.fixed_class(FixedKey::SetItem, false), key: "{name}",
+                {
+                    DynamicNode::Component(VComponent::new(
+                        self.item_view.0,
+                        SetItemProps {
+                            text: text.clone(),
+                            path: qualify(&path, &name),
+                            index,
+                            editing,
+                            values: ctx.values,
+                            classes: ctx.classes.clone(),
+                        },
+                        "ItemView",
+                    ))
+                }
+                FieldErrors {
+                    field_id: ctx.nested(&self.name).id(&name),
+                    errors,
+                    classes: ctx.classes.clone(),
+                }
+                if editable {
+                    EditItemButton {
+                        path: path.clone(),
+                        index,
+                        text: text.clone(),
+                        editing,
+                        on_edit: ctx.on_edit,
+                        classes: ctx.classes.clone(),
+                    }
+                }
+                RemoveItemButton {
+                    path,
+                    index,
+                    text,
+                    on_edit: ctx.on_edit,
+                    classes: ctx.classes.clone(),
+                }
+            }
+        }
+    }
+
     /// Set the duplicate message and say `true` if `candidate` equals an
     /// item; `false`, with nothing changed, if it does not.
     fn refuse_duplicate(&mut self, candidate: &dyn Node) -> bool {
@@ -762,7 +825,6 @@ impl Node for SetNode {
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Set, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::SetLegend, false);
-        let set_item_class = ctx.classes.fixed_class(FixedKey::SetItem, false);
         let class_for_set_items = ctx.classes.fixed_class(FixedKey::SetItems, false);
         let refused = self.message.as_ref().is_some_and(|m| m.refused);
         let message_class = ctx.classes.fixed_class(FixedKey::SetMessage, refused);
@@ -780,23 +842,6 @@ impl Node for SetNode {
         // dev's adder may leave the draft out (a search-to-add), and Edit
         // would then fill a box nobody can see.
         let editable = self.adder == ItemAdder(DraftAdder);
-        // Worked out here, since an rsx `for` takes no statements. An item is
-        // shown, not edited in place (decision E): its text, then its own
-        // errors (a dev's validator or a server can still name one).
-        let shown: Vec<(String, String, Vec<ValidationMessage>, bool)> = self
-            .items
-            .iter()
-            .map(|item| {
-                let mut errors = ErrorsByPath::default();
-                item.collect_errors(&path, &mut errors);
-                (
-                    item.name(),
-                    item_text(&**item),
-                    errors.into_values().flatten().collect(),
-                    self.editing.as_deref() == Some(item.name().as_str()),
-                )
-            })
-            .collect();
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -821,22 +866,8 @@ impl Node for SetNode {
                         // re-render every row below it; with one it moves the nodes
                         // it already has. The wrapper exists because a key has to sit
                         // on an element, and it is what pairs a item with its widget.
-                        for (index, (name, text, errors, editing)) in shown.into_iter().enumerate() {
-                            li { class: &set_item_class, key: "{name}",
-                                "{text}"
-                                FieldErrors { field_id: nested.id(&name), errors, classes: ctx.classes.clone() }
-                                if editable {
-                                    EditItemButton {
-                                        path: path.clone(),
-                                        index,
-                                        text: text.clone(),
-                                        editing,
-                                        on_edit: ctx.on_edit,
-                                        classes: ctx.classes.clone(),
-                                    }
-                                }
-                                RemoveItemButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
-                            }
+                        for (index, item) in self.items.iter().enumerate() {
+                            { self.render_item(ctx, &**item, index, editable) }
                         }
                     },
                 }

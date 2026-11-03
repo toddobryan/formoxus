@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `item` on a list needs `set` beside it, since only a set shows its items as text: write `set, item: …`
+  --> tests/ui/form_item_on_a_list.rs:15:23
+   |
+15 |             tags => { item: ItemText },
+   |                       ^^^^ evaluation of `main::_` failed here

@@ -31,6 +31,9 @@ pub(crate) struct FieldBody {
     /// `adder: SomeComponent`, the component that adds the list's rows in
     /// place of the Add button. The key is kept for the list check's span.
     pub(crate) adder: Option<(Ident, syn::Path)>,
+    /// `item: SomeComponent`, what shows each item's text in a set (box 9).
+    /// The key is kept for the checks' span.
+    pub(crate) item: Option<(Ident, syn::Path)>,
     /// The bare flag `set`, rendering a `Vec` of leaves as a set (K). The
     /// key, since a flag has nothing else, is what its checks are spanned on.
     pub(crate) set: Option<Ident>,
@@ -475,6 +478,7 @@ impl FieldBody {
         checks.push(self.set_checks(&shape));
         checks.push(self.order_checks(&shape, path_span));
         checks.push(self.feedback_checks(&shape));
+        checks.push(self.item_checks(&shape));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -603,6 +607,26 @@ impl FieldBody {
         }
     }
 
+    /// `item`'s two `const _` assertions, spanned on the key: that the field
+    /// is a set, or a list `set` makes one. Written so only one reports: a
+    /// list fails the first, anything else that is not a set the second.
+    fn item_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let (Some((key, _)), None) = (&self.item, &self.set) else {
+            return TokenStream2::new();
+        };
+        let fk = quote! { ::formoxus::field_kind };
+        let on_a_list = "`item` on a list needs `set` beside it, since only a set shows its \
+                         items as text: write `set, item: …`";
+        let on_anything_else = "`item` applies only to set fields";
+        quote_spanned! { key.span()=>
+            const _: () = ::core::assert!(!#fk::is_list(#shape), #on_a_list);
+            const _: () = ::core::assert!(
+                #fk::is_list(#shape) || #fk::is_set(#shape),
+                #on_anything_else
+            );
+        }
+    }
+
     /// One `const _` assertion per attribute the widget must pass through:
     /// every table attribute but the validated ones, which are the field's
     /// settings and never reach the widget. Spanned on the key, since the
@@ -677,8 +701,8 @@ impl Parse for FieldBody {
 
 impl FieldBody {
     /// One `key: value` (or bare flag) entry: `widget`, `label`, `choices`,
-    /// `adder`, `set`, `sort_by`, `feedback`, a table attribute by its `snake_case` variant name, or
-    /// a quoted key passed through as written.
+    /// `adder`, `set`, `sort_by`, `feedback`, `item`, a table attribute by its
+    /// `snake_case` variant name, or a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
         if starts_nested(body) {
             let path: SpecPath = body.parse()?;
@@ -702,7 +726,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" | "choices" | "adder" | "feedback" => {
+            "widget" | "label" | "choices" | "adder" | "feedback" | "item" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -721,6 +745,11 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.adder = Some((key.clone(), body.parse()?));
+                } else if name == "item" {
+                    if self.item.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.item = Some((key.clone(), body.parse()?));
                 } else if name == "feedback" {
                     if self.feedback.is_some() {
                         return Err(given_twice());
@@ -772,6 +801,7 @@ impl FieldBody {
             && self.set.is_none()
             && self.sort_by.is_none()
             && self.feedback.is_none()
+            && self.item.is_none()
     }
 }
 
@@ -1223,7 +1253,7 @@ fn owned(attr: Attr) -> String {
 }
 
 /// Every identifier key a field body accepts: `widget`, `label`, `choices`,
-/// `adder`, `set`, `sort_by`, `feedback`, then each table attribute an author
+/// `adder`, `set`, `sort_by`, `feedback`, `item`, then each table attribute an author
 /// may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
@@ -1234,6 +1264,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "set".to_string(),
         "sort_by".to_string(),
         "feedback".to_string(),
+        "item".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1410,6 +1441,7 @@ mod tests {
                 "set" => quote!(#ident),
                 "sort_by" => quote!(#ident: String::cmp),
                 "feedback" => quote!(#ident: |_| None),
+                "item" => quote!(#ident: TagChip),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -1902,6 +1934,61 @@ mod tests {
         let msg = err_of(quote! { Source { agreed => { required: true } } });
         expect_that!(msg, contains_substring("`required` is set by formoxus"));
         expect_that!(msg, contains_substring("write `required_true`"));
+    }
+
+    // ── item ─────────────────────────────────────────────────────────────
+
+    /// The component goes into an `ItemView` on the set's own path, and, like
+    /// `adder`, may be named by a path.
+    #[gtest]
+    fn item_becomes_a_builder_call() {
+        let spec = parse(quote! { Source { tags => { item: ui::TagChip } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                ". with_item_view (\"tags\" , :: formoxus :: widgets :: ItemView (ui :: TagChip))"
+            )
+        );
+    }
+
+    /// After `.treat_as_set`, whose run-time check `with_item_view` relies on
+    /// for a `Vec`.
+    #[gtest]
+    fn item_comes_after_set() {
+        let spec = parse(quote! { Source { tags => { item: TagChip, set } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        let set = tokens.find(". treat_as_set").expect("set is emitted");
+        let item = tokens.find(". with_item_view").expect("item is emitted");
+        expect_that!(item, gt(set));
+    }
+
+    /// Without `set`, two checks: a list needs `set`, and anything else must
+    /// be a set.
+    #[gtest]
+    fn item_asks_whether_the_field_is_a_set() {
+        let spec = parse(quote! { Source { tags => { item: TagChip } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring("`item` on a list needs `set` beside it")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("`item` applies only to set fields")
+        );
+    }
+
+    /// With `set`, `set`'s own checks say whether the field can be one.
+    #[gtest]
+    fn item_beside_set_has_no_checks_of_its_own() {
+        let spec = parse(quote! { Source { tags => { set, item: TagChip } } }).unwrap();
+        expect_that!(spec.expand().to_string(), not(contains_substring("`item`")));
+    }
+
+    #[gtest]
+    fn item_given_twice_is_refused() {
+        let msg = err_of(quote! { Source { tags => { item: A, item: B } } });
+        expect_that!(msg, contains_substring("`item` is given twice"));
     }
 
     // ── adder ────────────────────────────────────────────────────────────

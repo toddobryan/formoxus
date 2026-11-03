@@ -2038,9 +2038,179 @@ fn a_list_refuses_an_item_edit() {
 fn removing_the_item_being_edited_restores_add() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
-    app.click(app.labelled("click", "Remove row 2"));
+    app.click(app.labelled("click", "Remove “rust”"));
     let html = app.html();
     expect_that!(html, contains_substring("Add</button>"));
     expect_that!(html, not(contains_substring("Cancel</button>")));
     expect_that!(html, contains_substring(draft_value("tags.#2", "rust")));
+}
+
+// ── Display (box 9) ──────────────────────────────────────────────────────
+
+/// A set's Remove is named by its item, as Edit is: the set is sorted, so
+/// "Remove row 2" names nothing a user can see. A list keeps its rows'
+/// positions (`vecs.rs`).
+#[gtest]
+fn a_sets_remove_is_named_by_its_item() {
+    let html = super::render_to_html(PostForm);
+    expect_that!(html, contains_substring(r#"aria-label="Remove “rust”""#));
+    expect_that!(html, not(contains_substring("Remove row")));
+}
+
+#[component]
+fn TextareaItemsForm() -> Element {
+    let form = use_form(|| form_for(&post(), form! { Post { tags[] => { widget: textarea } } }));
+    form.render(using_fns! {})
+}
+
+/// The items' own widget is the draft's: shown, items are text, so the
+/// widget `tags[]` names is where an item is typed, new or being edited.
+#[gtest]
+fn the_items_widget_renders_the_draft() {
+    let html = super::render_to_html(TextareaItemsForm);
+    expect_that!(html, contains_substring(r#"name="tags.#2""#));
+    expect_that!(html, contains_substring("<textarea"));
+}
+
+/// The draft and its buttons in one `fx-set-adder`, so a preset can lay
+/// them out as a row (the gallery's `fx-tags`).
+#[gtest]
+fn the_draft_and_its_buttons_share_one_wrapper() {
+    let html = super::render_to_html(PostForm);
+    let start = html
+        .find(r#"<div class="fx-set-adder"><div id=""#)
+        .expect("the wrapper opens on the draft");
+    let add = html.find("Add</button>").expect("the set has Add");
+    let message = html.find("fx-set-message").expect("the set has its region");
+    expect_that!(add, gt(start));
+    expect_that!(
+        html[add..message].to_string(),
+        starts_with("Add</button></div>")
+    );
+}
+
+#[component]
+fn TagsPresetForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            form! { Post { classes_plus: { set: + ["fx-tags"] } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// How the gallery's tags preset is turned on (its `main.css`): one class
+/// on the set's fieldset, through `classes_plus:`.
+#[gtest]
+fn the_tags_preset_is_one_class_on_the_set() {
+    expect_that!(
+        super::render_to_html(TagsPresetForm),
+        contains_substring(r#"<fieldset class="fx-group fx-set fx-tags""#)
+    );
+}
+
+// ── A dev's item view: `item:` (box 9) ───────────────────────────────────
+
+/// A view that shows everything it was handed.
+#[component]
+fn TagChip(props: formoxus::widgets::SetItemProps) -> Element {
+    let stored = formoxus::widgets::get_current(&props.path, props.values);
+    let says = format!(
+        "{} at {} #{} editing={} stored={stored}",
+        props.text, props.path, props.index, props.editing
+    );
+    rsx! { span { class: "chip", "{says}" } }
+}
+
+#[component]
+fn ChipForm() -> Element {
+    let form = use_form(|| form_for(&tagged(), form! { Tagged { tags => { item: TagChip } } }));
+    form.render(using_fns! {})
+}
+
+#[component]
+fn HandBuiltChipForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &tagged(),
+            FormSpec::default().with_item_view("tags", formoxus::widgets::ItemView(TagChip)),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// The view shows the item, and formoxus still renders the rest of the
+/// `<li>`: Edit and Remove, named by the item, follow it.
+#[gtest]
+fn a_dev_item_view_shows_each_item() {
+    for html in [
+        super::render_to_html(ChipForm),
+        super::render_to_html(HandBuiltChipForm),
+    ] {
+        expect_that!(
+            html,
+            contains_substring(
+                r#"<li class="fx-set-item"><span class="chip">rust at tags.#1 #1 editing=false stored=rust</span><button"#
+            )
+        );
+        expect_that!(html, contains_substring(r#"aria-label="Edit “rust”""#));
+        expect_that!(html, contains_substring(r#"aria-label="Remove “rust”""#));
+    }
+}
+
+#[component]
+fn ChipWireForm() -> Element {
+    let form = use_form(|| form_for(&tagged(), form! { Tagged { tags => { item: TagChip } } }));
+    with_wire(form, rsx! {})
+}
+
+/// Told when its item is the one being edited.
+#[gtest]
+fn a_dev_item_view_knows_when_its_item_is_being_edited() {
+    let mut app = super::Harness::mount(ChipWireForm);
+    edit_rust(&mut app);
+    expect_that!(
+        app.html(),
+        contains_substring("rust at tags.#1 #1 editing=true")
+    );
+}
+
+#[component]
+fn ChipListForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Draft {
+                tags: tags(&["b", "a"]),
+            },
+            form! { Draft { tags => { set, item: TagChip } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// On a `Vec` treated as a set, as on a set: sorted before its keys are
+/// given out, so `a` is `#0`.
+#[gtest]
+fn a_dev_item_view_shows_a_list_treated_as_a_set() {
+    expect_that!(
+        super::render_to_html(ChipListForm),
+        contains_substring(r#"<span class="chip">a at tags.#0 #0"#)
+    );
+}
+
+#[gtest]
+#[should_panic(expected = "title: `item` applies only to a set, not `String`")]
+fn an_item_view_on_a_scalar_is_refused() {
+    let _ =
+        FormSpec::<Post>::default().with_item_view("title", formoxus::widgets::ItemView(TagChip));
+}
+
+#[gtest]
+#[should_panic(
+    expected = "tags: if you want to treat this list as a set, call `treat_as_set` first"
+)]
+fn an_item_view_on_a_list_not_yet_treated_as_a_set_is_refused() {
+    let _ =
+        FormSpec::<Draft>::default().with_item_view("tags", formoxus::widgets::ItemView(TagChip));
 }

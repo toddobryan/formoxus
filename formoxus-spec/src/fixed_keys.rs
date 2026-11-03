@@ -61,6 +61,9 @@ pub enum FixedKey {
     SetItems,
     /// The set's `<legend>`: `fx-legend fx-field-label`.
     SetLegend,
+    /// The `<div>` around a set's default adder, its draft and its buttons,
+    /// so they can be laid out as one row: `fx-set-adder`.
+    SetAdder,
     /// The set's live region, after its adder: what its last edit did ("“rust”
     /// was added successfully."), or why it was refused: `fx-set-message`,
     /// plus `fx-invalid` for a refusal.
@@ -120,6 +123,7 @@ impl FixedKey {
         Self::SetItem,
         Self::SetItems,
         Self::SetLegend,
+        Self::SetAdder,
         Self::SetMessage,
         Self::Variant,
         Self::VariantLegend,
@@ -155,6 +159,7 @@ impl FixedKey {
             Self::SetItem => "set_item",
             Self::SetItems => "set_items",
             Self::SetLegend => "set_legend",
+            Self::SetAdder => "set_adder",
             Self::SetMessage => "set_message",
             Self::Variant => "variant",
             Self::VariantLegend => "variant_legend",
@@ -219,6 +224,7 @@ mod tests {
                 | FixedKey::SetItem
                 | FixedKey::SetItems
                 | FixedKey::SetLegend
+                | FixedKey::SetAdder
                 | FixedKey::SetMessage
                 | FixedKey::Variant
                 | FixedKey::VariantLegend
@@ -234,7 +240,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(29 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(30 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

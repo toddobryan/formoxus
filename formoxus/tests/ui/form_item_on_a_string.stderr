@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `item` applies only to set fields
+  --> tests/ui/form_item_on_a_string.rs:14:27
+   |
+14 |             nickname => { item: ItemText },
+   |                           ^^^^ evaluation of `main::_` failed here

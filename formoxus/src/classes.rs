@@ -411,6 +411,7 @@ impl Classes {
             (FixedKey::SetItem, Slot::new("fx-set-item")),
             (FixedKey::SetItems, Slot::new("fx-set-items")),
             (FixedKey::SetLegend, Slot::new("fx-legend fx-field-label")),
+            (FixedKey::SetAdder, Slot::new("fx-set-adder")),
             // `fx-invalid` for a refusal (a duplicate), so it can look like an
             // error while a success looks like news.
             (
@@ -748,6 +749,7 @@ mod tests {
             (FixedKey::SetItem, "fx-set-item"),
             (FixedKey::SetItems, "fx-set-items"),
             (FixedKey::SetLegend, "fx-legend fx-field-label"),
+            (FixedKey::SetAdder, "fx-set-adder"),
             (FixedKey::SetMessage, "fx-set-message"),
             (FixedKey::Variant, "fx-group fx-variant"),
             (FixedKey::VariantLegend, "fx-legend fx-field-label"),

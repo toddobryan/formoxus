@@ -747,6 +747,7 @@ fn set_node(
         items,
         draft,
         editing: None,
+        item_view: spec.and_then(|s| s.item_view).unwrap_or_default(),
         comparator,
         message: None,
         feedback: spec.and_then(|s| s.feedback.clone()),

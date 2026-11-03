@@ -175,6 +175,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
     };
     let after_cancel = focus_draft.clone();
     rsx! {
+        div { class: classes.fixed_class(FixedKey::SetAdder, false),
         div {
             id: "{id}-draft",
             onkeydown: move |e: KeyboardEvent| {
@@ -214,6 +215,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
                 "Cancel"
             }
         }
+        }
     }
 }
 
@@ -251,27 +253,36 @@ pub fn EditItemButton(
     }
 }
 
-/// The widget that drops one row from a list.
+/// The widget that drops one row from a list, or one item from a set.
 ///
 /// Addressed by POSITION, not by the row's key: the list is what applies the
 /// edit and it works in terms of `rows`, so a position is what it can act on
 /// directly. Keys identify a row across edits; a position locates one at an
 /// instant, which is all a click needs to say.
+///
+/// Named by `text` when there is one, "Remove “rust”", as a set's is: a set
+/// is sorted, so "Remove row 2" names nothing a user can see. A list's row
+/// has no one text to name it by, so it keeps its position.
 #[component]
 pub fn RemoveItemButton(
     path: String,
     index: usize,
+    /// The item as the user sees it, for the button's name.
+    text: Option<String>,
     on_edit: Callback<Edit>,
     classes: Rc<Classes>,
 ) -> Element {
     // 1-based for humans: this is the only place a row's position is spoken
     // aloud, and it is never used as a path segment.
-    let ordinal = index + 1;
+    let label = match text {
+        Some(text) => format!("Remove “{text}”"),
+        None => format!("Remove row {}", index + 1),
+    };
     rsx! {
         button {
             r#type: "button",
             class: classes.fixed_class(FixedKey::RemoveRowButton, false),
-            aria_label: "Remove row {ordinal}",
+            aria_label: "{label}",
             onclick: move |_| {
                 on_edit.call(Edit::RemoveItem { path: path.clone(), index });
             },

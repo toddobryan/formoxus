@@ -1,0 +1,16 @@
+error[E0308]: mismatched types
+  --> tests/ui/form_item_wrong_props.rs:23:29
+   |
+23 |             tags => { item: NotAView },
+   |                             ^^^^^^^^
+   |                             |
+   |                             expected fn pointer, found fn item
+   |                             arguments to this struct are incorrect
+   |
+   = note: expected fn pointer `fn(SetItemProps) -> Result<VNode, RenderError>`
+                 found fn item `fn(AddItemProps) -> Result<VNode, RenderError> {NotAView}`
+note: tuple struct defined here
+  --> src/widgets/set_item.rs
+   |
+   | pub struct ItemView(pub fn(SetItemProps) -> Element);
+   |            ^^^^^^^^

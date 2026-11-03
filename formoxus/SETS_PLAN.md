@@ -888,8 +888,43 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   cannot show). **Browser-only, for box 10:** focus in the draft after
   Edit, Save and Cancel, and Escape not reaching anything else.
 
-- [ ] **9.** (Claude) Display (F): a tags preset in
+- [x] **9.** (Claude) Display (F): a tags preset in
   the gallery's CSS, and a test that an item's row widget renders.
+
+  **Built 2026-11-03** (Claude, at Todd's "Go ahead and do 9"):
+  1. A set's Remove is named by its item, "Remove “rust”"
+     (`RemoveItemButton`'s new `text: Option<String>`); a list's keeps
+     "Remove row N".
+  2. New `FixedKey::SetAdder` (`set_adder`, class `fx-set-adder`): a
+     `<div>` around `DraftAdder`'s draft and its buttons, which were loose
+     siblings in the fieldset, so a preset can lay them out as one row.
+  3. The gallery's `main.css`: a default for every set (a plain list, each
+     item its text then Edit and Remove; the adder a row, Add not sticky),
+     and the tags preset, chips in a wrapping row, opted into with
+     `classes_plus: { set: + ["fx-tags"] }`. `fx-tags` is the gallery's
+     class, not formoxus's.
+  4. "An item's row widget" no longer meant what it did when this box was
+     written: box 8 made an item display-only text, so the widget `tags[]`
+     names now renders the DRAFT (test
+     `the_items_widget_renders_the_draft`). So, decided with Todd the same
+     day: **`item:` in `form!`** (`tags => { item: TagChip }`), or
+     `FormSpec::with_item_view(path, ItemView(TagChip))`, names a
+     component taking `SetItemProps` (`text`, the item's `path`, `index`,
+     `editing`, `values`, `classes`; no typed `T`, since a set's items are
+     single values, so the text IS the value). It replaces the item's TEXT
+     only (Todd): formoxus still renders the `<li>`, the item's errors,
+     Edit and Remove. Default `ItemText`. Sets only: `const` checks refuse
+     it on a list without `set` and on anything else not a set (goldens
+     `form_item_on_a_list`, `form_item_on_a_string`,
+     `form_item_wrong_props`), and `with_item_view` goes through
+     `set_field`'s panics. `SetNode::render_item` now renders one `<li>`
+     (clippy's 100-line limit).
+  5. NOT done: Delete or Backspace on a focused item (optional). It needs
+     focus moved somewhere after the item goes, which only a browser can
+     check.
+
+  Tests: 10 in `sets.rs`, 5 `form!` parse tests, 3 goldens. The CSS is
+  unchecked in a browser until box 10's gallery example shows a set.
 
   From `tag_group` in dioxus-primitives (read 2026-11-03, Todd agreed):
   1. A set's Remove names its item: `aria-label="Remove “rust”"`, by

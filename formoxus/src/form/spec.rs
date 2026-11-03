@@ -38,6 +38,9 @@ pub struct FieldSpec {
     /// A set's words for what an edit did (`feedback:`), in place of
     /// formoxus's own.
     pub feedback: Option<SetFeedback>,
+    /// A set's view of each item's text (`item:`), in place of
+    /// [`ItemText`](crate::widgets::ItemText).
+    pub item_view: Option<crate::widgets::ItemView>,
 }
 
 #[derive(Clone, Debug)]
@@ -186,6 +189,13 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// ("“rust” was added successfully.") with the dev's.
     pub fn with_feedback(mut self, path: &str, feedback: SetFeedback) -> Self {
         self.set_field(path, "feedback").feedback = Some(feedback);
+        self
+    }
+
+    /// Show each item of the set at `path` with `view` instead of its bare
+    /// text. Formoxus still renders the item's errors, Edit and Remove.
+    pub fn with_item_view(mut self, path: &str, view: crate::widgets::ItemView) -> Self {
+        self.set_field(path, "item").item_view = Some(view);
         self
     }
 

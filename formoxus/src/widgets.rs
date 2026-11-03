@@ -64,6 +64,7 @@ pub mod input;
 pub mod item_buttons;
 pub mod radio_group;
 pub mod select;
+pub mod set_item;
 pub mod textarea;
 pub mod types;
 pub mod values;
@@ -85,6 +86,7 @@ pub use item_buttons::{
 };
 pub use radio_group::RadioGroup;
 pub use select::{ABSENT_DISPLAY, Select};
+pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
 pub use values::{get_current, write_value};
