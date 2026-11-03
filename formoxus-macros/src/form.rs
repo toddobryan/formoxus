@@ -564,7 +564,8 @@ fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
 impl FieldSpec {
     /// The `FormSpec` builder calls one field body contributes, in order:
     /// label, widget, choices, the field's settings (`with_node`), the
-    /// attributes that only render (`with_attrs`), and a list's `adder`.
+    /// attributes that only render (`with_attrs`), a list's `adder`, `set`
+    /// (`treat_as_set`) and `sort_by`.
     /// Each is omitted when the body says nothing about it.
     fn builder_calls(&self, model: &Path) -> TokenStream2 {
         let key = self.path.key();
@@ -627,7 +628,14 @@ impl FieldSpec {
             let name = sort_by.name_tokens();
             quote! { .with_sort_by(#key, #items.sort_by(#order, #name)) }
         });
-        quote! { #label #widget #node #attrs #adder #sort_by }
+        // Before `sort_by`, whose run-time check on a `Vec` asks whether it is
+        // already treated as a set.
+        let set = self
+            .body
+            .set
+            .as_ref()
+            .map(|_| quote! { .treat_as_set(#key) });
+        quote! { #label #widget #node #attrs #adder #set #sort_by }
     }
 }
 

@@ -311,6 +311,10 @@ impl Items {
     pub(crate) fn sort_by(&mut self, order: &SetOrder) {
         order.item_order.sort_nodes(&mut self.collection);
     }
+
+    pub(crate) fn dedup(&mut self, order: &SetOrder) {
+        order.item_order.dedup_nodes(&mut self.collection);
+    }
 }
 
 impl<'a> IntoIterator for &'a Items {

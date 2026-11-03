@@ -18,11 +18,12 @@ use dioxus::{
     core::{DynamicNode, VComponent},
     prelude::*,
 };
-use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
+use facet::{Def, Facet, Partial, Peek, ReflectError, ScalarType, Shape};
 use formoxus_spec::FixedKey;
 use unicase::{Ascii, UniCase};
 
 use crate::{
+    build::retain_first,
     error::FormAccessError,
     form::ErrorsByPath,
     nodes::{
@@ -46,7 +47,7 @@ pub fn unicode_case_insensitive<S: AsRef<str>>(a: &S, b: &S) -> Ordering {
 
 #[derive(Clone)]
 pub struct SetOrder {
-    pub item_order: Arc<dyn ItemOrder>,
+    pub item_order: Arc<dyn ItemHandler>,
 }
 
 impl SetOrder {
@@ -66,7 +67,10 @@ impl SetOrder {
         }
     }
 
-    pub fn custom<T: Facet<'static> + 'static>(cmp: fn(&T, &T) -> Ordering, name: &str) -> Self {
+    pub fn custom<T: Facet<'static> + 'static + PartialEq>(
+        cmp: fn(&T, &T) -> Ordering,
+        name: &str,
+    ) -> Self {
         Self {
             item_order: Arc::new(CustomOrder {
                 cmp_value: cmp,
@@ -90,7 +94,7 @@ impl PartialEq for SetOrder {
     }
 }
 
-pub trait ItemOrder: Debug + Send + Sync {
+pub trait ItemHandler: Debug + Send + Sync {
     fn name(&self) -> String;
 
     /// Sort a set's values as `set_node` found them, BEFORE their keys are
@@ -104,6 +108,8 @@ pub trait ItemOrder: Debug + Send + Sync {
     /// `Invalid` leaf, say, after a failed submit) goes after every item that
     /// has a value, in the order it was already in (`sort_by` is stable).
     fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
+
+    fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
 }
 
 struct DefaultOrder {
@@ -143,7 +149,7 @@ impl Debug for DefaultOrder {
     }
 }
 
-impl ItemOrder for DefaultOrder {
+impl ItemHandler for DefaultOrder {
     fn name(&self) -> String {
         format!("{self:?}")
     }
@@ -159,6 +165,13 @@ impl ItemOrder for DefaultOrder {
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
             (None, None) => Ordering::Equal,
+        });
+    }
+
+    fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        retain_first(nodes, |a, b| match (a.peek_value(), b.peek_value()) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
         });
     }
 }
@@ -195,7 +208,7 @@ impl<T> Debug for CustomOrder<T> {
     }
 }
 
-impl<T: Facet<'static> + 'static> ItemOrder for CustomOrder<T> {
+impl<T: Facet<'static> + 'static + PartialEq> ItemHandler for CustomOrder<T> {
     fn name(&self) -> String {
         format!("CustomOrder({})", self.name)
     }
@@ -218,6 +231,16 @@ impl<T: Facet<'static> + 'static> ItemOrder for CustomOrder<T> {
             (None, Some(_)) => Ordering::Greater,
             (None, None) => Ordering::Equal,
         });
+        nodes.extend(keyed.into_iter().map(|(_, n)| n));
+    }
+
+    fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        let mut keyed: Vec<(Option<T>, Box<dyn Node>)> =
+            nodes.drain(..).map(|n| (Self::value_of(&*n), n)).collect();
+        retain_first(
+            &mut keyed,
+            |(a, _), (b, _)| matches!((a, b), (Some(a), Some(b)) if a == b),
+        );
         nodes.extend(keyed.into_iter().map(|(_, n)| n));
     }
 }
@@ -255,6 +278,7 @@ impl Node for SetNode {
         self.items
             .distribute_values(&qualify(prefix, &self.name), specs, values);
         self.items.sort_by(&self.comparator);
+        self.items.dedup(&self.comparator);
     }
 
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
@@ -283,12 +307,31 @@ impl Node for SetNode {
     }
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
-        let mut partial = partial.init_set()?;
-        for item in &self.items {
-            partial = partial.begin_set_item()?;
-            partial = item.write_value_into(partial)?;
-            partial = partial.end()?;
-        }
+        let partial = match partial.shape().def {
+            Def::Set(_) => {
+                let mut partial = partial.init_set()?;
+                for item in &self.items {
+                    partial = partial.begin_set_item()?;
+                    partial = item.write_value_into(partial)?;
+                    partial = partial.end()?;
+                }
+                partial
+            }
+            Def::List(_) => {
+                let mut partial = partial.init_list()?;
+                for item in &self.items {
+                    partial = partial.begin_list_item()?;
+                    partial = item.write_value_into(partial)?;
+                    partial = partial.end()?;
+                }
+                partial
+            }
+            _ => panic!(
+                "{}: a set writes into a set or a list, not `{}`",
+                self.name,
+                partial.shape()
+            ),
+        };
         Ok(partial)
     }
 

@@ -276,8 +276,8 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
       first failure reports; goldens `form_set_on_a_set`,
       `form_set_on_a_string`, `form_set_on_a_list_of_structs`.)
 
-    - [ ] **2f4.** The expansion, `.with_set("path")`, against `pub fn
-      with_set(self, path: &str) -> Self` (agreed 2026-11-01). Waits on
+    - [x] **2f4.** The expansion, `.treat_as_set("path")`, against `pub fn
+      treat_as_set(self, path: &str) -> Self` (agreed 2026-11-01 as `with_set`, renamed 2026-11-03). Waits on
       box 5's builder: until it exists, nothing using `set` compiles.
 
   - [x] **2g.** (Claude) Tests for 2d–2e: a `BTreeSet<String>` and a
@@ -435,7 +435,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     **Open, for 2f4:** `tags => { set, sort_by: … }` on a `Vec` passes
     every `const` check and then panics at run time, since `with_sort_by`
     asserts `is_set`. It must also accept a field marked `set` once
-    `with_set` exists.
+    `treat_as_set` exists.
 
     Checked by TYPE, not `const` (a `Shape`'s `ConstTypeId` wraps a fn
     const code cannot call). The expansion is
@@ -481,6 +481,167 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 - [ ] **5.** A `Vec` treated as a set reaches the model sorted and
   deduplicated. (Todd, Claude tests)
 
+  Expanded 2026-11-03. A `Vec` marked `set` is built as a `SetNode`, not a
+  `ListNode`, so it gets the `<ul>`, Remove only, the refusals and the
+  order for free. What is new is the `Vec` underneath: the node must peek
+  it as a list, write it as a list, and drop duplicates itself, which a
+  `BTreeSet`/`HashSet` does on insert. Sorting needs nothing new, since the
+  items already sit in order (box 4) and are written in that order.
+
+  **Where duplicates come from, and where each is dropped:**
+
+  1. Edit mode, a model `Vec` that already holds one (`["rust", "rust"]`).
+     Dropped at build, among the `Peek`s, before the sort and the keys, so
+     the screen shows what will be saved.
+  2. An `AddItem` whose value equals an item. Refused with a message: box 6,
+     not here.
+  3. The wire: a scripted or forged payload naming two items with equal
+     values. Dropped in `distribute_values`, beside the sort, so a failed
+     submit re-renders without them. This applies to a `Def::Set` too:
+     until 5d, its write collapses them silently but its nodes keep both.
+
+  **After 5d the screen and the model always agree** (asked by Todd,
+  2026-11-03): every drop removes a NODE, and the model is written from the
+  nodes. A browser submit distributes into the live state
+  (`Form::validate`), so the dropped item leaves the page in the same step;
+  a server submit distributes into a fresh state, and a failed one
+  re-renders that state. The one way a user can still make a duplicate is
+  retyping an item in place, which items allow only until box 8; after it,
+  every new value comes through the adder, which box 6 checks.
+
+  "Equal" is the model's own `PartialEq` (H), never the comparator, and an
+  item with no value (`Empty`, `Invalid`) equals nothing. The FIRST of
+  equal items stays.
+
+  **Equality needs `T`, and only the item order has it.** A scalar item's
+  leaf gives a `Peek` (`Node::peek_value`), so `Peek::partial_eq` works. A
+  newtype's leaf gives its INNER value, and a unit enum's `VariantNode`
+  gives nothing, the same wall 4a hit for ordering. But every non-scalar
+  set already has a `sort_by` (4c4), so a `CustomOrder<T>` that rebuilds
+  `T` is always there when `peek_value` is not enough. So equality goes
+  beside the order: the erased per-item object learns `dedup_nodes`, and
+  box 6's duplicate check asks the same object.
+
+  - [x] **5a.** (Todd) `FieldSpec.treat_as_set: bool` and `FormSpec::treat_as_set(path)` (named so 2026-11-03, without `with_`: every `with_*` builder sets a value it is given, and this one takes only the path; `form!` keeps `set`),
+    agreed for 2f4. It asserts what `form!`'s three `set` checks assert,
+    for a hand-built spec: not already a set, a list, a list of leaves
+    (`field_kind::is_list_of_leaves` is a `const fn`, callable at run
+    time). And `with_sort_by` accepts a field marked `set` as well as a
+    `Def::Set`, closing box 4's open item. On a `Vec` not (yet) marked, its
+    panic says to call `treat_as_set` first (B).
+
+  - [ ] **5b.** (Todd) `build`: a `Def::List` field whose spec has `set`
+    goes to `set_node`, not `list_node`, found with
+    `walk.spec_for(prefix)`. `set_node` peeks a `Vec` with `into_list` and
+    a set with `into_set`, deciding from the peek's own shape. `SetNode`
+    itself is unchanged: it keeps NO record of its container (Todd,
+    2026-11-03), because 5e's write reads it from the `Partial`.
+
+    Also here (Todd, 2026-11-03), since it is the same file: `rows_of`
+    takes a `Def::Set`'s item shape as well as a `Def::List`'s, so a spec
+    path through a set's items (`labels[] => { … }`) stops panicking with
+    "not a list, so `[]` names nothing". Test in `specs.rs` (Claude); see
+    the note under box 9.
+
+  - [x] **5c.** (Claude, at Todd's request) Dedup at build (source 1): drop a `Peek` equal
+    (`Peek::partial_eq`) to an earlier one, before `sort_peeks` and before
+    keys are assigned, so the keys stay `#0..#n` with no gaps. A `Def::Set`
+    never has one, so this runs for a `Vec` only.
+
+    Done 2026-11-03 as `build::without_duplicates`, called on the list
+    branch only. Pairwise, since `Peek` has no `Eq` and its `Hash` panics
+    on a type without one. Two tests in `sets.rs`, both failing without it.
+
+  - [x] **5d.** (Todd) Equality on the item order: `ItemOrder` is renamed
+    `ItemHandler` (A), and gains
+    `dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>)`, called right
+    after `sort_nodes` in `distribute_values` (source 3), not after
+    `AddItem` (box 6 refuses those).
+
+    - `DefaultOrder`: `peek_value` on each side, `Peek::partial_eq`.
+    - `CustomOrder<T>`: `value_of` on each side (it already validates a
+      clone first) and `T`'s own `==`, so `T: PartialEq` joins its bounds
+      and `SetItems::sort_by`'s. Every `BTreeSet`/`HashSet` item has it
+      already (`Ord`/`Eq` imply it); a `Vec` of a type without it cannot
+      take `set` at all, which is right, since its duplicates could not
+      be found.
+
+    An item dropped here leaves its store entries behind, which
+    `ordered_values` already ignores. Left so on purpose (Todd, 2026-11-03):
+    only a browser submit has a store to leave them in, item keys are never
+    reused so nothing can pick one up, `Form::reset` leaves stale paths on
+    the same reasoning, and after box 8 a user cannot make a duplicate on
+    the client at all.
+
+  - [x] **5e.** (Todd) `SetNode::write_value_into` for a `Vec`: branch on
+    `partial.shape().def`, which is the collection's own shape by the time
+    the node writes (`write_into` has called `begin_field`, and an
+    `OptionNode` `begin_some`). `Def::List`: `init_list`, then
+    `begin_list_item` / the item's write / `end` per item, in node order;
+    otherwise `init_set` as now. No sort and no dedup here: 5c and 5d have
+    done both by the time anything writes.
+
+  - [ ] **5p.** (Claude, after 5d) Time large sets, for J (C): a
+    `BTreeSet<String>` and a `Vec<Tag>` with `set` and `sort_by`, at 100,
+    1,000 and 10,000 items, through build, `AddItem`, and a
+    `distribute_values` from the wire. The suspects are `CustomOrder`
+    rebuilding every `T` on each sort (`value_of` validates a CLONE of each
+    item first), and `dedup_nodes`, which is pairwise, O(n²), since `T` is
+    only `PartialEq`. A comparator need not agree with `==` (a by-length
+    order puts "ab" and "cd" together), so sorting first and comparing
+    neighbours would miss duplicates. Report the numbers and whether J (or
+    a cheaper dedup) is worth building; nothing to fix in this box.
+
+  - [x] **5f.** (Claude) 2f4: `form!`'s `set` expands to
+    `.treat_as_set("path")`, emitted BEFORE `.with_sort_by(…)` so 5a's check
+    sees the mark. Parse test for the order of the two calls.
+
+  - [x] **5t.** (Claude) Tests, in `sets.rs` unless noted. (All done 2026-11-03; the dedup tests fail without `Items::dedup`.)
+
+    1. A `Vec<String>` with `set` (through `treat_as_set` and through `form!`)
+       renders a `<ul>`, Remove only, no ↑/↓, and refuses `MoveItem` and a
+       blank `AddItem`, as a `BTreeSet` does.
+    2. Edit mode, `["rust", "dioxus", "rust", "css"]`: built as three items
+       in order, keys `#0,#1,#2`, and `validate` gives
+       `vec!["css", "dioxus", "rust"]`.
+    3. `AddItem` of a new value lands in order, and the model `Vec` follows.
+    4. The wire with two equal values: one item after `distribute_values`,
+       and the model has it once. The same for a `BTreeSet`, whose nodes
+       keep both today (source 3).
+    5. A `Vec<Tag>` with `set` and `sort_by`: sorted, deduplicated by
+       `Tag`'s `==` (not the comparator: two tags of equal length both
+       stay).
+    6. An `Empty` item is not a duplicate of another `Empty` one: both
+       stay, and the submit fails on them as it would anyway.
+    7. `Option<Vec<String>>` with `set`, as `tags? => { set }`.
+    8. `treat_as_set`'s three refusals as `should_panic` (`specs.rs`, beside
+       `with_adder`'s), and `with_sort_by` on a `set`-marked `Vec`. (Done
+       2026-11-03 with 5f: 8 spec tests, plus `form!`'s `set` building the
+       same spec as `treat_as_set` and `set, sort_by:` on a `Vec` building
+       at all.)
+    9. `Vec<Tag>` with `set` and no `sort_by`: already a golden
+       (`form_set_flag_without_sort_by`); add the run-time panic for a
+       hand-built spec.
+
+  **Decided (Todd, 2026-11-03):**
+
+  A. `ItemOrder` becomes **`ItemHandler`**, since it orders and dedups (and
+     answers box 6's duplicate check).
+
+  B. **`with_sort_by` on an unmarked `Vec` panics with "call `treat_as_set`
+     first".** Formoxus optimizes for `form!`, which emits the calls in the
+     right order; a dev building a `FormSpec` by hand has to build it
+     correctly.
+
+  C. **J stays open**, pending 5p's timings of large sets.
+
+  D. **A duplicate from the wire is dropped quietly, not refused.** In a set
+     it carries no information, and `BTreeSet::from_iter` and serde both
+     drop one silently, so formoxus is exactly as strict as the model type.
+     A script is not told; the first of equal items (`"01"` before `"1"` in
+     a `u8` set) is the one kept. Refusing is box 6's job, for the adder,
+     where a person can act on the message.
+
 - [ ] **6.** Duplicates (C): an `AddRow` whose value equals an item is
   refused, with a message beside the adder, per H and I. (Todd,
   Claude tests)
@@ -500,6 +661,17 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
 - [ ] **9.** (Claude) Display (F): a tags preset in
   the gallery's CSS, and a test that an item's row widget renders.
+
+  **Found 2026-11-03, needed first:** a spec path through a set's items
+  (`tags[] => { widget: … }` on a `BTreeSet`) panics, "`tags` is a
+  `BTreeSet<String>`, not a list, so `[]` names nothing": `rows_of`
+  (`build.rs`), which checks a path's `[]` segments, accepts only
+  `Def::List`. `form!` does not catch it, since its projection's `.iter()`
+  compiles on a set, so it is a run-time panic for a path that is right. The
+  fix is `rows_of` taking a `Def::Set`'s item shape too, folded into 5b
+  (Todd), with a `specs.rs` test (Claude). (Done 2026-11-03: renamed
+  `items_of`, message now "not a collection"; test
+  `specs::brackets_on_a_set_name_its_items`.)
 
 - [ ] **10.** (Claude) End to end: `/t/tags` and its e2e tests (add, a
   duplicate's message, edit then add, edit then cancel, the submitted

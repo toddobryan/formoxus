@@ -645,3 +645,274 @@ fn a_unit_enum_set_sorts_by_its_sort_by() {
     expect_that!(item_keys(&rebuilt, "levels"), eq("#1,#2,#0"));
     expect_that!(rebuilt.validate(), some(eq(&triage)));
 }
+
+// ── `set` on a `Vec` ─────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Draft {
+    tags: Vec<String>,
+}
+
+/// `form!`'s `set` is `treat_as_set` on the spec, so the two build the same
+/// spec. Rendering and writing a `Vec` as a set are 5b–5e's tests.
+#[gtest]
+fn form_set_treats_the_list_as_a_set() {
+    expect_that!(
+        format!("{:?}", form! { Draft { tags => { set } } }),
+        eq(&format!(
+            "{:?}",
+            FormSpec::<Draft>::default().treat_as_set("tags")
+        ))
+    );
+}
+
+/// `with_sort_by` on a `Vec` panics unless `treat_as_set` came first;
+/// `form!` emits them in that order whichever order the keys are written.
+#[gtest]
+fn form_set_and_sort_by_on_a_vec_build_a_spec() {
+    let spec = form! { Draft { tags => { sort_by: unicode_case_insensitive, set } } };
+    expect_that!(
+        format!("{spec:?}"),
+        contains_substring(r#"name: "unicode_case_insensitive""#)
+    );
+}
+
+fn draft_tags(form: &FormState<Draft>) -> Vec<String> {
+    form.collect_values()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("tags.#"))
+        .map(|(_, raw)| raw)
+        .collect()
+}
+
+/// A `Vec` can hold a duplicate and a set cannot, so the second "rust" is
+/// dropped when the form is built (5c), before the keys are assigned: three
+/// items, `#0..#2`, sorted. And the model gets back what the screen shows, a
+/// sorted `Vec` with no duplicate (5e).
+#[gtest]
+fn a_list_treated_as_a_set_drops_its_duplicates_when_built() {
+    let draft = Draft {
+        tags: tags(&["rust", "dioxus", "rust", "css"]),
+    };
+    let mut form = form_for(&draft, FormSpec::default().treat_as_set("tags"));
+    expect_that!(
+        draft_tags(&form),
+        elements_are![eq("css"), eq("dioxus"), eq("rust")]
+    );
+    expect_that!(item_keys(&form, "tags"), eq("#0,#1,#2"));
+    expect_that!(
+        form.validate(),
+        some(eq(&Draft {
+            tags: tags(&["css", "dioxus", "rust"]),
+        }))
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct TagList {
+    tags: Vec<Tag>,
+}
+
+/// Equal is `Tag`'s own `==`, not the order: "ab" and "cd" compare `Equal`
+/// by length but are different tags, so both stay, and only the repeated
+/// "ab" goes, though "cd" sits between the two.
+#[gtest]
+fn a_list_treated_as_a_set_drops_by_equality_not_by_its_order() {
+    let list = TagList {
+        tags: ["ab", "cd", "ab", "xyz"]
+            .iter()
+            .map(|name| Tag(name.to_string()))
+            .collect(),
+    };
+    let mut form = form_for(
+        &list,
+        FormSpec::default()
+            .treat_as_set("tags")
+            .with_sort_by("tags", SetOrder::custom(by_length, "by_length")),
+    );
+    let values: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("tags.#"))
+        .map(|(_, raw)| raw)
+        .collect();
+    expect_that!(values, elements_are![eq("ab"), eq("cd"), eq("xyz")]);
+    expect_that!(
+        form.validate().map(|list| list.tags),
+        some(elements_are![
+            eq(&Tag("ab".to_string())),
+            eq(&Tag("cd".to_string())),
+            eq(&Tag("xyz".to_string()))
+        ])
+    );
+}
+
+/// The markup and the refusals are a set's, not a list's: a `<ul>`, Remove
+/// on each item and no ↑/↓, through the spec and through `form!` alike.
+#[component]
+fn DraftAsSetForm() -> Element {
+    let draft = Draft {
+        tags: tags(&["dioxus", "rust"]),
+    };
+    let form = use_form(move || form_for(&draft, FormSpec::default().treat_as_set("tags")));
+    form.render(using_fns! {})
+}
+
+#[component]
+fn DraftAsSetMacroForm() -> Element {
+    let draft = Draft {
+        tags: tags(&["dioxus", "rust"]),
+    };
+    let form = use_form(move || form_for(&draft, form! { Draft { tags => { set } } }));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_list_treated_as_a_set_renders_as_a_set() {
+    for html in [
+        super::render_to_html(DraftAsSetForm),
+        super::render_to_html(DraftAsSetMacroForm),
+    ] {
+        expect_that!(html.matches(r#"<ul class="fx-set-items">"#).count(), eq(1));
+        expect_that!(html.matches(r#"<li class="fx-set-item">"#).count(), eq(2));
+        expect_that!(html.matches("fx-button-remove-row").count(), eq(2));
+        expect_that!(html, not(contains_substring("<ol")));
+        expect_that!(html, not(contains_substring("fx-move-buttons")));
+    }
+}
+
+fn draft_with(names: &[&str]) -> FormState<Draft> {
+    form_for(
+        &Draft { tags: tags(names) },
+        FormSpec::default().treat_as_set("tags"),
+    )
+}
+
+#[gtest]
+fn a_list_treated_as_a_set_refuses_a_move_and_a_blank_item() {
+    let mut form = draft_with(&["dioxus", "rust"]);
+    expect_that!(
+        form.edit(&Edit::MoveItem {
+            path: "tags".to_string(),
+            from: 0,
+            to: 1,
+        })
+        .map_err(|e| e.0),
+        err(contains_substring(
+            "tags is a set; you cannot reorder its items"
+        ))
+    );
+    expect_that!(
+        form.edit(&add_tag(None)).map_err(|e| e.0),
+        err(contains_substring(
+            "tags is a set; you cannot add an empty item to a set"
+        ))
+    );
+}
+
+/// An added item takes the next key and its place in the order, and the
+/// model's `Vec` follows the order, not the order of arrival.
+#[gtest]
+fn a_list_treated_as_a_set_puts_an_added_item_in_order() {
+    let mut form = draft_with(&["dioxus", "rust"]);
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new("css".to_string())))),
+        ok(some(eq("tags.#2")))
+    );
+    expect_that!(item_keys(&form, "tags"), eq("#2,#0,#1"));
+    expect_that!(
+        form.validate(),
+        some(eq(&Draft {
+            tags: tags(&["css", "dioxus", "rust"]),
+        }))
+    );
+}
+
+/// The wire can name two items with equal values (a script, say). The second
+/// is dropped when the values are distributed (5d), beside the sort, so the
+/// nodes and the model hold the same items, and a failed submit would
+/// re-render without it. Decision D: dropped quietly, not refused.
+#[gtest]
+fn a_list_treated_as_a_set_drops_a_duplicate_from_the_wire() {
+    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set("tags"));
+    form.distribute_values(&values(&[
+        ("tags", "#0,#1,#2"),
+        ("tags.#0", "rust"),
+        ("tags.#1", "css"),
+        ("tags.#2", "rust"),
+    ]));
+    expect_that!(draft_tags(&form), elements_are![eq("css"), eq("rust")]);
+    expect_that!(item_keys(&form, "tags"), eq("#1,#0"));
+    expect_that!(
+        form.validate(),
+        some(eq(&Draft {
+            tags: tags(&["css", "rust"]),
+        }))
+    );
+}
+
+/// A `BTreeSet`'s write always collapsed a duplicate; before 5d its nodes
+/// kept both, so the screen showed an item the model did not have.
+#[gtest]
+fn a_set_drops_a_duplicate_from_the_wire_from_its_nodes_too() {
+    let mut form = empty_form::<Post>(FormSpec::default());
+    form.distribute_values(&values(&[
+        ("title", "Hello"),
+        ("tags", "#0,#1"),
+        ("tags.#0", "rust"),
+        ("tags.#1", "rust"),
+    ]));
+    expect_that!(post_tags(&form), elements_are![eq("rust")]);
+    expect_that!(form.validate(), some(eq(&post_tagged(&["rust"]))));
+}
+
+/// An item with no value equals nothing, not even another item with none:
+/// both blanks stay, after the item that has a value, and the submit fails
+/// on them as it would anyway.
+#[gtest]
+fn blank_items_are_not_duplicates_of_each_other() {
+    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set("tags"));
+    form.distribute_values(&values(&[
+        ("tags", "#0,#1,#2"),
+        ("tags.#0", ""),
+        ("tags.#1", ""),
+        ("tags.#2", "rust"),
+    ]));
+    expect_that!(item_keys(&form, "tags"), eq("#2,#0,#1"));
+    expect_that!(form.validate(), none());
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct MaybeDraft {
+    tags: Option<Vec<String>>,
+}
+
+/// Behind an `Option`, written with its `?` as every optional path is: the
+/// payload is the set, built, sorted, deduplicated and written as a `Vec`.
+#[gtest]
+fn a_list_behind_an_option_can_be_treated_as_a_set() {
+    let maybe = MaybeDraft {
+        tags: Some(tags(&["rust", "css", "rust"])),
+    };
+    let mut form = form_for(&maybe, form! { MaybeDraft { tags? => { set } } });
+    expect_that!(
+        form.validate(),
+        some(eq(&MaybeDraft {
+            tags: Some(tags(&["css", "rust"])),
+        }))
+    );
+    let mut none = form_for(
+        &MaybeDraft { tags: None },
+        form! { MaybeDraft { tags? => { set } } },
+    );
+    expect_that!(none.validate(), some(eq(&MaybeDraft { tags: None })));
+}
+
+/// A `Vec` of newtypes treated as a set needs `sort_by`, as a set of them
+/// does: `form!` refuses it at compile time (`form_set_flag_without_sort_by`),
+/// and a hand-built spec when the form is built.
+#[gtest]
+#[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
+fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
+    let _ = empty_form::<TagList>(FormSpec::default().treat_as_set("tags"));
+}

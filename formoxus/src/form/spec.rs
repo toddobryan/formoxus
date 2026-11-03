@@ -15,6 +15,7 @@ use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
 use crate::field_kind::is_list;
+use crate::field_kind::is_list_of_leaves;
 use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
 use crate::nodes::SetOrder;
@@ -32,6 +33,7 @@ pub struct FieldSpec {
     /// for its type. What `field:` and a typed field's settings expand to.
     pub node: Option<crate::field_node::NodeCtor>,
     pub adder: Option<ItemAdder>,
+    pub treat_as_set: bool,
     pub sort_by: Option<SetOrder>,
 }
 
@@ -154,10 +156,32 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
+    pub fn treat_as_set(mut self, path: &str) -> Self {
+        let shape = Self::shape_at(path);
+        assert!(
+            !is_set(shape),
+            "{path} is already a set; don't call `treat_as_set`"
+        );
+        assert!(
+            is_list(shape),
+            "{path}: `treat_as_set` applies only to a list, not `{shape}`"
+        );
+        assert!(
+            is_list_of_leaves(shape),
+            "{path}: `treat_as_set` applies only to a list of single values (a string, number, bool, enum without data, or newtype over one): a set's items are shown, not edited"
+        );
+        self.field(path).treat_as_set = true;
+        self
+    }
+
     pub fn with_sort_by(mut self, path: &str, order: SetOrder) -> Self {
         let shape = Self::shape_at(path);
         assert!(
-            is_set(shape),
+            !is_list(shape) || self.field(path).treat_as_set,
+            "{path}: if you want to treat this list as a set, call `treat_as_set` first"
+        );
+        assert!(
+            is_set(shape) || is_list(shape),
             "{path}: `sort_by` applies only to a set, not `{shape}`"
         );
         self.field(path).sort_by = Some(order);

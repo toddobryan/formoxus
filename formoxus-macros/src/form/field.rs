@@ -2161,6 +2161,27 @@ mod tests {
         expect_that!(tokens, not(contains_substring("items_have_default_order")));
     }
 
+    #[gtest]
+    fn set_becomes_a_builder_call() {
+        let spec = parse(quote! { Source { tags => { set } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(". treat_as_set (\"tags\")")
+        );
+    }
+
+    /// `with_sort_by` on a `Vec` panics unless the list is already treated as
+    /// a set, so the order of the two calls is load-bearing, whichever order
+    /// the keys were written in.
+    #[gtest]
+    fn set_is_emitted_before_sort_by() {
+        let spec = parse(quote! { Source { tags => { sort_by: String::cmp, set } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(". treat_as_set (\"tags\") . with_sort_by (\"tags\"")
+        );
+    }
+
     /// Every named field is asked, since `form!` cannot see which are sets.
     #[gtest]
     fn without_sort_by_a_field_is_asked_for_a_default_order() {

@@ -3,13 +3,14 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 4 done (sorting + `form!` sort_by), uncommitted; next box 5 or 2f4. #18 parked
+- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 4 committed (7a31548); box 5 expanded + decided (ItemHandler); Todd on 5a–5e. #18 parked
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
 - [Plan task-list format](feedback_plan_task_list_format.md) — plans render in VS Code preview: `- [ ] **N.** …` + blank line before lists; `N. [ ]` hides numbers
 - [Dev vs user](dev_vs_user_vocabulary.md) — "dev" builds an app with formoxus, "user" uses that app, "Formoxus dev" changes formoxus; correct Todd when he slips
 - [Radical refactors on a branch](feedback_radical_refactors_on_a_branch.md) — big refactor on a branch: one breaking change beats many green steps; compiler errors are the to-do list
+- [Macro first](feedback_macro_first.md) — optimize for `form!`; a hand-built `FormSpec` must call builders in order and gets a clear panic, not an order-free redesign
 - [One function, not two](feedback_one_function_not_two.md) — extend an existing function (tag/param/enum) over adding a near-duplicate; migration cost alone does not win
 - [Raise parked gaps when built on](feedback_raise_parked_gaps_when_built_on.md) — new code on a path a known-limitation comment/`*_yet` test warns about: say so; #13 came from one
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook

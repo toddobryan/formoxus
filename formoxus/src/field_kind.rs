@@ -125,7 +125,7 @@ impl<T> std::fmt::Debug for SetItems<T> {
     }
 }
 
-impl<T: Facet<'static> + 'static> SetItems<T> {
+impl<T: Facet<'static> + 'static + PartialEq> SetItems<T> {
     /// `order` over the items, named `name` for `SetOrder`'s `Debug`: what
     /// `sort_by: (order, name)` wrote, or else the order as written.
     pub fn sort_by(self, order: fn(&T, &T) -> Ordering, name: &str) -> SetOrder {

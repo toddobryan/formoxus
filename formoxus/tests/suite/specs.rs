@@ -17,6 +17,7 @@ use formoxus::nodes::ValuesByPath;
 use formoxus::prelude::*;
 use formoxus::widgets::{CheckboxInput, Select, TextInput, Textarea};
 use googletest::prelude::*;
+use std::collections::BTreeSet;
 
 /// A `bool` and an `Option<bool>` side by side — the two shapes whose *derived*
 /// widgets differ, which is what makes them the useful subjects for testing
@@ -267,9 +268,16 @@ fn one_rows_key_is_refused() {
 }
 
 #[gtest]
-#[should_panic(expected = "`title` is a `String`, not a list, so `[]` names nothing")]
+#[should_panic(expected = "`title` is a `String`, not a collection, so `[]` names nothing")]
 fn brackets_on_a_scalar_are_refused() {
     let _ = FormSpec::<EventForCreate>::default().with_label("title[]", "Title");
+}
+
+/// A set's items are named with `[]` as a list's are, so a spec can give
+/// them a label or a widget (box 9).
+#[gtest]
+fn brackets_on_a_set_name_its_items() {
+    let _ = FormSpec::<Lists>::default().with_label("labels[]", "Label");
 }
 
 #[gtest]
@@ -343,6 +351,7 @@ struct Lists {
     maybe: Option<Vec<String>>,
     venues: Vec<Location>,
     title: String,
+    labels: BTreeSet<String>,
 }
 
 fn adder() -> formoxus::widgets::ItemAdder {
@@ -387,6 +396,78 @@ fn an_adder_on_a_struct_row_is_refused() {
 #[should_panic(expected = "tagz: names nothing in a form over `Lists`")]
 fn an_adder_on_an_unknown_path_says_so_first() {
     let _ = FormSpec::<Lists>::default().with_adder("tagz", adder());
+}
+
+// ── `treat_as_set` and `with_sort_by` ────────────────────────────────────
+//
+// `form!`'s `set` and `sort_by` are refused at compile time (`tests/ui`);
+// these are the hand-built spec, whose checks are the same, made when it is
+// built, and named by path.
+
+fn by_bytes() -> formoxus::nodes::SetOrder {
+    formoxus::nodes::SetOrder::custom(String::cmp, "bytes")
+}
+
+/// A list of strings, the inner lists of a list of lists, and a list behind
+/// an `Option`, whose key has no `?`.
+#[gtest]
+fn treat_as_set_is_accepted_on_every_list_of_leaves() {
+    let _ = FormSpec::<Lists>::default()
+        .treat_as_set("tags")
+        .treat_as_set("grid[]")
+        .treat_as_set("maybe");
+}
+
+#[gtest]
+#[should_panic(expected = "labels is already a set; don't call `treat_as_set`")]
+fn treat_as_set_on_a_set_is_refused() {
+    let _ = FormSpec::<Lists>::default().treat_as_set("labels");
+}
+
+#[gtest]
+#[should_panic(expected = "title: `treat_as_set` applies only to a list, not `String`")]
+fn treat_as_set_on_a_scalar_is_refused() {
+    let _ = FormSpec::<Lists>::default().treat_as_set("title");
+}
+
+/// A set's items are shown, not edited, so each must be one value.
+#[gtest]
+#[should_panic(expected = "venues: `treat_as_set` applies only to a list of single values")]
+fn treat_as_set_on_a_list_of_structs_is_refused() {
+    let _ = FormSpec::<Lists>::default().treat_as_set("venues");
+}
+
+/// The outer list's items are lists, which are not single values either.
+#[gtest]
+#[should_panic(expected = "grid: `treat_as_set` applies only to a list of single values")]
+fn treat_as_set_on_a_list_of_lists_is_refused() {
+    let _ = FormSpec::<Lists>::default().treat_as_set("grid");
+}
+
+#[gtest]
+fn sort_by_is_accepted_on_a_set_and_on_a_list_treated_as_one() {
+    let _ = FormSpec::<Lists>::default()
+        .with_sort_by("labels", by_bytes())
+        .treat_as_set("tags")
+        .with_sort_by("tags", by_bytes());
+}
+
+/// `form!` emits `treat_as_set` before `with_sort_by`; a hand-built spec
+/// must too (decision B in box 5).
+#[gtest]
+#[should_panic(
+    expected = "tags: if you want to treat this list as a set, call `treat_as_set` first"
+)]
+fn sort_by_on_a_list_not_yet_treated_as_a_set_is_refused() {
+    let _ = FormSpec::<Lists>::default()
+        .with_sort_by("tags", by_bytes())
+        .treat_as_set("tags");
+}
+
+#[gtest]
+#[should_panic(expected = "title: `sort_by` applies only to a set, not `String`")]
+fn sort_by_on_a_scalar_is_refused() {
+    let _ = FormSpec::<Lists>::default().with_sort_by("title", by_bytes());
 }
 
 // ── `[]` — selecting every row of a list ─────────────────────────────────

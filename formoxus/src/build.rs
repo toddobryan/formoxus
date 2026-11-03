@@ -3,7 +3,7 @@
 //! a shape can be.
 
 use facet::{
-    EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind,
+    Def, EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind,
     StructType, Type, UserType, Variant,
 };
 
@@ -106,7 +106,7 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
         } else {
             let name = segment.trim_end_matches("[]");
             let rows = (segment.len() - name.len()) / 2;
-            field_named(at, name, &walked).and_then(|field| rows_of(field.shape(), name, rows))
+            field_named(at, name, &walked).and_then(|field| items_of(field.shape(), name, rows))
         };
         at = next?;
         walked = qualify(&walked, segment);
@@ -218,15 +218,16 @@ fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, 
     }
 }
 
-/// The element shape `rows` lists deep inside `shape`, for `name` written
+/// The element shape `items` lists deep inside `shape`, for `name` written
 /// with that many `[]`.
-fn rows_of(mut shape: &'static Shape, name: &str, rows: usize) -> Result<At, String> {
-    for _ in 0..rows {
-        match peel(shape).def.into_list() {
-            Ok(list_def) => shape = list_def.t,
-            Err(_) => {
+fn items_of(mut shape: &'static Shape, name: &str, items: usize) -> Result<At, String> {
+    for _ in 0..items {
+        match peel(shape).def {
+            Def::List(list_def) => shape = list_def.t,
+            Def::Set(set_def) => shape = set_def.t,
+            _ => {
                 return Err(format!(
-                    "`{name}` is a `{shape}`, not a list, so `[]` names nothing"
+                    "`{name}` is a `{shape}`, not a collection, so `[]` names nothing"
                 ));
             }
         }
@@ -433,19 +434,21 @@ pub(crate) fn node_for_shape(
                 "newtype {shape} wraps {scalar:?}, which is not supported in Field (field {name})"
             )
         });
-    } else if let Ok(list_def) = shape.def.into_list() {
-        // SEAM: `list_node(_list_def.t, name, inner_peek, variants, prefix)`,
-        // building one row per element via `node_for_shape` with the index as
-        // the row's name. See VEC_PLAN.md.
-        return list_node(list_def.t, name, peek, walk, prefix, optional);
-    } else if let Ok(set_def) = shape.def.into_set() {
-        return set_node(set_def.t, name, peek, walk, prefix, optional);
     }
 
-    match &shape.ty {
-        Type::User(UserType::Struct(_)) => struct_node(shape, name, peek, walk, prefix, optional),
-        Type::User(UserType::Enum(enum_type)) => enum_node(enum_type, name, peek, walk, prefix),
-        other => panic!("field {name} has unsupported type {other:?}"),
+    match shape.def {
+        Def::Set(set_def) => set_node(set_def.t, name, peek, walk, prefix, optional),
+        Def::List(list_def) if walk.spec_for(prefix).is_some_and(|spec| spec.treat_as_set) => {
+            set_node(list_def.t, name, peek, walk, prefix, optional)
+        }
+        Def::List(list_def) => list_node(list_def.t, name, peek, walk, prefix, optional),
+        _ => match &shape.ty {
+            Type::User(UserType::Struct(_)) => {
+                struct_node(shape, name, peek, walk, prefix, optional)
+            }
+            Type::User(UserType::Enum(enum_type)) => enum_node(enum_type, name, peek, walk, prefix),
+            other => panic!("field {name} has unsupported type {other:?}"),
+        },
     }
 }
 
@@ -654,17 +657,18 @@ fn list_node(
     })
 }
 
-/// A set-typed field: a [`SetNode`] whose items are named by a `#`-prefixed key,
-/// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
-/// nesting a struct's fields use — no special casing anywhere downstream.
-///
-/// `shape` is the *element* shape (`SetDef::t`), not the `Vec`'s, and the
-/// `SetNode` keeps it: `Edit::AddItem` only allows adding a real value. It is
-/// illegal to add an empty value.
-///
-/// Edit mode takes the item count from the value. Create mode has no value to
-/// count and so starts empty — which is now an answer rather than a gap, since
-/// `AddItem` is how a blank set gets items added.
+/// Keep the first of any items `same` calls equal, wherever they sit.
+/// Pairwise; see 5c for why nothing cheaper works.
+pub(crate) fn retain_first<T>(items: &mut Vec<T>, same: impl Fn(&T, &T) -> bool) {
+    let mut kept: Vec<T> = Vec::with_capacity(items.len());
+    for item in items.drain(..) {
+        if !kept.iter().any(|k| same(k, &item)) {
+            kept.push(item);
+        }
+    }
+    *items = kept;
+}
+
 fn set_node(
     shape: &'static Shape,
     name: &str,
@@ -680,10 +684,22 @@ fn set_node(
 
     let items: Vec<Box<dyn Node>> = peek
         .map(|p| {
-            let set = p
-                .into_set()
-                .expect("shape said set, so the value peeks as one");
-            let mut items: Vec<Peek<'_, 'static>> = set.iter().collect();
+            let mut items: Vec<Peek<'_, 'static>> = match p.shape().def {
+                // Only a list: a set cannot hold a duplicate. Before the sort
+                // and the keys, so the keys have no gaps and the first render
+                // shows what will be saved (`SETS_PLAN.md` 5c).
+                Def::List(_) => {
+                    let mut items: Vec<Peek<'_, 'static>> =
+                        p.into_list().expect("just matched").iter().collect();
+                    retain_first(&mut items, |a, b| a == b);
+                    items
+                }
+                Def::Set(_) => p.into_set().expect("just matched").iter().collect(),
+                _ => panic!(
+                    "{prefix}: `set_node` should only be called on a set or list, not `{}`",
+                    p.shape()
+                ),
+            };
             comparator.item_order.sort_peeks(&mut items);
             items
                 .into_iter()

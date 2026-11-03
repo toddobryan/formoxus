@@ -1,11 +1,39 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-11-03 LATER: box 4 (sorting, form! sort_by) DONE uncommitted, just ci green; next box 5 or 2f4. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-03 LATEST: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-11-03, later: box 4 DONE (4a–4c4), uncommitted, `just ci` green
+## ▶ 2026-11-03, latest: box 4 committed (7a31548); box 5 EXPANDED, awaiting Todd
+
+Box 5 (a `Vec` marked `set`) is now 5a–5f, 5p, 5t in `SETS_PLAN.md`.
+DECIDED: A `ItemOrder` -> `ItemHandler` (orders + dedups, box 6 reuses it);
+B `with_sort_by` on an unmarked `Vec` panics "call `treat_as_set` first"
+([[feedback-macro-first]]); C J stays open until 5p times large sets
+(Claude, after 5d). Next: Todd 5a–5e; Claude 5f (2f4), 5p, 5t.
+Same day: D, a duplicate from the wire is dropped quietly (as `BTreeSet`
+and serde do), never refused. Todd named 5a's field and builder
+`treat_as_set` (`FieldSpec.treat_as_set`, `FormSpec::treat_as_set(path)`),
+no `with_` prefix; `form!`'s key stays `set`.
+Later: 5a DONE (Todd); 5f/2f4 DONE (Claude: `set` -> `.treat_as_set(path)`
+emitted before `.with_sort_by`), 5t item 8 done (8 spec tests). Found:
+`rows_of` (build.rs) accepts only lists, so `tags[]` on a set panics at
+run time; FIXED in 5b (Todd: `rows_of` -> `items_of`, "not a collection"), test added.
+5b DONE (Todd). 5c DONE (Claude, Todd asked: pairwise `without_duplicates`
+in build.rs; Peek has no Eq and its Hash panics on unhashable types). Next:
+Todd 5d (ItemHandler + dedup_nodes), 5e (write a Vec).
+5d DONE (Todd: `retain_first` in build.rs shared by build dedup and both
+`dedup_nodes`; `Items::dedup` after the sort in distribute). Stale store
+entries from a client-side dedup: LEFT on purpose. Claude waits for 5e to
+write the rest of 5t (wire dedup, validate gives a sorted deduped Vec).
+5e DONE (Todd: write branches on `partial.shape().def`). 5t DONE (Claude, 9
+more set tests, 39 in sets.rs). Box 5 left: only 5p (Claude: time large
+sets). All of box 5 uncommitted, `just ci` green. Todd next: 5b (locations given:
+node_for_shape's into_list branch, set_node's peek; NO kind field on
+SetNode: 5e branches on `partial.shape().def`). All uncommitted, `just ci` green (967).
+
+## ▶ 2026-11-03, later: box 4 DONE (4a–4c4), committed 7a31548, `just ci` green
 
 Todd: 4b (`ascii_`/`unicode_case_insensitive`, in the prelude). Claude:
 4c, `form!`'s `sort_by:`, expanding to
@@ -21,7 +49,7 @@ accepts a field marked `set`. Next: box 5 (Todd), or 2f4.
 ## ▶ 2026-11-03: `with_sort_by` + tests A/B done; 4b in progress (Todd)
 
 Todd added `FormSpec::with_sort_by(path, SetOrder)` (asserts `is_set`;
-must also accept a `Vec` marked `set` once 2f4's `with_set` exists).
+must also accept a `Vec` marked `set` once 2f4's `treat_as_set` exists).
 `SetOrder::default_for(shape, path)` now panics with
 "tags: a set of `Tag` has no default order; give it a sort_by …". Claude
 wrote 4 order tests in `sets.rs` (build, AddItem, rebuild from the wire,
@@ -65,7 +93,7 @@ wrote `tests/suite/sets.rs` (2g, 15 tests), made `adder:` accept a set
 (2f1), parsed the bare `set` flag (2f2, not yet expanded) and gave it its three `const` checks with `field_kind::is_list_of_leaves` (2f3). DECIDED for
 box 8: Edit MARKS the item rather than removing it, so submitting
 mid-edit loses nothing, and the draft goes into the adder's text box.
-Nothing committed since c78a8e1. Next: box 4 (sorting rules in 4a); 2f4 waits on Todd's `with_set`.
+Nothing committed since c78a8e1. Next: box 4 (sorting rules in 4a); 2f4 waits on Todd's `treat_as_set`.
 
 ## ▶ 2026-11-01: 2c and box 3 done
 
