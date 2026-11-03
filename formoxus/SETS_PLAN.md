@@ -718,21 +718,140 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   (I′) built the same day: 6 more `sets.rs` tests, 6 `form!` parse tests,
   goldens `form_feedback_wrong_type` and `form_feedback_on_a_list`.
 
-- [ ] **7.** The default adder for a set: a text box and Add for a
+- [x] **7.** The default adder for a set: a text box and Add for a
   string-like `T`, a select over the choices for a unit enum or
   `choices:`. (Todd, Claude tests)
+
+  **Decided 2026-11-03 (Todd): a DRAFT item, not a dedicated text box.**
+  The set owns one blank item that is never one of its items, rendered
+  inside the adder by the item type's own default widget: a text box for
+  a `String`, a number input for a `u8`, a select for a unit enum or
+  `choices:`. Add turns the draft into an item. Parsing, constraints and
+  `tags[] => { … }` overrides then apply to the draft as to any item, with
+  no adder-specific widget code, and box 8 fills this same draft instead
+  of building one of its own. `tag_group` (dioxus-primitives) was read
+  first: it displays and selects tags but has no adder, so it shaped
+  box 9, not this.
+
+  Settled the same day (Todd):
+  1. The commit is `Edit::AddItem { value: None }`, not a new edit: "add
+     what the adder holds", a blank row for a list and the draft for a
+     set.
+  2. Text left in the draft at submit is ignored: it was never added, so
+     it was never in the set.
+  3. The draft's label is "Add to {set label}" ("Add to Tags"), unless
+     `tags[] => { label: … }` gives one.
+  4. A select draft does NOT leave out the choices already in the set,
+     yet: picking one gets the duplicate message. Filtering needs the
+     set's items passed down to a leaf widget; later.
+
+  Found while planning: what is submitted comes from the node tree's walk
+  (`FormState::ordered_values`), never from the DOM, so the draft is kept
+  off the wire by the walk alone, whatever its input's `name` says.
+
+  - [x] **7a.** The draft: `SetNode` gains `draft: Box<dyn Node>`, built
+    blank by `Items::new_item` under a key taken from the same counter as
+    an item's, so no item ever gets its key, and an `AddItem` with a value
+    cannot land on it. `set_items`, which raises the counter to keys from
+    the wire, gives the draft a fresh key if a wire key took its key (on a
+    server, whose draft was built before the keys arrived).
+  - [x] **7b.** Off the wire, in the store: the set's walk reports the
+    draft's leaves as a third kind, `RawValue::Draft`. `leaf_values` keeps
+    them (so the store is seeded with them, and `reset` clears what was
+    typed), and `ordered_values` drops them (so neither `to_wire` nor
+    `validate` sees them). The plan's recommendation; the alternative is a
+    separate `draft_values` walk.
+  - [x] **7c.** Committing the draft: `Edit::AddItem { value: None }` on a
+    set (refused today, since a set has no use for a blank item). Before
+    the edit, `apply_edit` distributes the draft's leaves from the store
+    into it. `SetNode::edit` then validates the draft:
+    1. Empty: nothing happens, no message (Enter in an empty box does not
+       scold).
+    2. Invalid (`300` in a `u8` set, a `max_length` broken): refused, the
+       error shown by the draft's own widget, the text left for the user
+       to fix.
+    3. A duplicate: refused with I′'s message, the text left as it is.
+    4. Otherwise the draft moves into the items under its key, the set is
+       sorted, I′'s "added" message is set, and a new blank draft takes
+       the next key. Nothing is copied in the store: the draft's leaves
+       already sit at the item's path.
+
+    `ItemHandler::position` takes a `Peek` today, which a node can give
+    (`peek_value`) only for the default order; a custom order's
+    `position` needs the draft as a node, through `item_value`.
+  - [x] **7d.** The adder: `AddItemProps` gains `draft: Option<Element>`
+    (the set renders the draft and hands it over; a list passes `None`).
+    The set's default adder becomes a new `DraftAdder`: the draft, then an
+    Add (`type="button"`) sending 7c's edit, and Enter in the draft caught
+    (`prevent_default`) and sent as the same edit, since Enter in a text
+    box would otherwise submit the whole form. Focus stays in the draft
+    after Add: it is rendered in the same place, unkeyed, so Dioxus reuses
+    its element. `adder:` still replaces `DraftAdder`, and an adder that
+    sends `AddItem` with a value (a search-to-add) can ignore `draft`.
+  - [x] **7t.** (Claude) Tests: each of 7c's four outcomes; the draft in
+    neither `to_wire` nor `validate`; `reset` clearing it; an `AddItem`
+    with a value never taking the draft's key; a server's draft re-keyed;
+    a `tags[] => { max_length: … }` refusing in the draft; a unit-enum
+    set's draft a `<select>`.
+
+  **Built 2026-11-03** (Claude, at Todd's request while he was away; Todd
+  had planned to build it). Uncommitted. What turned up beyond the steps:
+  1. The label travels on `NodeContext::label_if_unnamed`, read by
+     `FieldNode` and `VariantNode` when their own label is `None`:
+     a set's label case is known only at render, so the text cannot be
+     baked into the draft at build. `nested` and `optional` drop it.
+  2. The draft renders under `ctx.nested(..).optional()`, so it is never
+     `required`: an empty required box would block every submit.
+  3. A unit enum's draft is a `VariantNode`, so two more things: an edit
+     inside the draft (its `ChooseVariant`) is routed to it by
+     `SetNode::edit`, and the draft's STRUCTURE entries are dropped from
+     the walk, not made drafts. In the store, `apply_edit`'s sync would
+     read the choice back as `""` and unchoose it.
+  4. `ItemHandler::position` takes a node now, not a `Peek`: the draft
+     and an `AddItem`'s value (built by `Items::probe`) are asked the same
+     way, and a custom order rebuilds both with `item_value`.
+  5. `use_form` no longer focuses the item a set's Add made
+     (`FormState::is_set`); `DraftAdder` puts focus back in the draft
+     after a click.
+  6. Every added item's key is one higher than before, since the draft
+     holds one: 8 existing `sets.rs` expectations moved by one, and the
+     two "refuses a blank item" tests became "adds nothing from an empty
+     draft".
+
+  Tests: 17 in `sets.rs` (`Harness::press` added for `keydown`), all 12
+  mutations caught. **Browser-only, for box 10's e2e:** that Enter in the
+  draft does not submit the form (`prevent_default`), and where focus
+  lands after Add.
+
+  **Known gap:** a draft whose text breaks a constraint attribute the
+  browser checks (`pattern`, a number's `min`/`max`) blocks a
+  browser-validated submit, although decision 2 says leftover draft text
+  is ignored. The fix is probably the draft's input taking a `form`
+  attribute naming no form, which also takes it out of a native submit;
+  not done, since a leaf widget has no way to be given one yet.
+
+  Reviewed (Todd, 2026-11-03): `label_if_unnamed` on `NodeContext` is
+  fine. The known gap waits for box 10, whose e2e tests confirm it (or
+  not) in a real browser first.
 
 - [ ] **8.** (Decided 2026-11-01: Edit MARKS the item, not removes it,
   so a user who clicks Edit and then submits loses nothing, and "the top"
   is the adder's text box.)
-  Edit through the adder (E): a draft the set owns, handed to
-  the adder (`AddItemProps` gains an optional `draft`; a list's adder
-  ignores it); the item being edited is marked; Add replaces it
+  Edit through the adder (E): box 7's draft, filled with the item's
+  values; the item being edited is marked; Add replaces it
   atomically; Escape or Cancel restores it; the adder's text box takes
   focus. Edit appears only when the adder takes text. (Todd, Claude tests)
 
 - [ ] **9.** (Claude) Display (F): a tags preset in
   the gallery's CSS, and a test that an item's row widget renders.
+
+  From `tag_group` in dioxus-primitives (read 2026-11-03, Todd agreed):
+  1. A set's Remove names its item: `aria-label="Remove “rust”"`, by
+     `item_text`, not "Remove row 2", which in a sorted set names nothing
+     a user can see. A list keeps "Remove row N".
+  2. Optional polish: Delete or Backspace on a focused item removes it.
+     Not its roving-focus `role="grid"`, which exists for selecting tags,
+     which a set's items do not do.
 
   **Found 2026-11-03, needed first:** a spec path through a set's items
   (`tags[] => { widget: … }` on a `BTreeSet`) panics, "`tags` is a
@@ -748,6 +867,12 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 - [ ] **10.** (Claude) End to end: `/t/tags` and its e2e tests (add, a
   duplicate's message, edit then add, edit then cancel, the submitted
   order), and a gallery example.
+
+  From box 7, browser-only: Enter in the draft adds and does NOT submit
+  the form; focus is in the draft after Add, by Enter and by click; and
+  the known gap, whether a draft breaking `pattern` (or a number's
+  `min`/`max`) blocks a browser-validated submit. If it does, fixing it
+  becomes a box of its own (Todd, 2026-11-03).
 
 - [ ] **11.** (Claude) Rows become items, everywhere a dev or a Formoxus
   dev can see the word (Todd, 2026-10-31: "one term used internally and

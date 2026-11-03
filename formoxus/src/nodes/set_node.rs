@@ -27,8 +27,8 @@ use crate::{
     error::FormAccessError,
     form::ErrorsByPath,
     nodes::{
-        Edit, Items, Node, NodeContext, SpecsByPath, ValuesByPath, default_label, ensure_owned,
-        qualify,
+        Edit, Items, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label,
+        ensure_owned, owns, qualify,
     },
     widgets::{AddItemProps, FieldErrors, ItemAdder, RemoveItemButton, errors::errors_id},
 };
@@ -111,11 +111,11 @@ pub trait ItemHandler: Debug + Send + Sync {
 
     fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
 
-    /// Where an item equal to `value` sits in `nodes`, by the model's own
-    /// `PartialEq` (decision H), for refusing a duplicate `AddItem` (box 6).
-    /// An item with no value equals nothing; so does a `value` of another
-    /// type, which `Items::add_item` then refuses for its type.
-    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize>;
+    /// Where an item equal to `candidate` sits in `nodes`, by the model's own
+    /// `PartialEq` (decision H), for refusing a duplicate (box 6): the node an
+    /// `AddItem`'s value would become, or a set's draft (box 7). A node with
+    /// no value equals nothing.
+    fn position(&self, nodes: &[Box<dyn Node>], candidate: &dyn Node) -> Option<usize>;
 }
 
 struct DefaultOrder {
@@ -181,7 +181,8 @@ impl ItemHandler for DefaultOrder {
         });
     }
 
-    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize> {
+    fn position(&self, nodes: &[Box<dyn Node>], candidate: &dyn Node) -> Option<usize> {
+        let value = candidate.peek_value()?;
         nodes
             .iter()
             .position(|node| node.peek_value().is_some_and(|item| item == value))
@@ -257,11 +258,11 @@ impl<T: Facet<'static> + 'static + PartialEq> ItemHandler for CustomOrder<T> {
         nodes.extend(keyed.into_iter().map(|(_, n)| n));
     }
 
-    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize> {
-        let value = value.get::<T>().ok()?;
+    fn position(&self, nodes: &[Box<dyn Node>], candidate: &dyn Node) -> Option<usize> {
+        let value = item_value::<T>(candidate)?;
         nodes
             .iter()
-            .position(|node| item_value::<T>(&**node).is_some_and(|item| &item == value))
+            .position(|node| item_value::<T>(&**node).is_some_and(|item| item == value))
     }
 }
 
@@ -272,6 +273,10 @@ pub struct SetNode {
     pub optional: bool,
     pub adder: ItemAdder,
     pub items: Items,
+    /// The blank item the adder renders, which Add makes an item
+    /// (`SETS_PLAN.md` box 7). Never one of `items`: under a key of its own,
+    /// off the wire, and never validated with the form.
+    pub draft: Box<dyn Node>,
     pub comparator: SetOrder,
     /// What the set's last edit did, or why it was refused, for its live
     /// region. Every edit to the set replaces it.
@@ -375,6 +380,51 @@ pub struct SetMessage {
 }
 
 impl SetNode {
+    /// Set the duplicate message and say `true` if `candidate` equals an
+    /// item; `false`, with nothing changed, if it does not.
+    fn refuse_duplicate(&mut self, candidate: &dyn Node) -> bool {
+        let Some(at) = self.items.position_of(&self.comparator, candidate) else {
+            return false;
+        };
+        self.message = self
+            .items
+            .iter()
+            .nth(at)
+            .and_then(|item| self.message_for(SetEventKind::Duplicate, &**item));
+        true
+    }
+
+    /// Make the draft an item, if it can be one (`SETS_PLAN.md` 7c), and
+    /// return the item's path. Its values were distributed from the store
+    /// just before, by `apply_edit`.
+    ///
+    /// 1. Empty: nothing happens, and nothing is said, so Enter in an empty
+    ///    box does not scold.
+    /// 2. Invalid: refused, its error shown by the draft's own widget, the
+    ///    text left to fix.
+    /// 3. A duplicate: refused, with the duplicate message, the text left.
+    /// 4. Otherwise it becomes an item under the key it has, so its leaves in
+    ///    the store are already at the item's path, and a new blank draft
+    ///    takes the next key.
+    fn commit_draft(&mut self, my_path: &str, specs: &SpecsByPath) -> Option<String> {
+        self.draft.validate();
+        if !self.draft.is_present() {
+            self.draft.clear_errors();
+            return None;
+        }
+        let candidate = self.draft.clone_box();
+        if candidate.has_errors_within() || self.refuse_duplicate(&*candidate) {
+            return None;
+        }
+        let fresh = self.items.new_draft(my_path, specs);
+        let item = std::mem::replace(&mut self.draft, fresh);
+        let added = qualify(my_path, &item.name());
+        self.message = self.message_for(SetEventKind::Added, &*item);
+        self.items.insert_node(item);
+        self.items.sort_by(&self.comparator);
+        Some(added)
+    }
+
     /// The line for the live region after `kind` happened to `item`: the
     /// dev's `feedback:` if there is one, else formoxus's own words. A
     /// duplicate is a refusal, so it renders with the slot's invalid class.
@@ -432,13 +482,32 @@ impl Node for SetNode {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<super::RawValue>) {
-        self.items.collect_values(&qualify(prefix, &self.name), out);
+    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+        let my_path = qualify(prefix, &self.name);
+        self.items.collect_values(&my_path, out);
+        // Its leaves as drafts, so the store holds them but the wire does not.
+        // Its structure (a unit enum draft's chosen variant) not at all: like
+        // all structure it lives in the state, and only the state needs it.
+        // In the store, `apply_edit`'s sync would read it back as `""` and
+        // unchoose what the user picked.
+        let mut draft = Vec::new();
+        self.draft.collect_values(&my_path, &mut draft);
+        out.extend(draft.into_iter().filter_map(|value| match value {
+            RawValue::Leaf { path, data } => Some(RawValue::Draft { path, data }),
+            RawValue::Structure { .. } | RawValue::Draft { .. } => None,
+        }));
     }
 
     fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
-        self.items
-            .distribute_values(&qualify(prefix, &self.name), specs, values);
+        let my_path = qualify(prefix, &self.name);
+        self.items.distribute_values(&my_path, specs, values);
+        // A server's draft was built before the wire's keys arrived, so one
+        // of them can be its key. Nothing was typed into a server's draft, so
+        // a fresh blank one loses nothing.
+        if self.items.has_item_named(&self.draft.name()) {
+            self.draft = self.items.new_draft(&my_path, specs);
+        }
+        self.draft.distribute_values(&my_path, specs, values);
         self.items.sort_by(&self.comparator);
         self.items.dedup(&self.comparator);
     }
@@ -503,6 +572,7 @@ impl Node for SetNode {
 
     fn clear_errors(&mut self) {
         self.items.clear_errors();
+        self.draft.clear_errors();
     }
 
     fn edit(
@@ -520,18 +590,17 @@ impl Node for SetNode {
             self.message = None;
             return match edit {
                 Edit::AddItem { value, .. } => match value {
-                    None => Err(FormAccessError(format!(
-                        "{my_path} is a set; you cannot add an empty item to a set"
-                    ))),
+                    // "Add what the adder holds": for a set, the draft.
+                    None => Ok(self.commit_draft(&my_path, specs)),
                     Some(v) => {
                         // Refused for the user, not the caller (box 6): the set is
                         // unchanged and its live region says why, so `Ok`, not an
                         // error for `use_form` to log. Named by the item already
                         // there, which the user can see.
-                        if let Some(at) = self.items.position_of(&self.comparator, v) {
-                            self.message = self.items.iter().nth(at).and_then(|item| {
-                                self.message_for(SetEventKind::Duplicate, &**item)
-                            });
+                        let probe = self.items.probe(&my_path, specs, v);
+                        if let Some(probe) = probe
+                            && self.refuse_duplicate(&*probe)
+                        {
                             return Ok(None);
                         }
                         let added = self.items.add_item(&my_path, None, specs, Some(v))?;
@@ -564,6 +633,10 @@ impl Node for SetNode {
             };
         }
 
+        // An edit inside the draft, such as a unit enum draft's choice.
+        if owns(&qualify(&my_path, &self.draft.name()), path) {
+            return self.draft.edit(&my_path, edit, specs);
+        }
         self.items.edit_within(&my_path, edit, specs)
     }
 
@@ -597,6 +670,15 @@ impl Node for SetNode {
         let refused = self.message.as_ref().is_some_and(|m| m.refused);
         let message_class = ctx.classes.fixed_class(FixedKey::SetMessage, refused);
         let nested = ctx.nested(&self.name);
+        // Not required, whatever the set is: an empty draft is a set with
+        // nothing being added, and a `required` box would block the submit.
+        // Named for the set, since items have no labels of their own.
+        let mut draft_ctx = nested.optional();
+        draft_ctx.label_if_unnamed = Some(match self.label(ctx.label_case) {
+            Some(label) => format!("Add to {label}"),
+            None => "Add".to_string(),
+        });
+        let draft = self.draft.render(&draft_ctx);
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -639,6 +721,7 @@ impl Node for SetNode {
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
+                            draft: Some(draft),
                         },
                         "ItemAdder",
                     ))

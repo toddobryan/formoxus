@@ -215,7 +215,11 @@ impl Node for VariantNode {
         };
 
         let id = ctx.id(&self.name);
-        let label = self.label(ctx.label_case);
+        // A set's draft names its select through the context (box 7), as a
+        // leaf's draft does: items have no labels of their own.
+        let label = self
+            .label(ctx.label_case)
+            .or_else(|| ctx.label_if_unnamed.clone());
         // The legend is the select's ONLY label, and a `<legend>` names its
         // fieldset, not the controls inside it. Without this the select has no
         // accessible name: a screen reader announces a nameless combo box, and

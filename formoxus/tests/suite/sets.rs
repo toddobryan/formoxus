@@ -168,18 +168,13 @@ fn a_set_refuses_a_move() {
     expect_that!(form.validate(), some(eq(&post())), "the set is unchanged");
 }
 
-/// A blank item is what a list's Add makes, to be typed into. A set's items
-/// are display-only (E), so one arriving blank would be an empty value the
-/// user can never fill in.
+/// A list's Add makes a blank row to type into; a set's commits its draft
+/// (box 7), and an empty draft adds nothing, so a set never gets an item the
+/// user cannot fill in.
 #[gtest]
-fn a_set_refuses_a_blank_item() {
+fn a_set_adds_nothing_from_an_empty_draft() {
     let mut form = form_for(&post(), FormSpec::default());
-    expect_that!(
-        form.edit(&add_tag(None)).map_err(|e| e.0),
-        err(contains_substring(
-            "tags is a set; you cannot add an empty item to a set"
-        ))
-    );
+    expect_that!(form.edit(&add_tag(None)), ok(none()));
     expect_that!(form.validate(), some(eq(&post())), "the set is unchanged");
 }
 
@@ -188,7 +183,8 @@ fn a_set_takes_an_item_that_arrives_filled() {
     let mut form = form_for(&post(), FormSpec::default());
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new("web".to_string())))),
-        ok(some(eq("tags.#2")))
+        // `#2` is the draft's (box 7).
+        ok(some(eq("tags.#3")))
     );
     expect_that!(
         form.validate(),
@@ -227,11 +223,12 @@ fn RemovedSetItemProbe() -> Element {
 }
 
 /// The cleanup `use_form` does for a list's row reaches a set's item too: it
-/// finds the item through the key entry `Items` writes for both.
+/// finds the item through the key entry `Items` writes for both. `tags.#2` is
+/// the draft's leaf, which the store holds like any other (box 7).
 #[gtest]
 fn a_removed_items_value_leaves_the_store() {
     let html = super::render_to_html(RemovedSetItemProbe);
-    expect_that!(store_keys(&html), eq("tags.#1 title"));
+    expect_that!(store_keys(&html), eq("tags.#1 tags.#2 title"));
 }
 
 // ── Behind an `Option`, and inside an enum ───────────────────────────────
@@ -403,7 +400,8 @@ fn a_set_with_sort_by_is_in_that_order_when_built() {
     expect_that!(item_keys(&form, "tags"), eq("#0,#1,#2"));
 }
 
-/// An added item takes the next key, `#3`, and then its place in the order:
+/// An added item takes the next free key, `#4` (the draft has `#3`), and then
+/// its place in the order:
 /// a key names an item, not a position, so sorting moves items and leaves
 /// every key with the item it named.
 #[gtest]
@@ -415,13 +413,13 @@ fn a_set_with_sort_by_puts_an_added_item_in_order() {
             before: None,
             value: Some(ItemValue::new(Tag("css".to_string()))),
         }),
-        ok(some(eq("tags.#3")))
+        ok(some(eq("tags.#4")))
     );
     expect_that!(
         tag_values(&form),
         elements_are![eq("go"), eq("css"), eq("rust"), eq("dioxus")]
     );
-    expect_that!(item_keys(&form, "tags"), eq("#0,#3,#1,#2"));
+    expect_that!(item_keys(&form, "tags"), eq("#0,#4,#1,#2"));
 }
 
 /// The server's case: a submit rebuilds the items in the order the wire
@@ -789,7 +787,7 @@ fn draft_with(names: &[&str]) -> FormState<Draft> {
 }
 
 #[gtest]
-fn a_list_treated_as_a_set_refuses_a_move_and_a_blank_item() {
+fn a_list_treated_as_a_set_refuses_a_move_and_adds_nothing_from_an_empty_draft() {
     let mut form = draft_with(&["dioxus", "rust"]);
     expect_that!(
         form.edit(&Edit::MoveItem {
@@ -802,24 +800,21 @@ fn a_list_treated_as_a_set_refuses_a_move_and_a_blank_item() {
             "tags is a set; you cannot reorder its items"
         ))
     );
-    expect_that!(
-        form.edit(&add_tag(None)).map_err(|e| e.0),
-        err(contains_substring(
-            "tags is a set; you cannot add an empty item to a set"
-        ))
-    );
+    expect_that!(form.edit(&add_tag(None)), ok(none()));
+    expect_that!(item_keys(&form, "tags"), eq("#0,#1"));
 }
 
-/// An added item takes the next key and its place in the order, and the
-/// model's `Vec` follows the order, not the order of arrival.
+/// An added item takes the next free key (the draft has `#2`) and its place
+/// in the order, and the model's `Vec` follows the order, not the order of
+/// arrival.
 #[gtest]
 fn a_list_treated_as_a_set_puts_an_added_item_in_order() {
     let mut form = draft_with(&["dioxus", "rust"]);
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new("css".to_string())))),
-        ok(some(eq("tags.#2")))
+        ok(some(eq("tags.#3")))
     );
-    expect_that!(item_keys(&form, "tags"), eq("#2,#0,#1"));
+    expect_that!(item_keys(&form, "tags"), eq("#3,#0,#1"));
     expect_that!(
         form.validate(),
         some(eq(&Draft {
@@ -942,7 +937,7 @@ fn a_set_takes_an_item_its_order_ties_but_its_type_does_not_equal() {
     );
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new("Rust".to_string())))),
-        ok(some(eq("tags.#2")))
+        ok(some(eq("tags.#3")))
     );
     expect_that!(
         form.validate(),
@@ -962,7 +957,7 @@ fn a_set_with_sort_by_refuses_only_an_equal_item() {
         value: Some(ItemValue::new(Tag(name.to_string()))),
     };
     expect_that!(form.edit(&add("go")), ok(none()));
-    expect_that!(form.edit(&add("js")), ok(some(eq("tags.#2"))));
+    expect_that!(form.edit(&add("js")), ok(some(eq("tags.#3"))));
     expect_that!(form.validate(), some(eq(&shelf(&["go", "js", "rust"]))));
 }
 
@@ -1369,4 +1364,333 @@ fn feedback_on_a_scalar_is_refused() {
 fn feedback_on_a_list_not_yet_treated_as_a_set_is_refused() {
     let _ = FormSpec::<Draft>::default()
         .with_feedback("tags", SetFeedback::new(|_: SetEvent<'_, String>| None));
+}
+
+// ── The draft (box 7) ────────────────────────────────────────────────────
+//
+// A set's Add commits its draft, a blank item rendered in the adder. Through
+// `use_form` (the `Harness`) for what only it does: the draft's text lives in
+// the store, and Add reads it from there. Through `FormState` for the rest,
+// with the draft's value distributed in, as `apply_edit` does.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Tagged {
+    tags: BTreeSet<String>,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Sizes {
+    sizes: BTreeSet<u8>,
+}
+
+/// The form, then what its `to_wire` would send, as `path=raw` pairs.
+fn with_wire<T: Clone + std::fmt::Debug + PartialEq + Facet<'static> + 'static>(
+    form: Form<T>,
+    extra: Element,
+) -> Element {
+    let wire = form
+        .to_wire()
+        .values()
+        .iter()
+        .map(|(path, raw)| format!("{path}={raw}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    rsx! {
+        {form.render(using_fns! {})}
+        {extra}
+        output { id: "wire", "{wire}" }
+    }
+}
+
+fn wire(pairs: &str) -> String {
+    format!(r#"<output id="wire">{pairs}</output>"#)
+}
+
+#[component]
+fn EmptyTaggedForm() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Tagged>::default()));
+    with_wire(form, rsx! {})
+}
+
+#[component]
+fn EmptySizesForm() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Sizes>::default()));
+    with_wire(form, rsx! {})
+}
+
+#[component]
+fn ResettableTaggedForm() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Tagged>::default()));
+    // Formatted, so the label crosses as a mutation `Harness::labelled` sees.
+    let label = "Reset";
+    with_wire(
+        form,
+        rsx! {
+            button { aria_label: "{label}", onclick: move |_| form.reset(), "Reset" }
+        },
+    )
+}
+
+/// The draft's input, on an EMPTY set, where it is the only one: listeners
+/// register in the order dioxus creates nodes, not document order, so "the
+/// last input" is not the draft once there are items.
+fn draft_input(app: &super::Harness) -> dioxus::core::ElementId {
+    app.only_listener("input")
+}
+
+/// Add, on an empty set, where nothing else is clicked.
+fn add_button(app: &super::Harness) -> dioxus::core::ElementId {
+    app.only_listener("click")
+}
+
+/// What the draft's input shows, by its path.
+fn draft_value(path: &str, value: &str) -> String {
+    format!(r#"name="{path}" value="{value}""#)
+}
+
+/// Named for its set, since items have no labels, and not `required`: an
+/// empty draft is nothing being added, and would otherwise block the submit.
+#[gtest]
+fn the_draft_is_named_for_its_set_and_not_required() {
+    let html = super::render_to_html(EmptyTaggedForm);
+    expect_that!(html, contains_substring(">Add to Tags</label>"));
+    expect_that!(html, contains_substring(draft_value("tags.#0", "")));
+    expect_that!(html, not(contains_substring("required")));
+}
+
+#[component]
+fn LabelledDraftForm() -> Element {
+    let form = use_form(|| empty_form(form! { Tagged { tags[] => { label: "Tag" } } }));
+    form.render(using_fns! {})
+}
+
+/// The items' own label, when the dev gives one, is the draft's too.
+#[gtest]
+fn the_items_label_names_the_draft() {
+    let html = super::render_to_html(LabelledDraftForm);
+    expect_that!(html, contains_substring(">Tag</label>"));
+    expect_that!(html, not(contains_substring("Add to Tags")));
+}
+
+#[gtest]
+fn typing_into_the_draft_reaches_neither_the_wire_nor_the_set() {
+    let mut app = super::Harness::mount(EmptyTaggedForm);
+    app.fire("input", draft_input(&app), "web");
+    expect_that!(app.html(), contains_substring(wire("tags=")));
+    expect_that!(
+        app.html(),
+        contains_substring(draft_value("tags.#0", "web"))
+    );
+}
+
+/// Add makes the draft an item under the key it had, says so, and leaves a
+/// new blank draft under the next.
+#[gtest]
+fn add_makes_the_draft_an_item() {
+    let mut app = super::Harness::mount(EmptyTaggedForm);
+    app.fire("input", draft_input(&app), "web");
+    app.click(add_button(&app));
+    let html = app.html();
+    expect_that!(html, contains_substring(wire("tags=#0 tags.#0=web")));
+    expect_that!(
+        html,
+        contains_substring(done("“web” was added successfully."))
+    );
+    expect_that!(html, contains_substring(draft_value("tags.#1", "")));
+}
+
+/// Enter in the draft is Add, so a user adds without leaving the keyboard.
+#[gtest]
+fn enter_in_the_draft_adds_it() {
+    let mut app = super::Harness::mount(EmptyTaggedForm);
+    app.fire("input", draft_input(&app), "web");
+    app.press(app.only_listener("keydown"), Key::Enter);
+    expect_that!(app.html(), contains_substring(wire("tags=#0 tags.#0=web")));
+}
+
+/// Any other key is typing.
+#[gtest]
+fn another_key_in_the_draft_adds_nothing() {
+    let mut app = super::Harness::mount(EmptyTaggedForm);
+    app.fire("input", draft_input(&app), "web");
+    app.press(app.only_listener("keydown"), Key::Tab);
+    expect_that!(app.html(), contains_substring(wire("tags=")));
+}
+
+/// Refused, with the error beside the draft and the text left to fix.
+#[gtest]
+fn an_invalid_draft_is_refused_and_keeps_its_text() {
+    let mut app = super::Harness::mount(EmptySizesForm);
+    app.fire("input", draft_input(&app), "300");
+    app.click(add_button(&app));
+    let html = app.html();
+    expect_that!(html, contains_substring(wire("sizes=")));
+    expect_that!(html, contains_substring(draft_value("sizes.#0", "300")));
+    expect_that!(
+        html,
+        contains_substring("&#34;300&#34; isn&#39;t a valid u8")
+    );
+    expect_that!(html, contains_substring(region("fx-set-message", "")));
+}
+
+/// The draft's input and Add are found while the set is empty, and used again
+/// after an add: the draft renders in the same place, so its elements are
+/// the same ones, under the next key, which is what keeps focus in it.
+#[gtest]
+fn a_duplicate_draft_is_refused_and_keeps_its_text() {
+    let mut app = super::Harness::mount(EmptyTaggedForm);
+    let (draft, add) = (draft_input(&app), add_button(&app));
+    app.fire("input", draft, "rust");
+    app.click(add);
+    app.fire("input", draft, "rust");
+    app.click(add);
+    let html = app.html();
+    expect_that!(html, contains_substring(wire("tags=#0 tags.#0=rust")));
+    expect_that!(
+        html,
+        contains_substring(refused("“rust” is already there."))
+    );
+    expect_that!(html, contains_substring(draft_value("tags.#1", "rust")));
+}
+
+#[gtest]
+fn reset_clears_the_draft() {
+    let mut app = super::Harness::mount(ResettableTaggedForm);
+    app.fire("input", draft_input(&app), "we");
+    app.click(app.labelled("click", "Reset"));
+    expect_that!(app.html(), contains_substring(draft_value("tags.#0", "")));
+}
+
+/// `post()` has two items, so its draft is `tags.#2`.
+fn post_with_draft(text: &str) -> FormState<Post> {
+    let mut form = form_for(&post(), FormSpec::default());
+    form.distribute_values(&ValuesByPath::from_iter([(
+        "tags.#2".to_string(),
+        text.to_string(),
+    )]));
+    form
+}
+
+#[gtest]
+fn a_draft_is_neither_sent_nor_validated() {
+    let mut form = post_with_draft("web");
+    expect_that!(form.collect_values().get("tags.#2"), none());
+    expect_that!(form.validate(), some(eq(&post())));
+}
+
+/// An `AddItem` with a value takes a key of its own, never the draft's, so
+/// what was typed into the draft is still there to add.
+#[gtest]
+fn an_add_with_a_value_never_takes_the_drafts_key() {
+    let mut form = post_with_draft("we");
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new("css".to_string())))),
+        ok(some(eq("tags.#3")))
+    );
+    expect_that!(form.edit(&add_tag(None)), ok(some(eq("tags.#2"))));
+    expect_that!(
+        form.validate(),
+        some(eq(&post_tagged(&["css", "dioxus", "rust", "we"])))
+    );
+}
+
+/// A server's draft is built before the wire's keys arrive, so one of them
+/// can be its key. It moves to a fresh one: here `#1`, whose value it then
+/// takes, rather than staying at `#0` and reading item `#0`'s.
+#[gtest]
+fn a_drafts_key_moves_when_the_wire_takes_it() {
+    let mut form = empty_form(FormSpec::<Tagged>::default());
+    form.distribute_values(&ValuesByPath::from_iter(
+        [("tags", "#0"), ("tags.#0", "x"), ("tags.#1", "y")]
+            .map(|(path, raw)| (path.to_string(), raw.to_string())),
+    ));
+    expect_that!(form.edit(&add_tag(None)), ok(some(eq("tags.#1"))));
+    expect_that!(
+        form.validate(),
+        some(eq(&Tagged {
+            tags: tags(&["x", "y"]),
+        }))
+    );
+}
+
+/// The items' spec reaches the draft, constraints and all.
+#[gtest]
+fn the_items_constraints_refuse_a_draft() {
+    // 6: "dioxus" is an item already.
+    let mut form = form_for(&post(), form! { Post { tags[] => { max_length: 6 } } });
+    form.distribute_values(&ValuesByPath::from_iter([(
+        "tags.#2".to_string(),
+        "toolong".to_string(),
+    )]));
+    expect_that!(form.edit(&add_tag(None)), ok(none()));
+    expect_that!(form.validate(), some(eq(&post())));
+}
+
+#[component]
+fn EmptyTriageForm() -> Element {
+    let form =
+        use_form(|| empty_form(form! { Triage { levels => { sort_by: most_urgent_first } } }));
+    form.render(using_fns! {})
+}
+
+/// A unit enum's draft is its own widget, a select over the variants, named
+/// by its legend as any enum's select is.
+#[gtest]
+fn a_unit_enum_sets_draft_is_a_select() {
+    let html = super::render_to_html(EmptyTriageForm);
+    expect_that!(html, contains_substring("Add to Levels</legend>"));
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="High">High</option>"#)
+    );
+}
+
+/// Choosing in the draft's select is an edit inside the draft, which the set
+/// hands it; Add then makes the choice an item.
+#[gtest]
+fn a_unit_enum_draft_takes_a_choice_and_adds_it() {
+    let mut form = empty_form(form! { Triage { levels => { sort_by: most_urgent_first } } });
+    expect_that!(
+        form.edit(&Edit::ChooseVariant {
+            path: "levels.#0".to_string(),
+            variant: Some("High".to_string()),
+        }),
+        ok(none())
+    );
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: "levels".to_string(),
+            before: None,
+            value: None,
+        }),
+        ok(some(eq("levels.#0")))
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&Triage {
+            levels: [Priority::High].into(),
+        }))
+    );
+}
+
+#[component]
+fn EmptyTriageWireForm() -> Element {
+    let form =
+        use_form(|| empty_form(form! { Triage { levels => { sort_by: most_urgent_first } } }));
+    with_wire(form, rsx! {})
+}
+
+/// The same through `use_form`: the choice stays in the state, where no
+/// sync from the store can unchoose it before Add reads it.
+#[gtest]
+fn a_unit_enum_draft_chosen_in_its_select_is_added() {
+    let mut app = super::Harness::mount(EmptyTriageWireForm);
+    app.fire("change", app.only_listener("change"), "High");
+    app.click(add_button(&app));
+    let html = app.html();
+    expect_that!(html, contains_substring(wire("levels=#0 levels.#0=High")));
+    expect_that!(
+        html,
+        contains_substring(done("“High” was added successfully."))
+    );
 }

@@ -266,7 +266,9 @@ impl<F: Field> Node for FieldNode<F> {
         self.widget.render(WidgetProps {
             id: ctx.id(&self.name),
             path: ctx.path(&self.name),
-            label: self.label(ctx.label_case),
+            label: self
+                .label(ctx.label_case)
+                .or_else(|| ctx.label_if_unnamed.clone()),
             errors: self.errors.clone(),
             classes: ctx.classes.clone(),
             values: ctx.values,

@@ -111,6 +111,7 @@ impl Node for ListNode {
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
+                            draft: None,
                         },
                         "ItemAdder",
                     ))

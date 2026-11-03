@@ -79,7 +79,9 @@ pub use input::{
     CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
-pub use item_buttons::{AddItemButton, AddItemProps, ItemAdder, MoveItemButtons, RemoveItemButton};
+pub use item_buttons::{
+    AddItemButton, AddItemProps, DraftAdder, ItemAdder, MoveItemButtons, RemoveItemButton,
+};
 pub use radio_group::RadioGroup;
 pub use select::{ABSENT_DISPLAY, Select};
 pub use textarea::Textarea;

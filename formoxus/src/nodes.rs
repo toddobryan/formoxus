@@ -235,18 +235,25 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
 /// at all (an enum's variant name, a list's row keys), and lives only in the
 /// state, never in the store. Both cross the wire, because a server rebuilds
 /// from an empty form and has no other way to learn the structure.
+///
+/// A [`Draft`](Self::Draft) is a leaf of a set's draft, the blank item its
+/// adder renders (`SETS_PLAN.md` box 7). It lives in the store like a
+/// leaf, so what the user types is kept, and `reset` clears it, but it never
+/// crosses the wire and is never validated: until Add commits it, it is not in
+/// the set.
 #[derive(Clone, Debug)]
 pub enum RawValue {
     Leaf { path: String, data: String },
     Structure { path: String, data: String },
+    Draft { path: String, data: String },
 }
 
 impl RawValue {
     pub fn into_pair(self) -> (String, String) {
         match self {
-            RawValue::Leaf { path: p, data: d } | RawValue::Structure { path: p, data: d } => {
-                (p, d)
-            }
+            RawValue::Leaf { path: p, data: d }
+            | RawValue::Structure { path: p, data: d }
+            | RawValue::Draft { path: p, data: d } => (p, d),
         }
     }
 }
@@ -299,6 +306,13 @@ pub struct NodeContext {
     /// `Send`. They hold `Classes` by value. See
     /// `.claude/memory/config_cascade.md`.
     pub classes: Rc<Classes>,
+    /// The label for a leaf that has none of its own, given only to a set's
+    /// draft ("Add to Tags"): a set's items go unlabelled, but the draft is a
+    /// box the user types into, so it needs a name. A leaf's own label, from
+    /// `tags[] => { label: … }`, still wins. [`nested`](Self::nested) and
+    /// [`optional`](Self::optional) drop it, so it reaches only the node it
+    /// was given to.
+    pub label_if_unnamed: Option<String>,
 }
 
 impl NodeContext {
@@ -319,6 +333,7 @@ impl NodeContext {
             on_edit,
             label_case,
             classes: Rc::new(classes),
+            label_if_unnamed: None,
         }
     }
 
@@ -332,11 +347,13 @@ impl NodeContext {
             on_edit: self.on_edit,
             label_case: self.label_case,
             classes: self.classes.clone(),
+            label_if_unnamed: None,
         }
     }
 
-    /// Everything from here down is optional. `OptionNode` is the only node
-    /// that *changes* the context rather than passing it along unaltered.
+    /// Everything from here down is optional. `OptionNode` changes the
+    /// context this way for its payload, and `SetNode` for its draft, which
+    /// an empty box must not block a submit for.
     pub fn optional(&self) -> Self {
         Self {
             form_id: self.form_id.clone(),
@@ -346,6 +363,7 @@ impl NodeContext {
             on_edit: self.on_edit,
             label_case: self.label_case,
             classes: self.classes.clone(),
+            label_if_unnamed: None,
         }
     }
 

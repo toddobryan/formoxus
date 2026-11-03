@@ -144,12 +144,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// The leaf entries alone: what a [`ValuesStore`](crate::nodes::ValuesStore)
-    /// is seeded with. Structure stays out, because the state owns it.
+    /// is seeded with. Structure stays out, because the state owns it. A set's
+    /// draft is in, so `reset` clears what was typed into it.
     pub(crate) fn leaf_values(&self) -> ValuesByPath {
         self.raw_values()
             .into_iter()
             .filter_map(|v| match v {
-                RawValue::Leaf { path, data } => Some((path, data)),
+                RawValue::Leaf { path, data } | RawValue::Draft { path, data } => {
+                    Some((path, data))
+                }
                 RawValue::Structure { .. } => None,
             })
             .collect()
@@ -169,9 +172,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     ///
     /// Only the leaves belong in a [`ValuesStore`](crate::nodes::ValuesStore): the
     /// state owns structure, so seeding a store takes the leaves alone.
+    ///
+    /// A set's draft is left out: until Add commits it, it is not in the set.
     pub fn collect_values(&self) -> ValuesByPath {
         self.raw_values()
             .into_iter()
+            .filter(|v| !matches!(v, RawValue::Draft { .. }))
             .map(RawValue::into_pair)
             .collect()
     }
@@ -201,17 +207,51 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// undone variant choice leaves behind, which nothing reads. And a leaf the
     /// tree has but the store does not arrives as `""`, which is the same
     /// "absent IS empty" rule [`distribute_values`](Self::distribute_values) already follows.
+    ///
+    /// A set's draft is left out, as [`collect_values`](Self::collect_values)
+    /// leaves it out: neither `to_wire` nor `validate` sees what was typed into
+    /// an adder and never added. [`draft_values`](Self::draft_values) is the
+    /// one read of it.
     pub(crate) fn ordered_values(&self, store: &HashMap<String, String>) -> ValuesByPath {
         self.raw_values()
             .into_iter()
-            .map(|v| match v {
+            .filter_map(|v| match v {
                 RawValue::Leaf { path, .. } => {
                     let raw = store.get(&path).cloned().unwrap_or_default();
-                    (path, raw)
+                    Some((path, raw))
                 }
-                RawValue::Structure { path, data } => (path, data),
+                RawValue::Structure { path, data } => Some((path, data)),
+                RawValue::Draft { .. } => None,
             })
             .collect()
+    }
+
+    /// The leaves of every set draft under `path`, read from the store: what
+    /// committing a draft distributes first (`SETS_PLAN.md` 7c), since the
+    /// state never sees a keystroke.
+    pub(crate) fn draft_values(&self, path: &str, store: &HashMap<String, String>) -> ValuesByPath {
+        self.raw_values()
+            .into_iter()
+            .filter_map(|v| match v {
+                RawValue::Draft { path: draft, .. } if owns(path, &draft) => {
+                    let raw = store.get(&draft).cloned().unwrap_or_default();
+                    Some((draft, raw))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether `path` names a set: a `Def::Set`, or a list `treat_as_set`
+    /// marked. For `use_form`, which focuses the row an Add made, except in a
+    /// set, whose Add leaves focus in its draft.
+    pub(crate) fn is_set(&self, path: &str) -> bool {
+        let key = crate::build::spec_key(path);
+        crate::build::spec_key_shape(T::SHAPE, &key).is_ok_and(|shape| {
+            crate::field_kind::is_set(shape)
+                || (crate::field_kind::is_list(shape)
+                    && self.spec.fields.get(&key).is_some_and(|s| s.treat_as_set))
+        })
     }
 
     /// Take raw input values back in, keyed by the same qualified paths

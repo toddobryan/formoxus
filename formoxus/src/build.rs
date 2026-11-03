@@ -733,12 +733,19 @@ fn set_node(
              write `{name}[]` to give every item a widget, or did you mean `label`?",
         );
     }
+    let mut items = Items::new(shape, items);
+    let draft = items.new_draft(prefix, walk.specs);
     Box::new(SetNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         optional,
-        adder: spec.and_then(|s| s.adder).unwrap_or_default(),
-        items: Items::new(shape, items),
+        // A set's own default, not a list's: a set has no use for a blank
+        // item, so its Add commits the draft (`SETS_PLAN.md` 7d).
+        adder: spec
+            .and_then(|s| s.adder)
+            .unwrap_or(crate::widgets::ItemAdder(crate::widgets::DraftAdder)),
+        items,
+        draft,
         comparator,
         message: None,
         feedback: spec.and_then(|s| s.feedback.clone()),

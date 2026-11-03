@@ -280,10 +280,47 @@ impl Items {
         self.collection.iter()
     }
 
-    /// Where an item equal to `value` sits, as `order` judges it: only the
-    /// set's item handler knows the item type.
-    pub(crate) fn position_of(&self, order: &SetOrder, value: &ItemValue) -> Option<usize> {
-        order.item_order.position(&self.collection, value.peek())
+    /// Where an item equal to `candidate` sits, as `order` judges it: only the
+    /// set's item handler knows the item type. A node, not a value, so a
+    /// set's draft and an `AddItem`'s value are asked the same way.
+    pub(crate) fn position_of(&self, order: &SetOrder, candidate: &dyn Node) -> Option<usize> {
+        order.item_order.position(&self.collection, candidate)
+    }
+
+    /// The node `value` would become, for asking whether it is already an
+    /// item before it is added; `None` for a value of another type, which
+    /// [`add_item`](Self::add_item) then refuses for its type. Built under the
+    /// next key, which it never takes.
+    pub(crate) fn probe(
+        &self,
+        my_path: &str,
+        specs: &SpecsByPath,
+        value: &ItemValue,
+    ) -> Option<Box<dyn Node>> {
+        (value.shape() == self.shape)
+            .then(|| self.new_item(my_path, self.next_key, specs, Some(value)))
+    }
+
+    /// A blank item under a key of its own, which no item will ever be given:
+    /// a set's draft (`SETS_PLAN.md` 7a). Not one of the items until
+    /// [`insert_node`](Self::insert_node) makes it one.
+    pub(crate) fn new_draft(&mut self, my_path: &str, specs: &SpecsByPath) -> Box<dyn Node> {
+        let draft = self.new_item(my_path, self.next_key, specs, None);
+        self.next_key += 1;
+        draft
+    }
+
+    /// Whether an item already has `name`, which a key from the wire can take
+    /// from a draft built before the keys arrived (a server's).
+    pub(crate) fn has_item_named(&self, name: &str) -> bool {
+        self.iter().any(|item| item.name() == name)
+    }
+
+    /// Make `node`, built by [`new_draft`](Self::new_draft), the last item,
+    /// under the key it already has, so its leaves in the store are already at
+    /// its path.
+    pub(crate) fn insert_node(&mut self, node: Box<dyn Node>) {
+        self.collection.push(node);
     }
 
     // Paths are unique, so at most one item can own this one. Dispatching by

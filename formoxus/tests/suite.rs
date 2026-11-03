@@ -159,8 +159,8 @@ pub fn without_form_id(html: &str) -> String {
 
 use dioxus::core::{AttributeValue, ElementId, Mutation, Mutations};
 use dioxus_html::{
-    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, SerializedMouseData,
-    set_event_converter,
+    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, SerializedKeyboardData,
+    SerializedMouseData, set_event_converter,
 };
 use std::any::Any;
 use std::rc::Rc;
@@ -318,6 +318,24 @@ impl Harness {
         let payload = PlatformEventData::new(Box::new(SerializedMouseData::default()));
         let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
         self.dom.runtime().handle_event("click", dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
+    /// Press `key` while the element at `id` has focus, as a `keydown`, then
+    /// flush. Returns the edit count, like [`fire`](Self::fire).
+    pub fn press(&mut self, id: ElementId, key: Key) -> usize {
+        let payload = PlatformEventData::new(Box::new(SerializedKeyboardData::new(
+            key,
+            Code::Unidentified,
+            Location::Standard,
+            false,
+            Modifiers::empty(),
+            false,
+        )));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event("keydown", dom_event, id);
         let mutations = self.dom.render_immediate_to_vec();
         self.absorb(&mutations);
         mutations.edits.len()

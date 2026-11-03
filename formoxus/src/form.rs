@@ -720,7 +720,12 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     });
     let on_edit = use_callback(move |edit: Edit| {
         match apply_edit(state, values, &edit) {
-            Ok(Some(row)) if matches!(edit, Edit::AddItem { value: None, .. }) => {
+            // Not in a set: its Add made an item from the draft, and focus
+            // stays in the draft for the next one (`DraftAdder`).
+            Ok(Some(row))
+                if matches!(edit, Edit::AddItem { value: None, .. })
+                    && !state.peek().is_set(edit.path()) =>
+            {
                 new_blank_row.set(Some(row));
             }
             Ok(_) => {}
@@ -768,6 +773,17 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         Edit::RemoveItem { path, index } => row_path(&state.peek(), path, *index),
         _ => None,
     };
+    // A set's Add makes an item of its draft, whose values only the store has
+    // (`SETS_PLAN.md` 7c). For a list there are no drafts, so nothing.
+    if let Edit::AddItem {
+        path, value: None, ..
+    } = edit
+    {
+        let drafts = state.peek().draft_values(path, &values.read());
+        if !drafts.is_empty() {
+            state.write().distribute_values(&drafts);
+        }
+    }
     // Its own statement, so the write guard is dropped before `peek` below.
     let created = state.write().edit(edit)?;
     // A removed row's leaves would otherwise outlive it in the store. Nothing

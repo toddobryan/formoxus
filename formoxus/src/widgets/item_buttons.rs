@@ -5,8 +5,8 @@
 //! [`ListNode`](crate::nodes::ListNode) rebuild itself.
 //!
 //! Add is the one a dev can replace: `adder:` in `form!` names a component
-//! taking [`AddItemProps`], held as a [`ItemAdder`], and [`AddItemButton`] is the
-//! default.
+//! taking [`AddItemProps`], held as a [`ItemAdder`]. [`AddItemButton`] is a
+//! list's default and [`DraftAdder`] a set's.
 
 use std::rc::Rc;
 use std::{fmt::Debug, ptr::fn_addr_eq};
@@ -19,13 +19,14 @@ use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
 
-/// What a list's adder is handed: [`AddItemButton`], or a dev's own component
-/// named by `adder:` in `form!`.
+/// What a list's or a set's adder is handed: [`AddItemButton`],
+/// [`DraftAdder`], or a dev's own component named by `adder:` in `form!`.
 ///
 /// An adder appends a row by sending an [`Edit::AddItem`] through `on_edit`.
-/// With `value: None` the row arrives blank and takes focus. With
-/// `value: Some(ItemValue::new(item))` it arrives filled in, and focus is left
-/// alone, so a user picking several choices in a row stays on the adder.
+/// With `value: Some(ItemValue::new(item))` it arrives filled in, and focus is
+/// left alone, so a user picking several choices in a row stays on the adder.
+/// With `value: None` it means "add what the adder holds": in a list a blank
+/// row, which takes focus, and in a set its `draft`.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct AddItemProps {
     /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
@@ -48,6 +49,11 @@ pub struct AddItemProps {
     pub classes: Rc<Classes>,
     /// How many rows the list has now, for an adder that stops at a maximum.
     pub rows: usize,
+    /// A set's draft, rendered: the blank item, in the item type's own
+    /// widget, that `Edit::AddItem { value: None }` makes an item. `None` for
+    /// a list. An adder that sends its own value (a search-to-add) can leave
+    /// it out.
+    pub draft: Option<Element>,
 }
 
 /// A list's adder: the component that renders in place of Add.
@@ -111,6 +117,64 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
             },
             // Icon and word: there is one Add per list, so the text costs
             // nothing, and a lone "+" under a list says less than "+ Add".
+            {icon(PLUS)}
+            "Add"
+        }
+    }
+}
+
+/// A set's default [`ItemAdder`]: its draft, then Add, which makes the draft
+/// an item (`SETS_PLAN.md` 7d).
+///
+/// Enter in the draft is Add too, and `prevent_default` is what stops it
+/// also submitting the whole form, which Enter in a text box inside a
+/// `<form>` otherwise does. Only the draft is wrapped: Enter on Add already
+/// clicks it, so a wrapper around both would add twice.
+///
+/// After Add, focus goes back to the draft, so a user adding several items
+/// types one after another. The draft is rendered in the same place, so the
+/// element is the same one, now under the next key.
+#[component]
+pub fn DraftAdder(props: AddItemProps) -> Element {
+    let AddItemProps {
+        path,
+        id,
+        on_edit,
+        classes,
+        draft,
+        ..
+    } = props;
+    let draft_id = format!("{id}-draft");
+    let add = move || {
+        on_edit.call(Edit::AddItem {
+            path: path.clone(),
+            value: None,
+            before: None,
+        });
+    };
+    let on_enter = add.clone();
+    let on_click = add;
+    let focus_id = draft_id.clone();
+    rsx! {
+        div {
+            id: "{draft_id}",
+            onkeydown: move |e: KeyboardEvent| {
+                if e.key() == Key::Enter {
+                    e.prevent_default();
+                    on_enter();
+                }
+            },
+            {draft}
+        }
+        button {
+            r#type: "button",
+            class: classes.fixed_class(FixedKey::AddRowButton, false),
+            onclick: move |_| {
+                on_click();
+                document::eval(&format!(
+                    "document.getElementById('{focus_id}')?.querySelector('input, select, textarea')?.focus()"
+                ));
+            },
             {icon(PLUS)}
             "Add"
         }
