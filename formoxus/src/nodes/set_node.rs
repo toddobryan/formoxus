@@ -882,7 +882,12 @@ impl Node for SetNode {
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
                             draft: Some(draft),
-                            editing: self.editing.is_some(),
+                            editing: self.editing.as_ref().and_then(|name| {
+                                self.items
+                                    .iter()
+                                    .find(|item| &item.name() == name)
+                                    .map(|item| item_text(&**item))
+                            }),
                         },
                         "ItemAdder",
                     ))

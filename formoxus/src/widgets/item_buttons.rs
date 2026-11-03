@@ -54,9 +54,11 @@ pub struct AddItemProps {
     /// a list. An adder that sends its own value (a search-to-add) can leave
     /// it out.
     pub draft: Option<Element>,
-    /// Whether the draft holds an item being edited (box 8), so Add would
-    /// replace it: [`DraftAdder`] then says Save, and offers Cancel.
-    pub editing: bool,
+    /// The text of the item being edited (box 8), whose value the draft
+    /// holds, so Add would replace it: [`DraftAdder`] then says Replace,
+    /// named "Replace “rust”", and offers Cancel. `None` when nothing is
+    /// being edited, and always for a list.
+    pub editing: Option<String>,
 }
 
 /// A list's adder: the component that renders in place of Add.
@@ -134,9 +136,13 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
 /// `<form>` otherwise does. Only the draft is wrapped: Enter on Add already
 /// clicks it, so a wrapper around both would add twice.
 ///
-/// While an item is being edited (box 8), Add is Save, since it replaces
-/// that item, and Cancel, or Escape in the draft, stops the edit and leaves
-/// the item as it was.
+/// While an item is being edited (box 8), Add is Replace, named for the item
+/// it replaces ("Replace “rust”"), and Cancel, or Escape in the draft, stops
+/// the edit and leaves the item as it was. Not "Save": a form's own submit
+/// button is often `save`, and two buttons would then share a name. Named by
+/// the item being replaced, not by the draft's text, so the name stays true
+/// as the user types. The visible word begins the name (WCAG 2.5.3), so a
+/// voice-control user can say "click Replace".
 ///
 /// After Add or Cancel, focus goes back to the draft, so a user adding
 /// several items types one after another. The draft is rendered in the same
@@ -174,6 +180,8 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         ));
     };
     let after_cancel = focus_draft.clone();
+    let replacing = editing.as_ref().map(|text| format!("Replace “{text}”"));
+    let is_editing = editing.is_some();
     rsx! {
         div { class: classes.fixed_class(FixedKey::SetAdder, false),
         div {
@@ -182,7 +190,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
                 if e.key() == Key::Enter {
                     e.prevent_default();
                     (on_key.0)();
-                } else if editing && e.key() == Key::Escape {
+                } else if is_editing && e.key() == Key::Escape {
                     e.prevent_default();
                     (on_key.1)();
                 }
@@ -192,19 +200,20 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         button {
             r#type: "button",
             class: classes.fixed_class(FixedKey::AddRowButton, false),
+            aria_label: replacing,
             onclick: move |_| {
                 add();
                 focus_draft();
             },
-            if editing {
+            if is_editing {
                 {icon(CHECK)}
-                "Save"
+                "Replace"
             } else {
                 {icon(PLUS)}
                 "Add"
             }
         }
-        if editing {
+        if is_editing {
             button {
                 r#type: "button",
                 class: classes.fixed_class(FixedKey::Button(formoxus_spec::ButtonType::Cancel), false),

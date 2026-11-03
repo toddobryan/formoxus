@@ -22,6 +22,7 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::{nodes::ItemValue, prelude::*};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 /// Dispatch on the slug. Every form is listed here and nowhere else.
@@ -47,6 +48,8 @@ pub fn TestForm(slug: String) -> Element {
         "reorder" => rsx! { Reorder {} },
         "struct-rows" => rsx! { StructRows {} },
         "adder" => rsx! { Adder {} },
+        "tags" => rsx! { Tags {} },
+        "tags-pattern" => rsx! { TagsPattern {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -606,6 +609,47 @@ fn Adder() -> Element {
         form! {
             Playlist {
                 songs => { adder: SongPicker },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── tags ─────────────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Tagged {
+    tags: BTreeSet<String>,
+}
+
+/// A set (`SETS_PLAN.md` boxes 7 and 8): items are added through the draft,
+/// "Add to Tags", by Add or Enter, and edited through it by Edit, then Save
+/// or Cancel (or Escape).
+#[component]
+fn Tags() -> Element {
+    harness(
+        "tags",
+        "A set of tags. Type one into Add to Tags and press Add or Enter; Edit puts one back into the box, Save replaces it, Cancel or Escape leaves it. Submit: the model lists them sorted.",
+        form! {
+            Tagged {
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+/// The same set, its items constrained by a `pattern` the browser checks,
+/// with browser validation ON: is text left in the draft, which formoxus
+/// ignores at submit, blocked by the browser anyway?
+#[component]
+fn TagsPattern() -> Element {
+    harness(
+        "tags-pattern",
+        "A set of lowercase tags, pattern [a-z]+, browser validation ON. Leave \"Rust\" in Add to Tags and submit.",
+        form! {
+            Tagged {
+                browser_validation: on,
+                tags[] => { pattern: "[a-z]+" },
                 buttons: { save: { type: submit } }
             }
         },

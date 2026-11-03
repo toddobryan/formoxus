@@ -861,7 +861,8 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
      since Save sorts. Shown as Edit's `aria-pressed="true"`: Edit is a
      toggle, so a second press stops the edit. No new class; the gallery
      lights `.fx-button-edit-item[aria-pressed="true"]`.
-  5. **Save**: while editing, the adder's Add reads "Save" (check icon)
+  5. **Save** (renamed **Replace** in box 10): while editing, the adder's
+     Add reads "Save" (check icon)
      and replaces the item in one edit, so the set never holds both. The
      draft becomes the item under its own key, as an add does, and the old
      item goes. Equal to the item being edited is that item saved
@@ -945,9 +946,38 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   `items_of`, message now "not a collection"; test
   `specs::brackets_on_a_set_name_its_items`.)
 
-- [ ] **10.** (Claude) End to end: `/t/tags` and its e2e tests (add, a
+- [x] **10.** (Claude) End to end: `/t/tags` and its e2e tests (add, a
   duplicate's message, edit then add, edit then cancel, the submitted
   order), and a gallery example.
+
+  **Built 2026-11-03.** `/t/tags` (a `BTreeSet<String>`) and
+  `/t/tags-pattern` (its items `pattern: "[a-z]+"`, browser validation ON)
+  in `examples/src/test_forms.rs`; 11 tests in `e2e/tests/tags.rs`, the
+  full e2e suite 52/52. Proven in a browser: Add and Enter add, Enter does
+  NOT submit, focus is in the draft after Add, Edit, Save and Cancel, a
+  duplicate's message, Escape cancels, a submit while editing keeps the
+  item, text left in the draft is not submitted, Remove is named by its
+  item, and `{:#?}` of the submitted set is sorted. Three of those
+  mutation-checked (Enter's `prevent_default`, the focus after an Add click,
+  the focus after Edit).
+
+  **The gallery example is DEFERRED** (Todd, 2026-11-03): gallery examples
+  for both a set AND a list come together, once this plan is finished. See
+  box 13.
+
+  **Box 7's known gap, CONFIRMED:** with "Rust" left in a draft whose items
+  have `pattern: "[a-z]+"`, the browser blocks the submit, although formoxus
+  ignores leftover draft text. Pinned as
+  `a_draft_breaking_its_pattern_blocks_the_submit_yet`. Now box 14.
+
+  **Found: two buttons named "Save".** While an item was being edited the
+  set's Add read "Save", so a form whose own submit button is `save` (the
+  test forms', and a common name) had two buttons announced identically.
+  **Fixed (Todd, 2026-11-03):** it reads "Replace", named "Replace “rust”"
+  for the item it replaces. Named by the ITEM, not the draft's text, so the
+  name stays true while the user types (Todd's point about "Save “rust”");
+  the visible word begins the name, for WCAG 2.5.3 (Label in Name).
+  `AddItemProps::editing` is now `Option<String>`, the item's text.
 
   From box 8, browser-only: focus lands in the draft after Edit, Save and
   Cancel. From box 7, browser-only: Enter in the draft adds and does NOT submit
@@ -993,6 +1023,17 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   builds formoxus by PATH, so it follows whatever branch is checked out
   here: its three `.fx-list-set` selectors (2b) become `.fx-list`, and
   its comment naming `ListSet` becomes `ListNode`.
+
+- [ ] **13.** (Claude) Gallery examples for a set and a list (Todd,
+  2026-11-03: both together, after the rest of this plan), using the
+  `fx-tags` preset for the set. Replaces box 10's gallery example, and is
+  where the box 9 CSS is first seen in a browser.
+
+- [ ] **14.** A draft's constraint attributes must not block a submit:
+  box 10 confirmed that a draft breaking its items' `pattern` does, under
+  browser validation. Probably the draft's input takes a `form` attribute
+  naming no form, which also keeps it out of a native submit; a leaf widget
+  has no way to be given one yet. Design first.
 
 ## Not in this plan
 

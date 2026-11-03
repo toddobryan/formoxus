@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 6 committed (d3d4852); box 7 committed (213f67b); box 8 committed (9ad5461); box 9 (display, `item:` views) committed; next box 10 (e2e + gallery). #18 parked
+- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 6 committed (d3d4852); box 7 committed (213f67b); box 8 committed (9ad5461); box 9 committed (55e50ed); box 10 (e2e) committed; next box 11; boxes 13 (galleries), 14 (pattern gap) added. #18 parked
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -60,6 +60,7 @@
 - [Formoxus widget survey](formoxus_widget_survey.md) — Django's Field/Widget split (constraints follow the value type); why a proc macro beat facet attrs
 
 ## Gotchas
+- [Mutation restore keeps the mutant](mutation_restore_mtime.md) — restoring by moving a backup back leaves an old mtime: cargo/dx keep the MUTATED build; `os.utime` on restore
 - [`optional` is payload-only](optional_flag_is_payload_only.md) — the walk's `optional` = "this node IS an Option's payload"; never pass a container's down to rebuilt children; test with `bool`, not `String`
 - [Toolchain pin & goldens](toolchain_pin_and_goldens.md) — 1.99.1 + rust-src pinned 2026-10-21; a golden flips on another stable OR missing rust-src; check both before re-blessing
 - [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element

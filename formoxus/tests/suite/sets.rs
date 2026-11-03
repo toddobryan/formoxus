@@ -1697,7 +1697,7 @@ fn a_unit_enum_draft_chosen_in_its_select_is_added() {
 
 // ── Editing an item through the draft (box 8) ────────────────────────────
 //
-// Edit marks an item and puts its value into the draft; Save (Add, while
+// Edit marks an item and puts its value into the draft; Replace (Add, while
 // editing) replaces the item with what the draft holds; Cancel, Escape or a
 // second press of Edit stops, leaving the item as it was.
 
@@ -1720,9 +1720,10 @@ fn mounted_tags() -> super::Harness {
     super::Harness::mount(TaggedWireForm)
 }
 
-/// Add (or Save): the first button named by its own text.
-fn save(app: &super::Harness) -> dioxus::core::ElementId {
-    app.unlabelled("click")[0]
+/// Replace, while `rust` is being edited: Add, named for the item it would
+/// replace.
+fn replace(app: &super::Harness) -> dioxus::core::ElementId {
+    app.labelled("click", "Replace “rust”")
 }
 
 fn edit_rust(app: &mut super::Harness) {
@@ -1754,7 +1755,7 @@ fn edit_puts_the_item_into_the_draft() {
         html,
         contains_substring(r#"aria-label="Edit “rust”" aria-pressed="true""#)
     );
-    expect_that!(html, contains_substring("Save</button>"));
+    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
     expect_that!(html, contains_substring("Cancel</button>"));
     expect_that!(
         html,
@@ -1763,13 +1764,13 @@ fn edit_puts_the_item_into_the_draft() {
     );
 }
 
-/// Save replaces the item, in one edit: the set never holds both.
+/// Replace replaces the item, in one edit: the set never holds both.
 #[gtest]
-fn save_replaces_the_item_being_edited() {
+fn replace_swaps_in_the_draft_for_the_item_being_edited() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
     app.fire("input", app.only_listener("input"), "go");
-    app.click(save(&app));
+    app.click(replace(&app));
     let html = app.html();
     expect_that!(
         html,
@@ -1783,12 +1784,13 @@ fn save_replaces_the_item_being_edited() {
     expect_that!(html, contains_substring("Add</button>"));
 }
 
-/// Saved unchanged, it is not its own duplicate, and there is nothing to say.
+/// Replaced by itself unchanged, it is not its own duplicate, and there is
+/// nothing to say.
 #[gtest]
-fn saving_an_item_unchanged_ends_the_edit_quietly() {
+fn replacing_an_item_with_itself_ends_the_edit_quietly() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
-    app.click(save(&app));
+    app.click(replace(&app));
     let html = app.html();
     expect_that!(
         html,
@@ -1800,18 +1802,18 @@ fn saving_an_item_unchanged_ends_the_edit_quietly() {
 
 /// Equal to ANOTHER item is a duplicate as ever, and the edit goes on.
 #[gtest]
-fn saving_an_edit_equal_to_another_item_is_refused() {
+fn replacing_with_another_items_value_is_refused() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
     app.fire("input", app.only_listener("input"), "dioxus");
-    app.click(save(&app));
+    app.click(replace(&app));
     let html = app.html();
     expect_that!(html, contains_substring(wire(POST_WIRE)));
     expect_that!(
         html,
         contains_substring(refused("“dioxus” is already there."))
     );
-    expect_that!(html, contains_substring("Save</button>"));
+    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
 }
 
 #[gtest]
@@ -1876,7 +1878,7 @@ fn editing_another_item_moves_the_edit() {
     );
 }
 
-/// The item stays in the set until Save, so a submit while editing sends it
+/// The item stays in the set until Replace, so a submit while editing sends it
 /// and loses nothing; what the draft holds is not sent (box 7).
 #[gtest]
 fn an_item_being_edited_is_still_in_the_set() {
@@ -2015,7 +2017,7 @@ fn feedback_hears_of_a_change() {
     let mut app = super::Harness::mount(ChangedFeedbackForm);
     edit_rust(&mut app);
     app.fire("input", app.only_listener("input"), "go");
-    app.click(save(&app));
+    app.click(replace(&app));
     expect_that!(app.html(), contains_substring(done("rust became go")));
 }
 
@@ -2213,4 +2215,18 @@ fn an_item_view_on_a_scalar_is_refused() {
 fn an_item_view_on_a_list_not_yet_treated_as_a_set_is_refused() {
     let _ =
         FormSpec::<Draft>::default().with_item_view("tags", formoxus::widgets::ItemView(TagChip));
+}
+
+/// Named for the item it replaces, not for what the draft holds, so the name
+/// stays true while the user types; and it shows the word that begins its
+/// name (WCAG 2.5.3), so it never reads "Save" beside a form's own `save`.
+#[gtest]
+fn replace_is_named_for_the_item_it_replaces() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "go");
+    let html = app.html();
+    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
+    expect_that!(html, contains_substring("Replace</button>"));
+    expect_that!(html, not(contains_substring("Save")));
 }

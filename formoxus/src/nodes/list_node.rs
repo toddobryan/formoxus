@@ -112,7 +112,7 @@ impl Node for ListNode {
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
                             draft: None,
-                            editing: false,
+                            editing: None,
                         },
                         "ItemAdder",
                     ))

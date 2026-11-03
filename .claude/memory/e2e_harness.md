@@ -58,6 +58,16 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
+## 2026-11-03: 52 tests, 11 files: `tags` (11) for SETS_PLAN box 10
+
+On `/t/tags` and `/t/tags-pattern`. The draft is found by role and name
+(`textbox "Add to Tags"`), items by `.fx-set-item:has-text("…")`. **Scope the
+set's Save to `.fx-set-adder`**: a test form's own submit button is `save`,
+so `button("Save")` matches two. `a_draft_breaking_its_pattern_blocks_the_submit_yet`
+pins a known gap (SETS_PLAN box 14) with a matching draft as its positive
+control. A mutation run that restores files by moving a backup leaves stale
+wasm: see [[mutation-restore-mtime]].
+
 ## 39 tests, 8 files (35/7 until 2026-10-30; 29/6 until 2026-10-24; 24/5 until 2026-10-01)
 
 **2026-10-30: `reorder` (2), for ORDERED_LISTS box 3**, on `/t/reorder`.
