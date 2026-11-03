@@ -24,13 +24,16 @@ use unicase::{Ascii, UniCase};
 
 use crate::{
     build::retain_first,
-    error::FormAccessError,
+    error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
     nodes::{
         Edit, Items, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label,
         ensure_owned, owns, qualify,
     },
-    widgets::{AddItemProps, FieldErrors, ItemAdder, RemoveItemButton, errors::errors_id},
+    widgets::{
+        AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, RemoveItemButton,
+        errors::errors_id,
+    },
 };
 
 pub fn ascii_case_insensitive<T: AsRef<str>>(a: &T, b: &T) -> Ordering {
@@ -277,6 +280,11 @@ pub struct SetNode {
     /// (`SETS_PLAN.md` box 7). Never one of `items`: under a key of its own,
     /// off the wire, and never validated with the form.
     pub draft: Box<dyn Node>,
+    /// The name (`#3`) of the item being edited, whose value the draft holds
+    /// (`SETS_PLAN.md` box 8). A name, not a position: Add sorts the set, and
+    /// a name stays with its item. The item stays in the set until Add
+    /// replaces it, so a submit while editing loses nothing.
+    pub editing: Option<String>,
     pub comparator: SetOrder,
     /// What the set's last edit did, or why it was refused, for its live
     /// region. Every edit to the set replaces it.
@@ -287,18 +295,23 @@ pub struct SetNode {
 }
 
 /// What an edit to a set did, for a dev's `feedback:` to put into words
-/// (decision I′). Each carries the item: the one added, the one removed, or
-/// the one already there that an Add would have duplicated, which equals the
-/// value the user tried by `==`.
+/// (decision I′). Each carries the item: the one added, the one removed, the
+/// one already there that an Add would have duplicated, which equals the
+/// value the user tried by `==`, or an edited item before and after (box 8).
 ///
-/// `#[non_exhaustive]`, so editing an item (box 8) can join without breaking
-/// a dev's `match`: give it a `_ =>` arm.
+/// `#[non_exhaustive]`, so a later event can join without breaking a dev's
+/// `match`: give it a `_ =>` arm.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SetEvent<'a, T> {
     Added(&'a T),
     Removed(&'a T),
     Duplicate(&'a T),
+    /// An edited item, replaced by what the draft held.
+    Changed {
+        from: &'a T,
+        to: &'a T,
+    },
 }
 
 // `Copy` by hand, not derived, since a derive would demand `T: Copy`; every
@@ -312,12 +325,16 @@ impl<T> Clone for SetEvent<'_, T> {
 
 impl<T> Copy for SetEvent<'_, T> {}
 
-/// Which [`SetEvent`] happened, before the item is rebuilt as a `T`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SetEventKind {
-    Added,
-    Removed,
-    Duplicate,
+/// A [`SetEvent`] before its items are rebuilt as `T`s: their nodes.
+#[derive(Clone, Copy)]
+pub(crate) enum NodeEvent<'a> {
+    Added(&'a dyn Node),
+    Removed(&'a dyn Node),
+    Duplicate(&'a dyn Node),
+    Changed {
+        from: &'a dyn Node,
+        to: &'a dyn Node,
+    },
 }
 
 /// A dev's `feedback:`, with its item type erased: what the spec holds.
@@ -329,9 +346,9 @@ pub(crate) enum SetEventKind {
 #[derive(Clone)]
 pub struct SetFeedback(Arc<DescribeFn>);
 
-/// A dev's `feedback:` once its `T` is erased: the event, and the item's node
-/// to rebuild a `T` from.
-type DescribeFn = dyn Fn(SetEventKind, &dyn Node) -> Option<String> + Send + Sync;
+/// A dev's `feedback:` once its `T` is erased: the event, with the nodes to
+/// rebuild each `T` from.
+type DescribeFn = dyn Fn(NodeEvent<'_>) -> Option<String> + Send + Sync;
 
 impl SetFeedback {
     /// Words for each [`SetEvent`] over items of type `T`: the line for the
@@ -339,20 +356,25 @@ impl SetFeedback {
     pub fn new<T: Facet<'static> + 'static>(
         describe: impl Fn(SetEvent<'_, T>) -> Option<String> + Send + Sync + 'static,
     ) -> Self {
-        Self(Arc::new(move |kind, item| {
-            // An item that cannot be built (until box 8, one typed into in
-            // place) has no `T` to describe, so no message.
-            let value = item_value::<T>(item)?;
-            describe(match kind {
-                SetEventKind::Added => SetEvent::Added(&value),
-                SetEventKind::Removed => SetEvent::Removed(&value),
-                SetEventKind::Duplicate => SetEvent::Duplicate(&value),
-            })
+        Self(Arc::new(move |event| {
+            // An item that cannot be built (an invalid one from the wire) has
+            // no `T` to describe, so no message.
+            match event {
+                NodeEvent::Added(item) => describe(SetEvent::Added(&item_value::<T>(item)?)),
+                NodeEvent::Removed(item) => describe(SetEvent::Removed(&item_value::<T>(item)?)),
+                NodeEvent::Duplicate(item) => {
+                    describe(SetEvent::Duplicate(&item_value::<T>(item)?))
+                }
+                NodeEvent::Changed { from, to } => describe(SetEvent::Changed {
+                    from: &item_value::<T>(from)?,
+                    to: &item_value::<T>(to)?,
+                }),
+            }
         }))
     }
 
-    fn describe(&self, kind: SetEventKind, item: &dyn Node) -> Option<String> {
-        (self.0)(kind, item)
+    fn describe(&self, event: NodeEvent<'_>) -> Option<String> {
+        (self.0)(event)
     }
 }
 
@@ -390,8 +412,50 @@ impl SetNode {
             .items
             .iter()
             .nth(at)
-            .and_then(|item| self.message_for(SetEventKind::Duplicate, &**item));
+            .and_then(|item| self.message_for(NodeEvent::Duplicate(&**item)));
         true
+    }
+
+    /// Start editing the item at `index`, or with `None` stop (box 8), and
+    /// return the draft's path, whose values `apply_edit` then copies into
+    /// the store. Either way the draft is rebuilt under the key it holds:
+    /// blank to stop, and to start, filled with the item's values, moved from
+    /// the item's path to the draft's. Whatever was typed into it goes.
+    fn edit_item(
+        &mut self,
+        my_path: &str,
+        index: Option<usize>,
+        specs: &SpecsByPath,
+    ) -> Result<String, FormAccessError> {
+        let draft_name = self.draft.name();
+        let draft_path = qualify(my_path, &draft_name);
+        let mut draft = self.items.new_named(my_path, &draft_name, specs, None);
+        self.editing = match index {
+            None => None,
+            Some(index) => {
+                let item = self.items.iter().nth(index).ok_or_else(|| {
+                    FormAccessError(format!(
+                        "cannot edit item at index {index} of {my_path}: it has {} items",
+                        self.items.len()
+                    ))
+                })?;
+                let item_path = qualify(my_path, &item.name());
+                let mut values = Vec::new();
+                item.collect_values(my_path, &mut values);
+                let moved: ValuesByPath = values
+                    .into_iter()
+                    .map(|value| {
+                        let (path, data) = value.into_pair();
+                        // Every path under the item starts with its own.
+                        (format!("{draft_path}{}", &path[item_path.len()..]), data)
+                    })
+                    .collect();
+                draft.distribute_values(my_path, specs, &moved);
+                Some(item.name())
+            }
+        };
+        self.draft = draft;
+        Ok(draft_path)
     }
 
     /// Make the draft an item, if it can be one (`SETS_PLAN.md` 7c), and
@@ -403,9 +467,12 @@ impl SetNode {
     /// 2. Invalid: refused, its error shown by the draft's own widget, the
     ///    text left to fix.
     /// 3. A duplicate: refused, with the duplicate message, the text left.
+    ///    Equal to the item being edited is not a duplicate: it is that item
+    ///    saved unchanged.
     /// 4. Otherwise it becomes an item under the key it has, so its leaves in
     ///    the store are already at the item's path, and a new blank draft
-    ///    takes the next key.
+    ///    takes the next key. If an item was being edited (box 8), it goes in
+    ///    the same edit, so the set never holds both.
     fn commit_draft(&mut self, my_path: &str, specs: &SpecsByPath) -> Option<String> {
         self.draft.validate();
         if !self.draft.is_present() {
@@ -413,43 +480,68 @@ impl SetNode {
             return None;
         }
         let candidate = self.draft.clone_box();
-        if candidate.has_errors_within() || self.refuse_duplicate(&*candidate) {
+        if candidate.has_errors_within() {
+            return None;
+        }
+        let equal = self
+            .items
+            .position_of(&self.comparator, &*candidate)
+            .and_then(|at| self.items.iter().nth(at))
+            .map(|item| item.name());
+        let unchanged = equal.is_some() && equal == self.editing;
+        if equal.is_some() && !unchanged {
+            self.refuse_duplicate(&*candidate);
             return None;
         }
         let fresh = self.items.new_draft(my_path, specs);
         let item = std::mem::replace(&mut self.draft, fresh);
         let added = qualify(my_path, &item.name());
-        self.message = self.message_for(SetEventKind::Added, &*item);
+        let replaced = self
+            .editing
+            .take()
+            .and_then(|name| self.items.remove_named(&name));
+        self.message = match &replaced {
+            // Saved as it was: nothing to say.
+            Some(_) if unchanged => None,
+            Some(from) => self.message_for(NodeEvent::Changed {
+                from: &**from,
+                to: &*item,
+            }),
+            None => self.message_for(NodeEvent::Added(&*item)),
+        };
         self.items.insert_node(item);
         self.items.sort_by(&self.comparator);
         Some(added)
     }
 
-    /// The line for the live region after `kind` happened to `item`: the
-    /// dev's `feedback:` if there is one, else formoxus's own words. A
-    /// duplicate is a refusal, so it renders with the slot's invalid class.
-    fn message_for(&self, kind: SetEventKind, item: &dyn Node) -> Option<SetMessage> {
+    /// The line for the live region after `event`: the dev's `feedback:` if
+    /// there is one, else formoxus's own words. A duplicate is a refusal, so
+    /// it renders with the slot's invalid class.
+    fn message_for(&self, event: NodeEvent<'_>) -> Option<SetMessage> {
         let text = match &self.feedback {
-            Some(feedback) => feedback.describe(kind, item),
-            None => default_message(kind, &item_text(item)),
+            Some(feedback) => feedback.describe(event),
+            None => default_message(event),
         }?;
         Some(SetMessage {
             text,
-            refused: kind == SetEventKind::Duplicate,
+            refused: matches!(event, NodeEvent::Duplicate(_)),
         })
     }
 }
 
 /// formoxus's own words for what an edit did, Django's way (I′), or `None` for
 /// an item with nothing to name.
-fn default_message(kind: SetEventKind, text: &str) -> Option<String> {
-    if text.is_empty() {
-        return None;
-    }
-    Some(match kind {
-        SetEventKind::Added => format!("“{text}” was added successfully."),
-        SetEventKind::Removed => format!("“{text}” was removed successfully."),
-        SetEventKind::Duplicate => format!("“{text}” is already there."),
+fn default_message(event: NodeEvent<'_>) -> Option<String> {
+    let named = |item: &dyn Node| Some(item_text(item)).filter(|text| !text.is_empty());
+    Some(match event {
+        NodeEvent::Added(item) => format!("“{}” was added successfully.", named(item)?),
+        NodeEvent::Removed(item) => format!("“{}” was removed successfully.", named(item)?),
+        NodeEvent::Duplicate(item) => format!("“{}” is already there.", named(item)?),
+        NodeEvent::Changed { from, to } => format!(
+            "“{}” was changed to “{}” successfully.",
+            named(from)?,
+            named(to)?
+        ),
     })
 }
 
@@ -609,21 +701,26 @@ impl Node for SetNode {
                             .items
                             .iter()
                             .find(|item| qualify(&my_path, &item.name()) == added)
-                            .and_then(|item| self.message_for(SetEventKind::Added, &**item));
+                            .and_then(|item| self.message_for(NodeEvent::Added(&**item)));
                         Ok(Some(added))
                     }
                 },
                 Edit::RemoveItem { index, .. } => {
                     // Described before it goes, while there is an item to name.
-                    let message = self
-                        .items
-                        .iter()
-                        .nth(*index)
-                        .and_then(|item| self.message_for(SetEventKind::Removed, &**item));
+                    let item = self.items.iter().nth(*index);
+                    let message =
+                        item.and_then(|item| self.message_for(NodeEvent::Removed(&**item)));
+                    let name = item.map(|item| item.name());
                     self.items.remove_item(&my_path, *index)?;
+                    // Removing the item being edited ends the edit. The draft
+                    // keeps its text, which Add would now add back.
+                    if name.is_some() && name == self.editing {
+                        self.editing = None;
+                    }
                     self.message = message;
                     Ok(None)
                 }
+                Edit::EditItem { index, .. } => self.edit_item(&my_path, *index, specs).map(Some),
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a set, not an enum")))
                 }
@@ -679,6 +776,27 @@ impl Node for SetNode {
             None => "Add".to_string(),
         });
         let draft = self.draft.render(&draft_ctx);
+        // Edit only beside the adder that renders the draft it fills: a
+        // dev's adder may leave the draft out (a search-to-add), and Edit
+        // would then fill a box nobody can see.
+        let editable = self.adder == ItemAdder(DraftAdder);
+        // Worked out here, since an rsx `for` takes no statements. An item is
+        // shown, not edited in place (decision E): its text, then its own
+        // errors (a dev's validator or a server can still name one).
+        let shown: Vec<(String, String, Vec<ValidationMessage>, bool)> = self
+            .items
+            .iter()
+            .map(|item| {
+                let mut errors = ErrorsByPath::default();
+                item.collect_errors(&path, &mut errors);
+                (
+                    item.name(),
+                    item_text(&**item),
+                    errors.into_values().flatten().collect(),
+                    self.editing.as_deref() == Some(item.name().as_str()),
+                )
+            })
+            .collect();
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -703,9 +821,20 @@ impl Node for SetNode {
                         // re-render every row below it; with one it moves the nodes
                         // it already has. The wrapper exists because a key has to sit
                         // on an element, and it is what pairs a item with its widget.
-                        for (index, item) in self.items.iter().enumerate() {
-                            li { class: &set_item_class, key: "{item.name()}",
-                                { item.render(&nested) }
+                        for (index, (name, text, errors, editing)) in shown.into_iter().enumerate() {
+                            li { class: &set_item_class, key: "{name}",
+                                "{text}"
+                                FieldErrors { field_id: nested.id(&name), errors, classes: ctx.classes.clone() }
+                                if editable {
+                                    EditItemButton {
+                                        path: path.clone(),
+                                        index,
+                                        text: text.clone(),
+                                        editing,
+                                        on_edit: ctx.on_edit,
+                                        classes: ctx.classes.clone(),
+                                    }
+                                }
                                 RemoveItemButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                             }
                         }
@@ -722,6 +851,7 @@ impl Node for SetNode {
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
                             draft: Some(draft),
+                            editing: self.editing.is_some(),
                         },
                         "ItemAdder",
                     ))

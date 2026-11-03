@@ -253,3 +253,9 @@ its last edit did ("“rust” was added successfully.") or why it was refused
 (a duplicate). Briefly `fx-add-message` on an inserted `role="alert"` div
 the same day; replaced once every edit got a message, since a polite
 success needs a status region, and that must exist before its text does.
+
+**2026-11-03 (box 8, `sets`):** `fx-button fx-button-edit-item` on a set
+item's Edit (`FixedKey::EditItemButton`, `classes_plus:` name
+`edit_item_button`). The item being edited is marked by Edit's
+`aria-pressed="true"`, not by a class; Cancel while editing reuses the form
+buttons' `fx-button-cancel` slot.

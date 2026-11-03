@@ -1,11 +1,21 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-11-03 NEWEST: box 6 committed d3d4852; box 7 (set draft adder) BUILT by Claude while Todd was away, UNCOMMITTED, just ci green 1017, awaiting his review. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-03 NEWEST: box 8 (Edit through the draft) built by Claude, decisions accepted, committed; just ci green 1036. Before that: box 6 committed d3d4852; box 7 (set draft adder) built by Claude, committed 213f67b, just ci green 1017; next box 8. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-11-03, newest: box 7 BUILT, uncommitted, awaiting Todd's review
+## ▶ 2026-11-03, newest: box 8 BUILT and committed
+
+Todd: "Go ahead and write box 8." Built by Claude: `Edit::EditItem { path,
+index: Option<usize> }`, items shown as text + errors + Edit + Remove (no
+longer editable in place), Save/Cancel/Escape in `DraftAdder`, Edit a
+toggle (`aria-pressed`), `SetEvent::Changed { from, to }`. `just ci` green
+1036, 14 mutations caught. TEN decisions made on his behalf, listed under
+box 8 in `SETS_PLAN.md`; Todd accepted all of them and said commit. Next:
+box 9 (display; Remove named by its item).
+
+## ▶ 2026-11-03, newest: box 7 BUILT and committed (213f67b)
 
 Box 6 committed d3d4852. Box 7 planned in `SETS_PLAN.md` (Todd decided: a
 DRAFT item rendered by the item type's own widget, not a dedicated text box;
@@ -13,8 +23,7 @@ commit = `Edit::AddItem { value: None }`; leftover draft text ignored at
 submit; label "Add to {set label}"; no filtering of choices yet). Todd then
 said "Go ahead and do this. I'm away from the computer", so Claude built
 7a–7d AND 7t, though the plan said Todd builds. `just ci` green, 1017 tests,
-12 mutations caught. NOT committed: wait for his go. First thing next
-session: walk him through the diff; box 7's "Built" note in the plan lists
+12 mutations caught. Todd reviewed it and it is committed, 213f67b. Box 7's "Built" note in the plan lists
 what turned up (label via `NodeContext::label_if_unnamed`, draft under
 `optional()`, unit-enum draft = `VariantNode` so its structure stays out of
 the store, `ItemHandler::position` takes a node, `FormState::is_set` for

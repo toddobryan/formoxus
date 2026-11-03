@@ -834,13 +834,59 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   fine. The known gap waits for box 10, whose e2e tests confirm it (or
   not) in a real browser first.
 
-- [ ] **8.** (Decided 2026-11-01: Edit MARKS the item, not removes it,
+- [x] **8.** (Decided 2026-11-01: Edit MARKS the item, not removes it,
   so a user who clicks Edit and then submits loses nothing, and "the top"
   is the adder's text box.)
   Edit through the adder (E): box 7's draft, filled with the item's
   values; the item being edited is marked; Add replaces it
   atomically; Escape or Cancel restores it; the adder's text box takes
   focus. Edit appears only when the adder takes text. (Todd, Claude tests)
+
+  **Built 2026-11-03** (Claude, at Todd's "Go ahead and write box 8").
+  Decisions Claude made, all accepted by Todd the same day:
+  1. **Items are shown, not edited in place**: an item renders as its
+     text (`item_text`), then its own errors (a dev's validator or a
+     server can still name an item), then Edit and Remove. Before, each
+     item was its own editable widget.
+  2. **One new edit, `Edit::EditItem { path, index: Option<usize> }`**:
+     `Some(i)` starts editing item `i`, `None` stops (one variant, not
+     two). It returns the draft's path, so `apply_edit` copies the draft's
+     new values into the store and `use_form` focuses it. A list refuses
+     it ("its rows are edited in place").
+  3. **Filling the draft**: rebuilt blank under the key it holds, then the
+     item's values, structure included (a unit enum's variant), are moved
+     from the item's path to the draft's and distributed into it. Whatever
+     was typed into the draft goes.
+  4. **The mark**: `SetNode::editing`, the item's NAME, not its position,
+     since Save sorts. Shown as Edit's `aria-pressed="true"`: Edit is a
+     toggle, so a second press stops the edit. No new class; the gallery
+     lights `.fx-button-edit-item[aria-pressed="true"]`.
+  5. **Save**: while editing, the adder's Add reads "Save" (check icon)
+     and replaces the item in one edit, so the set never holds both. The
+     draft becomes the item under its own key, as an add does, and the old
+     item goes. Equal to the item being edited is that item saved
+     unchanged, not a duplicate, and says nothing; equal to ANOTHER item is
+     refused as a duplicate, and the edit goes on. The old item's store
+     entries are left (5d's decision A).
+  6. **Cancel**: a Cancel button (the form's `fx-button-cancel` slot)
+     beside Save, Escape in the draft, or Edit pressed again. Escape does
+     nothing when no edit is under way.
+  7. **Remove while editing** the edited item ends the edit; the draft
+     keeps the text, so Add would put it back as a new item.
+  8. **Message**: `SetEvent::Changed { from, to }` joins the
+     `#[non_exhaustive]` enum, and formoxus says "“rust” was changed to
+     “go” successfully." (Django names only the new value; naming both
+     says more.) Internally `NodeEvent` replaces `SetEventKind`.
+  9. **Edit appears only beside `DraftAdder`**: a dev's adder may leave
+     the draft out, and Edit would fill a box nobody sees.
+  10. New: `FixedKey::EditItemButton` (`edit_item_button`, class
+     `fx-button fx-button-edit-item`), Lucide `pencil` and `check` icons,
+     `AddItemProps::editing`, `Harness::unlabelled`.
+
+  Tests: 19 in `sets.rs`, all 14 mutations caught (one only after a
+  rendered test was added: removing the edited item, which the state alone
+  cannot show). **Browser-only, for box 10:** focus in the draft after
+  Edit, Save and Cancel, and Escape not reaching anything else.
 
 - [ ] **9.** (Claude) Display (F): a tags preset in
   the gallery's CSS, and a test that an item's row widget renders.
@@ -868,7 +914,8 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   duplicate's message, edit then add, edit then cancel, the submitted
   order), and a gallery example.
 
-  From box 7, browser-only: Enter in the draft adds and does NOT submit
+  From box 8, browser-only: focus lands in the draft after Edit, Save and
+  Cancel. From box 7, browser-only: Enter in the draft adds and does NOT submit
   the form; focus is in the draft after Add, by Enter and by click; and
   the known gap, whether a draft breaking `pattern` (or a number's
   `min`/`max`) blocks a browser-validated submit. If it does, fixing it

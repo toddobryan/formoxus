@@ -80,7 +80,8 @@ pub use input::{
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
 };
 pub use item_buttons::{
-    AddItemButton, AddItemProps, DraftAdder, ItemAdder, MoveItemButtons, RemoveItemButton,
+    AddItemButton, AddItemProps, DraftAdder, EditItemButton, ItemAdder, MoveItemButtons,
+    RemoveItemButton,
 };
 pub use radio_group::RadioGroup;
 pub use select::{ABSENT_DISPLAY, Select};

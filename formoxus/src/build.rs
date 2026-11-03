@@ -746,6 +746,7 @@ fn set_node(
             .unwrap_or(crate::widgets::ItemAdder(crate::widgets::DraftAdder)),
         items,
         draft,
+        editing: None,
         comparator,
         message: None,
         feedback: spec.and_then(|s| s.feedback.clone()),

@@ -376,6 +376,10 @@ impl Classes {
                 FixedKey::RemoveRowButton,
                 Slot::new("fx-button fx-button-remove-row"),
             ),
+            (
+                FixedKey::EditItemButton,
+                Slot::new("fx-button fx-button-edit-item"),
+            ),
             (FixedKey::MoveRowButtons, Slot::new("fx-move-buttons")),
             (
                 FixedKey::MoveRowUpButton,
@@ -730,6 +734,7 @@ mod tests {
             ),
             (FixedKey::AddRowButton, "fx-button fx-button-add-row"),
             (FixedKey::RemoveRowButton, "fx-button fx-button-remove-row"),
+            (FixedKey::EditItemButton, "fx-button fx-button-edit-item"),
             (FixedKey::MoveRowButtons, "fx-move-buttons"),
             (FixedKey::MoveRowUpButton, "fx-button fx-button-move-up"),
             (FixedKey::MoveRowDownButton, "fx-button fx-button-move-down"),

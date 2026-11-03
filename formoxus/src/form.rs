@@ -728,6 +728,11 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             {
                 new_blank_row.set(Some(row));
             }
+            // Editing a set's item, or stopping, hands back its draft, where
+            // the user goes on typing.
+            Ok(Some(draft)) if matches!(edit, Edit::EditItem { .. }) => {
+                new_blank_row.set(Some(draft));
+            }
             Ok(_) => {}
             Err(e) => {
                 // An unknown variant name has already been recorded against the
@@ -799,7 +804,12 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // widgets, `validate` and `to_wire` read the STORE. Copy the new row's
     // leaves across, overwriting, so nothing stale can shadow them. A blank row
     // needs nothing: absent is already `""`.
-    if let (Some(row), Edit::AddItem { value: Some(_), .. }) = (&created, edit) {
+    //
+    // The same for a set's draft, refilled with an item's values or emptied
+    // when an edit starts or stops (box 8): only the tree has them.
+    if let (Some(row), Edit::AddItem { value: Some(_), .. } | Edit::EditItem { .. }) =
+        (&created, edit)
+    {
         for (path, raw) in state.peek().leaf_values() {
             if crate::nodes::owns(row, &path) {
                 crate::widgets::values::write_value(&path, values, raw);

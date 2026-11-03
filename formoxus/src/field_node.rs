@@ -398,6 +398,7 @@ impl<F: Field> Node for FieldNode<F> {
             let wanted = match edit {
                 Edit::ChooseVariant { .. } => "an enum",
                 Edit::AddItem { .. } | Edit::RemoveItem { .. } | Edit::MoveItem { .. } => "a list",
+                Edit::EditItem { .. } => "a set",
             };
             FormAccessError(format!("{path} is a field, not {wanted}"))
         } else {

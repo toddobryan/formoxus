@@ -286,6 +286,16 @@ impl Harness {
         found[0]
     }
 
+    /// The elements listening for `event` that have no dynamic `aria-label`,
+    /// in registration order: a button named by its own text ("Add",
+    /// "Cancel") among others named by a label ("Remove row 1").
+    pub fn unlabelled(&self, event: &str) -> Vec<ElementId> {
+        self.listeners(event)
+            .into_iter()
+            .filter(|id| !self.labels.iter().any(|(i, _)| i == id))
+            .collect()
+    }
+
     /// Fire `event` at `id` with `value` as the widget's value, then flush the
     /// re-render so the next assertion sees the result. Returns how many DOM
     /// edits that re-render produced — see

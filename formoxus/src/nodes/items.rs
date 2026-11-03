@@ -181,7 +181,18 @@ impl Items {
         specs: &SpecsByPath,
         value: Option<&ItemValue>,
     ) -> Box<dyn Node> {
-        let name = item_segment(key);
+        self.new_named(my_path, &item_segment(key), specs, value)
+    }
+
+    /// [`new_item`](Self::new_item) under a name already made, so a set can
+    /// rebuild its draft blank under the key the draft already holds.
+    pub(crate) fn new_named(
+        &self,
+        my_path: &str,
+        name: &str,
+        specs: &SpecsByPath,
+        value: Option<&ItemValue>,
+    ) -> Box<dyn Node> {
         // A value makes this one item a `form_for` of its own: read from it, and
         // in `Populated` mode, so a `None` inside it means "absent" (answered),
         // not "nothing to read" as it does in a blank item.
@@ -191,10 +202,10 @@ impl Items {
         };
         node_for_shape(
             self.shape,
-            &name,
+            name,
             peek,
             Walk { mode, specs },
-            &qualify(my_path, &name),
+            &qualify(my_path, name),
             // Never the container's own `optional`: that says the container is an
             // `Option`'s payload, which its items are not, exactly as
             // `list_node` builds them. A row that can be absent says so in its
@@ -314,6 +325,16 @@ impl Items {
     /// from a draft built before the keys arrived (a server's).
     pub(crate) fn has_item_named(&self, name: &str) -> bool {
         self.iter().any(|item| item.name() == name)
+    }
+
+    /// Take out the item named `name`, if there is one: a set's edited item,
+    /// as its replacement goes in.
+    pub(crate) fn remove_named(&mut self, name: &str) -> Option<Box<dyn Node>> {
+        let at = self
+            .collection
+            .iter()
+            .position(|item| item.name() == name)?;
+        Some(self.collection.remove(at))
     }
 
     /// Make `node`, built by [`new_draft`](Self::new_draft), the last item,

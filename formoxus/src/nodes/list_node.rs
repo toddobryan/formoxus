@@ -112,6 +112,7 @@ impl Node for ListNode {
                             classes: ctx.classes.clone(),
                             rows: self.items.len(),
                             draft: None,
+                            editing: false,
                         },
                         "ItemAdder",
                     ))
@@ -196,6 +197,9 @@ impl Node for ListNode {
                 Edit::MoveItem { from, to, .. } => {
                     self.items.move_item(&my_path, *from, *to).map(|()| None)
                 }
+                Edit::EditItem { .. } => Err(FormAccessError(format!(
+                    "{my_path} is a list; its rows are edited in place"
+                ))),
             };
         }
 

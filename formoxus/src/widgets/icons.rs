@@ -20,6 +20,13 @@ pub(crate) const CHEVRON_DOWN: &[&str] = &["m6 9 6 6 6-6"];
 pub(crate) const X: &[&str] = &["M18 6 6 18", "m6 6 12 12"];
 /// Lucide `plus`.
 pub(crate) const PLUS: &[&str] = &["M5 12h14", "M12 5v14"];
+/// Lucide `pencil`.
+pub(crate) const PENCIL: &[&str] = &[
+    "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+    "m15 5 4 4",
+];
+/// Lucide `check`.
+pub(crate) const CHECK: &[&str] = &["M20 6 9 17l-5-5"];
 
 /// One icon, 16px, drawn in the button's text color.
 pub(crate) fn icon(paths: &'static [&'static str]) -> Element {

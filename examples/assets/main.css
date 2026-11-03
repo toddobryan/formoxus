@@ -20,7 +20,7 @@
  *               .fx-problems  .fx-problem  .fx-set-message
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
- *               .fx-button-add-row .fx-button-remove-row
+ *               .fx-button-add-row .fx-button-remove-row .fx-button-edit-item
  *               .fx-move-buttons + .fx-button-move-up .fx-button-move-down
  *
  * How they nest. A field's caption is a `<label for>` BESIDE its control, not
@@ -234,14 +234,18 @@ body {
 /* Small, borderless icon buttons: one set per row, so the page's own button
  * size would swamp the rows. */
 .fx-move-buttons .fx-button,
-.fx-button-remove-row {
+.fx-button-remove-row,
+.fx-button-edit-item {
     padding: 0.125rem;
     line-height: 0;
     border: none;
     color: var(--fx-muted);
 }
 .fx-move-buttons .fx-button:hover:not(:disabled),
-.fx-button-remove-row:hover { color: var(--fx-text); }
+.fx-button-remove-row:hover,
+.fx-button-edit-item:hover { color: var(--fx-text); }
+/* The item being edited: its Edit stays lit while its value is in the draft. */
+.fx-button-edit-item[aria-pressed="true"] { color: var(--fx-text); }
 .fx-move-buttons .fx-button:disabled { opacity: 0.25; cursor: default; }
 
 /* ── the gallery frame, not formoxus ─────────────────────────────────── */

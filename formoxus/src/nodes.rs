@@ -430,6 +430,16 @@ pub enum Edit {
         /// `c,b,a`. Moving down one place from `i` is `to: i + 1`.
         to: usize,
     },
+    /// Start or stop editing an item of a set (`SETS_PLAN.md` box 8).
+    /// `Some(index)` marks the item at that position and puts its value into
+    /// the set's draft, where an `AddItem { value: None }` then replaces it
+    /// with what the draft holds. `None` stops editing, leaving the item as it
+    /// was, and empties the draft. A set's only: a list's rows are edited in
+    /// place.
+    EditItem {
+        path: String,
+        index: Option<usize>,
+    },
 }
 
 impl Edit {
@@ -440,7 +450,8 @@ impl Edit {
             Edit::ChooseVariant { path, .. }
             | Edit::AddItem { path, .. }
             | Edit::RemoveItem { path, .. }
-            | Edit::MoveItem { path, .. } => path,
+            | Edit::MoveItem { path, .. }
+            | Edit::EditItem { path, .. } => path,
         }
     }
 

@@ -1694,3 +1694,353 @@ fn a_unit_enum_draft_chosen_in_its_select_is_added() {
         contains_substring(done("“High” was added successfully."))
     );
 }
+
+// ── Editing an item through the draft (box 8) ────────────────────────────
+//
+// Edit marks an item and puts its value into the draft; Save (Add, while
+// editing) replaces the item with what the draft holds; Cancel, Escape or a
+// second press of Edit stops, leaving the item as it was.
+
+fn tagged() -> Tagged {
+    Tagged {
+        tags: tags(&["dioxus", "rust"]),
+    }
+}
+
+#[component]
+fn TaggedWireForm() -> Element {
+    let form = use_form(|| form_for(&tagged(), FormSpec::default()));
+    with_wire(form, rsx! {})
+}
+
+/// Mounted with `dioxus` as item `#0`, `rust` `#1`, and the draft `#2`.
+/// Items are shown, not edited in place, and `Tagged` has no other field, so
+/// the draft is the only input.
+fn mounted_tags() -> super::Harness {
+    super::Harness::mount(TaggedWireForm)
+}
+
+/// Add (or Save): the first button named by its own text.
+fn save(app: &super::Harness) -> dioxus::core::ElementId {
+    app.unlabelled("click")[0]
+}
+
+fn edit_rust(app: &mut super::Harness) {
+    app.click(app.labelled("click", "Edit “rust”"));
+}
+
+const POST_WIRE: &str = "tags=#0,#1 tags.#0=dioxus tags.#1=rust";
+
+/// Shown as its text, with Edit and Remove, not as an input of its own
+/// (decision E): nothing moves while the user types.
+#[gtest]
+fn an_item_is_shown_with_edit_and_remove() {
+    let html = super::render_to_html(PostForm);
+    expect_that!(html, not(contains_substring(r#"name="tags.#1""#)));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+    );
+    expect_that!(html, contains_substring("fx-button fx-button-edit-item"));
+}
+
+#[gtest]
+fn edit_puts_the_item_into_the_draft() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    let html = app.html();
+    expect_that!(html, contains_substring(draft_value("tags.#2", "rust")));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="true""#)
+    );
+    expect_that!(html, contains_substring("Save</button>"));
+    expect_that!(html, contains_substring("Cancel</button>"));
+    expect_that!(
+        html,
+        contains_substring(wire(POST_WIRE)),
+        "nothing changed yet"
+    );
+}
+
+/// Save replaces the item, in one edit: the set never holds both.
+#[gtest]
+fn save_replaces_the_item_being_edited() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "go");
+    app.click(save(&app));
+    let html = app.html();
+    expect_that!(
+        html,
+        contains_substring(wire("tags=#0,#2 tags.#0=dioxus tags.#2=go"))
+    );
+    expect_that!(
+        html,
+        contains_substring(done("“rust” was changed to “go” successfully."))
+    );
+    expect_that!(html, contains_substring(draft_value("tags.#3", "")));
+    expect_that!(html, contains_substring("Add</button>"));
+}
+
+/// Saved unchanged, it is not its own duplicate, and there is nothing to say.
+#[gtest]
+fn saving_an_item_unchanged_ends_the_edit_quietly() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.click(save(&app));
+    let html = app.html();
+    expect_that!(
+        html,
+        contains_substring(wire("tags=#0,#2 tags.#0=dioxus tags.#2=rust"))
+    );
+    expect_that!(html, contains_substring(region("fx-set-message", "")));
+    expect_that!(html, contains_substring("Add</button>"));
+}
+
+/// Equal to ANOTHER item is a duplicate as ever, and the edit goes on.
+#[gtest]
+fn saving_an_edit_equal_to_another_item_is_refused() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "dioxus");
+    app.click(save(&app));
+    let html = app.html();
+    expect_that!(html, contains_substring(wire(POST_WIRE)));
+    expect_that!(
+        html,
+        contains_substring(refused("“dioxus” is already there."))
+    );
+    expect_that!(html, contains_substring("Save</button>"));
+}
+
+#[gtest]
+fn cancel_leaves_the_item_as_it_was() {
+    let mut app = mounted_tags();
+    let before = app.listeners("click");
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "go");
+    let cancel = super::new_since(&before, app.unlabelled("click"));
+    app.click(cancel[0]);
+    let html = app.html();
+    expect_that!(html, contains_substring(wire(POST_WIRE)));
+    expect_that!(html, contains_substring(draft_value("tags.#2", "")));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+    );
+}
+
+#[gtest]
+fn escape_in_the_draft_cancels_an_edit() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "go");
+    app.press(app.only_listener("keydown"), Key::Escape);
+    let html = app.html();
+    expect_that!(html, contains_substring(wire(POST_WIRE)));
+    expect_that!(html, contains_substring(draft_value("tags.#2", "")));
+}
+
+/// Not editing, Escape is not formoxus's: what was typed stays.
+#[gtest]
+fn escape_without_an_edit_leaves_the_draft_alone() {
+    let mut app = mounted_tags();
+    app.fire("input", app.only_listener("input"), "we");
+    app.press(app.only_listener("keydown"), Key::Escape);
+    expect_that!(app.html(), contains_substring(draft_value("tags.#2", "we")));
+}
+
+/// Edit is a toggle: pressed again, it stops the edit as Cancel does.
+#[gtest]
+fn pressing_edit_again_cancels() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    edit_rust(&mut app);
+    let html = app.html();
+    expect_that!(html, contains_substring(draft_value("tags.#2", "")));
+    expect_that!(html, contains_substring("Add</button>"));
+}
+
+/// Editing another item moves the edit there; what the draft held goes.
+#[gtest]
+fn editing_another_item_moves_the_edit() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.click(app.labelled("click", "Edit “dioxus”"));
+    let html = app.html();
+    expect_that!(html, contains_substring(draft_value("tags.#2", "dioxus")));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+    );
+}
+
+/// The item stays in the set until Save, so a submit while editing sends it
+/// and loses nothing; what the draft holds is not sent (box 7).
+#[gtest]
+fn an_item_being_edited_is_still_in_the_set() {
+    let mut form = form_for(&post(), FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::EditItem {
+            path: "tags".to_string(),
+            index: Some(1),
+        }),
+        ok(some(eq("tags.#2")))
+    );
+    expect_that!(form.validate(), some(eq(&post())));
+}
+
+/// Removing the item being edited ends the edit, and the draft keeps its
+/// text: Add would put it back, as a new item.
+#[gtest]
+fn removing_the_item_being_edited_ends_the_edit() {
+    let mut form = form_for(&post(), FormSpec::default());
+    form.edit(&Edit::EditItem {
+        path: "tags".to_string(),
+        index: Some(1),
+    })
+    .expect("item 1 exists");
+    form.edit(&Edit::RemoveItem {
+        path: "tags".to_string(),
+        index: 1,
+    })
+    .expect("item 1 exists");
+    expect_that!(form.edit(&add_tag(None)), ok(some(eq("tags.#2"))));
+    expect_that!(form.validate(), some(eq(&post())));
+}
+
+#[gtest]
+fn editing_an_item_that_is_not_there_is_refused() {
+    let mut form = form_for(&post(), FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::EditItem {
+            path: "tags".to_string(),
+            index: Some(2),
+        }),
+        err(displays_as(contains_substring(
+            "cannot edit item at index 2 of tags: it has 2 items"
+        )))
+    );
+}
+
+/// A unit enum's item moves into the draft as its chosen variant, a
+/// structure value, and back out as an item.
+#[gtest]
+fn a_unit_enum_item_is_edited_through_its_draft() {
+    let mut form = form_for(
+        &Triage {
+            levels: [Priority::Low].into(),
+        },
+        form! { Triage { levels => { sort_by: most_urgent_first } } },
+    );
+    form.edit(&Edit::EditItem {
+        path: "levels".to_string(),
+        index: Some(0),
+    })
+    .expect("item 0 exists");
+    form.edit(&Edit::ChooseVariant {
+        path: "levels.#1".to_string(),
+        variant: Some("High".to_string()),
+    })
+    .expect("the draft takes a choice");
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: "levels".to_string(),
+            before: None,
+            value: None,
+        }),
+        ok(some(eq("levels.#1")))
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&Triage {
+            levels: [Priority::High].into(),
+        }))
+    );
+}
+
+/// Edit fills a draft, so only beside the adder that shows one.
+#[gtest]
+fn a_custom_adder_gets_no_edit() {
+    expect_that!(
+        super::render_to_html(CustomAdderPostForm),
+        not(contains_substring("fx-button-edit-item"))
+    );
+}
+
+#[component]
+fn ItemErrorForm() -> Element {
+    let form = use_form(|| {
+        let mut state = form_for(&post(), FormSpec::default());
+        state
+            .push_field_error("tags.#1", "Not that one.")
+            .expect("item 1 exists");
+        state
+    });
+    form.render(using_fns! {})
+}
+
+/// An item's own error, from a dev's validator or a server, is shown with it,
+/// since it has no input of its own to show one.
+#[gtest]
+fn an_items_own_error_is_shown_with_it() {
+    expect_that!(
+        super::render_to_html(ItemErrorForm),
+        contains_substring(r#"<li class="fx-field-error">Not that one.</li>"#)
+    );
+}
+
+fn changed(event: SetEvent<'_, String>) -> Option<String> {
+    match event {
+        SetEvent::Changed { from, to } => Some(format!("{from} became {to}")),
+        _ => None,
+    }
+}
+
+#[component]
+fn ChangedFeedbackForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &tagged(),
+            form! { Tagged { tags => { feedback: changed } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// A dev's `feedback:` hears of a change with both values.
+#[gtest]
+fn feedback_hears_of_a_change() {
+    let mut app = super::Harness::mount(ChangedFeedbackForm);
+    edit_rust(&mut app);
+    app.fire("input", app.only_listener("input"), "go");
+    app.click(save(&app));
+    expect_that!(app.html(), contains_substring(done("rust became go")));
+}
+
+#[gtest]
+fn a_list_refuses_an_item_edit() {
+    let mut form = form_for(&Draft { tags: tags(&["a"]) }, FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::EditItem {
+            path: "tags".to_string(),
+            index: Some(0),
+        }),
+        err(displays_as(contains_substring(
+            "tags is a list; its rows are edited in place"
+        )))
+    );
+}
+
+/// What the user sees of it: the adder is back to Add, with no Cancel.
+#[gtest]
+fn removing_the_item_being_edited_restores_add() {
+    let mut app = mounted_tags();
+    edit_rust(&mut app);
+    app.click(app.labelled("click", "Remove row 2"));
+    let html = app.html();
+    expect_that!(html, contains_substring("Add</button>"));
+    expect_that!(html, not(contains_substring("Cancel</button>")));
+    expect_that!(html, contains_substring(draft_value("tags.#2", "rust")));
+}

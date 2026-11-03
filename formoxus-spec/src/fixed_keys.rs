@@ -44,6 +44,9 @@ pub enum FixedKey {
     AddRowButton,
     /// A row's remove button: `fx-button fx-button-remove-row`.
     RemoveRowButton,
+    /// A set item's Edit, which puts the item into the adder's draft:
+    /// `fx-button fx-button-edit-item`.
+    EditItemButton,
     /// The `<div>` around a list row's move buttons: `fx-move-buttons`.
     MoveRowButtons,
     /// The button that moves a row up one: `fx-button fx-button-move-up`.
@@ -103,6 +106,7 @@ impl FixedKey {
         Self::Button(ButtonType::Action),
         Self::AddRowButton,
         Self::RemoveRowButton,
+        Self::EditItemButton,
         Self::MoveRowButtons,
         Self::MoveRowUpButton,
         Self::MoveRowDownButton,
@@ -137,6 +141,7 @@ impl FixedKey {
             Self::ButtonRow => "button_row",
             Self::AddRowButton => "add_row_button",
             Self::RemoveRowButton => "remove_row_button",
+            Self::EditItemButton => "edit_item_button",
             Self::MoveRowButtons => "move_row_buttons",
             Self::MoveRowUpButton => "move_row_up_button",
             Self::MoveRowDownButton => "move_row_down_button",
@@ -200,6 +205,7 @@ mod tests {
                 | FixedKey::ButtonRow
                 | FixedKey::AddRowButton
                 | FixedKey::RemoveRowButton
+                | FixedKey::EditItemButton
                 | FixedKey::MoveRowButtons
                 | FixedKey::MoveRowUpButton
                 | FixedKey::MoveRowDownButton
@@ -228,7 +234,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(28 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(29 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

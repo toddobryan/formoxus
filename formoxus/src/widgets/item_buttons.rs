@@ -17,7 +17,7 @@ use formoxus_spec::FixedKey;
 use crate::nodes::ValuesStore;
 use crate::{classes::Classes, nodes::Edit};
 
-use super::icons::{CHEVRON_DOWN, CHEVRON_UP, PLUS, X, icon};
+use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 
 /// What a list's or a set's adder is handed: [`AddItemButton`],
 /// [`DraftAdder`], or a dev's own component named by `adder:` in `form!`.
@@ -54,6 +54,9 @@ pub struct AddItemProps {
     /// a list. An adder that sends its own value (a search-to-add) can leave
     /// it out.
     pub draft: Option<Element>,
+    /// Whether the draft holds an item being edited (box 8), so Add would
+    /// replace it: [`DraftAdder`] then says Save, and offers Cancel.
+    pub editing: bool,
 }
 
 /// A list's adder: the component that renders in place of Add.
@@ -131,9 +134,13 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
 /// `<form>` otherwise does. Only the draft is wrapped: Enter on Add already
 /// clicks it, so a wrapper around both would add twice.
 ///
-/// After Add, focus goes back to the draft, so a user adding several items
-/// types one after another. The draft is rendered in the same place, so the
-/// element is the same one, now under the next key.
+/// While an item is being edited (box 8), Add is Save, since it replaces
+/// that item, and Cancel, or Escape in the draft, stops the edit and leaves
+/// the item as it was.
+///
+/// After Add or Cancel, focus goes back to the draft, so a user adding
+/// several items types one after another. The draft is rendered in the same
+/// place, so the element is the same one, now under the next key.
 #[component]
 pub fn DraftAdder(props: AddItemProps) -> Element {
     let AddItemProps {
@@ -142,26 +149,41 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         on_edit,
         classes,
         draft,
+        editing,
         ..
     } = props;
     let draft_id = format!("{id}-draft");
+    let add_path = path.clone();
     let add = move || {
         on_edit.call(Edit::AddItem {
-            path: path.clone(),
+            path: add_path.clone(),
             value: None,
             before: None,
         });
     };
-    let on_enter = add.clone();
-    let on_click = add;
-    let focus_id = draft_id.clone();
+    let cancel = move || {
+        on_edit.call(Edit::EditItem {
+            path: path.clone(),
+            index: None,
+        });
+    };
+    let on_key = (add.clone(), cancel.clone());
+    let focus_draft = move || {
+        document::eval(&format!(
+            "document.getElementById('{draft_id}')?.querySelector('input, select, textarea')?.focus()"
+        ));
+    };
+    let after_cancel = focus_draft.clone();
     rsx! {
         div {
-            id: "{draft_id}",
+            id: "{id}-draft",
             onkeydown: move |e: KeyboardEvent| {
                 if e.key() == Key::Enter {
                     e.prevent_default();
-                    on_enter();
+                    (on_key.0)();
+                } else if editing && e.key() == Key::Escape {
+                    e.prevent_default();
+                    (on_key.1)();
                 }
             },
             {draft}
@@ -170,13 +192,61 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
             r#type: "button",
             class: classes.fixed_class(FixedKey::AddRowButton, false),
             onclick: move |_| {
-                on_click();
-                document::eval(&format!(
-                    "document.getElementById('{focus_id}')?.querySelector('input, select, textarea')?.focus()"
-                ));
+                add();
+                focus_draft();
             },
-            {icon(PLUS)}
-            "Add"
+            if editing {
+                {icon(CHECK)}
+                "Save"
+            } else {
+                {icon(PLUS)}
+                "Add"
+            }
+        }
+        if editing {
+            button {
+                r#type: "button",
+                class: classes.fixed_class(FixedKey::Button(formoxus_spec::ButtonType::Cancel), false),
+                onclick: move |_| {
+                    cancel();
+                    after_cancel();
+                },
+                "Cancel"
+            }
+        }
+    }
+}
+
+/// A set item's Edit (box 8): puts the item into the adder's draft, marking
+/// it as the one being edited. A toggle, `aria-pressed` while its item is
+/// being edited, so a second press stops the edit, as Cancel does.
+///
+/// Named by the item's text, not its position: a set is sorted, so "item 2"
+/// names nothing a user can see.
+#[component]
+pub fn EditItemButton(
+    path: String,
+    index: usize,
+    /// The item as the user sees it, for the button's name.
+    text: String,
+    /// Whether this item is the one being edited.
+    editing: bool,
+    on_edit: Callback<Edit>,
+    classes: Rc<Classes>,
+) -> Element {
+    rsx! {
+        button {
+            r#type: "button",
+            class: classes.fixed_class(FixedKey::EditItemButton, false),
+            aria_label: "Edit “{text}”",
+            aria_pressed: if editing { "true" } else { "false" },
+            onclick: move |_| {
+                on_edit.call(Edit::EditItem {
+                    path: path.clone(),
+                    index: (!editing).then_some(index),
+                });
+            },
+            {icon(PENCIL)}
         }
     }
 }
