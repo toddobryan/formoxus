@@ -92,6 +92,10 @@ body {
 /* One class reaches every control, which is what `.fx-control` is for — this
    was three descendant selectors before the controls carried classes. */
 .fx-control {
+    /* `border-box`, or `width: 100%` plus the padding and border overflows
+       its column: a list's Remove sat over a textarea's corner, and a set's
+       draft ran into Add. */
+    box-sizing: border-box;
     width: 100%;
     padding: 0.4rem 0.5rem;
     border: 1px solid var(--fx-border);
@@ -217,18 +221,33 @@ body {
     margin-top: 0.5rem;
 }
 
-/* A reorderable list (`allow_reordering`): an `<ol>` of `<li>` rows, laid out
- * as moves | the row | Remove, so Remove is never next to a move. `> li`, not
- * `li`: a row can hold a list of its own. */
-.fx-list-items { padding: 0; margin: 0; }
+/* A list: an `<ol>` of `<li>` items, laid out as number | moves | the item |
+ * Remove, so Remove is never next to a move. `> li`, not `li`: an item can
+ * hold a list of its own.
+ *
+ * The number is drawn by a counter, because `display: grid` takes the `<li>`
+ * out of `display: list-item` and its marker with it. It is what "Remove item
+ * 2" and "Move item 2 up" refer to, so it has to be on screen; a screen reader
+ * announces the position from the `<ol>` either way. Its own counter per
+ * `<ol>`, so a nested list counts from 1. */
+.fx-list-items { padding: 0; margin: 0; counter-reset: fx-item; }
 .fx-list-items > .fx-list-item {
     list-style: none;
+    counter-increment: fx-item;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto auto 1fr auto;
     gap: 0.5rem;
     align-items: start;
     padding-block: 0.25rem;
     border-bottom: 1px solid var(--fx-border);
+}
+.fx-list-items > .fx-list-item::before {
+    content: counter(fx-item) ".";
+    align-self: center;
+    min-width: 1.5em;
+    text-align: end;
+    color: var(--fx-muted);
+    font-variant-numeric: tabular-nums;
 }
 .fx-move-buttons { display: flex; flex-direction: column; }
 
@@ -271,6 +290,12 @@ body {
 .fx-set-adder > :first-child { flex: 1 1 12rem; }
 .fx-set-adder .fx-form-field { margin-block-end: 0; }
 .fx-set-adder .fx-button-add-item { position: static; margin-top: 0; }
+/* A unit enum's draft is a variant select in a fieldset of its own; inside
+ * the set's fieldset, drawn as a plain field: no second box, its legend as
+ * a label. */
+.fx-set-adder .fx-variant { border: 0; padding: 0; margin: 0; }
+.fx-set-adder .fx-variant > .fx-legend { padding: 0; font-weight: 500; }
+.fx-set-adder .fx-variant .fx-form-field { margin-block: 0; }
 
 /* The tags preset: a set's items as chips in a wrapping row. Opt-in, per set
  * for every set in a form, through `classes_plus: { set: + ["fx-tags"] }`, or

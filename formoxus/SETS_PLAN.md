@@ -1075,6 +1075,44 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   numbers (a `::marker` or a counter in the grid's first column), or accept
   it.
 
+  **Built 2026-11-03** (Claude). Four gallery examples (Todd: a set and a
+  list, each both typed in and chosen from a provided list), in
+  `examples/src/examples/{sets,lists}.rs`:
+  1. A set typed into: a post's tags, `BTreeSet<String>`,
+     `unicode_case_insensitive`, the `fx-tags` chips.
+  2. A set chosen from a list: a meeting's days, `BTreeSet<Weekday>`, a unit
+     enum, so the draft is a select; `sort_by: Weekday::cmp`.
+  3. A list typed into: a recipe's steps, `Vec<String>`, `widget: textarea`.
+  4. A list chosen from a list: a trip's stops, `Vec<String>` with
+     `stops[] => { widget: select, choices: CITIES }`, airport codes as the
+     values and city names shown; a round trip repeats a city.
+
+  Seen in a browser (Playwright screenshots). The gallery CSS: a list's
+  numbers are SHOWN, by a counter in a new first grid column (`display:
+  grid` drops the `<li>`'s marker); `.fx-control` is `box-sizing:
+  border-box` (its `width: 100%` plus padding had a list's Remove over a
+  textarea's corner and a set's draft into Add); a unit enum's draft
+  fieldset is drawn flat inside the set's.
+
+  **Found: a seeded `<textarea>` renders EMPTY in a fullstack app.** SSR
+  writes `<textarea value="…"></textarea>`; a textarea ignores a `value`
+  attribute (its initial text is its CONTENT), and hydration does not set
+  the property, so `el.value` is `""`. The recipe's three steps show blank.
+  Affects every seeded textarea, apcsp's included. The suite cannot see it
+  (it checks markup) and the textarea e2e test only types into an empty
+  one.
+
+  **Fixed:** `TextareaView` also sets `dangerous_inner_html` to the escaped
+  value, so SSR writes it as the content. Not a text child: with hydration
+  on, SSR wraps a dynamic text node in `<!--node-id…-->` comments, which a
+  textarea shows literally. `value` stays, since Dioxus sets it as the
+  PROPERTY on every change, and a typed-in textarea's content moves only its
+  default. Pinned by suite `a_seeded_textarea_*` (under `pre_render`) and
+  e2e `/t/textarea-seeded`; each half of the fix mutation-checked against
+  its own e2e test. Known edge left alone: the parser drops ONE leading
+  newline after `<textarea>`, so a seeded value starting with `\n` shows
+  without it (the store keeps it).
+
 - [x] **14.** A draft's constraint attributes must not block a submit:
   box 10 confirmed that a draft breaking its items' `pattern` does, under
   browser validation. Probably the draft's input takes a `form` attribute
