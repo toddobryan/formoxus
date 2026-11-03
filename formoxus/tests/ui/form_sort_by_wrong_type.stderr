@@ -1,0 +1,19 @@
+error[E0308]: mismatched types
+  --> tests/ui/form_sort_by_wrong_type.rs:23:32
+   |
+21 |       let _ = empty_form::<Post>(form! {
+   |  ________________________________-
+22 | |         Post {
+23 | |             tags => { sort_by: by_length },
+   | |                                ^^^^^^^^^ expected fn pointer, found fn item
+24 | |         }
+25 | |     });
+   | |_____- arguments to this method are incorrect
+   |
+   = note: expected fn pointer `for<'a, 'b> fn(&'a std::string::String, &'b std::string::String) -> Ordering`
+                 found fn item `for<'a, 'b> fn(&'a Tag, &'b Tag) -> Ordering {by_length}`
+note: method defined here
+  --> src/field_kind.rs
+   |
+   |     pub fn sort_by(self, order: fn(&T, &T) -> Ordering, name: &str) -> SetOrder {
+   |            ^^^^^^^

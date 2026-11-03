@@ -336,7 +336,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
 
 - [ ] **4.** The order (G).
 
-  - [ ] **4a.** (Todd) An erased comparator, `SetOrder`, built from a
+  - [x] **4a.** (Todd) An erased comparator, `SetOrder`, built from a
     `fn(&T, &T) -> Ordering`, and the default chain. The set sorts its
     items with it once, however the order was chosen. Keeps the typed
     values, per J.
@@ -395,11 +395,47 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
       `FieldNode::write_value_into` hits `unreachable!` on an `Invalid`
       leaf. Skipped items go last, in place.
 
-  - [ ] **4b.** (Todd) `formoxus::sets::case_insensitive`, exported in the
-    prelude.
+  - [x] **4b.** (Todd) `ascii_case_insensitive` and
+    `unicode_case_insensitive` in `nodes/set_node.rs` (decided 2026-11-03:
+    no `sets` module), re-exported from `nodes` and in the prelude. Each is
+    generic over `S: AsRef<str>`, so the one fn instantiates at whatever
+    `T` 4c infers (`String`, `Box<str>`, a newtype with `AsRef<str>`).
+    Built on `unicase` (`Ascii`, `UniCase`), and TIE-BROKEN by plain
+    `str::cmp`: a set may hold both "Rust" and "rust", and an `Equal`
+    leaves them in arrival order, which for a `HashSet` differs between
+    server and client and splits the keys on hydration.
 
-  - [ ] **4c.** (Claude) `form!`: `sort_by: path::to::comparator`, only on
+  - [x] **4c.** (Claude) `form!`: `sort_by: path::to::comparator`, only on
     a set, its `T` inferred from the field. Waits on 4a's builder.
+
+    **As built (2026-11-03), two changes from the sketch below**, both found
+    in the goldens:
+
+    1. TWO calls, `set_items_of(|__m: &Post| &__m.tags).sort_by(order,
+       name)`, not one `set_order_for(projection, order, name)`. rustc
+       checks a call's non-closure arguments before its closures, so with
+       one call a fn of the wrong type pinned `T` first and the mismatch was
+       reported on the projection, i.e. across the whole `form!`. A method
+       on the result is checked once `T` is known: the error lands on the
+       order, and an un-annotated closure still infers.
+    2. The projection reaches the SET, not one item via `row`, and
+       `set_items_of` takes `S: SetLike` (`HashSet`, `BTreeSet`, `Vec`),
+       a trait with `#[diagnostic::on_unimplemented]`. So `sort_by` on a
+       `String` is ONE error at the key, not a bare "`&String` is not an
+       iterator" across the `form!` beside the `const` one. The `const`
+       check is now only `!is_list` (a `Vec` without `set`). A path ending
+       in `[]` gets its hint as the trait's `note`.
+
+    An unnamed order is named by the macro, from its tokens with the
+    spaces tidied (`String::cmp`), since `stringify!` of tokens that have
+    passed through a proc macro prints `String :: cmp`. The 4c4 check is
+    asked beside `set` only of a list of leaves, so `set`'s own refusals
+    are not doubled.
+
+    **Open, for 2f4:** `tags => { set, sort_by: … }` on a `Vec` passes
+    every `const` check and then panics at run time, since `with_sort_by`
+    asserts `is_set`. It must also accept a field marked `set` once
+    `with_set` exists.
 
     Checked by TYPE, not `const` (a `Shape`'s `ConstTypeId` wraps a fn
     const code cannot call). The expansion is
@@ -420,18 +456,18 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     2026-10-25 explicit-`?` rule, and peeled through `some()`; no trait
     looks through `Option`.
 
-    - [ ] **4c1.** The key, with `(order, name)` (L), the near-miss and
+    - [x] **4c1.** The key, with `(order, name)` (L), the near-miss and
       given-twice tests, and the bad-tuple error.
 
-    - [ ] **4c2.** The expansion, and a `const` check that the field is a
+    - [x] **4c2.** The expansion, and a `const` check that the field is a
       set or carries `set`, with a golden.
 
-    - [ ] **4c3.** Goldens for a mismatched `T` and a bad tuple; suite
+    - [x] **4c3.** Goldens for a mismatched `T` and a bad tuple; suite
       tests for a fn, `String::cmp`, an un-annotated closure (pins that
       the item type is inferred before the closure is checked), and a
       named order's `Debug`.
 
-    - [ ] **4c4.** A `const` check that a set's items are scalars when no
+    - [x] **4c4.** A `const` check that a set's items are scalars when no
       `sort_by` is given: on every named field that is a set, or carries
       `set`, without `sort_by`. Spanned on the path (or on `set`), with a
       golden. Message along the lines of "the items of `tags` have no

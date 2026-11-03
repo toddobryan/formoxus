@@ -676,7 +676,7 @@ fn set_node(
     let spec = walk.spec_for(prefix);
     let comparator = spec
         .and_then(|s| s.sort_by.clone())
-        .unwrap_or_else(|| SetOrder::default_for(shape));
+        .unwrap_or_else(|| SetOrder::default_for(shape, prefix));
 
     let items: Vec<Box<dyn Node>> = peek
         .map(|p| {

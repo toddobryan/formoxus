@@ -10,10 +10,11 @@
 use super::{across_the_wire, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::{Edit, ItemValue};
+use formoxus::nodes::{Edit, ItemValue, SetOrder, ValuesByPath};
 use formoxus::prelude::*;
 use formoxus::widgets::{AddItemProps, ItemAdder};
 use googletest::prelude::*;
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -339,7 +340,308 @@ struct Shelf {
 /// SHAPE when the set is built, so a missing one fails at the first render,
 /// not when a user's first Add gives the set something to sort.
 #[gtest]
-#[should_panic(expected = "you must provide a sort_by function")]
+#[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
 fn a_set_of_non_scalars_without_sort_by_fails_at_construction() {
     let _ = empty_form::<Shelf>(FormSpec::default());
+}
+
+/// Shortest first, unlike `Tag`'s own `Ord`, so a set that ignored its
+/// `sort_by` would come out in a different order.
+fn by_length(a: &Tag, b: &Tag) -> Ordering {
+    a.0.len().cmp(&b.0.len()).then_with(|| a.0.cmp(&b.0))
+}
+
+fn shelf_spec() -> FormSpec<Shelf> {
+    FormSpec::default().with_sort_by("tags", SetOrder::custom(by_length, "by_length"))
+}
+
+fn shelf(names: &[&str]) -> Shelf {
+    Shelf {
+        tags: names.iter().map(|name| Tag(name.to_string())).collect(),
+    }
+}
+
+fn values(pairs: &[(&str, &str)]) -> ValuesByPath {
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+/// The set's item keys, in the order its items sit: `collect_values` writes
+/// them at the set's own path in that order, so this is the order on screen.
+fn item_keys<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
+    form: &FormState<T>,
+    set: &str,
+) -> String {
+    form.collect_values()
+        .get(set)
+        .cloned()
+        .unwrap_or_else(|| panic!("{set} is a set, so it writes its keys"))
+}
+
+/// What each item of `tags` holds, in the order the items sit. A `Tag` is a
+/// newtype, so a leaf, so each item is exactly one value at `tags.#N`.
+fn tag_values(form: &FormState<Shelf>) -> Vec<String> {
+    form.collect_values()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("tags.#"))
+        .map(|(_, raw)| raw)
+        .collect()
+}
+
+/// At build, the `BTreeSet` hands its items over in `Tag`'s own order
+/// (dioxus, go, rust); the set sorts them by `by_length` BEFORE the keys are
+/// assigned, so `#0` is the shortest, not the first the set iterated.
+#[gtest]
+fn a_set_with_sort_by_is_in_that_order_when_built() {
+    let form = form_for(&shelf(&["dioxus", "go", "rust"]), shelf_spec());
+    expect_that!(
+        tag_values(&form),
+        elements_are![eq("go"), eq("rust"), eq("dioxus")]
+    );
+    expect_that!(item_keys(&form, "tags"), eq("#0,#1,#2"));
+}
+
+/// An added item takes the next key, `#3`, and then its place in the order:
+/// a key names an item, not a position, so sorting moves items and leaves
+/// every key with the item it named.
+#[gtest]
+fn a_set_with_sort_by_puts_an_added_item_in_order() {
+    let mut form = form_for(&shelf(&["dioxus", "go", "rust"]), shelf_spec());
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: "tags".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Tag("css".to_string()))),
+        }),
+        ok(some(eq("tags.#3")))
+    );
+    expect_that!(
+        tag_values(&form),
+        elements_are![eq("go"), eq("css"), eq("rust"), eq("dioxus")]
+    );
+    expect_that!(item_keys(&form, "tags"), eq("#0,#3,#1,#2"));
+}
+
+/// The server's case: a submit rebuilds the items in the order the wire
+/// names them, and if it fails, renders them again. The set sorts once the
+/// leaves are filled, not when the items are made, since a new item is
+/// empty until `distribute_values` reaches its leaf.
+#[gtest]
+fn a_set_with_sort_by_sorts_the_items_a_submit_rebuilds() {
+    let mut form = empty_form::<Shelf>(shelf_spec());
+    form.distribute_values(&values(&[
+        ("tags", "#0,#1,#2"),
+        ("tags.#0", "dioxus"),
+        ("tags.#1", "rust"),
+        ("tags.#2", "go"),
+    ]));
+    expect_that!(
+        tag_values(&form),
+        elements_are![eq("go"), eq("rust"), eq("dioxus")]
+    );
+    expect_that!(item_keys(&form, "tags"), eq("#2,#1,#0"));
+    expect_that!(form.validate(), some(eq(&shelf(&["dioxus", "go", "rust"]))));
+}
+
+#[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Pin {
+    label: String,
+    rank: u8,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Board {
+    pins: BTreeSet<Pin>,
+}
+
+fn by_rank(a: &Pin, b: &Pin) -> Ordering {
+    a.rank.cmp(&b.rank)
+}
+
+/// A struct item is a node with no value of its own, so a custom order
+/// rebuilds each item's `Pin` to compare it. An item that cannot be rebuilt,
+/// a blank `rank` (`Empty`) or an unparseable one (`Invalid`), must not
+/// panic: `write_value_into` hits `unreachable!` on either, which is why the
+/// order validates a copy first. Both go last, in the order they arrived.
+#[gtest]
+fn a_set_item_that_cannot_be_built_sorts_last_without_panicking() {
+    let mut form = empty_form::<Board>(
+        FormSpec::default().with_sort_by("pins", SetOrder::custom(by_rank, "by_rank")),
+    );
+    form.distribute_values(&values(&[
+        ("pins", "#0,#1,#2,#3"),
+        ("pins.#0.label", "blank"),
+        ("pins.#0.rank", ""),
+        ("pins.#1.label", "second"),
+        ("pins.#1.rank", "2"),
+        ("pins.#2.label", "invalid"),
+        ("pins.#2.rank", "x"),
+        ("pins.#3.label", "first"),
+        ("pins.#3.rank", "1"),
+    ]));
+    expect_that!(item_keys(&form, "pins"), eq("#3,#1,#0,#2"));
+    expect_that!(form.validate(), none());
+}
+
+// ── `sort_by` in `form!` ─────────────────────────────────────────────────
+
+/// A fn, its `T` inferred from the field: the same order as `with_sort_by`
+/// gives, at build and on the server's rebuild.
+#[gtest]
+fn form_sort_by_takes_a_fn() {
+    let spec = || form! { Shelf { tags => { sort_by: by_length } } };
+    let form = form_for(&shelf(&["dioxus", "go", "rust"]), spec());
+    expect_that!(
+        tag_values(&form),
+        elements_are![eq("go"), eq("rust"), eq("dioxus")]
+    );
+
+    let mut rebuilt = empty_form::<Shelf>(spec());
+    rebuilt.distribute_values(&values(&[
+        ("tags", "#0,#1,#2"),
+        ("tags.#0", "dioxus"),
+        ("tags.#1", "rust"),
+        ("tags.#2", "go"),
+    ]));
+    expect_that!(
+        tag_values(&rebuilt),
+        elements_are![eq("go"), eq("rust"), eq("dioxus")]
+    );
+}
+
+fn post_tags(form: &FormState<Post>) -> Vec<String> {
+    form.collect_values()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("tags.#"))
+        .map(|(_, raw)| raw)
+        .collect()
+}
+
+fn post_tagged(names: &[&str]) -> Post {
+    Post {
+        title: "Hello".to_string(),
+        tags: tags(names),
+    }
+}
+
+/// A path to a trait method coerces to `fn(&String, &String) -> Ordering`
+/// as a fn does. The order is the default one; what this pins is that the
+/// path is accepted.
+#[gtest]
+fn form_sort_by_takes_a_method_path() {
+    let form = form_for(
+        &post_tagged(&["b", "a", "c"]),
+        form! { Post { tags => { sort_by: String::cmp } } },
+    );
+    expect_that!(post_tags(&form), elements_are![eq("a"), eq("b"), eq("c")]);
+}
+
+/// The closure's argument types are not written: the projection pins the
+/// item type before the closure is checked, so `a.len()` resolves.
+#[gtest]
+fn form_sort_by_takes_an_unannotated_closure() {
+    let form = form_for(
+        &post_tagged(&["ccc", "a", "bb"]),
+        form! { Post { tags => { sort_by: |a, b| a.len().cmp(&b.len()) } } },
+    );
+    expect_that!(
+        post_tags(&form),
+        elements_are![eq("a"), eq("bb"), eq("ccc")]
+    );
+}
+
+/// Through the prelude, as a dev names it. By plain byte order "Banana"
+/// sorts before "apple"; ignoring case, after.
+#[gtest]
+fn form_sort_by_takes_a_case_insensitive_order() {
+    let form = form_for(
+        &post_tagged(&["apple", "Banana"]),
+        form! { Post { tags => { sort_by: unicode_case_insensitive } } },
+    );
+    expect_that!(post_tags(&form), elements_are![eq("apple"), eq("Banana")]);
+}
+
+/// The name is `SetOrder`'s, for its `Debug`: what `(order, name)` wrote,
+/// or else the order as written.
+#[gtest]
+fn form_sort_by_names_the_order() {
+    let named = form! { Post { tags => { sort_by: (String::cmp, "byte order") } } };
+    expect_that!(
+        format!("{named:?}"),
+        contains_substring(r#"name: "byte order""#)
+    );
+    let unnamed = form! { Post { tags => { sort_by: String::cmp } } };
+    expect_that!(
+        format!("{unnamed:?}"),
+        contains_substring(r#"name: "String::cmp""#)
+    );
+}
+
+/// `tags?`: the order is over what the `Option` holds.
+#[gtest]
+fn form_sort_by_reaches_a_set_behind_an_option() {
+    let maybe = MaybeTagged {
+        tags: Some(tags(&["ccc", "a", "bb"])),
+    };
+    let mut form = form_for(
+        &maybe,
+        form! { MaybeTagged { tags? => { sort_by: |a, b| a.len().cmp(&b.len()) } } },
+    );
+    let order: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("tags.#"))
+        .map(|(_, raw)| raw)
+        .collect();
+    expect_that!(order, elements_are![eq("a"), eq("bb"), eq("ccc")]);
+    expect_that!(form.validate(), some(eq(&maybe)));
+}
+
+#[derive(Facet, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum Priority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Triage {
+    levels: BTreeSet<Priority>,
+}
+
+/// Highest first, against `Priority`'s own order. By reference although
+/// `Copy`, since `fn(&T, &T) -> Ordering` is what `sort_by` takes.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn most_urgent_first(a: &Priority, b: &Priority) -> Ordering {
+    b.cmp(a)
+}
+
+/// A unit enum has no default order (4a): its item is a variant node, which
+/// holds no value to compare. With `sort_by` it sorts at build and on the
+/// server's rebuild, and still round-trips.
+#[gtest]
+fn a_unit_enum_set_sorts_by_its_sort_by() {
+    let spec = || form! { Triage { levels => { sort_by: most_urgent_first } } };
+    let triage = Triage {
+        levels: [Priority::Low, Priority::High, Priority::Medium].into(),
+    };
+    let mut form = form_for(&triage, spec());
+    let wire = form.collect_values();
+    expect_that!(wire.get("levels"), some(eq("#0,#1,#2")));
+    expect_that!(wire.get("levels.#0"), some(eq("High")));
+    expect_that!(wire.get("levels.#2"), some(eq("Low")));
+    expect_that!(form.validate(), some(eq(&triage)));
+
+    let mut rebuilt = empty_form::<Triage>(spec());
+    rebuilt.distribute_values(&values(&[
+        ("levels", "#0,#1,#2"),
+        ("levels.#0", "Low"),
+        ("levels.#1", "High"),
+        ("levels.#2", "Medium"),
+    ]));
+    expect_that!(item_keys(&rebuilt, "levels"), eq("#1,#2,#0"));
+    expect_that!(rebuilt.validate(), some(eq(&triage)));
 }

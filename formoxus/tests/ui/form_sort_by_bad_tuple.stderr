@@ -1,0 +1,5 @@
+error: `sort_by` takes an order, or a pair `(order, name)`
+  --> tests/ui/form_sort_by_bad_tuple.rs:14:32
+   |
+14 |             tags => { sort_by: (String::cmp, "bytes", "extra") },
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -441,6 +441,13 @@ pub(crate) fn project(segments: &[Segment]) -> TokenStream2 {
     walk(segments, false, |_, _| {})
 }
 
+/// [`project`], but with the path's last `?` taken off too: `tags?` is what
+/// the `Option` holds. For `sort_by`, which asks about the set's items, not
+/// about whether the field is optional.
+pub(crate) fn project_peeled(segments: &[Segment]) -> TokenStream2 {
+    walk(segments, true, |_, _| {})
+}
+
 /// Free `const _` assertions that every `Option` on the path was written with
 /// its `?`.
 ///

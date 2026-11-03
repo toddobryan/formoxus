@@ -1,0 +1,24 @@
+error[E0277]: `sort_by` applies only to set fields, or a list written with `set`
+  --> tests/ui/form_sort_by_on_a_string.rs:13:27
+   |
+13 |             nickname => { sort_by: String::cmp },
+   |                           ^^^^^^^ `std::string::String` is not a set
+   |
+   = help: the trait `formoxus::field_kind::SetLike` is not implemented for `std::string::String`
+   = note: a path ending in `[]` is every item of a list or set: put `sort_by` on the field's own path, without the `[]`
+help: the following other types implement trait `formoxus::field_kind::SetLike`
+  --> src/field_kind.rs
+   |
+   | impl<T, S> SetLike for HashSet<T, S> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `HashSet<T, S>`
+...
+   | impl<T> SetLike for BTreeSet<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `BTreeSet<T>`
+...
+   | impl<T> SetLike for Vec<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^ `Vec<T>`
+note: required by a bound in `formoxus::field_kind::set_items_of`
+  --> src/field_kind.rs
+   |
+   | pub fn set_items_of<M, S: SetLike>(_: fn(&M) -> &S) -> SetItems<S::Item> {
+   |                           ^^^^^^^ required by this bound in `set_items_of`

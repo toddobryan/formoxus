@@ -20,6 +20,7 @@ use dioxus::{
 };
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
 use formoxus_spec::FixedKey;
+use unicase::{Ascii, UniCase};
 
 use crate::{
     error::FormAccessError,
@@ -31,13 +32,27 @@ use crate::{
     widgets::{AddItemProps, FieldErrors, ItemAdder, RemoveItemButton, errors::errors_id},
 };
 
+pub fn ascii_case_insensitive<T: AsRef<str>>(a: &T, b: &T) -> Ordering {
+    Ascii::new(a.as_ref())
+        .cmp(&Ascii::new(b.as_ref()))
+        .then_with(|| a.as_ref().cmp(b.as_ref()))
+}
+
+pub fn unicode_case_insensitive<S: AsRef<str>>(a: &S, b: &S) -> Ordering {
+    UniCase::new(a.as_ref())
+        .cmp(&UniCase::new(b.as_ref()))
+        .then_with(|| a.as_ref().cmp(b.as_ref()))
+}
+
 #[derive(Clone)]
 pub struct SetOrder {
     pub item_order: Arc<dyn ItemOrder>,
 }
 
 impl SetOrder {
-    pub fn default_for(shape: &'static Shape) -> Self {
+    /// The order of a set at `path` whose items are `shape`, when no
+    /// `sort_by` was given. Only scalar items have one.
+    pub fn default_for(shape: &'static Shape, path: &str) -> Self {
         if let Some(scalar_type) = shape.scalar_type() {
             let default_order = DefaultOrder::for_type(scalar_type);
             SetOrder {
@@ -45,8 +60,8 @@ impl SetOrder {
             }
         } else {
             panic!(
-                "you must provide a sort_by function for type {:?}",
-                shape.ty
+                "{path}: a set of `{shape}` has no default order; give it a sort_by \
+                 (only a set of scalars sorts without one)"
             );
         }
     }
@@ -402,5 +417,90 @@ impl Node for SetNode {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cmp::Ordering;
+
+    use googletest::prelude::*;
+
+    use super::{ascii_case_insensitive, unicode_case_insensitive};
+
+    /// Plain `str::cmp` puts every capital before every lowercase letter,
+    /// so "Banana" before "apple"; both of these ignore case for that.
+    #[gtest]
+    fn case_does_not_decide_the_order() {
+        for cmp in [
+            ascii_case_insensitive::<&str>,
+            unicode_case_insensitive::<&str>,
+        ] {
+            let mut words = vec!["cherry", "Banana", "apple"];
+            words.sort_by(cmp);
+            expect_that!(
+                words,
+                elements_are![eq(&"apple"), eq(&"Banana"), eq(&"cherry")]
+            );
+        }
+    }
+
+    /// A set may hold both "Rust" and "rust", and `Equal` would leave them in
+    /// arrival order, which for a `HashSet` differs between server and client.
+    /// So only the same string is `Equal`; otherwise plain `str::cmp` decides.
+    #[gtest]
+    fn strings_differing_only_in_case_are_never_equal() {
+        for cmp in [
+            ascii_case_insensitive::<&str>,
+            unicode_case_insensitive::<&str>,
+        ] {
+            expect_that!(cmp(&"Rust", &"rust"), eq(Ordering::Less));
+            expect_that!(cmp(&"rust", &"Rust"), eq(Ordering::Greater));
+            expect_that!(cmp(&"rust", &"rust"), eq(Ordering::Equal));
+        }
+    }
+
+    /// The difference between the two: only `unicode_` folds "É" to "é", so
+    /// it compares "élan" and "Été" at their second letter. `ascii_` leaves
+    /// "é" and "É" as two different letters, and "É" comes first.
+    #[gtest]
+    fn only_unicode_folds_case_beyond_ascii() {
+        expect_that!(
+            unicode_case_insensitive(&"élan", &"Été"),
+            eq(Ordering::Less)
+        );
+        expect_that!(
+            ascii_case_insensitive(&"élan", &"Été"),
+            eq(Ordering::Greater)
+        );
+    }
+
+    /// Full case folding, not lowercasing: "ß" folds to "ss", so "Straße" and
+    /// "STRASSE" are the same word, and only the tie-break orders them ("t"
+    /// after "T"). Lowercasing would compare "straße" with "strasse" and put
+    /// "ß" after "s"; "STRASSF" shows the fold, not the tie-break, decided.
+    #[gtest]
+    fn unicode_folds_eszett_to_ss() {
+        expect_that!(
+            unicode_case_insensitive(&"Straße", &"STRASSE"),
+            eq(Ordering::Greater)
+        );
+        expect_that!(
+            unicode_case_insensitive(&"Straße", &"STRASSF"),
+            eq(Ordering::Less)
+        );
+    }
+
+    /// Generic over `AsRef<str>`, so `form!`'s `sort_by:` (4c) can hand
+    /// either one to a set of any string-like type, its `T` inferred from
+    /// the field.
+    #[gtest]
+    fn either_fits_a_set_of_any_string_like_type() {
+        let _: fn(&String, &String) -> Ordering = unicode_case_insensitive;
+        let _: fn(&Box<str>, &Box<str>) -> Ordering = ascii_case_insensitive;
+        expect_that!(
+            unicode_case_insensitive(&"b".to_string(), &"A".to_string()),
+            eq(Ordering::Greater)
+        );
     }
 }

@@ -57,3 +57,8 @@ own `matches_pattern` validator. It is dead-stripped today (verified: adding a
 `regex` call grew the bundle by the full 784 KiB raw). If formoxus ever routes
 validation through facet's `ValidatorKind`, consumers would ship two regex
 engines.
+
+`unicase` joined `formoxus` on 2026-11-03 for the case-insensitive set
+orders. It was already in the lock, but only through `mime_guess`, which is
+server-only, so it is NEW to the wasm bundle: measure what its fold tables
+cost (expected small) alongside the `regress` check.

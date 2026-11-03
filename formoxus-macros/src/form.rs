@@ -13,7 +13,7 @@ mod widget;
 pub(crate) use button::ButtonInfo;
 pub(crate) use classes::ClassEntry;
 pub(crate) use field::{FieldBody, FieldSpec};
-pub(crate) use spec_path::{SpecPath, option_checks, probe, project};
+pub(crate) use spec_path::{SpecPath, option_checks, probe, project, project_peeled};
 pub(crate) use widget::WidgetRef;
 
 use std::collections::HashSet;
@@ -169,9 +169,17 @@ impl FormSpecInput {
             .field_specs
             .iter()
             .map(|f| {
-                let types =
-                    f.body
-                        .type_checks(&model_type, &project(&f.path.segments), &f.path.key());
+                let path_span = f
+                    .path
+                    .segments
+                    .last()
+                    .map_or_else(Span::call_site, spec_path::Segment::span);
+                let types = f.body.type_checks(
+                    &model_type,
+                    &project(&f.path.segments),
+                    &f.path.key(),
+                    path_span,
+                );
                 let options = option_checks(&f.path.segments, &model_type);
                 quote! { #types #options }
             })
@@ -603,7 +611,23 @@ impl FieldSpec {
             };
             quote! { .with_adder(#key, #ctor) }
         });
-        quote! { #label #widget #node #attrs #adder }
+        // `set_items_of` infers the item type from the set the projection
+        // reaches, through `project_peeled`, since `project` keeps the path's
+        // last `?`: `tags?` is the set, not the `Option` around it. Spanned on
+        // the key, so a field that is not a set is reported at `sort_by`; the
+        // order keeps its own span, so a comparator over the wrong type is
+        // reported at the order.
+        let sort_by = self.body.sort_by.as_ref().map(|sort_by| {
+            let key_span = sort_by.key.span();
+            let set = respan(project_peeled(&self.path.segments), key_span);
+            let items = quote_spanned! { key_span=>
+                ::formoxus::field_kind::set_items_of(|__m: &#model| &#set)
+            };
+            let order = &sort_by.order;
+            let name = sort_by.name_tokens();
+            quote! { .with_sort_by(#key, #items.sort_by(#order, #name)) }
+        });
+        quote! { #label #widget #node #attrs #adder #sort_by }
     }
 }
 

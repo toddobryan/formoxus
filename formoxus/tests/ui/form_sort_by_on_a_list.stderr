@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `sort_by` on a list needs `set` beside it, since a list's order is the user's: write `set, sort_by: …`
+  --> tests/ui/form_sort_by_on_a_list.rs:13:23
+   |
+13 |             tags => { sort_by: String::cmp },
+   |                       ^^^^^^^ evaluation of `main::_` failed here

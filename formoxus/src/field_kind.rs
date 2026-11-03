@@ -21,12 +21,17 @@
 //! Classification mirrors `build::node_for_shape`, except that it compares
 //! names: `Shape::scalar_type` compares `TypeId`s and so can never be const.
 
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashSet};
+use std::marker::PhantomData;
+
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
 use formoxus_spec::{Attr, FieldType, HtmlElement};
 
 use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
+use crate::nodes::SetOrder;
 use crate::widgets::Widget;
 
 /// The shape of the field a projection reaches, with the field's type inferred
@@ -69,6 +74,64 @@ where
 /// The value type of a model field's default field: `u8` for a `u8` or an
 /// `Option<u8>`. What a choice field over that model field chooses among.
 type ValueOf<P> = <<P as DefaultField>::Field as Field>::Value;
+
+/// What `form!`'s `sort_by:` can order: a set, or a `Vec` written with `set`
+/// (whether a `Vec` carries `set` is a `const` check of its own).
+///
+/// A trait, so that `sort_by` on anything else is ONE error, this message
+/// at the key, rather than a bare "not an iterator" across the whole `form!`.
+#[diagnostic::on_unimplemented(
+    message = "`sort_by` applies only to set fields, or a list written with `set`",
+    label = "`{Self}` is not a set",
+    note = "a path ending in `[]` is every item of a list or set: put `sort_by` on the field's own \
+            path, without the `[]`"
+)]
+pub trait SetLike {
+    type Item;
+}
+
+impl<T, S> SetLike for HashSet<T, S> {
+    type Item = T;
+}
+
+impl<T> SetLike for BTreeSet<T> {
+    type Item = T;
+}
+
+impl<T> SetLike for Vec<T> {
+    type Item = T;
+}
+
+/// The item type of the set a projection reaches, for `sort_by:`
+/// (`set_items_of(|__m: &Post| &__m.tags).sort_by(by_length, "by_length")`).
+/// The projection is never called.
+///
+/// Two calls rather than one taking the projection and the order together:
+/// rustc checks a call's non-closure arguments before its closures, so a
+/// comparator over the wrong type would pin `T` first and the error would land
+/// on the projection, which is the whole `form!`. A method on the result is
+/// checked once `T` is known, so the mismatch is reported at the order, and an
+/// un-annotated closure gets its argument types from the field.
+pub fn set_items_of<M, S: SetLike>(_: fn(&M) -> &S) -> SetItems<S::Item> {
+    SetItems(PhantomData)
+}
+
+/// A set's item type, from [`set_items_of`], waiting for its order.
+pub struct SetItems<T>(PhantomData<fn(&T)>);
+
+impl<T> std::fmt::Debug for SetItems<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SetItems")
+    }
+}
+
+impl<T: Facet<'static> + 'static> SetItems<T> {
+    /// `order` over the items, named `name` for `SetOrder`'s `Debug`: what
+    /// `sort_by: (order, name)` wrote, or else the order as written.
+    pub fn sort_by(self, order: fn(&T, &T) -> Ordering, name: &str) -> SetOrder {
+        SetOrder::custom(order, name)
+    }
+}
 
 /// One row of a list, for a `[]` path segment in a projection.
 ///
@@ -199,6 +262,36 @@ pub const fn is_list_of_leaves(shape: &Shape) -> bool {
     match &shape.def {
         Def::List(list) => is_leaf(list.t),
         _ => false,
+    }
+}
+
+/// Whether this field's items have an order without a `sort_by`: `false`
+/// only for a set (or, when `marked_set`, a list written with `set`) whose
+/// items are not scalars, so `true` for any other field.
+///
+/// A scalar is a `String`, an integer, a float or a `bool`, as
+/// `SetOrder::default_for` decides at run time, and NOT a newtype over one or
+/// an `Option` of one: neither is asked through `kind`, which peels both.
+/// The item's own value is all the default order compares, and a newtype's
+/// leaf holds only its inner value.
+pub const fn items_have_default_order(shape: &Shape, marked_set: bool) -> bool {
+    let shape = match &shape.def {
+        Def::Option(option) => option.t,
+        _ => shape,
+    };
+    match &shape.def {
+        Def::Set(set) => is_scalar(set.t),
+        Def::List(list) if marked_set => is_scalar(list.t),
+        _ => true,
+    }
+}
+
+/// A `String` or a primitive [`primitive`] knows, by name, with nothing
+/// peeled.
+const fn is_scalar(shape: &Shape) -> bool {
+    match shape.module_path {
+        None => !matches!(primitive(shape.type_identifier), Kind::Other),
+        Some(module) => str_eq(shape.type_identifier, "String") && str_eq(module, "alloc::string"),
     }
 }
 

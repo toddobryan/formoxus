@@ -34,11 +34,79 @@ pub(crate) struct FieldBody {
     /// The bare flag `set`, rendering a `Vec` of leaves as a set (K). The
     /// key, since a flag has nothing else, is what its checks are spanned on.
     pub(crate) set: Option<Ident>,
+    /// `sort_by: order` or `sort_by: (order, name)`, a set's order (L).
+    pub(crate) sort_by: Option<SortBy>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
     /// own, so nothing past the parse sees one.
     pub(crate) nested: Vec<(SpecPath, FieldBody)>,
+}
+
+/// `sort_by:`'s value: any expression of type `fn(&T, &T) -> Ordering`, and
+/// the name `SetOrder`'s `Debug` shows. The key is kept for the checks' span.
+#[derive(Debug)]
+pub(crate) struct SortBy {
+    pub(crate) key: Ident,
+    pub(crate) order: Expr,
+    /// What `(order, name)` wrote; `None` for a bare order, which is named by
+    /// `stringify!` of itself.
+    pub(crate) name: Option<Expr>,
+}
+
+impl SortBy {
+    /// A two-element tuple is always `(order, name)`: a tuple is never a `fn`
+    /// pointer, so it cannot be an order itself. Any other tuple is a mistake
+    /// rather than an order rustc should be left to reject.
+    fn parse(key: Ident, body: ParseStream<'_>) -> Result<Self> {
+        let value: Expr = body.parse()?;
+        let (order, name) = match value {
+            Expr::Tuple(tuple) if tuple.elems.len() == 2 => {
+                let mut elems = tuple.elems.into_iter();
+                (elems.next(), elems.next())
+            }
+            Expr::Tuple(tuple) => {
+                return Err(syn::Error::new_spanned(
+                    tuple,
+                    "`sort_by` takes an order, or a pair `(order, name)`",
+                ));
+            }
+            order => (Some(order), None),
+        };
+        Ok(Self {
+            key,
+            order: order.expect("matched above"),
+            name,
+        })
+    }
+
+    /// The name as an expression `with_sort_by`'s `&str` takes.
+    pub(crate) fn name_tokens(&self) -> TokenStream2 {
+        let Some(name) = &self.name else {
+            let written = written_order(&self.order);
+            return quote!(#written);
+        };
+        quote!(&#name)
+    }
+}
+
+/// The order as the dev wrote it, near enough: `String::cmp`, not the
+/// `String :: cmp` that a token stream prints, and that `stringify!` prints
+/// too once the tokens have passed through a proc macro.
+fn written_order(order: &Expr) -> String {
+    let mut written = order.to_token_stream().to_string();
+    for (spaced, tight) in [
+        (" :: ", "::"),
+        (" . ", "."),
+        (" (", "("),
+        ("( ", "("),
+        (" )", ")"),
+        (" ,", ","),
+        ("& ", "&"),
+    ] {
+        written = written.replace(spaced, tight);
+    }
+    written
 }
 
 #[derive(Debug, Default)]
@@ -298,6 +366,7 @@ impl FieldBody {
         model: &impl ToTokens,
         place: &TokenStream2,
         key: &str,
+        path_span: Span,
     ) -> TokenStream2 {
         let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
         let takes = |span: Span, test: TokenStream2, message: &str| {
@@ -401,6 +470,7 @@ impl FieldBody {
         }
         checks.push(self.list_checks(&shape, key));
         checks.push(self.set_checks(&shape));
+        checks.push(self.order_checks(&shape, path_span));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -464,6 +534,53 @@ impl FieldBody {
                 "`set` applies only to a list of single values (a string, number, bool, enum \
                  without data, or newtype over one): a set's items are shown, not edited"
             );
+        }
+    }
+
+    /// The order's `const _` assertions. With `sort_by` and no `set`: that
+    /// the field is not a list, spanned on the key, since a list's order is
+    /// the user's. Anything else that is not a set is `field_kind::SetLike`'s
+    /// error, and an order over the wrong type is rustc's, both from the
+    /// builder call.
+    ///
+    /// Without `sort_by`: that a set's items have a default order, which only
+    /// scalars do, spanned on `set` if it is there and on the path otherwise.
+    /// Beside `set`, asked only of a list of leaves, so a list `set` already
+    /// refuses is not refused twice. A set field no `form!` names reaches only
+    /// `SetOrder::default_for`'s panic.
+    ///
+    /// Each message is interpolated rather than written in the
+    /// `quote_spanned!`, so it keeps the call site's span: on the path's span,
+    /// clippy reads a field named `r#type` as a raw string literal.
+    fn order_checks(&self, shape: &TokenStream2, path_span: Span) -> TokenStream2 {
+        let fk = quote! { ::formoxus::field_kind };
+        match (&self.sort_by, &self.set) {
+            (Some(_), Some(_)) => TokenStream2::new(),
+            (Some(sort_by), None) => {
+                let message = "`sort_by` on a list needs `set` beside it, since a list's order \
+                               is the user's: write `set, sort_by: …`";
+                quote_spanned! { sort_by.key.span()=>
+                    const _: () = ::core::assert!(!#fk::is_list(#shape), #message);
+                }
+            }
+            (None, set) => {
+                let span = set.as_ref().map_or(path_span, Ident::span);
+                let marked_set = set.is_some();
+                let message = "this set's items have no default order (only strings, numbers \
+                               and bools have one): give it `sort_by: …`, which for an `Ord` \
+                               type is `sort_by: Type::cmp`";
+                let applies = if marked_set {
+                    quote!(!#fk::is_list_of_leaves(#shape) ||)
+                } else {
+                    TokenStream2::new()
+                };
+                quote_spanned! { span=>
+                    const _: () = ::core::assert!(
+                        #applies #fk::items_have_default_order(#shape, #marked_set),
+                        #message
+                    );
+                }
+            }
         }
     }
 
@@ -541,7 +658,7 @@ impl Parse for FieldBody {
 
 impl FieldBody {
     /// One `key: value` (or bare flag) entry: `widget`, `label`, `choices`,
-    /// `adder`, `set`, a table attribute by its `snake_case` variant name, or
+    /// `adder`, `set`, `sort_by`, a table attribute by its `snake_case` variant name, or
     /// a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
         if starts_nested(body) {
@@ -594,6 +711,14 @@ impl FieldBody {
                 }
                 Ok(())
             }
+            "sort_by" => {
+                body.parse::<Token![:]>()?;
+                if self.sort_by.is_some() {
+                    return Err(syn::Error::new_spanned(&key, "`sort_by` is given twice"));
+                }
+                self.sort_by = Some(SortBy::parse(key, body)?);
+                Ok(())
+            }
             "set" => {
                 if body.peek(Token![:]) {
                     return Err(flag_with_value(&key));
@@ -621,6 +746,7 @@ impl FieldBody {
             && self.choices.is_none()
             && self.adder.is_none()
             && self.set.is_none()
+            && self.sort_by.is_none()
     }
 }
 
@@ -1072,8 +1198,8 @@ fn owned(attr: Attr) -> String {
 }
 
 /// Every identifier key a field body accepts: `widget`, `label`, `choices`,
-/// `adder`, `set`, then each table attribute an author may set, in table
-/// order.
+/// `adder`, `set`, `sort_by`, then each table attribute an author may set, in
+/// table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
@@ -1081,6 +1207,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
+        "sort_by".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1177,10 +1304,11 @@ fn conflicting(attr: Attr) -> Option<Attr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AttrSource, FieldBody, legal_keys, parse_value};
+    use super::{AttrSource, FieldBody, legal_keys, parse_value, written_order};
     use crate::form::tests::{err_of, parse};
     use googletest::prelude::*;
     use quote::quote;
+    use syn::Expr;
 
     // ── Field-body errors ─────────────────────────────────────────────────
 
@@ -1254,6 +1382,7 @@ mod tests {
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" => quote!(#ident),
+                "sort_by" => quote!(#ident: String::cmp),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -1904,6 +2033,165 @@ mod tests {
             err_of(quote! { Source { tags => { sett } } }),
             contains_substring("Did you mean `set`?")
         );
+    }
+
+    // ── `sort_by` ────────────────────────────────────────────────────────
+
+    /// `set_items_of` infers the item type from the set; the order goes to a
+    /// method on its result, and a bare order is named as written.
+    #[gtest]
+    fn sort_by_becomes_a_builder_call() {
+        let spec = parse(quote! { Source { tags => { sort_by: by_length } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                ". with_sort_by (\"tags\" , :: formoxus :: field_kind :: set_items_of (| __m : & \
+                 Source | & __m . tags) . sort_by (by_length , \"by_length\"))"
+            )
+        );
+    }
+
+    /// A pair is `(order, name)`, and the name is any expression, borrowed
+    /// as `label:`'s is.
+    #[gtest]
+    fn sort_by_takes_an_order_and_a_name() {
+        let spec =
+            parse(quote! { Source { tags => { sort_by: (String::cmp, "byte order") } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(". sort_by (String :: cmp , & \"byte order\"))")
+        );
+    }
+
+    /// `project` keeps a path's last `?`, which would make the "set" the
+    /// `Option`; the order's projection peels it.
+    #[gtest]
+    fn sort_by_on_an_optional_set_reaches_inside_the_option() {
+        let spec = parse(quote! { Source { tags? => { sort_by: String::cmp } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        let call = &tokens[tokens.find("set_items_of").expect("a sort_by call")..];
+        expect_that!(
+            call,
+            contains_substring("& (* { let __p = & __m . tags ; :: formoxus :: field_kind :: some")
+        );
+    }
+
+    /// Unnamed, the name is the order as written, without the spaces a
+    /// token stream prints.
+    #[gtest]
+    fn an_unnamed_order_is_named_as_written() {
+        for (order, written) in [
+            (quote!(String::cmp), "String::cmp"),
+            (quote!(sets::by_length), "sets::by_length"),
+            (
+                quote!(|a, b| a.len().cmp(&b.len())),
+                "| a, b | a.len().cmp(&b.len())",
+            ),
+        ] {
+            let order: Expr = syn::parse2(order).unwrap();
+            expect_that!(written_order(&order), eq(written));
+        }
+    }
+
+    #[gtest]
+    fn sort_by_with_a_tuple_of_three_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sort_by: (String::cmp, "a", "b") } } }),
+            eq("`sort_by` takes an order, or a pair `(order, name)`")
+        );
+    }
+
+    /// `(order,)` is a tuple, not a parenthesized order.
+    #[gtest]
+    fn sort_by_with_a_tuple_of_one_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sort_by: (String::cmp,) } } }),
+            eq("`sort_by` takes an order, or a pair `(order, name)`")
+        );
+    }
+
+    #[gtest]
+    fn sort_by_needs_an_order() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sort_by } } }),
+            contains_substring("expected `:`")
+        );
+    }
+
+    #[gtest]
+    fn sort_by_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sort_by: A::cmp, sort_by: B::cmp } } }),
+            eq("`sort_by` is given twice")
+        );
+    }
+
+    #[gtest]
+    fn a_near_miss_of_sort_by_suggests_it() {
+        expect_that!(
+            err_of(quote! { Source { tags => { sortby: String::cmp } } }),
+            contains_substring("Did you mean `sort_by`?")
+        );
+    }
+
+    /// Whether the field is a set at all is `SetLike`'s question, at the
+    /// builder call; the `const` check is for the one non-set `SetLike`
+    /// lets through, a `Vec` without `set`.
+    #[gtest]
+    fn sort_by_asks_whether_the_field_is_a_list() {
+        let spec = parse(quote! { Source { tags => { sort_by: String::cmp } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring("! :: formoxus :: field_kind :: is_list")
+        );
+        expect_that!(
+            tokens,
+            contains_substring("`sort_by` on a list needs `set` beside it")
+        );
+    }
+
+    /// Beside `set`, whether the field is a list is `set`'s own question, so
+    /// `sort_by` asks nothing more.
+    #[gtest]
+    fn sort_by_beside_set_leaves_the_question_to_set() {
+        let spec = parse(quote! { Source { tags => { set, sort_by: String::cmp } } }).unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(tokens, not(contains_substring("needs `set` beside it")));
+        expect_that!(tokens, not(contains_substring("items_have_default_order")));
+    }
+
+    /// Every named field is asked, since `form!` cannot see which are sets.
+    #[gtest]
+    fn without_sort_by_a_field_is_asked_for_a_default_order() {
+        let spec = parse(quote! { Source { tags => { label: "Tags" } } }).unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                "items_have_default_order (:: formoxus :: field_kind :: shape_of (| __m : & Source \
+                 | & __m . tags) , false)"
+            )
+        );
+    }
+
+    /// `set` makes a list a set, so its items are asked about too, but only
+    /// once `set`'s own checks pass: a list of structs is refused once, by
+    /// `set`.
+    #[gtest]
+    fn with_set_and_no_sort_by_the_list_is_asked_as_a_set() {
+        let tokens = parse(quote! { Source { tags => { set } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring(
+                "! :: formoxus :: field_kind :: is_list_of_leaves (:: formoxus :: field_kind :: \
+                 shape_of (| __m : & Source | & __m . tags)) || :: formoxus :: field_kind :: \
+                 items_have_default_order"
+            )
+        );
+        expect_that!(tokens, contains_substring("| & __m . tags) , true)"));
     }
 
     /// A form that declares no constraint expands exactly as it did before

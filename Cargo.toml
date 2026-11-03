@@ -99,6 +99,10 @@ serde = { version = "1", features = ["derive"] }
 regress = { version = "0.12.0" }
 serde_json = { version = "1" }
 trybuild = { version = "1.0.116" }
+# Case-insensitive set orders (`unicode_case_insensitive`,
+# `ascii_case_insensitive`). Already in the lock through `mime_guess`, which is
+# server-only, so this is new to the wasm bundle; measure it before publishing.
+unicase = { version = "2.9.0" }
 
 # workspace. The `version` is required as well as the `path`: on publish cargo
 # strips the path and the released crate resolves its macros from crates.io, so

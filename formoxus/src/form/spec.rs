@@ -154,6 +154,16 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
+    pub fn with_sort_by(mut self, path: &str, order: SetOrder) -> Self {
+        let shape = Self::shape_at(path);
+        assert!(
+            is_set(shape),
+            "{path}: `sort_by` applies only to a set, not `{shape}`"
+        );
+        self.field(path).sort_by = Some(order);
+        self
+    }
+
     pub fn with_validator(mut self, f: fn(&T) -> Vec<ValidationError<T>>) -> Self {
         self.validator = Some(f);
         self

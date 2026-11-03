@@ -1,9 +1,35 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-03 LATER: box 4 (sorting, form! sort_by) DONE uncommitted, just ci green; next box 5 or 2f4. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
+
+## ▶ 2026-11-03, later: box 4 DONE (4a–4c4), uncommitted, `just ci` green
+
+Todd: 4b (`ascii_`/`unicode_case_insensitive`, in the prelude). Claude:
+4c, `form!`'s `sort_by:`, expanding to
+`set_items_of(projection).sort_by(order, name)` with a `SetLike` trait
+(`on_unimplemented`); why two calls and not the plan's one is in the plan's
+4c "As built". 7 goldens, 13 macro tests, 7 suite tests (`sets.rs`, now 27),
+5 inline tests of the case-insensitive orders. GOTCHA found: a message
+literal written inside `quote_spanned!` on a path takes the path's span,
+and clippy reads `r#type` there as a raw string; interpolate messages.
+OPEN for 2f4: `set, sort_by:` on a `Vec` panics in `with_sort_by` until it
+accepts a field marked `set`. Next: box 5 (Todd), or 2f4.
+
+## ▶ 2026-11-03: `with_sort_by` + tests A/B done; 4b in progress (Todd)
+
+Todd added `FormSpec::with_sort_by(path, SetOrder)` (asserts `is_set`;
+must also accept a `Vec` marked `set` once 2f4's `with_set` exists).
+`SetOrder::default_for(shape, path)` now panics with
+"tags: a set of `Tag` has no default order; give it a sort_by …". Claude
+wrote 4 order tests in `sets.rs` (build, AddItem, rebuild from the wire,
+a struct item with an `Empty`/`Invalid` field sorting last); read item
+order from `collect_values`' structure entry, `#N` keys in screen order.
+4b DECIDED: `ascii_case_insensitive` + `unicode_case_insensitive` in
+`nodes/set_node.rs` (no `sets` module), generic over `AsRef<str>`, on
+`unicase` (new workspace dep), tie-broken by `str::cmp`. Next: 4c (Claude).
 
 ## ▶ 2026-11-02: 4a built; next `with_sort_by`, then Claude's tests A/B, then 4b
 
