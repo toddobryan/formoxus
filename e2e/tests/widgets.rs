@@ -1,11 +1,11 @@
-//! `/t/checkbox`, `/t/select`, `/t/radio-group`, `/t/textarea`.
+//! `/t/checkbox`, `/t/select`, `/t/radio-group`, `/t/textarea`, `/t/textarea-seeded`.
 //!
 //! One widget each, proving the thing SSR cannot: that a real interaction lands
 //! and the value survives the round trip through `onsubmit`.
 
 use anyhow::Result;
 use e2e::Session;
-use e2e::roles::{checkbox, combobox, radio, submit, textbox};
+use e2e::roles::{button, checkbox, combobox, radio, submit, textbox};
 use playwright_rs::expect;
 
 // ── checkbox ─────────────────────────────────────────────────────────────
@@ -120,6 +120,36 @@ async fn a_multiline_value_round_trips_through_a_textarea() -> Result<()> {
     expect(s.page.locator("#submitted"))
         .to_contain_text("one\\ntwo")
         .await?;
+    s.close().await
+}
+
+/// **A seeded textarea shows its text.** A textarea takes its text from its
+/// content and ignores a `value` attribute, and hydration never sets the
+/// property, so a server-rendered `value` alone left it blank. The `&` and `<`
+/// prove the content is escaped rather than parsed.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
+async fn a_seeded_textarea_shows_its_text() -> Result<()> {
+    let s = Session::open("/t/textarea-seeded").await?;
+    expect(textbox(&s, "About"))
+        .to_have_value("one\ntwo & <three>")
+        .await?;
+    s.close().await
+}
+
+/// **A value written after the user has typed still reaches the textarea.**
+/// Once typed in, a textarea's content moves only its default value, so the
+/// change has to land through the `value` property: content alone would leave
+/// it showing what was typed. (Not reset: the browser resets natively, from
+/// the content, so that passes either way.)
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
+async fn a_value_written_after_typing_reaches_the_textarea() -> Result<()> {
+    let s = Session::open("/t/textarea-seeded").await?;
+    let about = textbox(&s, "About");
+    about.fill("something else", None).await?;
+    button(&s, "Overwrite").click(None).await?;
+    expect(about).to_have_value("overwritten").await?;
     s.close().await
 }
 

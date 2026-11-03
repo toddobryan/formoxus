@@ -54,6 +54,16 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
             id: "{props.id}",
             name: "{path}",
             value: "{current}",
+            // A textarea's text comes from its CONTENT, not a `value` attribute,
+            // and hydration never re-applies attributes, so `value` alone
+            // leaves a seeded textarea blank in a fullstack app. Not a text
+            // child: with hydration on, SSR wraps each dynamic text node in
+            // `<!--node-id…-->` comments, which a textarea, being raw text,
+            // shows literally. `dangerous_inner_html` is written as bare
+            // content. `value` stays for every client-side change (the draft
+            // clearing, Edit, Cancel): once the user has typed, content
+            // only moves the default value, not what is shown.
+            dangerous_inner_html: escape_text(&current),
             oninput: move |e: FormEvent| {
                 let raw = e.value();
                 write_value(&path, values, raw);
@@ -64,4 +74,38 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     };
     let marked = props.attrs.contains(Attr::Required);
     field_row::<Textarea>(&props, marked, LabelSide::Before, control)
+}
+
+/// `text` escaped for a textarea's content, where `&` would start a
+/// character reference and `</textarea` would end the element.
+fn escape_text(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            c => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_text;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn escapes_what_could_end_the_textarea_or_start_a_reference() {
+        expect_that!(
+            escape_text("a < b && </textarea> c"),
+            eq("a &lt; b &amp;&amp; &lt;/textarea&gt; c")
+        );
+    }
+
+    #[gtest]
+    fn leaves_quotes_and_newlines_alone() {
+        expect_that!(escape_text("\"one\"\ntwo"), eq("\"one\"\ntwo"));
+    }
 }

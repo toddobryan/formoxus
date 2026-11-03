@@ -41,6 +41,7 @@ pub fn TestForm(slug: String) -> Element {
         "select" => rsx! { SelectForm {} },
         "radio-group" => rsx! { RadioGroupForm {} },
         "textarea" => rsx! { TextareaForm {} },
+        "textarea-seeded" => rsx! { TextareaSeeded {} },
         "enum" => rsx! { EnumForm {} },
         "enum-submit" => rsx! { EnumSubmit {} },
         "buttons" => rsx! { Buttons {} },
@@ -452,6 +453,51 @@ fn TextareaForm() -> Element {
     )
 }
 
+/// A SEEDED textarea: the server renders it, the browser hydrates it, and it must
+/// show its text, which a textarea takes from its content, not a `value`
+/// attribute. Overwrite writes a new value to the store after the user has
+/// typed, which content alone cannot show (a typed-in textarea's content moves
+/// only its default value): what `value` is still for. Not reset, which the
+/// browser also performs natively, from the content, so it would pass anyway.
+#[component]
+fn TextareaSeeded() -> Element {
+    let mut submitted = use_signal(|| None::<String>);
+    let seeded = Bio {
+        about: "one\ntwo & <three>".into(),
+    };
+    let form = use_form(move || {
+        form_for(
+            &seeded,
+            form! {
+                Bio {
+                    about => { widget: textarea },
+                    buttons: {
+                        overwrite: { type: action },
+                        save: { type: submit },
+                    }
+                }
+            },
+        )
+    });
+    rsx! {
+        Harness {
+            title: "textarea-seeded".to_string(),
+            note: "A textarea seeded with two lines: it shows them, and Overwrite replaces whatever is typed.".to_string(),
+            submitted: submitted().unwrap_or_default(),
+            {
+                form.render(using_fns! {
+                    overwrite: move || async move {
+                        formoxus::widgets::write_value("about", form.values(), "overwritten".to_string());
+                    },
+                    save: move |model: Bio| async move {
+                        submitted.set(Some(format!("{model:#?}")));
+                    },
+                })
+            }
+        }
+    }
+}
+
 // ── buttons ──────────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -460,7 +506,7 @@ struct Person {
 }
 
 /// Reset and submit, over a SEEDED form — reset has nothing to restore otherwise.
-/// This is the only test form built with `form_for` rather than `empty_form`.
+/// Built with `form_for` rather than `empty_form`, as is `textarea-seeded`.
 #[component]
 fn Buttons() -> Element {
     let mut submitted = use_signal(|| None::<String>);

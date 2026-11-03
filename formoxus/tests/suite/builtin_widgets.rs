@@ -258,3 +258,54 @@ fn the_choosers_extend_their_own_elements() {
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Disabled), eq(true));
     expect_that!(RadioGroup::EXTENDS.contains(Attr::Checked), eq(false));
 }
+
+// ── a seeded textarea ────────────────────────────────────────────────────
+
+#[derive(facet::Facet, Clone, Debug, PartialEq)]
+struct Bio {
+    about: String,
+}
+
+/// A form seeded with `about`, its textarea widget, rendered the way a
+/// fullstack server does: `pre_render`, with the hydration markers that a
+/// plain `render` leaves out.
+fn pre_render_seeded(about: &'static str) -> String {
+    #[component]
+    fn App(about: &'static str) -> Element {
+        let bio = Bio {
+            about: about.into(),
+        };
+        let form = formoxus::use_form(move || {
+            formoxus::form_for(
+                &bio,
+                formoxus::form! { Bio { about => { widget: textarea } } },
+            )
+        });
+        form.render(formoxus::using_fns! {})
+    }
+    let mut dom = VirtualDom::new_with_props(App, AppProps { about });
+    dom.rebuild_in_place();
+    dioxus_ssr::pre_render(&dom)
+}
+
+/// **The value is the textarea's CONTENT.** A textarea ignores a `value`
+/// attribute, and hydration never sets the property, so without content a
+/// seeded textarea is blank in the browser. The content is exactly the text:
+/// a dynamic text child would carry `<!--node-id…-->` markers here, which a
+/// textarea shows literally.
+#[gtest]
+fn a_seeded_textarea_holds_its_value_as_its_content() {
+    let html = pre_render_seeded("one\ntwo");
+    expect_that!(html, contains_substring(">one\ntwo</textarea>"));
+}
+
+/// Content is parsed as HTML text, so it is escaped: unescaped, the `&`
+/// would start a character reference and `</textarea>` would end the element.
+#[gtest]
+fn a_seeded_textareas_content_is_escaped() {
+    let html = pre_render_seeded("a < b && </textarea> c");
+    expect_that!(
+        html,
+        contains_substring(">a &lt; b &amp;&amp; &lt;/textarea&gt; c</textarea>")
+    );
+}
