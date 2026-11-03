@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 4 committed (7a31548); box 5 expanded + decided (ItemHandler); Todd on 5a–5e. #18 parked
+- [**START HERE: next session**](next_session.md) — **2026-11-03: branch `sets`, `formoxus/SETS_PLAN.md`**: box 5 committed (e55e318); box 6 (duplicates + set messages + `feedback:` hook) built, uncommitted. #18 parked
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -65,4 +65,5 @@
 - [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
+- [Dioxus Signal is not Sync](dioxus_signal_not_sync.md) — a spec-held hook is `Send + Sync`: capture `use_signal_sync`, not `use_signal`; `let _ = s;` captures nothing
 - [E2E harness](e2e_harness.md) — `just e2e`; use `get_by_role` with a name, not exact `get_by_label` (aria-hidden marker)

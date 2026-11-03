@@ -18,7 +18,7 @@ use crate::field_kind::is_list;
 use crate::field_kind::is_list_of_leaves;
 use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
-use crate::nodes::SetOrder;
+use crate::nodes::{SetFeedback, SetOrder};
 use crate::widgets::AnyWidget;
 use crate::widgets::item_buttons::ItemAdder;
 
@@ -35,6 +35,9 @@ pub struct FieldSpec {
     pub adder: Option<ItemAdder>,
     pub treat_as_set: bool,
     pub sort_by: Option<SetOrder>,
+    /// A set's words for what an edit did (`feedback:`), in place of
+    /// formoxus's own.
+    pub feedback: Option<SetFeedback>,
 }
 
 #[derive(Clone, Debug)]
@@ -175,6 +178,21 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     }
 
     pub fn with_sort_by(mut self, path: &str, order: SetOrder) -> Self {
+        self.set_field(path, "sort_by").sort_by = Some(order);
+        self
+    }
+
+    /// Replace formoxus's words for what an edit to the set at `path` did
+    /// ("“rust” was added successfully.") with the dev's.
+    pub fn with_feedback(mut self, path: &str, feedback: SetFeedback) -> Self {
+        self.set_field(path, "feedback").feedback = Some(feedback);
+        self
+    }
+
+    /// The spec of the set at `path`, for a key only a set takes: a
+    /// `Def::Set`, or a list `treat_as_set` has already marked, since `form!`
+    /// emits `treat_as_set` first (decision B in box 5).
+    fn set_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
             !is_list(shape) || self.field(path).treat_as_set,
@@ -182,10 +200,9 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         );
         assert!(
             is_set(shape) || is_list(shape),
-            "{path}: `sort_by` applies only to a set, not `{shape}`"
+            "{path}: `{key}` applies only to a set, not `{shape}`"
         );
-        self.field(path).sort_by = Some(order);
-        self
+        self.field(path)
     }
 
     pub fn with_validator(mut self, f: fn(&T) -> Vec<ValidationError<T>>) -> Self {

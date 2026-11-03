@@ -280,6 +280,12 @@ impl Items {
         self.collection.iter()
     }
 
+    /// Where an item equal to `value` sits, as `order` judges it: only the
+    /// set's item handler knows the item type.
+    pub(crate) fn position_of(&self, order: &SetOrder, value: &ItemValue) -> Option<usize> {
+        order.item_order.position(&self.collection, value.peek())
+    }
+
     // Paths are unique, so at most one item can own this one. Dispatching by
     // containment rather than trying each in turn is what lets a row's real
     // error reach the caller intact.

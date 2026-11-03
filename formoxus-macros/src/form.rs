@@ -565,7 +565,7 @@ impl FieldSpec {
     /// The `FormSpec` builder calls one field body contributes, in order:
     /// label, widget, choices, the field's settings (`with_node`), the
     /// attributes that only render (`with_attrs`), a list's `adder`, `set`
-    /// (`treat_as_set`) and `sort_by`.
+    /// (`treat_as_set`), `sort_by` and `feedback`.
     /// Each is omitted when the body says nothing about it.
     fn builder_calls(&self, model: &Path) -> TokenStream2 {
         let key = self.path.key();
@@ -618,24 +618,36 @@ impl FieldSpec {
         // the key, so a field that is not a set is reported at `sort_by`; the
         // order keeps its own span, so a comparator over the wrong type is
         // reported at the order.
-        let sort_by = self.body.sort_by.as_ref().map(|sort_by| {
-            let key_span = sort_by.key.span();
+        let items = |key_span: Span| {
             let set = respan(project_peeled(&self.path.segments), key_span);
-            let items = quote_spanned! { key_span=>
+            quote_spanned! { key_span=>
                 ::formoxus::field_kind::set_items_of(|__m: &#model| &#set)
-            };
+            }
+        };
+        let sort_by = self.body.sort_by.as_ref().map(|sort_by| {
+            let items = items(sort_by.key.span());
             let order = &sort_by.order;
             let name = sort_by.name_tokens();
             quote! { .with_sort_by(#key, #items.sort_by(#order, #name)) }
         });
-        // Before `sort_by`, whose run-time check on a `Vec` asks whether it is
-        // already treated as a set.
+        // The same builder as `sort_by`'s, so the closure's event type comes
+        // from the field and its argument needs no annotation.
+        let feedback = self.body.feedback.as_ref().map(|(feedback_key, describe)| {
+            let items = items(feedback_key.span());
+            // Spanned on the key, so a closure over the wrong item type is
+            // reported between `feedback` and the closure, not across `form!`.
+            quote_spanned! { feedback_key.span()=>
+                .with_feedback(#key, #items.feedback(#describe))
+            }
+        });
+        // Before `sort_by` and `feedback`, whose run-time checks on a `Vec` ask
+        // whether it is already treated as a set.
         let set = self
             .body
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #widget #node #attrs #adder #set #sort_by }
+        quote! { #label #widget #node #attrs #adder #set #sort_by #feedback }
     }
 }
 

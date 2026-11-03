@@ -150,8 +150,9 @@ pub mod prelude {
         ErrorsByPath, Form, FormErrors, FormSpec, FormState, Provider, empty_form, form_for,
         handler, provider, unchecked_handler, use_form, use_form_values,
     };
-    // What a dev writes after `sort_by:`, for a set of strings.
-    pub use crate::nodes::{ascii_case_insensitive, unicode_case_insensitive};
+    // What a dev writes after `sort_by:` for a set of strings, and matches on
+    // in `feedback:`.
+    pub use crate::nodes::{SetEvent, ascii_case_insensitive, unicode_case_insensitive};
     pub use crate::path::Path;
     pub use crate::submission::Submission;
     pub use crate::wire::WireForm;

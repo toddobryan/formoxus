@@ -17,7 +17,7 @@
  *   a group     .fx-group + .fx-struct .fx-variant .fx-list  .fx-legend
  *   radios      .fx-radio-group  .fx-choice  .fx-choice-label
  *   messages    .fx-field-errors  .fx-field-error  .fx-form-errors  .fx-form-error
- *               .fx-problems  .fx-problem
+ *               .fx-problems  .fx-problem  .fx-set-message
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
  *               .fx-button-add-row .fx-button-remove-row
@@ -178,6 +178,11 @@ body {
 }
 
 .fx-form-errors { margin-block: 0.75rem; }
+
+/* A set's live region, just after its adder: what its last edit did, in the
+   ordinary text colour, or why it was refused (a duplicate), as an error. */
+.fx-set-message { margin-block-start: 0.35rem; }
+.fx-set-message.fx-invalid { color: var(--fx-error); }
 
 .fx-buttons {
     display: flex;

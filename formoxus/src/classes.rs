@@ -407,6 +407,12 @@ impl Classes {
             (FixedKey::SetItem, Slot::new("fx-set-item")),
             (FixedKey::SetItems, Slot::new("fx-set-items")),
             (FixedKey::SetLegend, Slot::new("fx-legend fx-field-label")),
+            // `fx-invalid` for a refusal (a duplicate), so it can look like an
+            // error while a success looks like news.
+            (
+                FixedKey::SetMessage,
+                Slot::new("fx-set-message").with_invalid("fx-invalid"),
+            ),
             (FixedKey::Variant, Slot::new("fx-group fx-variant")),
             (
                 FixedKey::VariantLegend,
@@ -737,6 +743,7 @@ mod tests {
             (FixedKey::SetItem, "fx-set-item"),
             (FixedKey::SetItems, "fx-set-items"),
             (FixedKey::SetLegend, "fx-legend fx-field-label"),
+            (FixedKey::SetMessage, "fx-set-message"),
             (FixedKey::Variant, "fx-group fx-variant"),
             (FixedKey::VariantLegend, "fx-legend fx-field-label"),
             (FixedKey::RequiredMarker, "fx-required"),
@@ -746,7 +753,9 @@ mod tests {
         for (slot, base) in expected {
             // The fixed slots with an invalid class: a list's or a set's
             // fieldset carries its own errors, as the radio group's does (#13).
-            let invalid = matches!(slot, FixedKey::List | FixedKey::Set).then_some("fx-invalid");
+            // And a set's message, for a refusal.
+            let invalid = matches!(slot, FixedKey::List | FixedKey::Set | FixedKey::SetMessage)
+                .then_some("fx-invalid");
             expect_that!(
                 base_of(&fx, SlotKey::Fixed(slot)),
                 eq(Some((base, invalid))),

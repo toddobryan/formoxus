@@ -31,7 +31,7 @@ use formoxus_spec::{Attr, FieldType, HtmlElement};
 use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
-use crate::nodes::SetOrder;
+use crate::nodes::{SetEvent, SetFeedback, SetOrder};
 use crate::widgets::Widget;
 
 /// The shape of the field a projection reaches, with the field's type inferred
@@ -130,6 +130,16 @@ impl<T: Facet<'static> + 'static + PartialEq> SetItems<T> {
     /// `sort_by: (order, name)` wrote, or else the order as written.
     pub fn sort_by(self, order: fn(&T, &T) -> Ordering, name: &str) -> SetOrder {
         SetOrder::custom(order, name)
+    }
+
+    /// The dev's words for what an edit did, over the items: what `form!`'s
+    /// `feedback:` expands to. `T` is known here, so an un-annotated
+    /// `|event| match event { … }` gets its types from the field.
+    pub fn feedback(
+        self,
+        describe: impl Fn(SetEvent<'_, T>) -> Option<String> + Send + Sync + 'static,
+    ) -> SetFeedback {
+        SetFeedback::new(describe)
     }
 }
 

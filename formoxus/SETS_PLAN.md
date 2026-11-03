@@ -98,14 +98,40 @@ H. **A duplicate is by the model's own equality** (facet's `PartialEq`
    with `case_insensitive` both `Apple` and `apple` can be items, as a
    `BTreeSet<String>` would also hold both.
 
-I. **The duplicate message: `on_duplicate`, a closure with a default.**
-   The set calls it when an `AddRow` would add a duplicate. The default
-   puts a message into `AddRowProps`, which an adder is expected to show,
+I. **Superseded 2026-11-03 by I′ below.** **The duplicate message: `on_duplicate`, a closure with a default.**
+   The set calls it when an `Edit::AddItem` would add a duplicate. The default
+   puts a message into `AddItemProps` (`message`), which an adder is expected to show,
    so formoxus works with nothing configured. A dev replaces it in `form!`
    (`on_duplicate: …`); apcsp will, with one calling its `add_message` once
    it has messaging.
 
-J. **A set keeps its items' typed values**, if that is not too hard, so
+I′. **Every set edit says what it did** (Todd, 2026-11-03, replacing I).
+   A set has one live region, after its adder: `<div role="status">`,
+   ALWAYS rendered (a status region is announced reliably only if it is
+   already in the page when its text changes), class slot
+   `FixedKey::SetMessage` (`fx-set-message`, plus `fx-invalid` for a
+   refusal). Every edit to the set replaces its text. Sets only, not lists
+   (a list's Add makes a blank row, which says nothing). Wording copied
+   from Django's admin, without its model name, since a set has only a
+   plural label: "“rust” was added successfully.", "“rust” was removed
+   successfully.", and for a duplicate "“rust” is already there." The item
+   is named by its collected values (a newtype's inner value, a unit enum's
+   variant), never by a `Display` it may lack. Success is visible in `fx()`;
+   a dev who wants it announced only hides `.fx-set-message:not(.fx-invalid)`.
+   NOT auto-dismissed (WCAG 2.2.1): it goes when the next edit replaces it.
+   The dev's hook (BUILT 2026-11-03): `feedback:` in `form!`, or
+   `FormSpec::with_feedback(path, SetFeedback::new(…))`, a CLOSURE (Todd)
+   over a `#[non_exhaustive]`, `Copy` `SetEvent<'_, T>` (`Added`,
+   `Removed`, `Duplicate`; box 8's join later) carrying the item as the
+   dev's own `T`, rebuilt from its node. It returns the region's text, or
+   `None` to show nothing, e.g. after handing the event to the app's own
+   toaster (DioxusLabs' `dioxus-primitives` has one; formoxus depends on
+   none). It must be `Send + Sync`, since the spec reaches the server
+   (`Submission`), so it can capture a `use_signal_sync`, an `Arc`, or a
+   global signal, but NOT a plain `use_signal`, whose storage is a
+   `RefCell`.
+
+J. (CLOSED 2026-11-03 by 5p's timings: not needed.) **A set keeps its items' typed values**, if that is not too hard, so
    an item rebuilt from the wire sorts as `T` without reparsing its raw
    string every time. If it turns out hard, parsing as `build` does is the
    fallback.
@@ -581,7 +607,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     otherwise `init_set` as now. No sort and no dedup here: 5c and 5d have
     done both by the time anything writes.
 
-  - [ ] **5p.** (Claude, after 5d) Time large sets, for J (C): a
+  - [x] **5p.** (Claude, after 5d) Time large sets, for J (C): a
     `BTreeSet<String>` and a `Vec<Tag>` with `set` and `sort_by`, at 100,
     1,000 and 10,000 items, through build, `AddItem`, and a
     `distribute_values` from the wire. The suspects are `CustomOrder`
@@ -591,6 +617,40 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
     order puts "ab" and "cd" together), so sorting first and comparing
     neighbours would miss duplicates. Report the numbers and whether J (or
     a cheaper dedup) is worth building; nothing to fix in this box.
+
+    **Measured 2026-11-03** (native, release; wasm is typically slower by
+    a small factor). Milliseconds, from a scratch crate outside the repo:
+
+    | items  | case                         | build | add  | distribute | validate |
+    |--------|------------------------------|-------|------|------------|----------|
+    | 100    | `BTreeSet<String>`, default  | 0.05  | 0.01 | 0.13       | 0.03     |
+    | 100    | `Vec<String>` set, default   | 0.07  | 0.00 | 0.10       | 0.02     |
+    | 100    | `Vec<Tag>` set, `sort_by`    | 0.06  | 0.03 | 0.13       | 0.02     |
+    | 1,000  | `BTreeSet<String>`, default  | 0.27  | 0.02 | 5.05       | 0.23     |
+    | 1,000  | `Vec<String>` set, default   | 5.24  | 0.02 | 4.91       | 0.14     |
+    | 1,000  | `Vec<Tag>` set, `sort_by`    | 4.57  | 0.27 | 2.11       | 0.16     |
+    | 10,000 | `BTreeSet<String>`, default  | 3.93  | 0.31 | 463.15     | 4.33     |
+    | 10,000 | `Vec<String>` set, default   | 373.06| 0.31 | 464.72     | 2.42     |
+    | 10,000 | `Vec<Tag>` set, `sort_by`    | 236.26| 2.97 | 112.83     | 3.37     |
+
+    Reading: everything is under 6 ms up to 1,000 items. The only cost that
+    grows is the pairwise dedup: build (a `Vec` only) and distribute (every
+    set) grow ~70–90× for 10× the items, and nothing else in them is
+    quadratic. Rebuilding `T` is NOT the cost: the `CustomOrder` case,
+    which rebuilds every `T` for its sort and again for its dedup but then
+    compares with `T`'s own `==`, is the fastest at 10,000, because a
+    `Peek`'s `==` goes through a vtable per pair. Add stays under 3 ms.
+
+    **J CLOSED (Todd, 2026-11-03):** "plenty fast for reasonable sizes",
+    and typed values would not touch the cost anyway. **If a large set ever
+    matters**, the fix for the default order is exact and O(n): that order
+    is the type's own `Ord` (`total_cmp` for floats), which agrees with
+    `==` for every scalar (`-0.0` sorts right before `0.0`, `NaN` equals
+    nothing), so equal items are neighbours once sorted and `dedup_by`
+    after the sort finds them all. At build that means sorting before the
+    dedup, through a `dedup_peeks` on `ItemHandler`. A custom order stays
+    pairwise, since a comparator need not agree with `==`, but could
+    compare with `T`'s own `==` at build rather than `Peek`'s.
 
   - [x] **5f.** (Claude) 2f4: `form!`'s `set` expands to
     `.treat_as_set("path")`, emitted BEFORE `.with_sort_by(…)` so 5a's check
@@ -642,9 +702,21 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
      a `u8` set) is the one kept. Refusing is box 6's job, for the adder,
      where a person can act on the message.
 
-- [ ] **6.** Duplicates (C): an `AddRow` whose value equals an item is
+- [x] **6.** Duplicates (C): an `Edit::AddItem` whose value equals an item is
   refused, with a message beside the adder, per H and I. (Todd,
   Claude tests)
+
+  Where (2026-11-03): the check goes in `SetNode::edit`'s `AddItem` arm,
+  before `Items::add_item`, asked of the `ItemHandler`
+  (`ItemHandler::position`, through `Items::position_of`).
+
+  **Built 2026-11-03** (Todd started, Claude finished): a duplicate returns
+  `Ok(None)` (refused for the user, not the caller) and the set's region
+  says so; per I′, an add and a removal say what they did too.
+  `AddItemProps` carries no message: the set renders the region itself,
+  whatever the adder. Tests in `sets.rs`, mutation-checked. The dev's hook
+  (I′) built the same day: 6 more `sets.rs` tests, 6 `form!` parse tests,
+  goldens `form_feedback_wrong_type` and `form_feedback_on_a_list`.
 
 - [ ] **7.** The default adder for a set: a text box and Add for a
   string-like `T`, a select over the choices for a unit enum or

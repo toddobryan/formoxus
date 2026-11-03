@@ -29,7 +29,29 @@ entries from a client-side dedup: LEFT on purpose. Claude waits for 5e to
 write the rest of 5t (wire dedup, validate gives a sorted deduped Vec).
 5e DONE (Todd: write branches on `partial.shape().def`). 5t DONE (Claude, 9
 more set tests, 39 in sets.rs). Box 5 left: only 5p (Claude: time large
-sets). All of box 5 uncommitted, `just ci` green. Todd next: 5b (locations given:
+sets). All of box 5 uncommitted, `just ci` green.
+Box 5 COMMITTED e55e318. 5p DONE: up to 1,000 items everything < 6 ms; at
+10,000 the pairwise dedup costs 0.1-0.5 s. J CLOSED by Todd ("plenty fast").
+The O(n) default-order fix (adjacent dedup after sort) is written in 5p for
+later. Todd started box 6 (duplicates refused at the adder).
+Box 6 core WORKING (uncommitted, just ci green, 986): Todd's `add_message` on
+SetNode + `AddItemProps::message`; Claude cleaned up: `ItemHandler::contains`
+(DefaultOrder peek_value ==, CustomOrder T ==), `Items::contains(order, v)`,
+duplicate -> `Ok(None)` + message (decision B), every set edit clears it. 11
+tests in sets.rs, mutation-checked. OPEN: message markup (no fx- class, no
+role=status), decision I's `on_duplicate` closure + form! key not built.
+LATER same day: Todd generalized to every set edit (decision I′ in the plan):
+always-present `role=status` region after the adder, `FixedKey::SetMessage`
+/ `fx-set-message` (+`fx-invalid` on refusal), Django's wording ("“rust” was
+added successfully." / "removed successfully." / "is already there."),
+sets only, not auto-dismissed. BUILT (Claude), just ci green 989. Removed
+`AddItemProps::message` (the set renders the region). LEFT: the dev hook
+`fn(SetEvent<'_, T>) -> Option<String>`; OPEN Q to Todd: plain fn or closure.
+Hook BUILT: a closure (Todd), `feedback:` / `with_feedback` + `SetFeedback::new`,
+`SetEvent` Copy + non_exhaustive, `Send + Sync` (so `use_signal_sync`, not
+`use_signal`: see [[dioxus-signal-not-sync]]). Box 6 DONE, uncommitted, just ci
+green 1001. Next: box 7 (the default adder for a set); look at
+dioxus-primitives' `tag_group` first. Todd next: 5b (locations given:
 node_for_shape's into_list branch, set_node's peek; NO kind field on
 SetNode: 5e branches on `partial.shape().def`). All uncommitted, `just ci` green (967).
 

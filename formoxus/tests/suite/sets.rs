@@ -10,7 +10,7 @@
 use super::{across_the_wire, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::{Edit, ItemValue, SetOrder, ValuesByPath};
+use formoxus::nodes::{Edit, ItemValue, SetFeedback, SetOrder, ValuesByPath};
 use formoxus::prelude::*;
 use formoxus::widgets::{AddItemProps, ItemAdder};
 use googletest::prelude::*;
@@ -915,4 +915,458 @@ fn a_list_behind_an_option_can_be_treated_as_a_set() {
 #[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
 fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
     let _ = empty_form::<TagList>(FormSpec::default().treat_as_set("tags"));
+}
+
+// ── Duplicates refused at the adder (box 6) ──────────────────────────────
+
+/// An `AddItem` equal to an item is refused for the user, not the caller:
+/// `Ok(None)`, nothing added, nothing to log (decision C, box 6 B).
+#[gtest]
+fn a_set_refuses_a_duplicate_without_an_error() {
+    let mut form = form_for(&post(), FormSpec::default());
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new("rust".to_string())))),
+        ok(none())
+    );
+    expect_that!(form.validate(), some(eq(&post())), "the set is unchanged");
+}
+
+/// Equal is the model's `==`, not the order (H): under a case-insensitive
+/// order "Rust" sorts with "rust", but is a different `String`, so it is
+/// added, as a `BTreeSet<String>` would hold both.
+#[gtest]
+fn a_set_takes_an_item_its_order_ties_but_its_type_does_not_equal() {
+    let mut form = form_for(
+        &post(),
+        form! { Post { tags => { sort_by: unicode_case_insensitive } } },
+    );
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new("Rust".to_string())))),
+        ok(some(eq("tags.#2")))
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&post_tagged(&["dioxus", "Rust", "rust"])))
+    );
+}
+
+/// The same through a custom order, which compares with `T`'s own `==`:
+/// "go" and "js" are the same length, so tie under `by_length`, but only a
+/// second "go" is a duplicate.
+#[gtest]
+fn a_set_with_sort_by_refuses_only_an_equal_item() {
+    let mut form = form_for(&shelf(&["go", "rust"]), shelf_spec());
+    let add = |name: &str| Edit::AddItem {
+        path: "tags".to_string(),
+        before: None,
+        value: Some(ItemValue::new(Tag(name.to_string()))),
+    };
+    expect_that!(form.edit(&add("go")), ok(none()));
+    expect_that!(form.edit(&add("js")), ok(some(eq("tags.#2"))));
+    expect_that!(form.validate(), some(eq(&shelf(&["go", "js", "rust"]))));
+}
+
+/// A `Vec` treated as a set refuses one too.
+#[gtest]
+fn a_list_treated_as_a_set_refuses_a_duplicate() {
+    let mut form = draft_with(&["dioxus", "rust"]);
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new("dioxus".to_string())))),
+        ok(none())
+    );
+    expect_that!(
+        form.validate(),
+        some(eq(&Draft {
+            tags: tags(&["dioxus", "rust"]),
+        }))
+    );
+}
+
+/// A value of the wrong type is still the caller's mistake, refused for its
+/// type, not mistaken for an item that is there or not.
+#[gtest]
+fn a_wrong_type_is_still_an_error_not_a_duplicate() {
+    let mut form = form_for(&post(), FormSpec::default());
+    expect_that!(
+        form.edit(&add_tag(Some(ItemValue::new(7_u8)))),
+        err(displays_as(contains_substring(
+            "cannot add a `u8` item to tags: its items are `String`"
+        )))
+    );
+}
+
+// ── The set's live region ────────────────────────────────────────────────
+
+/// The region's whole `<div>`, as the set renders it after its adder.
+fn region(class: &str, text: &str) -> String {
+    format!(r#"<div class="{class}" role="status">{text}</div>"#)
+}
+
+fn done(text: &str) -> String {
+    region("fx-set-message", text)
+}
+
+fn refused(text: &str) -> String {
+    region("fx-set-message fx-invalid", text)
+}
+
+/// Present and empty before any edit: a `status` region is announced
+/// reliably only if it is already in the page when its text changes.
+#[gtest]
+fn a_sets_live_region_is_there_and_empty_before_any_edit() {
+    expect_that!(
+        super::render_to_html(PostForm),
+        contains_substring(region("fx-set-message", ""))
+    );
+}
+
+#[component]
+fn AddProbe() -> Element {
+    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("a new value is added")
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn RemoveProbe() -> Element {
+    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    use_hook(|| {
+        form.edit(&Edit::RemoveItem {
+            path: "tags".to_string(),
+            index: 1,
+        })
+        .expect("item 1 exists")
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn DuplicateAddProbe() -> Element {
+    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
+            .expect("a duplicate is refused without an error")
+    });
+    form.render(using_fns! {})
+}
+
+/// Each edit says what it did, Django's way: an add and a removal as news, a
+/// duplicate as a refusal, in the slot's invalid class.
+#[gtest]
+fn each_edit_says_what_it_did() {
+    expect_that!(
+        super::render_to_html(AddProbe),
+        contains_substring(done("“web” was added successfully."))
+    );
+    expect_that!(
+        super::render_to_html(RemoveProbe),
+        contains_substring(done("“rust” was removed successfully."))
+    );
+    expect_that!(
+        super::render_to_html(DuplicateAddProbe),
+        contains_substring(refused("“rust” is already there."))
+    );
+}
+
+/// After the adder, where the user just acted.
+#[gtest]
+fn the_region_follows_the_adder() {
+    let html = super::render_to_html(DuplicateAddProbe);
+    let add = html.find("fx-button-add-row").expect("the set has Add");
+    let message = html.find("fx-set-message").expect("the set has its region");
+    expect_that!(message, gt(add));
+}
+
+#[component]
+fn DuplicateThenAddProbe() -> Element {
+    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
+            .expect("refused without an error");
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("a new value is added")
+    });
+    form.render(using_fns! {})
+}
+
+/// A message answers the last edit only: the refusal does not linger once
+/// the next edit has done something else.
+#[gtest]
+fn the_next_edit_replaces_the_message() {
+    let html = super::render_to_html(DuplicateThenAddProbe);
+    expect_that!(html, not(contains_substring("is already there")));
+    expect_that!(
+        html,
+        contains_substring(done("“web” was added successfully."))
+    );
+}
+
+#[component]
+fn DuplicateTagProbe() -> Element {
+    let form = use_form(|| form_for(&shelf(&["go", "rust"]), shelf_spec()));
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "tags".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Tag("go".to_string()))),
+        })
+        .expect("refused without an error")
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn AddPriorityProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Triage {
+                levels: [Priority::Low].into(),
+            },
+            form! { Triage { levels => { sort_by: most_urgent_first } } },
+        )
+    });
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "levels".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Priority::High)),
+        })
+        .expect("a new level is added")
+    });
+    form.render(using_fns! {})
+}
+
+/// An item is named as the user sees it, not by a `Display` its type may not
+/// have: a newtype by its inner value, a unit enum by its variant.
+#[gtest]
+fn an_item_is_named_as_the_user_sees_it() {
+    expect_that!(
+        super::render_to_html(DuplicateTagProbe),
+        contains_substring(refused("“go” is already there."))
+    );
+    expect_that!(
+        super::render_to_html(AddPriorityProbe),
+        contains_substring(done("“High” was added successfully."))
+    );
+}
+
+#[component]
+fn DuplicateCustomAdderProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_adder("tags", ItemAdder(TagAdder)),
+        )
+    });
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
+            .expect("refused without an error")
+    });
+    form.render(using_fns! {})
+}
+
+/// The set renders the region, not the adder, so a custom adder has it too.
+#[gtest]
+fn a_custom_adder_still_has_the_sets_message() {
+    let html = super::render_to_html(DuplicateCustomAdderProbe);
+    let adder = html.find(r#"id="tag-adder""#).expect("the custom adder");
+    let message = html
+        .find(&refused("“rust” is already there."))
+        .expect("the refusal is shown");
+    expect_that!(message, gt(adder));
+}
+
+// ── A dev's own words: `feedback:` ───────────────────────────────────────
+
+/// A named `fn` works as a closure does. `_ =>` because `SetEvent` is
+/// `#[non_exhaustive]`.
+fn shout(event: SetEvent<'_, String>) -> Option<String> {
+    match event {
+        SetEvent::Added(tag) => Some(format!("ADDED {tag}")),
+        SetEvent::Removed(tag) => Some(format!("REMOVED {tag}")),
+        SetEvent::Duplicate(tag) => Some(format!("ALREADY {tag}")),
+        _ => None,
+    }
+}
+
+#[component]
+fn ShoutingAddProbe() -> Element {
+    let form = use_form(|| form_for(&post(), form! { Post { tags => { feedback: shout } } }));
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("added")
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn ShoutingRemoveProbe() -> Element {
+    let form = use_form(|| form_for(&post(), form! { Post { tags => { feedback: shout } } }));
+    use_hook(|| {
+        form.edit(&Edit::RemoveItem {
+            path: "tags".to_string(),
+            index: 1,
+        })
+        .expect("item 1 exists")
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn ShoutingDuplicateProbe() -> Element {
+    let form = use_form(|| form_for(&post(), form! { Post { tags => { feedback: shout } } }));
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
+            .expect("refused without an error")
+    });
+    form.render(using_fns! {})
+}
+
+/// The dev's words replace formoxus's for every event, and a duplicate is
+/// still a refusal, in the invalid class, whoever wrote its text.
+#[gtest]
+fn feedback_puts_each_event_in_the_devs_words() {
+    expect_that!(
+        super::render_to_html(ShoutingAddProbe),
+        contains_substring(done("ADDED web"))
+    );
+    expect_that!(
+        super::render_to_html(ShoutingRemoveProbe),
+        contains_substring(done("REMOVED rust"))
+    );
+    expect_that!(
+        super::render_to_html(ShoutingDuplicateProbe),
+        contains_substring(refused("ALREADY rust"))
+    );
+}
+
+#[component]
+fn ToasterProbe() -> Element {
+    // Stands in for an app's toaster: the closure captures a signal and
+    // returns `None`, so the set's own region stays empty. A SYNC signal: the
+    // hook lives in the spec, which must be `Send` for a server handler, and
+    // a plain `use_signal`'s storage is a `RefCell`.
+    let toasts = use_signal_sync(Vec::<String>::new);
+    let form = use_form(move || {
+        form_for(
+            &post(),
+            form! { Post { tags => { feedback: move |event| {
+                // `Fn`, so a copy to write through: a signal is `Copy`.
+                let mut toasts = toasts;
+                toasts.write().push(format!("{event:?}"));
+                None
+            } } } },
+        )
+    });
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("added");
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("refused without an error")
+    });
+    rsx! {
+        {form.render(using_fns! {})}
+        ul { id: "toasts",
+            for toast in toasts.read().iter() {
+                li { "{toast}" }
+            }
+        }
+    }
+}
+
+/// A closure, not a `fn`, so it can hand the event to the app: here a
+/// captured sync signal gets both, and `None` leaves the region empty.
+#[gtest]
+fn feedback_can_send_the_event_elsewhere_and_show_nothing() {
+    let html = super::render_to_html(ToasterProbe);
+    expect_that!(
+        html,
+        contains_substring(
+            r#"<ul id="toasts"><li>Added(&#34;web&#34;)</li><li>Duplicate(&#34;web&#34;)</li></ul>"#
+        )
+    );
+    expect_that!(html, contains_substring(region("fx-set-message", "")));
+}
+
+#[component]
+fn TagFeedbackProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &shelf(&["go", "rust"]),
+            form! { Shelf { tags => {
+                sort_by: by_length,
+                feedback: |event| match event {
+                    SetEvent::Added(tag) => Some(format!("tag {} ({} letters)", tag.0, tag.0.len())),
+                    _ => None,
+                },
+            } } },
+        )
+    });
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "tags".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Tag("css".to_string()))),
+        })
+        .expect("added")
+    });
+    form.render(using_fns! {})
+}
+
+/// The event carries the dev's own type, a whole `Tag`, rebuilt from the
+/// item, not the string the set shows.
+#[gtest]
+fn feedback_gets_the_item_as_its_own_type() {
+    expect_that!(
+        super::render_to_html(TagFeedbackProbe),
+        contains_substring(done("tag css (3 letters)"))
+    );
+}
+
+#[component]
+fn HandBuiltFeedbackProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_feedback(
+                "tags",
+                SetFeedback::new(|event: SetEvent<'_, String>| match event {
+                    SetEvent::Added(tag) => Some(format!("+{tag}")),
+                    _ => None,
+                }),
+            ),
+        )
+    });
+    use_hook(|| {
+        form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
+            .expect("added")
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_hand_built_spec_takes_feedback_too() {
+    expect_that!(
+        super::render_to_html(HandBuiltFeedbackProbe),
+        contains_substring(done("+web"))
+    );
+}
+
+#[gtest]
+#[should_panic(expected = "title: `feedback` applies only to a set, not `String`")]
+fn feedback_on_a_scalar_is_refused() {
+    let _ = FormSpec::<Post>::default()
+        .with_feedback("title", SetFeedback::new(|_: SetEvent<'_, String>| None));
+}
+
+#[gtest]
+#[should_panic(
+    expected = "tags: if you want to treat this list as a set, call `treat_as_set` first"
+)]
+fn feedback_on_a_list_not_yet_treated_as_a_set_is_refused() {
+    let _ = FormSpec::<Draft>::default()
+        .with_feedback("tags", SetFeedback::new(|_: SetEvent<'_, String>| None));
 }

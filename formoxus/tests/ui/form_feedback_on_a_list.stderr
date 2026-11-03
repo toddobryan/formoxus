@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `feedback` on a list needs `set` beside it, since only a set says what its edits did: write `set, feedback: …`
+  --> tests/ui/form_feedback_on_a_list.rs:13:23
+   |
+13 |             tags => { feedback: |_| None },
+   |                       ^^^^^^^^ evaluation of `main::_` failed here

@@ -740,6 +740,8 @@ fn set_node(
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
         items: Items::new(shape, items),
         comparator,
+        message: None,
+        feedback: spec.and_then(|s| s.feedback.clone()),
     })
 }
 

@@ -110,6 +110,12 @@ pub trait ItemHandler: Debug + Send + Sync {
     fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
 
     fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>);
+
+    /// Where an item equal to `value` sits in `nodes`, by the model's own
+    /// `PartialEq` (decision H), for refusing a duplicate `AddItem` (box 6).
+    /// An item with no value equals nothing; so does a `value` of another
+    /// type, which `Items::add_item` then refuses for its type.
+    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize>;
 }
 
 struct DefaultOrder {
@@ -174,6 +180,12 @@ impl ItemHandler for DefaultOrder {
             _ => false,
         });
     }
+
+    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize> {
+        nodes
+            .iter()
+            .position(|node| node.peek_value().is_some_and(|item| item == value))
+    }
 }
 
 struct CustomOrder<T> {
@@ -181,23 +193,24 @@ struct CustomOrder<T> {
     name: String,
 }
 
-impl<T: Facet<'static>> CustomOrder<T> {
-    fn value_of(node: &dyn Node) -> Option<T> {
-        let mut probe = node.clone_box();
-        probe.validate();
-        if probe.has_errors_within() {
-            return None;
-        }
-        let partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
-        probe
-            .write_value_into(partial)
-            .expect("write_value_into should succeed once validate() found no errors")
-            .build()
-            .expect("build should succeed once the item was written")
-            .materialize::<T>()
-            .expect("materialized shape should match T")
-            .into()
+/// Rebuild an item's `T` from its node, or `None` for an item that has no
+/// value to build (an `Empty` or `Invalid` leaf). For what needs a typed item
+/// and has only the node: a custom order, and a dev's `feedback`.
+fn item_value<T: Facet<'static>>(node: &dyn Node) -> Option<T> {
+    let mut probe = node.clone_box();
+    probe.validate();
+    if probe.has_errors_within() {
+        return None;
     }
+    let partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
+    probe
+        .write_value_into(partial)
+        .expect("write_value_into should succeed once validate() found no errors")
+        .build()
+        .expect("build should succeed once the item was written")
+        .materialize::<T>()
+        .expect("materialized shape should match T")
+        .into()
 }
 
 impl<T> Debug for CustomOrder<T> {
@@ -224,7 +237,7 @@ impl<T: Facet<'static> + 'static + PartialEq> ItemHandler for CustomOrder<T> {
 
     fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
         let mut keyed: Vec<(Option<T>, Box<dyn Node>)> =
-            nodes.drain(..).map(|n| (Self::value_of(&*n), n)).collect();
+            nodes.drain(..).map(|n| (item_value::<T>(&*n), n)).collect();
         keyed.sort_by(|(a, _), (b, _)| match (a, b) {
             (Some(a), Some(b)) => (self.cmp_value)(a, b),
             (Some(_), None) => Ordering::Less,
@@ -236,12 +249,19 @@ impl<T: Facet<'static> + 'static + PartialEq> ItemHandler for CustomOrder<T> {
 
     fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
         let mut keyed: Vec<(Option<T>, Box<dyn Node>)> =
-            nodes.drain(..).map(|n| (Self::value_of(&*n), n)).collect();
+            nodes.drain(..).map(|n| (item_value::<T>(&*n), n)).collect();
         retain_first(
             &mut keyed,
             |(a, _), (b, _)| matches!((a, b), (Some(a), Some(b)) if a == b),
         );
         nodes.extend(keyed.into_iter().map(|(_, n)| n));
+    }
+
+    fn position(&self, nodes: &[Box<dyn Node>], value: Peek<'_, 'static>) -> Option<usize> {
+        let value = value.get::<T>().ok()?;
+        nodes
+            .iter()
+            .position(|node| item_value::<T>(&**node).is_some_and(|item| &item == value))
     }
 }
 
@@ -253,6 +273,148 @@ pub struct SetNode {
     pub adder: ItemAdder,
     pub items: Items,
     pub comparator: SetOrder,
+    /// What the set's last edit did, or why it was refused, for its live
+    /// region. Every edit to the set replaces it.
+    pub message: Option<SetMessage>,
+    /// The dev's words for what an edit did (`feedback:`), or `None` for
+    /// formoxus's own.
+    pub feedback: Option<SetFeedback>,
+}
+
+/// What an edit to a set did, for a dev's `feedback:` to put into words
+/// (decision I′). Each carries the item: the one added, the one removed, or
+/// the one already there that an Add would have duplicated, which equals the
+/// value the user tried by `==`.
+///
+/// `#[non_exhaustive]`, so editing an item (box 8) can join without breaking
+/// a dev's `match`: give it a `_ =>` arm.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SetEvent<'a, T> {
+    Added(&'a T),
+    Removed(&'a T),
+    Duplicate(&'a T),
+}
+
+// `Copy` by hand, not derived, since a derive would demand `T: Copy`; every
+// variant is only a reference. `Copy` also spares a dev's named
+// `fn(SetEvent<'_, Tag>)` clippy's `needless_pass_by_value`.
+impl<T> Clone for SetEvent<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for SetEvent<'_, T> {}
+
+/// Which [`SetEvent`] happened, before the item is rebuilt as a `T`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SetEventKind {
+    Added,
+    Removed,
+    Duplicate,
+}
+
+/// A dev's `feedback:`, with its item type erased: what the spec holds.
+///
+/// A closure, not a `fn`, so it can capture app state, such as the handle of
+/// a toaster to send the message to instead (returning `None`, so the set's
+/// own region stays quiet). `Send + Sync`, which a captured Dioxus `Signal`
+/// is, so a spec can live in a server function.
+#[derive(Clone)]
+pub struct SetFeedback(Arc<DescribeFn>);
+
+/// A dev's `feedback:` once its `T` is erased: the event, and the item's node
+/// to rebuild a `T` from.
+type DescribeFn = dyn Fn(SetEventKind, &dyn Node) -> Option<String> + Send + Sync;
+
+impl SetFeedback {
+    /// Words for each [`SetEvent`] over items of type `T`: the line for the
+    /// set's live region, or `None` for nothing there.
+    pub fn new<T: Facet<'static> + 'static>(
+        describe: impl Fn(SetEvent<'_, T>) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(move |kind, item| {
+            // An item that cannot be built (until box 8, one typed into in
+            // place) has no `T` to describe, so no message.
+            let value = item_value::<T>(item)?;
+            describe(match kind {
+                SetEventKind::Added => SetEvent::Added(&value),
+                SetEventKind::Removed => SetEvent::Removed(&value),
+                SetEventKind::Duplicate => SetEvent::Duplicate(&value),
+            })
+        }))
+    }
+
+    fn describe(&self, kind: SetEventKind, item: &dyn Node) -> Option<String> {
+        (self.0)(kind, item)
+    }
+}
+
+impl Debug for SetFeedback {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SetFeedback(..)")
+    }
+}
+
+/// The same closure, as `SetOrder` compares its comparator: a closure has no
+/// `==` of its own.
+impl PartialEq for SetFeedback {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// A line for a set's live region (box 6): what its last edit did, or why it
+/// was refused.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SetMessage {
+    pub text: String,
+    /// A refusal (a duplicate), which renders with the slot's invalid class.
+    pub refused: bool,
+}
+
+impl SetNode {
+    /// The line for the live region after `kind` happened to `item`: the
+    /// dev's `feedback:` if there is one, else formoxus's own words. A
+    /// duplicate is a refusal, so it renders with the slot's invalid class.
+    fn message_for(&self, kind: SetEventKind, item: &dyn Node) -> Option<SetMessage> {
+        let text = match &self.feedback {
+            Some(feedback) => feedback.describe(kind, item),
+            None => default_message(kind, &item_text(item)),
+        }?;
+        Some(SetMessage {
+            text,
+            refused: kind == SetEventKind::Duplicate,
+        })
+    }
+}
+
+/// formoxus's own words for what an edit did, Django's way (I′), or `None` for
+/// an item with nothing to name.
+fn default_message(kind: SetEventKind, text: &str) -> Option<String> {
+    if text.is_empty() {
+        return None;
+    }
+    Some(match kind {
+        SetEventKind::Added => format!("“{text}” was added successfully."),
+        SetEventKind::Removed => format!("“{text}” was removed successfully."),
+        SetEventKind::Duplicate => format!("“{text}” is already there."),
+    })
+}
+
+/// An item as the user sees it, for a message about it: its values joined,
+/// so a string's text, a newtype's inner value, a unit enum's variant name
+/// and each field of a struct, never a `Display` the type may not have.
+fn item_text(item: &dyn Node) -> String {
+    let mut values = Vec::new();
+    item.collect_values("", &mut values);
+    values
+        .into_iter()
+        .map(|value| value.into_pair().1)
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl Node for SetNode {
@@ -353,24 +515,45 @@ impl Node for SetNode {
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path == my_path {
+            // A message answers the last edit only: whatever the set does next,
+            // it is stale.
+            self.message = None;
             return match edit {
                 Edit::AddItem { value, .. } => match value {
                     None => Err(FormAccessError(format!(
                         "{my_path} is a set; you cannot add an empty item to a set"
                     ))),
                     Some(v) => {
-                        let result = self
-                            .items
-                            .add_item(&my_path, None, specs, Some(v))
-                            .map(Some);
-                        if result.is_ok() {
-                            self.items.sort_by(&self.comparator);
+                        // Refused for the user, not the caller (box 6): the set is
+                        // unchanged and its live region says why, so `Ok`, not an
+                        // error for `use_form` to log. Named by the item already
+                        // there, which the user can see.
+                        if let Some(at) = self.items.position_of(&self.comparator, v) {
+                            self.message = self.items.iter().nth(at).and_then(|item| {
+                                self.message_for(SetEventKind::Duplicate, &**item)
+                            });
+                            return Ok(None);
                         }
-                        result
+                        let added = self.items.add_item(&my_path, None, specs, Some(v))?;
+                        self.items.sort_by(&self.comparator);
+                        self.message = self
+                            .items
+                            .iter()
+                            .find(|item| qualify(&my_path, &item.name()) == added)
+                            .and_then(|item| self.message_for(SetEventKind::Added, &**item));
+                        Ok(Some(added))
                     }
                 },
                 Edit::RemoveItem { index, .. } => {
-                    self.items.remove_item(&my_path, *index).map(|()| None)
+                    // Described before it goes, while there is an item to name.
+                    let message = self
+                        .items
+                        .iter()
+                        .nth(*index)
+                        .and_then(|item| self.message_for(SetEventKind::Removed, &**item));
+                    self.items.remove_item(&my_path, *index)?;
+                    self.message = message;
+                    Ok(None)
                 }
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a set, not an enum")))
@@ -411,6 +594,8 @@ impl Node for SetNode {
         let legend_class = ctx.classes.fixed_class(FixedKey::SetLegend, false);
         let set_item_class = ctx.classes.fixed_class(FixedKey::SetItem, false);
         let class_for_set_items = ctx.classes.fixed_class(FixedKey::SetItems, false);
+        let refused = self.message.as_ref().is_some_and(|m| m.refused);
+        let message_class = ctx.classes.fixed_class(FixedKey::SetMessage, refused);
         let nested = ctx.nested(&self.name);
         rsx! {
             fieldset {
@@ -457,6 +642,17 @@ impl Node for SetNode {
                         },
                         "ItemAdder",
                     ))
+                }
+                // Always present, empty until an edit: a `status` region is
+                // announced reliably only if it is already in the page when its
+                // text changes. After the adder, whatever adder the dev gave, so
+                // it is read where the user just acted.
+                div {
+                    class: message_class,
+                    role: "status",
+                    if let Some(message) = &self.message {
+                        "{message.text}"
+                    }
                 }
             }
         }

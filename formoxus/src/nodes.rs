@@ -19,7 +19,10 @@ pub use items::ItemValue;
 pub(crate) use items::{ITEM_SIGIL, Items, item_segment};
 pub use list_node::ListNode;
 pub use option_node::OptionNode;
-pub use set_node::{SetNode, SetOrder, ascii_case_insensitive, unicode_case_insensitive};
+pub use set_node::{
+    SetEvent, SetFeedback, SetMessage, SetNode, SetOrder, ascii_case_insensitive,
+    unicode_case_insensitive,
+};
 pub use struct_node::StructNode;
 pub use variant_node::{VariantChoice, VariantNode};
 

@@ -245,3 +245,11 @@ row's ↑/↓, `FixedKey::MoveRowButtons`) and **`fx-button fx-button-move-up`
 / `fx-button-move-down`** (`MoveRowUpButton`/`MoveRowDownButton`), shaped
 like `fx-button-add-row`. The icons inside the row buttons (`<svg>`) get
 NO class, by Todd's decision: CSS reaches them as `.fx-button svg`.
+
+**2026-11-03 (sets box 6): `fx-set-message`** (`FixedKey::SetMessage`,
+written `set_message` in `classes_plus:`), plus `fx-invalid` for a refusal:
+a set's ALWAYS-present `<div role="status">` after its adder, saying what
+its last edit did ("“rust” was added successfully.") or why it was refused
+(a duplicate). Briefly `fx-add-message` on an inserted `role="alert"` div
+the same day; replaced once every edit got a message, since a polite
+success needs a status region, and that must exist before its text does.

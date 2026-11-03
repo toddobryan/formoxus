@@ -1,0 +1,20 @@
+error[E0631]: type mismatch in closure arguments
+  --> tests/ui/form_feedback_wrong_type.rs:16:33
+   |
+16 |             tags => { feedback: |_: SetEvent<'_, u8>| None },
+   |                       --------  ---------------------^^^^^
+   |                       |         |
+   |                       |         expected due to this
+   |                       |         found signature defined here
+   |                       required by a bound introduced by this call
+   |
+   = note: expected closure signature `for<'a> fn(SetEvent<'a, std::string::String>) -> _`
+              found closure signature `fn(SetEvent<'_, u8>) -> _`
+note: required by a bound in `formoxus::field_kind::SetItems::<T>::feedback`
+  --> src/field_kind.rs
+   |
+   |     pub fn feedback(
+   |            -------- required by a bound in this associated function
+   |         self,
+   |         describe: impl Fn(SetEvent<'_, T>) -> Option<String> + Send + Sync + 'static,
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `SetItems::<T>::feedback`

@@ -36,6 +36,9 @@ pub(crate) struct FieldBody {
     pub(crate) set: Option<Ident>,
     /// `sort_by: order` or `sort_by: (order, name)`, a set's order (L).
     pub(crate) sort_by: Option<SortBy>,
+    /// `feedback: closure`, a set's words for what an edit did (I′). The key
+    /// is kept for the checks' span.
+    pub(crate) feedback: Option<(Ident, Expr)>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -471,6 +474,7 @@ impl FieldBody {
         checks.push(self.list_checks(&shape, key));
         checks.push(self.set_checks(&shape));
         checks.push(self.order_checks(&shape, path_span));
+        checks.push(self.feedback_checks(&shape));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -584,6 +588,21 @@ impl FieldBody {
         }
     }
 
+    /// `feedback`'s `const _` assertion, as `sort_by`'s: without `set`, that
+    /// the field is not a list, spanned on the key. Anything else that is not
+    /// a set is `field_kind::SetLike`'s error at the builder call, and a
+    /// closure over the wrong item type is rustc's.
+    fn feedback_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let (Some((key, _)), None) = (&self.feedback, &self.set) else {
+            return TokenStream2::new();
+        };
+        let message = "`feedback` on a list needs `set` beside it, since only a set says what \
+                       its edits did: write `set, feedback: …`";
+        quote_spanned! { key.span()=>
+            const _: () = ::core::assert!(!::formoxus::field_kind::is_list(#shape), #message);
+        }
+    }
+
     /// One `const _` assertion per attribute the widget must pass through:
     /// every table attribute but the validated ones, which are the field's
     /// settings and never reach the widget. Spanned on the key, since the
@@ -658,7 +677,7 @@ impl Parse for FieldBody {
 
 impl FieldBody {
     /// One `key: value` (or bare flag) entry: `widget`, `label`, `choices`,
-    /// `adder`, `set`, `sort_by`, a table attribute by its `snake_case` variant name, or
+    /// `adder`, `set`, `sort_by`, `feedback`, a table attribute by its `snake_case` variant name, or
     /// a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
         if starts_nested(body) {
@@ -683,7 +702,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" | "choices" | "adder" => {
+            "widget" | "label" | "choices" | "adder" | "feedback" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -702,6 +721,11 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.adder = Some((key.clone(), body.parse()?));
+                } else if name == "feedback" {
+                    if self.feedback.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.feedback = Some((key.clone(), body.parse()?));
                 } else {
                     assert!(name == "choices", "did you add another name to the match?");
                     if self.choices.is_some() {
@@ -747,6 +771,7 @@ impl FieldBody {
             && self.adder.is_none()
             && self.set.is_none()
             && self.sort_by.is_none()
+            && self.feedback.is_none()
     }
 }
 
@@ -1198,8 +1223,8 @@ fn owned(attr: Attr) -> String {
 }
 
 /// Every identifier key a field body accepts: `widget`, `label`, `choices`,
-/// `adder`, `set`, `sort_by`, then each table attribute an author may set, in
-/// table order.
+/// `adder`, `set`, `sort_by`, `feedback`, then each table attribute an author
+/// may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
@@ -1208,6 +1233,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "adder".to_string(),
         "set".to_string(),
         "sort_by".to_string(),
+        "feedback".to_string(),
     ]
     .into_iter()
     .chain(
@@ -1383,6 +1409,7 @@ mod tests {
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" => quote!(#ident),
                 "sort_by" => quote!(#ident: String::cmp),
+                "feedback" => quote!(#ident: |_| None),
                 _ => {
                     let attr = formoxus_spec::Attr::ALL
                         .iter()
@@ -2193,6 +2220,74 @@ mod tests {
                  | & __m . tags) , false)"
             )
         );
+    }
+
+    // ── `feedback` ───────────────────────────────────────────────────────
+
+    /// Through the same builder as `sort_by`, after it and after `set`, so a
+    /// `Vec`'s run-time check sees the mark.
+    #[gtest]
+    fn feedback_becomes_a_builder_call_after_set_and_sort_by() {
+        let spec = parse(quote! {
+            Source { tags => { feedback: |_| None, sort_by: String::cmp, set } }
+        })
+        .unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                ". treat_as_set (\"tags\") . with_sort_by (\"tags\" , :: formoxus :: field_kind :: \
+                 set_items_of (| __m : & Source | & __m . tags) . sort_by (String :: cmp , \
+                 \"String::cmp\")) . with_feedback (\"tags\" , :: formoxus :: field_kind :: \
+                 set_items_of (| __m : & Source | & __m . tags) . feedback (| _ | None))"
+            )
+        );
+    }
+
+    #[gtest]
+    fn feedback_needs_a_closure() {
+        expect_that!(
+            err_of(quote! { Source { tags => { feedback } } }),
+            contains_substring("expected `:`")
+        );
+    }
+
+    #[gtest]
+    fn feedback_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { tags => { feedback: |_| None, feedback: |_| None } } }),
+            eq("`feedback` is given twice")
+        );
+    }
+
+    #[gtest]
+    fn a_near_miss_of_feedback_suggests_it() {
+        expect_that!(
+            err_of(quote! { Source { tags => { feedbak: |_| None } } }),
+            contains_substring("Did you mean `feedback`?")
+        );
+    }
+
+    /// As `sort_by`'s: a `Vec` without `set` is the one non-set `SetLike`
+    /// lets through.
+    #[gtest]
+    fn feedback_asks_whether_the_field_is_a_list() {
+        let tokens = parse(quote! { Source { tags => { feedback: |_| None } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(
+            tokens,
+            contains_substring("`feedback` on a list needs `set` beside it")
+        );
+    }
+
+    #[gtest]
+    fn feedback_beside_set_leaves_the_question_to_set() {
+        let tokens = parse(quote! { Source { tags => { set, feedback: |_| None } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, not(contains_substring("`feedback` on a list")));
     }
 
     /// `set` makes a list a set, so its items are asked about too, but only
