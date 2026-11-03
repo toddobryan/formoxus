@@ -54,7 +54,7 @@
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
 //! - [`variant_select`] and [`item_buttons`] — the widgets that change a form's
-//!   SHAPE rather than a value: which variant is chosen, and the rows of a list.
+//!   SHAPE rather than a value: which variant is chosen, and the items of a list.
 //! - [`errors`] — the error list rendered under every widget.
 
 pub mod errors;

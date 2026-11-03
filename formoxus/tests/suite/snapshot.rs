@@ -4,7 +4,7 @@
 //! renders exactly what the literals did.
 //!
 //! One model touches every widget part and fixed slot in the plan's inventory,
-//! rendered three ways: clean (seeded, so a list has a row and its buttons),
+//! rendered three ways: clean (seeded, so a list has an item and its buttons),
 //! with field errors (empty and validated, so every required field is
 //! invalid), and with form-level errors (seeded and valid, so the validator
 //! runs, plus a button whose fn has the wrong arity, which is what puts the

@@ -46,7 +46,7 @@ pub fn TestForm(slug: String) -> Element {
         "buttons" => rsx! { Buttons {} },
         "bare" => rsx! { Bare {} },
         "reorder" => rsx! { Reorder {} },
-        "struct-rows" => rsx! { StructRows {} },
+        "struct-items" => rsx! { StructItems {} },
         "adder" => rsx! { Adder {} },
         "tags" => rsx! { Tags {} },
         "tags-pattern" => rsx! { TagsPattern {} },
@@ -523,14 +523,14 @@ struct Playlist {
     songs: Vec<String>,
 }
 
-/// A list: rows are added with Add, moved with their ↑/↓ buttons, and the
+/// A list: items are added with Add, moved with their ↑/↓ buttons, and the
 /// submitted model shows the order they ended in. Blank, so a test builds
-/// the rows it moves.
+/// the items it moves.
 #[component]
 fn Reorder() -> Element {
     harness(
         "reorder",
-        "A list. Add rows, move them with their arrow buttons, submit: the model keeps the new order.",
+        "A list. Add items, move them with their arrow buttons, submit: the model keeps the new order.",
         form! {
             Playlist {
                 buttons: { save: { type: submit } }
@@ -539,7 +539,7 @@ fn Reorder() -> Element {
     )
 }
 
-// ── struct-rows ──────────────────────────────────────────────────────────
+// ── struct-items ──────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Member {
@@ -552,13 +552,13 @@ struct Team {
     members: Vec<Member>,
 }
 
-/// A list whose rows are structs. A row Add makes takes focus
-/// at its FIRST field, which a leaf row (`/t/reorder`) cannot show.
+/// A list whose items are structs. An item Add makes takes focus
+/// at its FIRST field, which a leaf item (`/t/reorder`) cannot show.
 #[component]
-fn StructRows() -> Element {
+fn StructItems() -> Element {
     harness(
-        "struct-rows",
-        "A list of two-field rows. Add a row: focus lands in its Name field.",
+        "struct-items",
+        "A list of two-field items. Add an item: focus lands in its Name field.",
         form! {
             Team {
                 buttons: { save: { type: submit } }
@@ -572,8 +572,8 @@ fn StructRows() -> Element {
 /// What `/t/adder` offers, one button each.
 const SONGS: [&str; 3] = ["Alpha", "Bravo", "Charlie"];
 
-/// A custom adder (`adder:`): one button per song, each adding a row that
-/// arrives already holding it, in place of the blank row Add would make.
+/// A custom adder (`adder:`): one button per song, each adding an item that
+/// arrives already holding it, in place of the blank item Add would make.
 #[component]
 fn SongPicker(props: formoxus::widgets::AddItemProps) -> Element {
     rsx! {
@@ -599,13 +599,13 @@ fn pick(
     }
 }
 
-/// A list whose Add is replaced by `SongPicker`. Each click adds a filled row,
+/// A list whose Add is replaced by `SongPicker`. Each click adds a filled item,
 /// and the submitted model shows the songs in the order they were picked.
 #[component]
 fn Adder() -> Element {
     harness(
         "adder",
-        "A list with a custom adder. Click a song's button: a row arrives holding it. Submit: the model lists them in the order picked.",
+        "A list with a custom adder. Click a song's button: an item arrives holding it. Submit: the model lists them in the order picked.",
         form! {
             Playlist {
                 songs => { adder: SongPicker },

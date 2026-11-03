@@ -884,7 +884,7 @@ pub(crate) mod tests {
     }
 
     #[gtest]
-    fn a_repeated_row_selector_is_rejected() {
+    fn a_repeated_item_selector_is_rejected() {
         // `[]` is part of the key, so the comparison has to be on the rendered
         // key rather than on the idents alone.
         expect_that!(
@@ -980,18 +980,18 @@ pub(crate) mod tests {
     }
 
     #[gtest]
-    fn a_row_selector_on_a_keyword_name_is_a_field() {
+    fn an_item_selector_on_a_keyword_name_is_a_field() {
         // Same hazard with `[` in the second position instead of `.`.
         let spec = parse(quote! { Deck { buttons[].text => { widget: text } } })
-            .expect("a row selector rooted at a keyword should parse as a field");
+            .expect("an item selector rooted at a keyword should parse as a field");
         expect_that!(fields(&spec)[0].0, eq("buttons[].text"));
     }
 
     #[gtest]
-    fn a_list_and_its_rows_are_different_paths() {
+    fn a_list_and_its_items_are_different_paths() {
         // The collision that must NOT fire. `answers` is the `ListNode` (its
-        // legend) and `answers[]` is every row; naming both in one spec is the
-        // normal way to label a list and give its rows a widget. A dedup on the
+        // legend) and `answers[]` is every item; naming both in one spec is the
+        // normal way to label a list and give its items a widget. A dedup on the
         // idents alone would reject this.
         let spec = parse(quote! {
             Quiz {
@@ -999,7 +999,7 @@ pub(crate) mod tests {
                 answers[] => { widget: textarea },
             }
         })
-        .expect("a list and its rows are separate targets");
+        .expect("a list and its items are separate targets");
         expect_that!(
             fields(&spec)
                 .iter()
@@ -1018,7 +1018,7 @@ pub(crate) mod tests {
                 rows[].cells[] => { widget: textarea },
             }
         })
-        .expect("a row and a row's field are separate targets");
+        .expect("an item and an item's field are separate targets");
         expect_that!(fields(&spec).len(), eq(2));
     }
 

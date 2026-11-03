@@ -1,6 +1,6 @@
-//! The buttons that add, remove and move a list's rows.
+//! The buttons that add, remove and move a list's items.
 //!
-//! None reads the value store. Adding or dropping a row changes the form's
+//! None reads the value store. Adding or dropping an item changes the form's
 //! SHAPE, and moving one changes its order, so all any of them does is put an [`Edit`] on the wire and let
 //! [`ListNode`](crate::nodes::ListNode) rebuild itself.
 //!
@@ -22,33 +22,34 @@ use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 /// What a list's or a set's adder is handed: [`AddItemButton`],
 /// [`DraftAdder`], or a dev's own component named by `adder:` in `form!`.
 ///
-/// An adder appends a row by sending an [`Edit::AddItem`] through `on_edit`.
+/// An adder appends an item by sending an [`Edit::AddItem`] through `on_edit`.
 /// With `value: Some(ItemValue::new(item))` it arrives filled in, and focus is
 /// left alone, so a user picking several choices in a row stays on the adder.
 /// With `value: None` it means "add what the adder holds": in a list a blank
-/// row, which takes focus, and in a set its `draft`.
+/// item, which takes focus, and in a set its `draft`.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct AddItemProps {
     /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
-    /// row's: an adder acts on the list.
+    /// item's: an adder acts on the list.
     pub path: String,
     /// The list's own id, `{form}-{path}`, a base for the ids of the adder's
     /// elements (a `<select>` and the `<label for>` naming it). Suffix it
     /// rather than using it as-is: the list's `<fieldset>` already has it.
     pub id: String,
     /// The whole form's values. Add ignores it; an adder offering a fixed set
-    /// of choices can read the rows already there, to leave those out. The
+    /// of choices can read the items already there, to leave those out. The
     /// adder is a component of its own, so reading it re-renders only the
     /// adder.
     pub values: ValuesStore,
     /// Where the adder sends its `Edit`.
     pub on_edit: Callback<Edit>,
     /// The form's resolved classes, so a custom adder can borrow the
-    /// built-in Add's slot (`classes.fixed_class(FixedKey::AddRowButton, false)`)
+    /// built-in Add's slot (`classes.fixed_class(FixedKey::AddItemButton, false)`)
     /// and follow the app's preset.
     pub classes: Rc<Classes>,
-    /// How many rows the list has now, for an adder that stops at a maximum.
-    pub rows: usize,
+    /// How many items the list or set has now, for an adder that stops at a
+    /// maximum.
+    pub item_count: usize,
     /// A set's draft, rendered: the blank item, in the item type's own
     /// widget, that `Edit::AddItem { value: None }` makes an item. `None` for
     /// a list. An adder that sends its own value (a search-to-add) can leave
@@ -95,13 +96,13 @@ impl PartialEq for ItemAdder {
     }
 }
 
-/// The widget that appends a row to a list, and the default [`ItemAdder`].
+/// The widget that appends an item to a list, and the default [`ItemAdder`].
 ///
-/// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the value store — adding a row
+/// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the value store — adding an item
 /// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
 /// wire. `type="button"` is load-bearing: inside a `<form>` a bare `<button>`
 /// defaults to `type="submit"`, so omitting it would submit the form instead of
-/// adding a row.
+/// adding an item.
 #[component]
 pub fn AddItemButton(props: AddItemProps) -> Element {
     let AddItemProps {
@@ -113,10 +114,10 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
     rsx! {
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::AddRowButton, false),
+            class: classes.fixed_class(FixedKey::AddItemButton, false),
             onclick: move |_| {
                 // Append. `before` exists for mid-list insertion, which needs a
-                // widget between every pair of rows — a UI question that hasn't
+                // widget between every pair of items — a UI question that hasn't
                 // been answered yet, not a limitation of the edit.
                 on_edit.call(Edit::AddItem { path: path.clone(), value: None, before: None });
             },
@@ -199,7 +200,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         }
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::AddRowButton, false),
+            class: classes.fixed_class(FixedKey::AddItemButton, false),
             aria_label: replacing,
             onclick: move |_| {
                 add();
@@ -262,16 +263,17 @@ pub fn EditItemButton(
     }
 }
 
-/// The widget that drops one row from a list, or one item from a set.
+/// The widget that drops one item from a list or a set.
 ///
-/// Addressed by POSITION, not by the row's key: the list is what applies the
-/// edit and it works in terms of `rows`, so a position is what it can act on
-/// directly. Keys identify a row across edits; a position locates one at an
+/// Addressed by POSITION, not by the item's key: the list is what applies the
+/// edit and it works in terms of `items`, so a position is what it can act on
+/// directly. Keys identify an item across edits; a position locates one at an
 /// instant, which is all a click needs to say.
 ///
 /// Named by `text` when there is one, "Remove “rust”", as a set's is: a set
-/// is sorted, so "Remove row 2" names nothing a user can see. A list's row
-/// has no one text to name it by, so it keeps its position.
+/// is sorted, so "Remove item 2" names nothing a user can see. A list's item
+/// has no one text to name it by, so it is named by its position, which an
+/// `<ol>` numbers on screen by default and a screen reader announces.
 #[component]
 pub fn RemoveItemButton(
     path: String,
@@ -281,16 +283,16 @@ pub fn RemoveItemButton(
     on_edit: Callback<Edit>,
     classes: Rc<Classes>,
 ) -> Element {
-    // 1-based for humans: this is the only place a row's position is spoken
+    // 1-based for humans: this is the only place an item's position is spoken
     // aloud, and it is never used as a path segment.
     let label = match text {
         Some(text) => format!("Remove “{text}”"),
-        None => format!("Remove row {}", index + 1),
+        None => format!("Remove item {}", index + 1),
     };
     rsx! {
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::RemoveRowButton, false),
+            class: classes.fixed_class(FixedKey::RemoveItemButton, false),
             aria_label: "{label}",
             onclick: move |_| {
                 on_edit.call(Edit::RemoveItem { path: path.clone(), index });
@@ -300,18 +302,18 @@ pub fn RemoveItemButton(
     }
 }
 
-/// The ↑ and ↓ buttons that move one row of a reorderable list, rendered on
-/// the row's left, so neither is ever next to its Remove.
+/// The ↑ and ↓ buttons that move one item of a reorderable list, rendered on
+/// the item's left, so neither is ever next to its Remove.
 ///
-/// Each moves the row one place, by position as [`RemoveItemButton`] removes
-/// one. ↑ is disabled on the first row and ↓ on the last rather than left out,
-/// so every row's controls line up and a keyboard user tabbing down the list
+/// Each moves the item one place, by position as [`RemoveItemButton`] removes
+/// one. ↑ is disabled on the first item and ↓ on the last rather than left out,
+/// so every item's controls line up and a keyboard user tabbing down the list
 /// meets the same buttons in each.
 #[component]
 pub fn MoveItemButtons(
     path: String,
     index: usize,
-    /// How many rows the list has, which is what says this one is the last.
+    /// How many items the list has, which is what says this one is the last.
     count: usize,
     on_edit: Callback<Edit>,
     classes: Rc<Classes>,
@@ -319,11 +321,11 @@ pub fn MoveItemButtons(
     let ordinal = index + 1;
     let up_path = path.clone();
     rsx! {
-        div { class: classes.fixed_class(FixedKey::MoveRowButtons, false),
+        div { class: classes.fixed_class(FixedKey::MoveItemButtons, false),
             button {
                 r#type: "button",
-                class: classes.fixed_class(FixedKey::MoveRowUpButton, false),
-                aria_label: "Move row {ordinal} up",
+                class: classes.fixed_class(FixedKey::MoveItemUpButton, false),
+                aria_label: "Move item {ordinal} up",
                 disabled: index == 0,
                 onclick: move |_| {
                     if let Some(to) = index.checked_sub(1) {
@@ -334,8 +336,8 @@ pub fn MoveItemButtons(
             }
             button {
                 r#type: "button",
-                class: classes.fixed_class(FixedKey::MoveRowDownButton, false),
-                aria_label: "Move row {ordinal} down",
+                class: classes.fixed_class(FixedKey::MoveItemDownButton, false),
+                aria_label: "Move item {ordinal} down",
                 disabled: index + 1 == count,
                 onclick: move |_| {
                     on_edit.call(Edit::MoveItem { path: path.clone(), from: index, to: index + 1 });

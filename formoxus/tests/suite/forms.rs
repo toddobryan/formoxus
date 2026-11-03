@@ -428,9 +428,9 @@ fn a_label_defaults_to_the_humanized_field_name() {
 }
 
 #[gtest]
-fn a_list_row_gets_no_label() {
-    // A row's name is its index, and "0" is a position, not a label. The list
-    // carries the prose; the rows are positional.
+fn a_list_item_gets_no_label() {
+    // An item's name is its index, and "0" is a position, not a label. The list
+    // carries the prose; the items are positional.
     #[derive(Facet, Clone, Debug, PartialEq)]
     struct Quiz {
         answer_choices: Vec<String>,
@@ -445,7 +445,7 @@ fn a_list_row_gets_no_label() {
     let list = &form.nodes[0];
     expect_that!(list.label(LabelCase::Title), some(eq("Answer Choices")));
 
-    // Rendered, the rows must not pick up "0"/"1" as labels. Note the list's own
+    // Rendered, the items must not pick up "0"/"1" as labels. Note the list's own
     // label doesn't appear either — no container renders one yet, which is the
     // other half of why a form still reads bare.
     let html = render_to_html(QuizForm);

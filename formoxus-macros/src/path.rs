@@ -116,12 +116,12 @@ mod tests {
         expect_that!(out, contains_substring("\"email\""));
     }
 
-    /// `[]` reuses `form!`'s loop, so a row path is checked the same way — the
+    /// `[]` reuses `form!`'s loop, so an item path is checked the same way — the
     /// element type is inferred, so nothing has to name it.
     #[gtest]
-    fn a_row_path_witnesses_a_loop() {
+    fn an_item_path_witnesses_a_loop() {
         let out = expand(quote! { Quiz.answers[].text });
-        expect_that!(out, contains_substring("for __row0 in"));
+        expect_that!(out, contains_substring("for __item0 in"));
         expect_that!(out, contains_substring("\"answers[].text\""));
     }
 

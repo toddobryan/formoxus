@@ -1,4 +1,4 @@
-//! `?` mid-path on a field that is not an `Option`: here, a row of the list.
+//! `?` mid-path on a field that is not an `Option`: here, an item of the list.
 use facet::Facet;
 use formoxus::{empty_form, form};
 

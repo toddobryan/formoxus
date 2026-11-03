@@ -11,7 +11,7 @@
  * `Classes::bare()` emits no class at all. This gallery keeps the defaults.
  *
  * The complete default vocabulary, all prefixed `fx-`:
- *   structure   .fx-form  .fx-form-title  .fx-list-row  .fx-list-rows
+ *   structure   .fx-form  .fx-form-title  .fx-list-item  .fx-list-items
  *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
  *   a group     .fx-group + .fx-struct .fx-variant .fx-list .fx-set  .fx-legend
@@ -21,7 +21,7 @@
  *               .fx-problems  .fx-problem  .fx-set-message
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
- *               .fx-button-add-row .fx-button-remove-row .fx-button-edit-item
+ *               .fx-button-add-item .fx-button-remove-item .fx-button-edit-item
  *               .fx-move-buttons + .fx-button-move-up .fx-button-move-down
  *
  * How they nest. A field's caption is a `<label for>` BESIDE its control, not
@@ -202,15 +202,15 @@ body {
     cursor: pointer;
 }
 
-.fx-list-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+.fx-list-item { display: flex; gap: 0.5rem; align-items: flex-end; }
 
 /* A row's buttons draw icons (an `<svg>` with no class of its own). */
 .fx-button svg { vertical-align: -0.125em; }
-.fx-button-add-row svg { margin-inline-end: 0.25rem; }
+.fx-button-add-item svg { margin-inline-end: 0.25rem; }
 
 /* Add stays in reach while a long list scrolls past. It needs a background,
  * or the rows show through it. */
-.fx-button-add-row {
+.fx-button-add-item {
     position: sticky;
     bottom: 0.5rem;
     background: var(--fx-bg);
@@ -220,8 +220,8 @@ body {
 /* A reorderable list (`allow_reordering`): an `<ol>` of `<li>` rows, laid out
  * as moves | the row | Remove, so Remove is never next to a move. `> li`, not
  * `li`: a row can hold a list of its own. */
-.fx-list-rows { padding: 0; margin: 0; }
-.fx-list-rows > .fx-list-row {
+.fx-list-items { padding: 0; margin: 0; }
+.fx-list-items > .fx-list-item {
     list-style: none;
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -235,7 +235,7 @@ body {
 /* Small, borderless icon buttons: one set per row, so the page's own button
  * size would swamp the rows. */
 .fx-move-buttons .fx-button,
-.fx-button-remove-row,
+.fx-button-remove-item,
 .fx-button-edit-item {
     padding: 0.125rem;
     line-height: 0;
@@ -243,7 +243,7 @@ body {
     color: var(--fx-muted);
 }
 .fx-move-buttons .fx-button:hover:not(:disabled),
-.fx-button-remove-row:hover,
+.fx-button-remove-item:hover,
 .fx-button-edit-item:hover { color: var(--fx-text); }
 /* The item being edited: its Edit stays lit while its value is in the draft. */
 .fx-button-edit-item[aria-pressed="true"] { color: var(--fx-text); }
@@ -270,7 +270,7 @@ body {
 }
 .fx-set-adder > :first-child { flex: 1 1 12rem; }
 .fx-set-adder .fx-form-field { margin-block-end: 0; }
-.fx-set-adder .fx-button-add-row { position: static; margin-top: 0; }
+.fx-set-adder .fx-button-add-item { position: static; margin-top: 0; }
 
 /* The tags preset: a set's items as chips in a wrapping row. Opt-in, per set
  * for every set in a form, through `classes_plus: { set: + ["fx-tags"] }`, or

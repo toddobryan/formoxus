@@ -78,9 +78,9 @@ impl Items {
     }
 
     pub(crate) fn collect_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
-        // The list's own errors at its own path, before its rows', as
+        // The list's own errors at its own path, before its items', as
         // `VariantNode` does. Before #13 nothing ever put one there, so this
-        // only recursed, and a rejected row-key entry came back as an `Err`
+        // only recursed, and a rejected item-key entry came back as an `Err`
         // with no message anywhere.
         if !self.errors.is_empty() {
             out.insert(my_path.to_string(), self.errors.clone());
@@ -208,7 +208,7 @@ impl Items {
             &qualify(my_path, name),
             // Never the container's own `optional`: that says the container is an
             // `Option`'s payload, which its items are not, exactly as
-            // `list_node` builds them. A row that can be absent says so in its
+            // `list_node` builds them. An item that can be absent says so in its
             // own shape (`Vec<Option<T>>`), which the walk peels.
             /* optional */
             false,
@@ -216,7 +216,7 @@ impl Items {
     }
 
     /// Make `items` exactly `keys`, in that order: an item already here keeps its
-    /// node (and so its values and errors), and a key not here gets a blank row.
+    /// node (and so its values and errors), and a key not here gets a blank item.
     ///
     /// This is how a server, which starts from a collection with no items, gets the
     /// client's items back. `next_key` only ever grows, so a key the wire named
@@ -274,8 +274,8 @@ impl Items {
                 "cannot move item at index {from} to index {to} in {my_path}; it has {len} items"
             )));
         }
-        let row = self.collection.remove(from);
-        self.collection.insert(to, row);
+        let item = self.collection.remove(from);
+        self.collection.insert(to, item);
         Ok(())
     }
 
@@ -345,7 +345,7 @@ impl Items {
     }
 
     // Paths are unique, so at most one item can own this one. Dispatching by
-    // containment rather than trying each in turn is what lets a row's real
+    // containment rather than trying each in turn is what lets an item's real
     // error reach the caller intact.
     // `my_path`, NOT the items's own path: `edit`'s prefix excludes the
     // node's own name, which the node qualifies on itself. Passing
@@ -443,7 +443,7 @@ impl ItemValue {
     }
 
     /// The shape of the `T` this was made from, which `add_item` checks
-    /// against the collection's rows.
+    /// against the collection's items.
     pub fn shape(&self) -> &'static Shape {
         self.shape
     }
@@ -487,12 +487,12 @@ pub(crate) fn item_segment(key: usize) -> String {
     format!("{ITEM_SIGIL}{key}")
 }
 
-/// The row keys a list's wire entry names, in order: `"#0,#2"` is `[0, 2]`, and
-/// `""` is no rows.
+/// The item keys a list's wire entry names, in order: `"#0,#2"` is `[0, 2]`, and
+/// `""` is no items.
 ///
 /// `None` for anything `collect_values` would not have written: a segment that
 /// is not `#` and a number, a number not written canonically (`#01`, `#+1`,
-/// which would otherwise name the same row as `#1`), or a repeated key. A
+/// which would otherwise name the same item as `#1`), or a repeated key. A
 /// `HashSet`, not `Vec::contains`, so a forged entry with many keys costs time
 /// linear in its length rather than quadratic.
 pub(crate) fn parse_item_keys(raw: &str) -> Option<Vec<usize>> {
@@ -522,7 +522,7 @@ mod tests {
     }
 
     #[gtest]
-    fn empty_is_no_rows() {
+    fn empty_is_no_items() {
         expect_that!(parse_item_keys(""), some(eq(&Vec::<usize>::new())));
     }
 

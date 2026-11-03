@@ -145,7 +145,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    /// Build the leaf at `path` (a `[]` row path is fine) with `ctor` instead
+    /// Build the leaf at `path` (a `[]` item path is fine) with `ctor` instead
     /// of the default for its type.
     pub fn with_node(mut self, path: &str, ctor: crate::field_node::NodeCtor) -> Self {
         self.field(path).node = Some(ctor);

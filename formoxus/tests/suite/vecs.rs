@@ -59,7 +59,7 @@ fn venues() -> Venues {
 }
 
 #[gtest]
-fn scalar_rows_round_trip() {
+fn scalar_items_round_trip() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(form.validate(), some(eq(&quiz())));
     expect_that!(across_the_wire(&quiz()), ok(eq(&quiz())));
@@ -80,8 +80,8 @@ fn an_empty_list_round_trips() {
 }
 
 #[gtest]
-fn struct_rows_round_trip() {
-    // The case that proves the `write_value_into` split: a row is a
+fn struct_items_round_trip() {
+    // The case that proves the `write_value_into` split: an item is a
     // `StructNode`, so this nests `begin_list_item` → `begin_field` per struct
     // field. Confusing the two halves fails exactly here.
     let mut form = form_for(&venues(), FormSpec::default());
@@ -90,7 +90,7 @@ fn struct_rows_round_trip() {
 }
 
 #[gtest]
-fn rows_are_named_by_key() {
+fn items_are_named_by_key() {
     let form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order,
@@ -98,7 +98,7 @@ fn rows_are_named_by_key() {
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
-            // The list's own entry: its row keys, in row order.
+            // The list's own entry: its item keys, in item order.
             ("answers".to_string(), "#0,#1".to_string()),
             ("answers.#0".to_string(), "alpha".to_string()),
             ("answers.#1".to_string(), "beta".to_string()),
@@ -107,7 +107,7 @@ fn rows_are_named_by_key() {
 }
 
 #[gtest]
-fn struct_rows_qualify_through_their_key() {
+fn struct_items_qualify_through_their_key() {
     let form = form_for(&venues(), FormSpec::default());
     let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
     expect_that!(
@@ -134,7 +134,7 @@ fn nested_lists_nest_their_keys() {
     };
     let form = form_for(&grid, FormSpec::default());
     expect_that!(
-        // Every list says which rows it has, the inner ones included.
+        // Every list says which items it has, the inner ones included.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
             ("rows".to_string(), "#0,#1".to_string()),
@@ -152,8 +152,8 @@ fn nested_lists_nest_their_keys() {
 }
 
 #[gtest]
-fn enum_rows_are_pinned_by_the_value() {
-    // Populating pins each row's variant independently — row 0 and row 1 are
+fn enum_items_are_pinned_by_the_value() {
+    // Populating pins each item's variant independently — item 0 and item 1 are
     // different variants of the same enum, and neither needed a choice from
     // the caller because the value itself answered.
     let drawings = Drawings {
@@ -185,7 +185,7 @@ fn enum_rows_are_pinned_by_the_value() {
 }
 
 #[gtest]
-fn editing_one_row_leaves_the_others_alone() {
+fn editing_one_item_leaves_the_others_alone() {
     let mut form = form_for(&venues(), FormSpec::default());
     form.distribute_values(&IndexMap::from([(
         "places.#1.city".to_string(),
@@ -201,7 +201,7 @@ fn editing_one_row_leaves_the_others_alone() {
 #[gtest]
 fn leaves_then_apply_is_an_identity_round_trip() {
     // The widget loop, for lists, reloaded into an `empty_form` the way the
-    // scalar version of this test does. An empty form has no rows, so this
+    // scalar version of this test does. An empty form has no items, so this
     // only works because the list's own entry (`places` = `#0,#1`) rebuilds
     // them: before #13 it reloaded into a form of the same shape instead.
     let form = form_for(&venues(), FormSpec::default());
@@ -214,7 +214,7 @@ fn leaves_then_apply_is_an_identity_round_trip() {
 }
 
 #[gtest]
-fn create_mode_yields_no_rows_yet() {
+fn create_mode_yields_no_items_yet() {
     // Characterization, not an endorsement: `list_node` has no length to
     // work from without a value, so it builds an empty `ListNode` and
     // `validate` produces `vec![]` with no complaint. This test exists to
@@ -233,12 +233,12 @@ fn create_mode_yields_no_rows_yet() {
     );
 }
 
-// ── Adding and removing rows ─────────────────────────────────────────────
+// ── Adding and removing items ─────────────────────────────────────────────
 //
-// A row's name is a KEY, not a position. Everything below is a consequence of
-// that one decision, and every test here would pass with index-named rows
+// An item's name is a KEY, not a position. Everything below is a consequence of
+// that one decision, and every test here would pass with index-named items
 // EXCEPT the two that check the neighbours' paths after an insert or a remove —
-// which is exactly where index names silently move data between rows.
+// which is exactly where index names silently move data between items.
 
 fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
     form: &FormState<T>,
@@ -247,7 +247,7 @@ fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
 }
 
 #[gtest]
-fn adding_a_row_appends_by_default() {
+fn adding_an_item_appends_by_default() {
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
         path: "answers".to_string(),
@@ -269,8 +269,8 @@ fn adding_a_row_appends_by_default() {
 }
 
 #[gtest]
-fn a_new_row_is_blank_and_buildable() {
-    // The row is built from the ELEMENT shape with no value to peek at, so it
+fn a_new_item_is_blank_and_buildable() {
+    // The item is built from the ELEMENT shape with no value to peek at, so it
     // has to come out as a working node rather than a placeholder: fill it and
     // the model builds.
     let mut form = form_for(&quiz(), FormSpec::default());
@@ -292,12 +292,12 @@ fn a_new_row_is_blank_and_buildable() {
 }
 
 #[gtest]
-fn inserting_at_the_front_does_not_move_the_rows_below_it() {
-    // THE test for keys. With index-named rows, inserting at 0 would renumber
-    // every row after it — which means every leaf beneath them lands on a
+fn inserting_at_the_front_does_not_move_the_items_below_it() {
+    // THE test for keys. With index-named items, inserting at 0 would renumber
+    // every item after it — which means every leaf beneath them lands on a
     // different key in the value store, and the store (which deliberately
-    // survives structural edits) would hand row 1 the text the user typed into
-    // row 0. Keys make the insert a pure addition: nobody else is touched.
+    // survives structural edits) would hand item 1 the text the user typed into
+    // item 0. Keys make the insert a pure addition: nobody else is touched.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
         path: "answers".to_string(),
@@ -313,9 +313,9 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
         eq(&vec![
             ("title".to_string(), "Unit 1".to_string()),
             // The list's own entry carries the ORDER, which the keys alone
-            // cannot: #2 is the newest key but the first row.
+            // cannot: #2 is the newest key but the first item.
             ("answers".to_string(), "#2,#0,#1".to_string()),
-            // The new row comes FIRST in order...
+            // The new item comes FIRST in order...
             ("answers.#2".to_string(), String::new()),
             // ...while the two that were already here keep both their keys and
             // their values. Order and identity are different things now.
@@ -326,9 +326,9 @@ fn inserting_at_the_front_does_not_move_the_rows_below_it() {
 }
 
 #[gtest]
-fn the_list_builds_in_row_order_not_key_order() {
-    // The other half of the split: `write_value_into` walks `rows` and never
-    // reads a row's name, so a row inserted at the front lands at the front of
+fn the_list_builds_in_item_order_not_key_order() {
+    // The other half of the split: `write_value_into` walks `items` and never
+    // reads an item's name, so an item inserted at the front lands at the front of
     // the model even though its key is the highest.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
@@ -353,9 +353,9 @@ fn the_list_builds_in_row_order_not_key_order() {
 }
 
 #[gtest]
-fn removing_a_row_leaves_the_survivors_keys_untouched() {
-    // The mirror of the insert test. Index names would shift row 2 down into
-    // row 1's paths; keys mean the survivor is still `#1` and still owns the
+fn removing_an_item_leaves_the_survivors_keys_untouched() {
+    // The mirror of the insert test. Index names would shift item 2 down into
+    // item 1's paths; keys mean the survivor is still `#1` and still owns the
     // values already sitting under `places.#1.*` in the store.
     let mut form = form_for(&venues(), FormSpec::default());
     form.edit(&Edit::RemoveItem {
@@ -383,8 +383,8 @@ fn removing_a_row_leaves_the_survivors_keys_untouched() {
 
 #[gtest]
 fn a_key_is_never_reused() {
-    // Remove the last row and add one: the new row must NOT inherit the dead
-    // row's key, or the value store's leftovers from the removed row would
+    // Remove the last item and add one: the new item must NOT inherit the dead
+    // item's key, or the value store's leftovers from the removed item would
     // silently populate the new one.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::RemoveItem {
@@ -407,14 +407,14 @@ fn a_key_is_never_reused() {
             eq("answers.#0"),
             eq("answers.#2")
         ],
-        "the removed row was #1, so #1 must not come back"
+        "the removed item was #1, so #1 must not come back"
     );
     expect_that!(form.collect_values().get("answers"), some(eq("#0,#2")));
 }
 
 #[gtest]
-fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
-    // A row built by `AddItem` has to be indistinguishable from one built at
+fn an_item_edit_reaches_an_item_that_was_added_after_construction() {
+    // An item built by `AddItem` has to be indistinguishable from one built at
     // construction — including being reachable by the containment walk, which
     // means its prefix has to match what `list_node` would have produced.
     let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
@@ -425,7 +425,7 @@ fn a_row_edit_reaches_a_row_that_was_added_after_construction() {
     })
     .expect("shapes is a list");
     form.choose_variant("shapes.#0", Some("Circle"))
-        .expect("the new row is an enum, and Circle is one of its variants");
+        .expect("the new item is an enum, and Circle is one of its variants");
 
     expect_that!(
         paths_of(&form),
@@ -470,9 +470,9 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
 }
 
 #[gtest]
-fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
+fn an_add_item_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     // Regression: before `ListNode::edit` grew an "is it me?" branch, an edit
-    // addressed to the list itself fell through the row loop and came back as
+    // addressed to the list itself fell through the item loop and came back as
     // `no such path: answers` — a lie, since the list is precisely what owns it.
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
@@ -485,12 +485,12 @@ fn an_add_row_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     );
 }
 
-// ── Moving rows ──────────────────────────────────────────────────────────
+// ── Moving items ──────────────────────────────────────────────────────────
 //
-// A move reorders `rows` and touches nothing else: each row keeps its key, so
+// A move reorders `items` and touches nothing else: each item keeps its key, so
 // its values and errors go with it, and the list's own entry — the only place
-// order is written down — follows. Three rows, not two, wherever the result
-// would otherwise be the same for a SWAP: with two rows every move is one.
+// order is written down — follows. Three items, not two, wherever the result
+// would otherwise be the same for a SWAP: with two items every move is one.
 
 fn abc() -> Quiz {
     Quiz {
@@ -509,7 +509,7 @@ fn move_answer(form: &mut FormState<Quiz>, from: usize, to: usize) {
 }
 
 #[gtest]
-fn moving_the_first_row_to_the_end_shifts_the_others_up() {
+fn moving_the_first_item_to_the_end_shifts_the_others_up() {
     // The test that tells a move from a swap: a swap of 0 and 2 would give
     // `c,b,a` and leave `b` where it was.
     let mut form = form_for(&abc(), FormSpec::default());
@@ -532,7 +532,7 @@ fn moving_the_first_row_to_the_end_shifts_the_others_up() {
 }
 
 #[gtest]
-fn moving_the_last_row_to_the_front_shifts_the_others_down() {
+fn moving_the_last_item_to_the_front_shifts_the_others_down() {
     let mut form = form_for(&abc(), FormSpec::default());
     move_answer(&mut form, 2, 0);
 
@@ -544,8 +544,8 @@ fn moving_the_last_row_to_the_front_shifts_the_others_down() {
 }
 
 #[gtest]
-fn a_middle_row_moves_up_and_down_one_place() {
-    // What the ↑/↓ buttons will send: `to` is the row's position AFTER the
+fn a_middle_item_moves_up_and_down_one_place() {
+    // What the ↑/↓ buttons will send: `to` is the item's position AFTER the
     // move, so "down one" from 1 is `to: 2`, not `to: 3`.
     let mut up = form_for(&abc(), FormSpec::default());
     move_answer(&mut up, 1, 0);
@@ -557,7 +557,7 @@ fn a_middle_row_moves_up_and_down_one_place() {
 }
 
 #[gtest]
-fn moving_a_row_onto_itself_changes_nothing() {
+fn moving_an_item_onto_itself_changes_nothing() {
     let mut form = form_for(&abc(), FormSpec::default());
     move_answer(&mut form, 1, 1);
     expect_that!(form.collect_values().get("answers"), some(eq("#0,#1,#2")));
@@ -618,10 +618,10 @@ fn a_move_aimed_at_a_field_says_it_is_not_a_list() {
 }
 
 #[gtest]
-fn a_moved_row_takes_its_values_and_errors_with_it() {
-    // Struct rows, so "its values" is more than one leaf. The error is a
+fn a_moved_item_takes_its_values_and_errors_with_it() {
+    // Struct items, so "its values" is more than one leaf. The error is a
     // server's verdict on one cell; after the move it must still be on that
-    // cell (same key, same path), not on whatever row now sits at position 0.
+    // cell (same key, same path), not on whatever item now sits at position 0.
     let mut form = form_for(&venues(), FormSpec::default());
     form.push_field_error("places.#0.city", "No such city.")
         .expect("places.#0.city is a path of this form");
@@ -658,9 +658,9 @@ fn a_moved_row_takes_its_values_and_errors_with_it() {
 }
 
 #[gtest]
-fn a_server_rebuilds_the_rows_in_their_moved_order() {
+fn a_server_rebuilds_the_items_in_their_moved_order() {
     // The wire half: nothing about a move is new on the wire, because the list's
-    // own entry already carries row order. A server starts with no rows and
+    // own entry already carries item order. A server starts with no items and
     // builds them in the order the keys arrive.
     let mut form = form_for(&abc(), FormSpec::default());
     move_answer(&mut form, 0, 2);
@@ -716,9 +716,9 @@ fn QuizForm() -> Element {
 }
 
 #[gtest]
-fn each_row_renders_inside_its_own_wrapper() {
-    // The wrapper exists so a row has an element to carry dioxus's `key:` — and
-    // it is where a per-row remove widget will go. The key itself is NOT
+fn each_item_renders_inside_its_own_wrapper() {
+    // The wrapper exists so an item has an element to carry dioxus's `key:` — and
+    // it is where a per-item remove widget will go. The key itself is NOT
     // visible here: dioxus keys aren't DOM attributes, they only show up in
     // diffing behaviour, which needs a widget that can dispatch `AddItem`
     // before it can be driven. This guards the structure the key rides on.
@@ -728,21 +728,21 @@ fn each_row_renders_inside_its_own_wrapper() {
     expect_that!(html, contains_substring(r#"name="answers.#1""#));
 }
 
-// ── The row widgets ─────────────────────────────────────────────────────
+// ── The item widgets ─────────────────────────────────────────────────────
 //
 // These build the list up THROUGH THE UI rather than mounting a populated one,
 // because that is the only way to know which button is which: listener
 // registration order is the order dioxus creates dynamic nodes, not document
 // order, so "the first click listener" is not "the Add button." Built this way,
 // every widget is identified by the click that produced it, and where one click
-// produces several (a row's ↑, ↓ and Remove) by its name, with
+// produces several (an item's ↑, ↓ and Remove) by its name, with
 // `Harness::labelled`.
 //
-// None of these prove the row `key:` earns its keep — appending diffs correctly
+// None of these prove the item `key:` earns its keep — appending diffs correctly
 // by position too, so removing the key fails nothing here. The key's payoff is
 // mid-list insertion, which has no widget yet; the data half of that claim is
-// `inserting_at_the_front_does_not_move_the_rows_below_it`, and the DOM half
-// arrives with the insert-between-rows widget.
+// `inserting_at_the_front_does_not_move_the_items_below_it`, and the DOM half
+// arrives with the insert-between-items widget.
 
 #[component]
 fn BlankQuizForm() -> Element {
@@ -751,16 +751,16 @@ fn BlankQuizForm() -> Element {
 }
 
 #[gtest]
-fn clicking_add_on_an_empty_list_creates_a_row() {
+fn clicking_add_on_an_empty_list_creates_an_item() {
     // This also retires an open question rather than answering it: a blank form
-    // yields zero rows because a row count isn't in the shape, and that used to
+    // yields zero items because an item count isn't in the shape, and that used to
     // read as a gap. With an Add button it is simply the right answer.
     let mut app = Harness::mount(BlankQuizForm);
     let add = app.only_listener("click");
     expect_that!(
         app.html(),
         not(contains_substring("answers.#")),
-        "no rows yet"
+        "no items yet"
     );
 
     app.click(add);
@@ -769,7 +769,7 @@ fn clicking_add_on_an_empty_list_creates_a_row() {
 }
 
 #[gtest]
-fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
+fn removing_an_item_through_the_dom_leaves_its_neighbour_untouched() {
     // The end-to-end version of `removing_a_row_leaves_the_survivors_keys_
     // untouched`: same claim, but every step goes through a real event, so it
     // covers the buttons, the `Edit`s they build, `use_form`'s callback, and the
@@ -777,18 +777,18 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     let mut app = Harness::mount(BlankQuizForm);
     let add = app.only_listener("click");
 
-    // Row one. The input it reveals is the one that wasn't there before; its
+    // Item one. The input it reveals is the one that wasn't there before; its
     // Remove is one of three new buttons, so it is found by name.
     let inputs = app.listeners("input");
     app.click(add);
-    let remove_first = app.labelled("click", "Remove row 1");
+    let remove_first = app.labelled("click", "Remove item 1");
     app.fire(
         "input",
         new_since(&inputs, app.listeners("input"))[0],
         "alpha",
     );
 
-    // Row two.
+    // Item two.
     let clicks = app.listeners("click");
     let inputs = app.listeners("input");
     app.click(add);
@@ -801,22 +801,22 @@ fn removing_a_row_through_the_dom_leaves_its_neighbour_untouched() {
     expect_that!(
         app.listeners("click"),
         contains(eq(&remove_first)),
-        "appending must not tear down the row that was already there"
+        "appending must not tear down the item that was already there"
     );
     expect_that!(
         new_since(&clicks, app.listeners("click")).len(),
         eq(3),
-        "row two's ↑, ↓ and Remove, and nothing of row one's rebuilt"
+        "item two's ↑, ↓ and Remove, and nothing of item one's rebuilt"
     );
 
     app.click(remove_first);
 
     let html = app.html();
-    expect_that!(html, not(contains_substring("alpha")), "row one is gone");
+    expect_that!(html, not(contains_substring("alpha")), "item one is gone");
     expect_that!(
         html,
         contains_substring(r#"name="answers.#1" value="beta""#),
-        "row two keeps its key AND the text typed into it"
+        "item two keeps its key AND the text typed into it"
     );
 }
 
@@ -838,12 +838,12 @@ fn BlankQuizProbe() -> Element {
     }
 }
 
-/// The browser half of #13 for lists: rows added, typed into and removed
+/// The browser half of #13 for lists: items added, typed into and removed
 /// through real clicks reach the wire, and a server rebuilds exactly them.
-/// The rows exist only in the state, never in the store, so this is the path
+/// The items exist only in the state, never in the store, so this is the path
 /// that would send none if `to_wire` read structure from the store.
 #[gtest]
-fn rows_added_and_removed_in_the_browser_reach_the_server() {
+fn items_added_and_removed_in_the_browser_reach_the_server() {
     let mut app = Harness::mount(BlankQuizProbe);
     // `title` is required, so the server rejects until it has one.
     let title = app.only_listener("input");
@@ -852,7 +852,7 @@ fn rows_added_and_removed_in_the_browser_reach_the_server() {
 
     let inputs = app.listeners("input");
     app.click(add);
-    let remove_first = app.labelled("click", "Remove row 1");
+    let remove_first = app.labelled("click", "Remove item 1");
     app.fire(
         "input",
         new_since(&inputs, app.listeners("input"))[0],
@@ -882,15 +882,15 @@ fn rows_added_and_removed_in_the_browser_reach_the_server() {
             contains_substring(r#"<output id="rows">#1</output>"#),
             contains_substring(r#"<output id="accepted">beta</output>"#)
         ],
-        "the removed row is gone from the wire, and its survivor keeps its key"
+        "the removed item is gone from the wire, and its survivor keeps its key"
     );
 }
 
 // ── The list's own errors ────────────────────────────────────────────────
 //
 // A list's own error (a server's verdict at the list's path, a rejected
-// row-key entry, and one day a row count, #14) renders under its legend,
-// linked by `aria-describedby`. A bad CELL is its row's error, not the list's.
+// item-key entry, and one day an item count, #14) renders under its legend,
+// linked by `aria-describedby`. A bad CELL is its item's error, not the list's.
 
 fn errors_at(path: &str, message: &str) -> FormErrors {
     FormErrors {
@@ -928,12 +928,12 @@ fn a_lists_own_error_renders_under_its_legend_and_describes_it() {
         html,
         contains_substring(r#"<ul class="fx-field-errors" id="FORMID-answers-errors">"#)
     );
-    // In reading order: the list's name, then its message, then its rows.
+    // In reading order: the list's name, then its message, then its items.
     let legend = html.find("Answers</legend>").expect("the legend renders");
     let message = html
         .find("Give at least three answers.")
         .expect("the message renders");
-    let first_row = html.find(r#"name="answers.#0""#).expect("the rows render");
+    let first_row = html.find(r#"name="answers.#0""#).expect("the items render");
     expect_that!(legend < message && message < first_row, eq(true));
 }
 
@@ -969,61 +969,61 @@ fn a_list_renders_its_own_label() {
 }
 
 #[gtest]
-fn the_row_widgets_never_submit_the_form() {
+fn the_item_widgets_never_submit_the_form() {
     // Inside a `<form>` a bare `<button>` is `type="submit"`. Every widget
     // would then submit the form instead of editing the list — and since the
     // demo page's Check button is a real submit, that failure would look like
-    // "adding a row validates the form."
+    // "adding an item validates the form."
     let html = super::render_to_html(QuizForm);
     expect_that!(
         html.matches(r#"<button type="button""#).count(),
         eq(7),
-        "two rows of ↑, ↓ and Remove, then one Add"
+        "two items of ↑, ↓ and Remove, then one Add"
     );
 }
 
 // ── Every list is ordered ───────────────────────────────────────────────
 //
 // A `Vec` is a list, and a list's order means something, so every list
-// renders its rows as an `<ol>` of `<li>`s, each with ↑/↓
-// (`SETS_PLAN.md` A). A screen reader then announces each row's position.
+// renders its items as an `<ol>` of `<li>`s, each with ↑/↓
+// (`SETS_PLAN.md` A). A screen reader then announces each item's position.
 
-const ROWS_OL: &str = r#"<ol class="fx-list-rows">"#;
-const ROW_LI: &str = r#"<li class="fx-list-row">"#;
+const ROWS_OL: &str = r#"<ol class="fx-list-items">"#;
+const ROW_LI: &str = r#"<li class="fx-list-item">"#;
 
 #[gtest]
-fn a_list_renders_its_rows_as_an_ol() {
+fn a_list_renders_its_items_as_an_ol() {
     let html = super::render_to_html(QuizForm);
     expect_that!(html.matches(ROWS_OL).count(), eq(1));
     expect_that!(html.matches(ROW_LI).count(), eq(2));
     expect_that!(
         html,
-        not(contains_substring(r#"<div class="fx-list-row">"#))
+        not(contains_substring(r#"<div class="fx-list-item">"#))
     );
 }
 
 /// An empty `<ol>` is valid HTML, but some screen readers announce it as
-/// "list, 0 items", so a list with no rows has no `<ol>` at all. Its Add is
-/// still there: it is how the first row arrives.
+/// "list, 0 items", so a list with no items has no `<ol>` at all. Its Add is
+/// still there: it is how the first item arrives.
 #[gtest]
 fn an_empty_list_renders_no_ol_but_still_its_add() {
     let html = super::render_to_html(BlankQuizForm);
     expect_that!(html, not(contains_substring("<ol")));
-    expect_that!(html, contains_substring("fx-button-add-row"));
+    expect_that!(html, contains_substring("fx-button-add-item"));
 }
 
 /// An `<ol>` may hold only `<li>`s, so Add stays outside it, after it (H in
-/// `ORDERED_LISTS_PLAN.md`); each row's Remove stays inside its `<li>`.
+/// `ORDERED_LISTS_PLAN.md`); each item's Remove stays inside its `<li>`.
 #[gtest]
 fn a_lists_add_button_follows_the_ol() {
     let html = super::render_to_html(QuizForm);
-    let ol_ends = html.find("</ol>").expect("the rows are an <ol>");
+    let ol_ends = html.find("</ol>").expect("the items are an <ol>");
     let add = html
-        .find("fx-button-add-row")
+        .find("fx-button-add-item")
         .expect("the list has an Add button");
     expect_that!(add, gt(ol_ends));
     expect_that!(
-        html[..ol_ends].matches("fx-button-remove-row").count(),
+        html[..ol_ends].matches("fx-button-remove-item").count(),
         eq(2),
         "both Removes are inside the <ol>"
     );
@@ -1056,11 +1056,11 @@ fn a_list_of_lists_is_an_ol_of_ols() {
     expect_that!(
         html.matches(ROW_LI).count(),
         eq(5),
-        "two outer rows, then a, b and c"
+        "two outer items, then a, b and c"
     );
 }
 
-/// apcsp's assignment shape: a list inside an enum variant inside a list's row.
+/// apcsp's assignment shape: a list inside an enum variant inside a list's item.
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]
 enum Group {
@@ -1094,7 +1094,7 @@ fn ListInAVariantForm() -> Element {
 }
 
 #[gtest]
-fn a_list_inside_an_enum_row_is_an_ol_too() {
+fn a_list_inside_an_enum_item_is_an_ol_too() {
     let html = super::render_to_html(ListInAVariantForm);
     expect_that!(
         html.matches(ROWS_OL).count(),
@@ -1134,8 +1134,8 @@ fn a_list_behind_an_option_is_an_ol_too() {
 // ── The move buttons ─────────────────────────────────────────────────────
 //
 // What each button SENDS is a click, so it is the e2e suite's
-// (`e2e/tests/reorder.rs`); `ListNode::move_row` itself is "Moving rows" above.
-// These are the markup: which rows get buttons, which are disabled, and what
+// (`e2e/tests/reorder.rs`); `ListNode::move_row` itself is "Moving items" above.
+// These are the markup: which items get buttons, which are disabled, and what
 // each one is called.
 
 /// The opening `<button …>` tag of the button named `label`.
@@ -1158,24 +1158,24 @@ fn every_row_gets_move_buttons() {
     );
 }
 
-/// Disabled at the ends rather than left out, so every row's buttons line up.
+/// Disabled at the ends rather than left out, so every item's buttons line up.
 #[gtest]
-fn the_first_row_cannot_move_up_nor_the_last_down() {
+fn the_first_item_cannot_move_up_nor_the_last_down() {
     let html = super::render_to_html(QuizForm);
     expect_that!(
-        button_tag(&html, "Move row 1 up"),
+        button_tag(&html, "Move item 1 up"),
         contains_substring("disabled=true")
     );
     expect_that!(
-        button_tag(&html, "Move row 1 down"),
+        button_tag(&html, "Move item 1 down"),
         not(contains_substring("disabled"))
     );
     expect_that!(
-        button_tag(&html, "Move row 2 up"),
+        button_tag(&html, "Move item 2 up"),
         not(contains_substring("disabled"))
     );
     expect_that!(
-        button_tag(&html, "Move row 2 down"),
+        button_tag(&html, "Move item 2 down"),
         contains_substring("disabled=true")
     );
 }
@@ -1197,8 +1197,8 @@ fn ThreeAnswerQuiz() -> Element {
 }
 
 /// However long the list, exactly two buttons are disabled: ↑ on the first
-/// row and ↓ on the last. A one-row list is both ends at once, and a middle
-/// row has neither. Remove and Add are never disabled.
+/// item and ↓ on the last. A one-item list is both ends at once, and a middle
+/// item has neither. Remove and Add are never disabled.
 #[gtest]
 fn only_the_ends_of_a_list_are_disabled() {
     let lists: [(fn() -> Element, usize); 3] =
@@ -1208,12 +1208,12 @@ fn only_the_ends_of_a_list_are_disabled() {
         expect_that!(html.matches("disabled=true").count(), eq(2), "{rows} rows");
         for row in 1..=rows {
             expect_that!(
-                button_tag(&html, &format!("Move row {row} up")).contains("disabled=true"),
+                button_tag(&html, &format!("Move item {row} up")).contains("disabled=true"),
                 eq(row == 1),
                 "{rows} rows: row {row}'s ↑"
             );
             expect_that!(
-                button_tag(&html, &format!("Move row {row} down")).contains("disabled=true"),
+                button_tag(&html, &format!("Move item {row} down")).contains("disabled=true"),
                 eq(row == rows),
                 "{rows} rows: row {row}'s ↓"
             );
@@ -1222,17 +1222,17 @@ fn only_the_ends_of_a_list_are_disabled() {
 }
 
 /// A browser never clicks a disabled button, but nothing else is stopped: a
-/// script, an assistive tool, this harness. ↑ on the first row sends no edit
+/// script, an assistive tool, this harness. ↑ on the first item sends no edit
 /// at all, and ↓ on the last sends one the list refuses, which `use_form`
-/// logs. Either way the row stays put, and nothing panics.
+/// logs. Either way the item stays put, and nothing panics.
 #[gtest]
 fn clicking_a_disabled_move_button_changes_nothing() {
     let mut app = Harness::mount(OneAnswerQuiz);
     let before = app.html();
-    app.click(app.labelled("click", "Move row 1 up"));
-    expect_that!(app.html(), eq(&before), "↑ on the first row");
-    app.click(app.labelled("click", "Move row 1 down"));
-    expect_that!(app.html(), eq(&before), "↓ on the last row");
+    app.click(app.labelled("click", "Move item 1 up"));
+    expect_that!(app.html(), eq(&before), "↑ on the first item");
+    app.click(app.labelled("click", "Move item 1 down"));
+    expect_that!(app.html(), eq(&before), "↓ on the last item");
 }
 
 /// Icon-only, so the `aria-label` is the whole of each button's name.
@@ -1240,10 +1240,10 @@ fn clicking_a_disabled_move_button_changes_nothing() {
 fn each_move_button_is_named_for_its_row_and_direction() {
     let html = super::render_to_html(QuizForm);
     for label in [
-        "Move row 1 up",
-        "Move row 1 down",
-        "Move row 2 up",
-        "Move row 2 down",
+        "Move item 1 up",
+        "Move item 1 down",
+        "Move item 2 up",
+        "Move item 2 down",
     ] {
         expect_that!(
             button_tag(&html, label),
@@ -1253,36 +1253,36 @@ fn each_move_button_is_named_for_its_row_and_direction() {
     }
 }
 
-/// Move buttons, then the row, then Remove: D in `ORDERED_LISTS_PLAN.md`, so
+/// Move buttons, then the item, then Remove: D in `ORDERED_LISTS_PLAN.md`, so
 /// Remove is never next to a move.
 #[gtest]
-fn a_row_is_moves_then_the_row_then_remove() {
+fn an_item_is_moves_then_the_item_then_remove() {
     let html = super::render_to_html(QuizForm);
     let first_row = &html[html.find(ROW_LI).unwrap()..html.find("</li>").unwrap()];
     let moves = first_row.find("fx-move-buttons").unwrap();
     let input = first_row.find(r#"name="answers.#0""#).unwrap();
-    let remove = first_row.find("fx-button-remove-row").unwrap();
+    let remove = first_row.find("fx-button-remove-item").unwrap();
     expect_that!(moves, lt(input));
     expect_that!(input, lt(remove));
 }
 
-/// Icon plus the word, unlike the per-row buttons: one per list, so the text
+/// Icon plus the word, unlike the per-item buttons: one per list, so the text
 /// costs nothing. The icon is hidden, so the word is the name.
 #[gtest]
 fn add_shows_its_word_beside_its_icon() {
     let html = super::render_to_html(QuizForm);
-    let add = &html[html.find("fx-button-add-row").unwrap()..];
+    let add = &html[html.find("fx-button-add-item").unwrap()..];
     let add = &add[..add.find("</button>").unwrap()];
     expect_that!(add, contains_substring(r#"aria-hidden="true""#));
     expect_that!(add, ends_with("</svg>Add"));
 }
 
-// ── Rows that arrive filled in ───────────────────────────────────────────
+// ── Items that arrive filled in ───────────────────────────────────────────
 
 /// Two separately made from equal values are equal, which is what lets a test
 /// build the `Edit` it expects: comparing the `Rc`s instead would never match.
 #[gtest]
-fn row_values_compare_by_value() {
+fn item_values_compare_by_value() {
     use formoxus::nodes::ItemValue;
     expect_that!(
         ItemValue::new("q1".to_string()),
@@ -1297,13 +1297,13 @@ fn row_values_compare_by_value() {
 /// Same `Debug` text, different types: still unequal, because the shape is
 /// compared first.
 #[gtest]
-fn row_values_of_different_types_are_unequal() {
+fn item_values_of_different_types_are_unequal() {
     use formoxus::nodes::ItemValue;
     expect_that!(ItemValue::new(3_u8), not(eq(&ItemValue::new(3_u16))));
 }
 
 #[gtest]
-fn a_row_values_debug_shows_the_value() {
+fn an_item_values_debug_shows_the_value() {
     use formoxus::nodes::ItemValue;
     expect_that!(
         format!(
@@ -1320,11 +1320,11 @@ fn a_row_values_debug_shows_the_value() {
 
 // ── What `edit` returns ──────────────────────────────────────────────────
 //
-// `FormState::edit` hands back the full path of a row it created, which is
-// how `use_form` finds a filled row to copy into the store (and, later, a blank
-// one to focus). Every container passes it up from where the row was made.
+// `FormState::edit` hands back the full path of an item it created, which is
+// how `use_form` finds a filled item to copy into the store (and, later, a blank
+// one to focus). Every container passes it up from where the item was made.
 
-fn add_row(path: &str, value: Option<formoxus::nodes::ItemValue>) -> Edit {
+fn add_item(path: &str, value: Option<formoxus::nodes::ItemValue>) -> Edit {
     Edit::AddItem {
         path: path.to_string(),
         before: None,
@@ -1333,19 +1333,19 @@ fn add_row(path: &str, value: Option<formoxus::nodes::ItemValue>) -> Edit {
 }
 
 #[gtest]
-fn adding_a_blank_row_returns_its_path() {
+fn adding_a_blank_item_returns_its_path() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&add_row("answers", None)),
+        form.edit(&add_item("answers", None)),
         ok(some(eq("answers.#2")))
     );
 }
 
 #[gtest]
-fn adding_a_filled_row_returns_its_path() {
+fn adding_a_filled_item_returns_its_path() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
-        form.edit(&add_row(
+        form.edit(&add_item(
             "answers",
             Some(formoxus::nodes::ItemValue::new("gamma".to_string()))
         )),
@@ -1353,10 +1353,10 @@ fn adding_a_filled_row_returns_its_path() {
     );
 }
 
-/// The path names the row's KEY, not where it landed: inserted at the top,
-/// it is still the third row made.
+/// The path names the item's KEY, not where it landed: inserted at the top,
+/// it is still the third item made.
 #[gtest]
-fn a_row_inserted_mid_list_returns_its_key_not_its_position() {
+fn an_item_inserted_mid_list_returns_its_key_not_its_position() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
@@ -1368,19 +1368,19 @@ fn a_row_inserted_mid_list_returns_its_key_not_its_position() {
     );
 }
 
-/// Up through the outer list's row.
+/// Up through the outer list's item.
 #[gtest]
-fn a_row_added_to_a_nested_list_returns_its_full_path() {
+fn an_item_added_to_a_nested_list_returns_its_full_path() {
     let mut form = form_for(&grid(), FormSpec::default());
     expect_that!(
-        form.edit(&add_row("rows.#1", None)),
+        form.edit(&add_item("rows.#1", None)),
         ok(some(eq("rows.#1.#1")))
     );
 }
 
-/// Up through a variant (`VariantNode::forward_to_child`) and the list's row.
+/// Up through a variant (`VariantNode::forward_to_child`) and the list's item.
 #[gtest]
-fn a_row_added_to_a_list_inside_a_variant_returns_its_full_path() {
+fn an_item_added_to_a_list_inside_a_variant_returns_its_full_path() {
     let mut form = form_for(
         &Assignment {
             groups: vec![Group::All {
@@ -1391,14 +1391,14 @@ fn a_row_added_to_a_list_inside_a_variant_returns_its_full_path() {
         FormSpec::default(),
     );
     expect_that!(
-        form.edit(&add_row("groups.#0.$All.questions", None)),
+        form.edit(&add_item("groups.#0.$All.questions", None)),
         ok(some(eq("groups.#0.$All.questions.#1")))
     );
 }
 
 /// Up through an `OptionNode`, which adds no segment of its own.
 #[gtest]
-fn a_row_added_to_an_optional_list_returns_its_path() {
+fn an_item_added_to_an_optional_list_returns_its_path() {
     let mut form = form_for(
         &MaybeQuiz {
             answers: Some(vec!["alpha".to_string()]),
@@ -1406,12 +1406,12 @@ fn a_row_added_to_an_optional_list_returns_its_path() {
         FormSpec::default(),
     );
     expect_that!(
-        form.edit(&add_row("answers", None)),
+        form.edit(&add_item("answers", None)),
         ok(some(eq("answers.#1")))
     );
 }
 
-/// Only `AddItem` creates a row. Choosing a variant creates fields, which a
+/// Only `AddItem` creates an item. Choosing a variant creates fields, which a
 /// caller finds by the path it already chose.
 #[gtest]
 fn no_other_edit_returns_a_path() {
@@ -1443,22 +1443,22 @@ fn no_other_edit_returns_a_path() {
     );
 }
 
-/// A filled row lands where `before` says, and the rows around it keep their
+/// A filled item lands where `before` says, and the items around it keep their
 /// keys and values. Read from the tree (`FormState::validate`), so this is
 /// `add_item` alone; the store's copy is `use_form`'s, tested through `Harness`.
 #[gtest]
-fn a_filled_row_inserted_mid_list_lands_there_with_its_value() {
+fn a_filled_item_inserted_mid_list_lands_there_with_its_value() {
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
         path: "answers".to_string(),
         before: Some(1),
         value: Some(formoxus::nodes::ItemValue::new("between".to_string())),
     })
-    .expect("inserting before row 1 should succeed");
+    .expect("inserting before item 1 should succeed");
     expect_that!(
         form.collect_values().get("answers").map(String::as_str),
         some(eq("#0,#2,#1")),
-        "the new row is #2, and it sits second"
+        "the new item is #2, and it sits second"
     );
     expect_that!(
         form.validate(),
@@ -1476,7 +1476,7 @@ fn a_filled_row_inserted_mid_list_lands_there_with_its_value() {
 /// Nothing checks the type at compile time once an adder is a plain fn, so
 /// `add_item` does: the message names both types, and the list is untouched.
 #[gtest]
-fn a_row_value_of_the_wrong_type_is_refused() {
+fn an_item_value_of_the_wrong_type_is_refused() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
@@ -1494,16 +1494,16 @@ fn a_row_value_of_the_wrong_type_is_refused() {
     );
     // And the key it would have taken is still free.
     expect_that!(
-        form.edit(&add_row("answers", None)),
+        form.edit(&add_item("answers", None)),
         ok(some(eq("answers.#2")))
     );
 }
 
-// ── A filled row through the live form ───────────────────────────────────
+// ── A filled item through the live form ───────────────────────────────────
 //
 // `Form::edit` goes through `use_form`'s own `apply_edit`, the path a button
-// takes, so these see what `FormState::edit` alone cannot: the new row's
-// values copied into the STORE. Each probe adds its row once, then renders the
+// takes, so these see what `FormState::edit` alone cannot: the new item's
+// values copied into the STORE. Each probe adds its item once, then renders the
 // form beside what `Submission::accept` builds from `to_wire()`. `to_wire`
 // reads the store, so a value reaching `#accepted` is the proof the copy ran.
 
@@ -1536,8 +1536,8 @@ fn add_filled(
     path: &str,
     value: formoxus::nodes::ItemValue,
 ) {
-    form.edit(&add_row(path, Some(value)))
-        .expect("adding a filled row should succeed");
+    form.edit(&add_item(path, Some(value)))
+        .expect("adding a filled item should succeed");
 }
 
 #[component]
@@ -1554,7 +1554,7 @@ fn FilledLeafRowProbe() -> Element {
 }
 
 #[gtest]
-fn a_filled_leaf_row_renders_and_submits_its_value() {
+fn a_filled_leaf_item_renders_and_submits_its_value() {
     let html = super::render_to_html(FilledLeafRowProbe);
     expect_that!(
         html,
@@ -1587,10 +1587,10 @@ fn FilledStructRowProbe() -> Element {
     with_accepted(form, FormSpec::default())
 }
 
-/// Every leaf of a struct row, not just the first: the copy takes all of
-/// them under the row's path.
+/// Every leaf of a struct item, not just the first: the copy takes all of
+/// them under the item's path.
 #[gtest]
-fn a_filled_struct_row_renders_and_submits_every_field() {
+fn a_filled_struct_item_renders_and_submits_every_field() {
     let html = super::render_to_html(FilledStructRowProbe);
     let n = venues().places.len();
     for (field, value) in [("street", "2 Rue"), ("city", "Lyon"), ("zip", "69001")] {
@@ -1627,10 +1627,10 @@ fn FilledEnumRowProbe() -> Element {
     with_accepted(form, FormSpec::default())
 }
 
-/// The value picks the row's variant, as `form_for` would: built in
-/// `Populated` mode, not left unchosen as a blank row is.
+/// The value picks the item's variant, as `form_for` would: built in
+/// `Populated` mode, not left unchosen as a blank item is.
 #[gtest]
-fn a_filled_enum_row_takes_the_values_variant() {
+fn a_filled_enum_item_takes_the_values_variant() {
     let html = super::render_to_html(FilledEnumRowProbe);
     expect_that!(
         html,
@@ -1683,10 +1683,10 @@ fn FilledOptionRowsProbe() -> Element {
     with_accepted(form, FormSpec::default())
 }
 
-/// A `Vec<Option<T>>`'s row type is `Option<T>`, so that is what its value
-/// is; a `None` row is an answered absence, and stays one.
+/// A `Vec<Option<T>>`'s item type is `Option<T>`, so that is what its value
+/// is; a `None` item is an answered absence, and stays one.
 #[gtest]
-fn filled_option_rows_keep_some_and_none() {
+fn filled_option_items_keep_some_and_none() {
     let html = super::render_to_html(FilledOptionRowsProbe);
     expect_that!(
         accepted(&html),
@@ -1705,8 +1705,8 @@ fn filled_option_rows_keep_some_and_none() {
 // `AddItemProps`. With none, `AddItemButton` renders, so every other list test
 // in this file is also the no-adder case, unchanged.
 
-/// An adder that says what it was handed, and adds a filled `"gamma"` row
-/// when clicked. `first` is row `#0`'s value as the store has it, and
+/// An adder that says what it was handed, and adds a filled `"gamma"` item
+/// when clicked. `first` is item `#0`'s value as the store has it, and
 /// `stored` how many store entries it finds under the list, read whole, as an
 /// adder leaving out the choices already in its list would.
 #[component]
@@ -1716,7 +1716,7 @@ fn ProbeAdder(props: AddItemProps) -> Element {
         id,
         values,
         on_edit,
-        rows,
+        item_count,
         ..
     } = props;
     let first = get_current(&format!("{path}.#0"), values);
@@ -1726,13 +1726,13 @@ fn ProbeAdder(props: AddItemProps) -> Element {
         .keys()
         .filter(|k| k.starts_with(&under))
         .count();
-    let says = format!("{path} has {rows}, first {first}, stored {stored}");
+    let says = format!("{path} has {item_count}, first {first}, stored {stored}");
     rsx! {
         button {
             r#type: "button",
             id: "{id}-add",
             onclick: move |_| {
-                on_edit.call(add_row(&path, Some(ItemValue::new("gamma".to_string()))));
+                on_edit.call(add_item(&path, Some(ItemValue::new("gamma".to_string()))));
             },
             "{says}"
         }
@@ -1761,7 +1761,7 @@ fn ProbeAdderForm() -> Element {
 #[gtest]
 fn a_custom_adder_renders_in_place_of_add() {
     let html = super::render_to_html(ProbeAdderForm);
-    expect_that!(html, not(contains_substring("fx-button-add-row")));
+    expect_that!(html, not(contains_substring("fx-button-add-item")));
     expect_that!(html, contains_substring("answers has 2, first alpha"));
 }
 
@@ -1783,11 +1783,11 @@ fn BlankProbeAdderForm() -> Element {
     with_accepted(form, FormSpec::default())
 }
 
-/// The adder's own `AddItem` takes the same road as Add's: the row arrives
+/// The adder's own `AddItem` takes the same road as Add's: the item arrives
 /// filled, its value reaches the store and so `to_wire`, and the adder,
 /// rendered again, sees the new count and the new value.
 #[gtest]
-fn a_custom_adders_filled_row_reaches_the_server() {
+fn a_custom_adders_filled_item_reaches_the_server() {
     let mut app = Harness::mount(BlankProbeAdderForm);
     // `title` is required, so the server rejects until it has one.
     let title = app.only_listener("input");
@@ -1826,20 +1826,20 @@ fn InnerListsAdderForm() -> Element {
 /// `rows[]` is every inner list and not `rows`
 /// itself, which keeps Add. Each inner list's adder is handed its own path.
 #[gtest]
-fn every_rows_adder_reaches_each_inner_list_and_not_the_outer_one() {
+fn every_items_adder_reaches_each_inner_list_and_not_the_outer_one() {
     let html = super::render_to_html(InnerListsAdderForm);
     expect_that!(html, contains_substring("rows.#0 has 2, first a"));
     expect_that!(html, contains_substring("rows.#1 has 1, first c"));
-    expect_that!(html.matches("fx-button-add-row").count(), eq(1));
+    expect_that!(html.matches("fx-button-add-item").count(), eq(1));
 }
 
-// ── A removed row leaves the store ───────────────────────────────────────
+// ── A removed item leaves the store ───────────────────────────────────────
 //
-// `RemoveItem` drops every store entry under the row, so nothing reading the
+// `RemoveItem` drops every store entry under the item, so nothing reading the
 // store whole sees what the user deleted. Each probe edits through
 // `Form::edit`, the road a button takes, then lists the store's keys.
 
-fn remove_row(path: &str, index: usize) -> Edit {
+fn remove_item(path: &str, index: usize) -> Edit {
     Edit::RemoveItem {
         path: path.to_string(),
         index,
@@ -1849,12 +1849,15 @@ fn remove_row(path: &str, index: usize) -> Edit {
 #[component]
 fn RemovedLeafRowProbe() -> Element {
     let form = use_form(|| form_for(&quiz(), FormSpec::default()));
-    use_hook(|| form.edit(&remove_row("answers", 0)).expect("row 0 exists"));
+    use_hook(|| {
+        form.edit(&remove_item("answers", 0))
+            .expect("item 0 exists")
+    });
     with_store_keys(form)
 }
 
 #[gtest]
-fn a_removed_rows_value_leaves_the_store() {
+fn a_removed_items_value_leaves_the_store() {
     let html = super::render_to_html(RemovedLeafRowProbe);
     expect_that!(store_keys(&html), eq("answers.#1 title"));
 }
@@ -1862,14 +1865,14 @@ fn a_removed_rows_value_leaves_the_store() {
 #[component]
 fn RemovedStructRowProbe() -> Element {
     let form = use_form(|| form_for(&venues(), FormSpec::default()));
-    use_hook(|| form.edit(&remove_row("places", 0)).expect("row 0 exists"));
+    use_hook(|| form.edit(&remove_item("places", 0)).expect("item 0 exists"));
     with_store_keys(form)
 }
 
-/// Every leaf under the row, and none of its neighbour's: `places.#1` is not
+/// Every leaf under the item, and none of its neighbour's: `places.#1` is not
 /// inside `places.#0`, nor would `places.#10` be.
 #[gtest]
-fn a_removed_struct_rows_fields_all_leave_the_store() {
+fn a_removed_struct_items_fields_all_leave_the_store() {
     let html = super::render_to_html(RemovedStructRowProbe);
     expect_that!(
         store_keys(&html),
@@ -1894,7 +1897,7 @@ fn RemovedEnumRowProbe() -> Element {
             .values()
             .peek()
             .contains_key("shapes.#0.$Circle.radius");
-        form.edit(&remove_row("shapes", 0)).expect("row 0 exists");
+        form.edit(&remove_item("shapes", 0)).expect("item 0 exists");
         left_behind
     });
     rsx! {
@@ -1903,11 +1906,11 @@ fn RemovedEnumRowProbe() -> Element {
     }
 }
 
-/// Switching a row's variant keeps the old variant's values in the store, so
-/// switching back restores them. Removing the row must take those too, which
-/// is why the store is cleared by the row's path and not by its current leaves.
+/// Switching an item's variant keeps the old variant's values in the store, so
+/// switching back restores them. Removing the item must take those too, which
+/// is why the store is cleared by the item's path and not by its current leaves.
 #[gtest]
-fn a_removed_enum_rows_unchosen_values_leave_the_store_too() {
+fn a_removed_enum_items_unchosen_values_leave_the_store_too() {
     let html = super::render_to_html(RemovedEnumRowProbe);
     expect_that!(
         html,
@@ -1918,9 +1921,9 @@ fn a_removed_enum_rows_unchosen_values_leave_the_store_too() {
 }
 
 /// The case that found this: an adder reading the store whole sees a removed
-/// row go, and renders again when it does.
+/// item go, and renders again when it does.
 #[gtest]
-fn an_adder_reading_the_store_sees_a_removed_row_go() {
+fn an_adder_reading_the_store_sees_a_removed_item_go() {
     let mut app = Harness::mount(BlankProbeAdderForm);
     app.click(app.only_listener("click"));
     expect_that!(
@@ -1928,7 +1931,7 @@ fn an_adder_reading_the_store_sees_a_removed_row_go() {
         contains_substring("answers has 1, first gamma, stored 1")
     );
 
-    app.click(app.labelled("click", "Remove row 1"));
+    app.click(app.labelled("click", "Remove item 1"));
 
     expect_that!(
         app.html(),

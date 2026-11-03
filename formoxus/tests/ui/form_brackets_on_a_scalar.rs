@@ -1,4 +1,4 @@
-//! `[]` means "every row of this list", so it only makes sense on something
+//! `[]` means "every item of this list", so it only makes sense on something
 //! iterable. On a `String` the witness's `.iter()` is what catches it.
 use facet::Facet;
 use formoxus::form;

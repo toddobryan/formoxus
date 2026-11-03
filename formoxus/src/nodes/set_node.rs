@@ -817,7 +817,7 @@ impl Node for SetNode {
         // `validate()` doesn't keep.
         let id = ctx.id(&self.name);
         // The set's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
-        // `nested.prefix`'s children: the widgets act on the list, not on a row.
+        // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
         // `here`, not `within`: a bad cell is its item's error, not the set's.
         let invalid = self.has_errors_here();
@@ -863,7 +863,7 @@ impl Node for SetNode {
                         // Keyed by the items's own name, which is stable across
                         // inserts and removals. Without a key dioxus diffs
                         // the list by position, so inserting at the top would
-                        // re-render every row below it; with one it moves the nodes
+                        // re-render every item below it; with one it moves the nodes
                         // it already has. The wrapper exists because a key has to sit
                         // on an element, and it is what pairs a item with its widget.
                         for (index, item) in self.items.iter().enumerate() {
@@ -880,7 +880,7 @@ impl Node for SetNode {
                             values: ctx.values,
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
-                            rows: self.items.len(),
+                            item_count: self.items.len(),
                             draft: Some(draft),
                             editing: self.editing.as_ref().and_then(|name| {
                                 self.items

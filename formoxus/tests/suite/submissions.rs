@@ -498,11 +498,11 @@ fn an_enum_inside_a_chosen_variant_survives_the_wire() {
     expect_that!(across_the_wire(&hatched), ok(eq(&hatched)));
 }
 
-/// Each row carries its own choice. NOTE: this also needs `accept` to rebuild
-/// the rows, which it does not do today for ANY list; see
+/// Each item carries its own choice. NOTE: this also needs `accept` to rebuild
+/// the items, which it does not do today for ANY list; see
 /// `a_list_survives_the_wire` below.
 #[gtest]
-fn each_rows_choice_survives_the_wire() {
+fn each_items_choice_survives_the_wire() {
     let gallery = Gallery {
         shapes: vec![
             Shape::Circle { radius: 1.0 },
@@ -518,13 +518,13 @@ fn each_rows_choice_survives_the_wire() {
     expect_that!(across_the_wire(&gallery), ok(eq(&gallery)));
 }
 
-// ── Lists: the rows have to cross the wire too ───────────────────────────
+// ── Lists: the items have to cross the wire too ───────────────────────────
 //
 // Found while writing the enum tests above, and worse than #13 because it is
-// SILENT: `empty_form` builds a list with no rows, and `ListNode::
-// distribute_values` only fills rows that exist, so every row on the wire is
+// SILENT: `empty_form` builds a list with no items, and `ListNode::
+// distribute_values` only fills items that exist, so every item on the wire is
 // dropped and `accept` returns `Ok` with an empty `Vec`. The design notes
-// predicted "create mode yields zero rows" before `Submission` existed; nothing
+// predicted "create mode yields zero items" before `Submission` existed; nothing
 // connected it to the server rebuilding from `empty_form`.
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -542,10 +542,10 @@ fn a_list_survives_the_wire() {
     expect_that!(across_the_wire(&tagged), ok(eq(&tagged)));
 }
 
-/// Rows arrive in the order the list's entry names them, which is not key
-/// order: a row inserted at the front has the newest key.
+/// Items arrive in the order the list's entry names them, which is not key
+/// order: an item inserted at the front has the newest key.
 #[gtest]
-fn rows_are_rebuilt_in_the_order_the_entry_names_them() {
+fn items_are_rebuilt_in_the_order_the_entry_names_them() {
     let accepted = Submission::accept(
         FormSpec::<Tagged>::default(),
         &wire(&[
@@ -575,11 +575,11 @@ struct Salutations {
     titles: Vec<Option<Title>>,
 }
 
-/// A row with NO leaves at all, the case that inferring rows from leaf paths
+/// An item with NO leaves at all, the case that inferring items from leaf paths
 /// could never recover: an empty inner list contributes only its own entry,
-/// `rows.#0` = `""`.
+/// `items.#0` = `""`.
 #[gtest]
-fn a_row_with_no_leaves_survives_the_wire() {
+fn an_item_with_no_leaves_survives_the_wire() {
     let grid = Grid {
         rows: vec![Vec::new(), vec!["a".to_string()]],
     };
@@ -592,20 +592,20 @@ fn a_row_with_no_leaves_survives_the_wire() {
     expect_that!(across_the_wire(&grid), ok(eq(&grid)));
 }
 
-/// A `None` row is an unchosen optional enum: its only entry is `""`, and the
-/// row has to come back as `None`, neither dropped nor an error.
+/// A `None` item is an unchosen optional enum: its only entry is `""`, and the
+/// item has to come back as `None`, neither dropped nor an error.
 #[gtest]
-fn a_none_row_survives_the_wire() {
+fn a_none_item_survives_the_wire() {
     let salutations = Salutations {
         titles: vec![None, Some(Title::Dr)],
     };
     expect_that!(across_the_wire(&salutations), ok(eq(&salutations)));
 }
 
-/// A row the client inserted at the FRONT has the newest key, so only the
+/// An item the client inserted at the FRONT has the newest key, so only the
 /// list's own entry can tell the server it comes first.
 #[gtest]
-fn a_row_inserted_at_the_front_arrives_at_the_front() {
+fn an_item_inserted_at_the_front_arrives_at_the_front() {
     let mut form = form_for(
         &Tagged {
             name: "post".to_string(),
@@ -637,15 +637,15 @@ fn a_row_inserted_at_the_front_arrives_at_the_front() {
 }
 
 /// CHARACTERIZATION, not an endorsement. A payload that leaves out a list's
-/// own entry gets an EMPTY list, silently, with its rows' leaves ignored:
-/// absent means "leave the rows alone", and a server starts with none. A
+/// own entry gets an EMPTY list, silently, with its items' leaves ignored:
+/// absent means "leave the items alone", and a server starts with none. A
 /// required enum would at least error. `Form::to_wire` and
 /// `WireForm::from_model` always send the entry, so only a hand-built client
 /// gets here. Do NOT build anything that submits without structure (a native
 /// `<form>` post straight to `Submission::accept`, say) on this behaviour; if
 /// that is ever wanted, a missing entry has to become an error first.
 #[gtest]
-fn a_missing_row_list_is_an_empty_list() {
+fn a_missing_item_list_is_an_empty_list() {
     let accepted = Submission::accept(
         FormSpec::<Tagged>::default(),
         &wire(&[("name", "post"), ("tags.#0", "rust")]),
@@ -663,12 +663,12 @@ fn a_missing_row_list_is_an_empty_list() {
 /// No client writes this, so it is forged or broken, and either way it
 /// arrives from outside: a field error at the list's path, never a panic.
 #[gtest]
-fn a_malformed_row_list_is_an_error_at_the_lists_path() {
+fn a_malformed_item_list_is_an_error_at_the_lists_path() {
     let errors = Submission::accept(
         FormSpec::<Tagged>::default(),
         &wire(&[("name", "post"), ("tags", "#0,#0"), ("tags.#0", "rust")]),
     )
-    .expect_err("a repeated key is not a list of rows");
+    .expect_err("a repeated key is not a list of items");
     expect_that!(
         errors.messages_at(Some(path!(Tagged.tags))),
         elements_are![contains_substring("not a list of item keys")]

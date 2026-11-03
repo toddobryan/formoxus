@@ -262,8 +262,8 @@ fn an_unknown_nested_field_is_refused() {
 }
 
 #[gtest]
-#[should_panic(expected = "`#0` is one row's key — a spec names every row at once, with `[]`")]
-fn one_rows_key_is_refused() {
+#[should_panic(expected = "`#0` is one item's key — a spec names every item at once, with `[]`")]
+fn one_items_key_is_refused() {
     let _ = FormSpec::<WithRows>::default().with_label("venues.#0.city", "Town");
 }
 
@@ -282,7 +282,7 @@ fn brackets_on_a_set_name_its_items() {
 
 #[gtest]
 fn every_kind_of_node_is_accepted() {
-    // A leaf, a struct, a field in it, a list, its rows, a row's field: each
+    // A leaf, a struct, a field in it, a list, its items, an item's field: each
     // names a node, so none of these panics.
     let _ = FormSpec::<EventForCreate>::default()
         .with_label("title", "Headline")
@@ -376,18 +376,18 @@ fn an_adder_on_a_scalar_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("title", adder());
 }
 
-/// `tags[]` is every ROW of `tags`, each a `String`: the mistake decision A
-/// in `ORDERED_LISTS_PLAN.md` warns about, since a label for the rows does
+/// `tags[]` is every ITEM of `tags`, each a `String`: the mistake decision A
+/// in `ORDERED_LISTS_PLAN.md` warns about, since a label for the items does
 /// go there.
 #[gtest]
 #[should_panic(expected = "tags[]: `adder` applies only to list or set, not `String`")]
-fn an_adder_on_a_lists_rows_is_refused() {
+fn an_adder_on_a_lists_items_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("tags[]", adder());
 }
 
 #[gtest]
 #[should_panic(expected = "venues[]: `adder` applies only to list or set, not `Location`")]
-fn an_adder_on_a_struct_row_is_refused() {
+fn an_adder_on_a_struct_item_is_refused() {
     let _ = FormSpec::<Lists>::default().with_adder("venues[]", adder());
 }
 
@@ -470,10 +470,10 @@ fn sort_by_on_a_scalar_is_refused() {
     let _ = FormSpec::<Lists>::default().with_sort_by("title", by_bytes());
 }
 
-// ── `[]` — selecting every row of a list ─────────────────────────────────
+// ── `[]` — selecting every item of a list ─────────────────────────────────
 //
-// All of these go through `form_for` rather than `empty_form`: row count isn't in
-// the shape, so a blank form has no rows to select and the assertions would hold
+// All of these go through `form_for` rather than `empty_form`: item count isn't in
+// the shape, so a blank form has no items to select and the assertions would hold
 // vacuously.
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -521,10 +521,10 @@ fn RowsWithLabels() -> Element {
 }
 
 #[gtest]
-fn a_bracket_selector_reaches_every_row() {
-    // Rows normally get NO label — `default_label` returns `None` for a `#`-keyed
+fn a_bracket_selector_reaches_every_item() {
+    // Items normally get NO label — `default_label` returns `None` for a `#`-keyed
     // name — so every occurrence here is one the selector put there. Counting is
-    // what distinguishes "reached every row" from "reached the first one".
+    // what distinguishes "reached every item" from "reached the first one".
     //
     // Delimited rather than bare: the list's OWN derived legend is "Answers",
     // which contains "Answer", so a substring count would find four.
@@ -545,9 +545,9 @@ fn RowFieldsWithLabels() -> Element {
 
 #[gtest]
 fn a_bracket_selector_composes_with_a_field_below_it() {
-    // The case `[]` exists for. Two rows, so two "Town"s — and the siblings must
+    // The case `[]` exists for. Two items, so two "Town"s — and the siblings must
     // keep their derived labels, which is what separates a correct substitution
-    // from one that smears across the whole row.
+    // from one that smears across the whole item.
     let html = render_to_html(RowFieldsWithLabels);
     expect_that!(html.matches("Town").count(), eq(2));
     expect_that!(html.matches("Street").count(), eq(2));
@@ -566,9 +566,9 @@ fn ListWithItsOwnLabel() -> Element {
 }
 
 #[gtest]
-fn a_bare_list_path_labels_the_list_not_the_rows() {
+fn a_bare_list_path_labels_the_list_not_the_items() {
     // The distinction the bracket buys: without it, `venues` is the `ListNode`
-    // itself, so exactly one legend and nothing per row.
+    // itself, so exactly one legend and nothing per item.
     let html = render_to_html(ListWithItsOwnLabel);
     expect_that!(html.matches("Where we went").count(), eq(1));
 }
@@ -592,17 +592,17 @@ fn RowWidgetsOverridden() -> Element {
 }
 
 #[gtest]
-fn a_bracket_selector_can_set_each_rows_widget() {
-    // A `Vec<bool>` derives a checkbox per row; the selector replaces all of
+fn a_bracket_selector_can_set_each_items_widget() {
+    // A `Vec<bool>` derives a checkbox per item; the selector replaces all of
     // them. This is the half Todd's reading of `ListNode` predicted: a list has no
-    // widget of its own, but it has N rows that each do.
+    // widget of its own, but it has N items that each do.
     let html = render_to_html(RowWidgetsOverridden);
     expect_that!(html.matches("<select").count(), eq(2));
     expect_that!(html.matches(r#"type="checkbox""#).count(), eq(0));
 }
 
 #[gtest]
-#[should_panic(expected = "write `venues[]` to give every ROW a widget")]
+#[should_panic(expected = "write `venues[]` to give every ITEM a widget")]
 fn a_widget_on_the_list_itself_now_suggests_the_bracket() {
     // The rejection still stands, but it can name the fix now.
     let _ = form_for(
@@ -635,13 +635,13 @@ fn RowAddedAfterTheSpec() -> Element {
 }
 
 #[gtest]
-fn a_row_added_after_mount_still_gets_the_spec() {
-    // `add_item` builds the new row from the shape alone, so without re-applying
-    // it would come up with a derived label — none, for a `#`-keyed row — while
-    // the three original rows carry "Answer". Four rows, four labels.
+fn an_item_added_after_mount_still_gets_the_spec() {
+    // `add_item` builds the new item from the shape alone, so without re-applying
+    // it would come up with a derived label — none, for a `#`-keyed item — while
+    // the three original items carry "Answer". Four items, four labels.
     //
     // This is the case that makes re-application load-bearing, and it only became
-    // reachable when `[]` made a row's fields addressable at all.
+    // reachable when `[]` made an item's fields addressable at all.
     let html = render_to_html(RowAddedAfterTheSpec);
     expect_that!(html.matches(">Answer<").count(), eq(4));
 }
@@ -666,9 +666,9 @@ fn RowFieldAddedAfterTheSpec() -> Element {
 }
 
 #[gtest]
-fn a_new_rows_nested_field_gets_the_spec_too() {
-    // One level deeper: the new row is a whole `StructNode`, and the selector has to
-    // reach inside it. Three "Town"s for two original rows plus the new one.
+fn a_new_items_nested_field_gets_the_spec_too() {
+    // One level deeper: the new item is a whole `StructNode`, and the selector has to
+    // reach inside it. Three "Town"s for two original items plus the new one.
     let html = render_to_html(RowFieldAddedAfterTheSpec);
     expect_that!(html.matches("Town").count(), eq(3));
 }

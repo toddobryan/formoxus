@@ -64,7 +64,7 @@ impl<'s> Walk<'s> {
 
 /// The spec key that names the node at `path`.
 ///
-/// Rows are keyed by identity (`venues.#3`), but a spec names every row at
+/// Items are keyed by identity (`venues.#3`), but a spec names every item at
 /// once (`venues[]`), so each `.#n` segment folds into a `[]` on the segment
 /// before it: `venues.#3.city` is `venues[].city`, and `answers.#0` is
 /// `answers[]`. Variant segments (`$Circle`) are spelled the same in both.
@@ -88,7 +88,7 @@ pub(crate) fn spec_key(path: &str) -> String {
 /// What keeps a typo in `with_widget("venue.ctiy", …)` from storing a spec
 /// that is never looked up. It walks the shape the way the walk below
 /// builds nodes: an `Option` is transparent, a newtype is one leaf, `name[]`
-/// is every row of a list, and `$Variant` enters a variant of the enum before
+/// is every item of a list, and `$Variant` enters a variant of the enum before
 /// it. A top-level enum's fields have no `$Variant` in front (see
 /// `fields_from_enum`), so at the root a name may be any variant's field.
 pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static Shape, String> {
@@ -97,7 +97,7 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
     for segment in key.split('.') {
         if segment.starts_with(ITEM_SIGIL) {
             return Err(format!(
-                "`{segment}` is one row's key — a spec names every row at once, with `[]` \
+                "`{segment}` is one item's key — a spec names every item at once, with `[]` \
                  (`{walked}[]`)"
             ));
         }
@@ -105,8 +105,8 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
             variant_named(at, variant_name, &walked).map(At::Variant)
         } else {
             let name = segment.trim_end_matches("[]");
-            let rows = (segment.len() - name.len()) / 2;
-            field_named(at, name, &walked).and_then(|field| items_of(field.shape(), name, rows))
+            let brackets = (segment.len() - name.len()) / 2;
+            field_named(at, name, &walked).and_then(|field| items_of(field.shape(), name, brackets))
         };
         at = next?;
         walked = qualify(&walked, segment);
@@ -592,17 +592,17 @@ fn scalar_node(
     }
 }
 
-/// A list-typed field: a [`ListNode`] whose rows are named by a `#`-prefixed key,
+/// A list-typed field: a [`ListNode`] whose items are named by a `#`-prefixed key,
 /// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
 /// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the
-/// `ListNode` keeps it: `Edit::AddItem` has to build a node for a row that has
+/// `ListNode` keeps it: `Edit::AddItem` has to build a node for an item that has
 /// no value to peek at, and this is the only thing that says what kind.
 ///
-/// Edit mode takes the row count from the value. Create mode has no value to
+/// Edit mode takes the item count from the value. Create mode has no value to
 /// count and so starts empty — which is now an answer rather than a gap, since
-/// `AddItem` is how a blank list gets its rows.
+/// `AddItem` is how a blank list gets its items.
 fn list_node(
     shape: &'static Shape,
     name: &str,
@@ -619,20 +619,20 @@ fn list_node(
             list.iter()
                 .enumerate()
                 .map(|(i, element)| {
-                    // A row's KEY is its name — not its index. At construction
-                    // the two coincide, but they part company the moment a row
+                    // An item's KEY is its name — not its index. At construction
+                    // the two coincide, but they part company the moment an item
                     // is inserted or removed; see `item_segment`. And unlike
                     // `struct_node`, which passes `prefix` straight through,
                     // nothing upstream has qualified this on yet, so do it here.
                     // Keeping this in step with `collect_values` is what keeps
                     // the leaf paths and the store keys the same strings.
-                    let row = item_segment(i);
+                    let item = item_segment(i);
                     node_for_shape(
                         shape,
-                        &row,
+                        &item,
                         Some(element),
                         walk,
-                        &qualify(prefix, &row),
+                        &qualify(prefix, &item),
                         /* optional */ false,
                     )
                 })
@@ -645,7 +645,7 @@ fn list_node(
         assert!(
             spec.widget.is_none(),
             "{prefix} is a list, which has no single widget to override — \
-             write `{name}[]` to give every ROW a widget, or did you mean `label`?",
+             write `{name}[]` to give every ITEM a widget, or did you mean `label`?",
         );
     }
     Box::new(ListNode {

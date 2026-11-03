@@ -40,19 +40,19 @@ pub enum FixedKey {
     /// One button, by its type: `fx-button fx-button-{submit, reset,
     /// cancel, destructive, action}`.
     Button(ButtonType),
-    /// A list's add-row button: `fx-button fx-button-add-row`.
-    AddRowButton,
-    /// A row's remove button: `fx-button fx-button-remove-row`.
-    RemoveRowButton,
+    /// A list's add-item button: `fx-button fx-button-add-item`.
+    AddItemButton,
+    /// An item's remove button: `fx-button fx-button-remove-item`.
+    RemoveItemButton,
     /// A set item's Edit, which puts the item into the adder's draft:
     /// `fx-button fx-button-edit-item`.
     EditItemButton,
-    /// The `<div>` around a list row's move buttons: `fx-move-buttons`.
-    MoveRowButtons,
-    /// The button that moves a row up one: `fx-button fx-button-move-up`.
-    MoveRowUpButton,
-    /// The button that moves a row down one: `fx-button fx-button-move-down`.
-    MoveRowDownButton,
+    /// The `<div>` around a list item's move buttons: `fx-move-buttons`.
+    MoveItemButtons,
+    /// The button that moves an item up one: `fx-button fx-button-move-up`.
+    MoveItemUpButton,
+    /// The button that moves an item down one: `fx-button fx-button-move-down`.
+    MoveItemDownButton,
     /// The `<fieldset>` around a set: `fx-group fx-set`.
     Set,
     /// The `<li>` around one item of a set: `fx-set-item`.
@@ -76,10 +76,10 @@ pub enum FixedKey {
     List,
     /// Its `<legend>`: `fx-legend fx-field-label`.
     ListLegend,
-    /// The `<li>` around one row of a list: `fx-list-row`.
-    ListRow,
-    /// The `<ol>` around a list's rows: `fx-list-rows`.
-    ListRows,
+    /// The `<li>` around one item of a list: `fx-list-item`.
+    ListItem,
+    /// The `<ol>` around a list's items: `fx-list-items`.
+    ListItems,
     /// The `<fieldset>` around an enum field: `fx-group fx-variant`.
     Variant,
     /// Its `<legend>`: `fx-legend fx-field-label`.
@@ -107,18 +107,18 @@ impl FixedKey {
         Self::Button(ButtonType::Cancel),
         Self::Button(ButtonType::Destructive),
         Self::Button(ButtonType::Action),
-        Self::AddRowButton,
-        Self::RemoveRowButton,
+        Self::AddItemButton,
+        Self::RemoveItemButton,
         Self::EditItemButton,
-        Self::MoveRowButtons,
-        Self::MoveRowUpButton,
-        Self::MoveRowDownButton,
+        Self::MoveItemButtons,
+        Self::MoveItemUpButton,
+        Self::MoveItemDownButton,
         Self::Struct,
         Self::StructLegend,
         Self::List,
         Self::ListLegend,
-        Self::ListRow,
-        Self::ListRows,
+        Self::ListItem,
+        Self::ListItems,
         Self::Set,
         Self::SetItem,
         Self::SetItems,
@@ -143,18 +143,18 @@ impl FixedKey {
             Self::ButtonProblems => "button_problems",
             Self::ButtonProblem => "button_problem",
             Self::ButtonRow => "button_row",
-            Self::AddRowButton => "add_row_button",
-            Self::RemoveRowButton => "remove_row_button",
+            Self::AddItemButton => "add_item_button",
+            Self::RemoveItemButton => "remove_item_button",
             Self::EditItemButton => "edit_item_button",
-            Self::MoveRowButtons => "move_row_buttons",
-            Self::MoveRowUpButton => "move_row_up_button",
-            Self::MoveRowDownButton => "move_row_down_button",
+            Self::MoveItemButtons => "move_item_buttons",
+            Self::MoveItemUpButton => "move_item_up_button",
+            Self::MoveItemDownButton => "move_item_down_button",
             Self::Struct => "struct",
             Self::StructLegend => "struct_legend",
             Self::List => "list",
             Self::ListLegend => "list_legend",
-            Self::ListRow => "list_row",
-            Self::ListRows => "list_rows",
+            Self::ListItem => "list_item",
+            Self::ListItems => "list_items",
             Self::Set => "set",
             Self::SetItem => "set_item",
             Self::SetItems => "set_items",
@@ -208,18 +208,18 @@ mod tests {
                 | FixedKey::ButtonProblems
                 | FixedKey::ButtonProblem
                 | FixedKey::ButtonRow
-                | FixedKey::AddRowButton
-                | FixedKey::RemoveRowButton
+                | FixedKey::AddItemButton
+                | FixedKey::RemoveItemButton
                 | FixedKey::EditItemButton
-                | FixedKey::MoveRowButtons
-                | FixedKey::MoveRowUpButton
-                | FixedKey::MoveRowDownButton
+                | FixedKey::MoveItemButtons
+                | FixedKey::MoveItemUpButton
+                | FixedKey::MoveItemDownButton
                 | FixedKey::Struct
                 | FixedKey::StructLegend
                 | FixedKey::List
                 | FixedKey::ListLegend
-                | FixedKey::ListRow
-                | FixedKey::ListRows
+                | FixedKey::ListItem
+                | FixedKey::ListItems
                 | FixedKey::Set
                 | FixedKey::SetItem
                 | FixedKey::SetItems

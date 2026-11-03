@@ -369,24 +369,24 @@ impl Classes {
                 Slot::new("fx-button fx-button-action"),
             ),
             (
-                FixedKey::AddRowButton,
-                Slot::new("fx-button fx-button-add-row"),
+                FixedKey::AddItemButton,
+                Slot::new("fx-button fx-button-add-item"),
             ),
             (
-                FixedKey::RemoveRowButton,
-                Slot::new("fx-button fx-button-remove-row"),
+                FixedKey::RemoveItemButton,
+                Slot::new("fx-button fx-button-remove-item"),
             ),
             (
                 FixedKey::EditItemButton,
                 Slot::new("fx-button fx-button-edit-item"),
             ),
-            (FixedKey::MoveRowButtons, Slot::new("fx-move-buttons")),
+            (FixedKey::MoveItemButtons, Slot::new("fx-move-buttons")),
             (
-                FixedKey::MoveRowUpButton,
+                FixedKey::MoveItemUpButton,
                 Slot::new("fx-button fx-button-move-up"),
             ),
             (
-                FixedKey::MoveRowDownButton,
+                FixedKey::MoveItemDownButton,
                 Slot::new("fx-button fx-button-move-down"),
             ),
             (FixedKey::Struct, Slot::new("fx-group fx-struct")),
@@ -395,15 +395,15 @@ impl Classes {
                 Slot::new("fx-legend fx-field-label"),
             ),
             // `fx-invalid` like the radio group's fieldset, the other `fieldset`
-            // that carries its own errors: a list's own (row count, a rejected
-            // row-key entry), never a row's.
+            // that carries its own errors: a list's own (item count, a rejected
+            // item-key entry), never an item's.
             (
                 FixedKey::List,
                 Slot::new("fx-group fx-list").with_invalid("fx-invalid"),
             ),
             (FixedKey::ListLegend, Slot::new("fx-legend fx-field-label")),
-            (FixedKey::ListRow, Slot::new("fx-list-row")),
-            (FixedKey::ListRows, Slot::new("fx-list-rows")),
+            (FixedKey::ListItem, Slot::new("fx-list-item")),
+            (FixedKey::ListItems, Slot::new("fx-list-items")),
             (
                 FixedKey::Set,
                 Slot::new("fx-group fx-set").with_invalid("fx-invalid"),
@@ -733,18 +733,24 @@ mod tests {
                 FixedKey::Button(ButtonType::Action),
                 "fx-button fx-button-action",
             ),
-            (FixedKey::AddRowButton, "fx-button fx-button-add-row"),
-            (FixedKey::RemoveRowButton, "fx-button fx-button-remove-row"),
+            (FixedKey::AddItemButton, "fx-button fx-button-add-item"),
+            (
+                FixedKey::RemoveItemButton,
+                "fx-button fx-button-remove-item",
+            ),
             (FixedKey::EditItemButton, "fx-button fx-button-edit-item"),
-            (FixedKey::MoveRowButtons, "fx-move-buttons"),
-            (FixedKey::MoveRowUpButton, "fx-button fx-button-move-up"),
-            (FixedKey::MoveRowDownButton, "fx-button fx-button-move-down"),
+            (FixedKey::MoveItemButtons, "fx-move-buttons"),
+            (FixedKey::MoveItemUpButton, "fx-button fx-button-move-up"),
+            (
+                FixedKey::MoveItemDownButton,
+                "fx-button fx-button-move-down",
+            ),
             (FixedKey::Struct, "fx-group fx-struct"),
             (FixedKey::StructLegend, "fx-legend fx-field-label"),
             (FixedKey::List, "fx-group fx-list"),
             (FixedKey::ListLegend, "fx-legend fx-field-label"),
-            (FixedKey::ListRow, "fx-list-row"),
-            (FixedKey::ListRows, "fx-list-rows"),
+            (FixedKey::ListItem, "fx-list-item"),
+            (FixedKey::ListItems, "fx-list-items"),
             (FixedKey::Set, "fx-group fx-set"),
             (FixedKey::SetItem, "fx-set-item"),
             (FixedKey::SetItems, "fx-set-items"),

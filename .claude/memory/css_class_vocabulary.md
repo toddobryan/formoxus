@@ -264,3 +264,11 @@ around a set's draft and its Add/Save/Cancel. `fx-tags` is the GALLERY's
 class (examples `main.css`), not formoxus's: `classes_plus: { set: +
 ["fx-tags"] }` turns its chips preset on. A hyphenated class must be quoted
 in `classes_plus:`.
+
+**2026-11-03 (SETS_PLAN box 11): rows became ITEMS.** `fx-list-row(s)` →
+`fx-list-item(s)`, `fx-button-add-row` → `fx-button-add-item`,
+`fx-button-remove-row` → `fx-button-remove-item`; the `FixedKey`s and
+`classes_plus:` names likewise (`ListItem`, `list_item`, `AddItemButton`,
+`add_item_button`, …). Everything above that says `-row` predates it.
+`fx-button-row` (the button row) and `field_row` are a different "row" and
+kept their names.

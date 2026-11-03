@@ -1,4 +1,4 @@
-//! A list's rows are edited in place, not shown as text, so `item` on one
+//! A list's items are edited in place, not shown as text, so `item` on one
 //! needs `set`.
 use facet::Facet;
 use formoxus::widgets::ItemText;

@@ -226,7 +226,7 @@ where
 #[derive(Debug)]
 pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// Structure, typed values, errors — and *answers*. Every enum's chosen
-    /// variant and every list's rows live here and only here, never in the
+    /// variant and every list's items live here and only here, never in the
     /// store: they change through an [`Edit`], and they reach the wire from
     /// this state, as structure values ([`FormState::collect_values`]). That's
     /// why it's `FormState` and not `FormSchema`, and why it's a `Signal`: a
@@ -243,7 +243,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// it, before any edit.
     ///
     /// A whole `FormState`, not just its leaves, because a reset has to undo
-    /// STRUCTURAL edits too — rows added to a `Vec`, a variant chosen. Those
+    /// STRUCTURAL edits too — items added to a `Vec`, a variant chosen. Those
     /// live in the state and nowhere else, so restoring only the raw strings
     /// would leave a form with the right values in the wrong shape.
     initial_signal: Signal<FormState<T>>,
@@ -388,7 +388,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             return rsx! {};
         }
         let handle = *self;
-        // Resolved once for the row, not per button: it is the same cascade
+        // Resolved once for the item, not per button: it is the same cascade
         // answer for all of them, and `defaults()` needs a runtime.
         let label_case = self.label_case();
         let rendered = buttons
@@ -476,7 +476,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// cannot outlive the next submit.
     /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile
     /// error rather than this `Err`. The `Err` remains for the paths a
-    /// `path!` cannot spell: a specific row (`venues.#0.city`) has an index
+    /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
     /// only the runtime knows, so those go through
     /// [`FormState::push_field_error`] with a string.
     pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
@@ -552,9 +552,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// **Structure is not rebuilt.** Values land in the map, but which paths
     /// get *rendered* is decided by the state's schema, so a server cannot add
-    /// a row or choose a variant this way — only change what is already there.
+    /// an item or choose a variant this way — only change what is already there.
     /// A reply from [`WireForm::from_model`] does CARRY structure (each enum's
-    /// variant name, each list's row keys), and those entries are written into
+    /// variant name, each list's item keys), and those entries are written into
     /// the store like any other, deliberately: nothing reads a structure path
     /// from the store ([`to_wire`](Self::to_wire) and [`validate`](Self::validate)
     /// take structure from the state), so they sit there unread, and a key that
@@ -571,13 +571,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         self.distribute_errors(wire.errors())
     }
 
-    /// Apply a structural edit from code: add, remove or move a row, or choose
-    /// a variant. It goes the way formoxus's own buttons send theirs, so a row
+    /// Apply a structural edit from code: add, remove or move an item, or choose
+    /// a variant. It goes the way formoxus's own buttons send theirs, so an item
     /// added with a [`ItemValue`](crate::nodes::ItemValue) has its values in the
     /// store, where `validate` and `to_wire` read them, as well as in the tree.
     ///
     /// Unlike a button, which can only log a rejected edit, this returns it.
-    /// `Ok(Some(path))` is a row it created (`answers.#3`), so a caller can find
+    /// `Ok(Some(path))` is an item it created (`answers.#3`), so a caller can find
     /// it; `Ok(None)` is every other edit.
     pub fn edit(&self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
         apply_edit(self.state_signal, self.values_store, edit)
@@ -586,7 +586,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// Put the form back the way [`use_form`] built it.
     ///
     /// Everything goes: edited values, validation errors, and structural edits
-    /// like added rows or a chosen variant. A form built with
+    /// like added items or a chosen variant. A form built with
     /// [`form_for`] returns to that model's values; one built with
     /// [`empty_form`] goes back to empty.
     ///
@@ -705,7 +705,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // a real copy rather than another handle to the same thing — which is the
     // point, since `state` is about to be edited.
     let initial = use_signal(move || state.peek().clone());
-    let mut new_blank_row = use_signal(|| None::<String>);
+    let mut new_blank_item = use_signal(|| None::<String>);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
@@ -722,16 +722,16 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         match apply_edit(state, values, &edit) {
             // Not in a set: its Add made an item from the draft, and focus
             // stays in the draft for the next one (`DraftAdder`).
-            Ok(Some(row))
+            Ok(Some(item))
                 if matches!(edit, Edit::AddItem { value: None, .. })
                     && !state.peek().is_set(edit.path()) =>
             {
-                new_blank_row.set(Some(row));
+                new_blank_item.set(Some(item));
             }
             // Editing a set's item, or stopping, hands back its draft, where
             // the user goes on typing.
             Ok(Some(draft)) if matches!(edit, Edit::EditItem { .. }) => {
-                new_blank_row.set(Some(draft));
+                new_blank_item.set(Some(draft));
             }
             Ok(_) => {}
             Err(e) => {
@@ -747,10 +747,10 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
     let id = form_id.clone();
     use_effect(move || {
-        if let Some(row) = new_blank_row() {
+        if let Some(item) = new_blank_item() {
             document::eval(&format!(
-                "document.querySelector(`[id^='{id}-'][name='{row}'], \
-                [id^='{id}-'][name^='{row}.']`)?.focus()"
+                "document.querySelector(`[id^='{id}-'][name='{item}'], \
+                [id^='{id}-'][name^='{item}.']`)?.focus()"
             ));
         }
     });
@@ -773,9 +773,9 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut values: ValuesStore,
     edit: &Edit,
 ) -> Result<Option<String>, FormAccessError> {
-    // Found before the edit, while the row is still there to look up.
+    // Found before the edit, while the item is still there to look up.
     let removed = match edit {
-        Edit::RemoveItem { path, index } => row_path(&state.peek(), path, *index),
+        Edit::RemoveItem { path, index } => item_path_at(&state.peek(), path, *index),
         _ => None,
     };
     // A set's Add makes an item of its draft, whose values only the store has
@@ -791,27 +791,27 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     }
     // Its own statement, so the write guard is dropped before `peek` below.
     let created = state.write().edit(edit)?;
-    // A removed row's leaves would otherwise outlive it in the store. Nothing
+    // A removed item's leaves would otherwise outlive it in the store. Nothing
     // reads them back by path, since a key is never reused and `to_wire` reads
-    // only the rows the state still has. But a widget reading the store WHOLE
+    // only the items the state still has. But a widget reading the store WHOLE
     // would see what the user deleted: an adder leaving out the choices already
     // in its list would go on leaving out a removed one. By prefix rather than
-    // the row's current leaves, so an unchosen variant's values go too.
-    if let Some(row) = removed {
-        values.retain(|path, _| !crate::nodes::owns(&row, path));
+    // the item's current leaves, so an unchosen variant's values go too.
+    if let Some(item) = removed {
+        values.retain(|path, _| !crate::nodes::owns(&item, path));
     }
-    // A filled row was built from its value, so the TREE has its values, but
-    // widgets, `validate` and `to_wire` read the STORE. Copy the new row's
-    // leaves across, overwriting, so nothing stale can shadow them. A blank row
+    // A filled item was built from its value, so the TREE has its values, but
+    // widgets, `validate` and `to_wire` read the STORE. Copy the new item's
+    // leaves across, overwriting, so nothing stale can shadow them. A blank item
     // needs nothing: absent is already `""`.
     //
     // The same for a set's draft, refilled with an item's values or emptied
     // when an edit starts or stops (box 8): only the tree has them.
-    if let (Some(row), Edit::AddItem { value: Some(_), .. } | Edit::EditItem { .. }) =
+    if let (Some(item), Edit::AddItem { value: Some(_), .. } | Edit::EditItem { .. }) =
         (&created, edit)
     {
         for (path, raw) in state.peek().leaf_values() {
-            if crate::nodes::owns(row, &path) {
+            if crate::nodes::owns(item, &path) {
                 crate::widgets::values::write_value(&path, values, raw);
             }
         }
@@ -819,10 +819,10 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Ok(created)
 }
 
-/// The full path of row `index` of the list at `path`: the KEY the row has
+/// The full path of item `index` of the list at `path`: the KEY the item has
 /// (`answers.#2`), not its place, read from the list's structure entry
-/// (`#0,#2,#1`). `None` if there is no such row, which the edit then reports.
-fn row_path<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
+/// (`#0,#2,#1`). `None` if there is no such item, which the edit then reports.
+fn item_path_at<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: &FormState<T>,
     path: &str,
     index: usize,

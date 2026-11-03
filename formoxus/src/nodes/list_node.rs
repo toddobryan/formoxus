@@ -40,7 +40,7 @@ impl Node for ListNode {
 
     fn render(&self, ctx: &NodeContext) -> Element {
         // A `fieldset` for the same reason `StructNode` and `VariantNode` use one:
-        // the rows and the widgets that manage them read as one thing, and the
+        // the items and the widgets that manage them read as one thing, and the
         // legend gives the list's label somewhere to appear.
         //
         // No `aria-labelledby`: a `<legend>` names its own fieldset, and unlike
@@ -50,21 +50,21 @@ impl Node for ListNode {
         // reach assistive technology through `aria-describedby`, and CSS through
         // the fieldset's invalid class.
         //
-        // No required marker, unlike `VariantNode`: nothing enforces a minimum row
+        // No required marker, unlike `VariantNode`: nothing enforces a minimum item
         // count yet (#14), so marking a list required would be a promise
         // `validate()` doesn't keep.
         let id = ctx.id(&self.name);
         // The list's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
-        // `nested.prefix`'s children: the widgets act on the list, not on a row.
+        // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
-        // `here`, not `within`: a bad cell is its row's error, not the list's.
+        // `here`, not `within`: a bad cell is its item's error, not the list's.
         let invalid = self.has_errors_here();
         let describedby = invalid.then(|| errors_id(&id));
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::List, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::ListLegend, false);
-        let list_row_class = ctx.classes.fixed_class(FixedKey::ListRow, false);
-        let class_for_list_rows = ctx.classes.fixed_class(FixedKey::ListRows, false);
+        let list_item_class = ctx.classes.fixed_class(FixedKey::ListItem, false);
+        let class_for_list_items = ctx.classes.fixed_class(FixedKey::ListItems, false);
         let nested = ctx.nested(&self.name);
         rsx! {
             fieldset {
@@ -83,19 +83,19 @@ impl Node for ListNode {
                     classes: ctx.classes.clone(),
                 }
                 if !self.items.is_empty() {
-                    ol { class: &class_for_list_rows,
-                        // Keyed by the row's own name, which is stable across
+                    ol { class: &class_for_list_items,
+                        // Keyed by the item's own name, which is stable across
                         // inserts, removals and reorders. Without a key dioxus diffs
                         // the list by position, so inserting at the top would
-                        // re-render every row below it; with one it moves the nodes
+                        // re-render every item below it; with one it moves the nodes
                         // it already has. The wrapper exists because a key has to sit
-                        // on an element, and it is what pairs a row with its widget.
-                        for (index, row) in self.items.iter().enumerate() {
+                        // on an element, and it is what pairs an item with its widget.
+                        for (index, item) in self.items.iter().enumerate() {
                             // Move buttons on the left, Remove on the right, so Remove
                             // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
-                            li { class: &list_row_class, key: "{row.name()}",
+                            li { class: &list_item_class, key: "{item.name()}",
                                 MoveItemButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
-                                { row.render(&nested) }
+                                { item.render(&nested) }
                                 RemoveItemButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                             }
                         }
@@ -110,7 +110,7 @@ impl Node for ListNode {
                             values: ctx.values,
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
-                            rows: self.items.len(),
+                            item_count: self.items.len(),
                             draft: None,
                             editing: None,
                         },
@@ -198,7 +198,7 @@ impl Node for ListNode {
                     self.items.move_item(&my_path, *from, *to).map(|()| None)
                 }
                 Edit::EditItem { .. } => Err(FormAccessError(format!(
-                    "{my_path} is a list; its rows are edited in place"
+                    "{my_path} is a list; its items are edited in place"
                 ))),
             };
         }

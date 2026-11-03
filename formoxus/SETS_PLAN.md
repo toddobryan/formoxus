@@ -986,7 +986,7 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   `min`/`max`) blocks a browser-validated submit. If it does, fixing it
   becomes a box of its own (Todd, 2026-11-03).
 
-- [ ] **11.** (Claude) Rows become items, everywhere a dev or a Formoxus
+- [x] **11.** (Claude) Rows become items, everywhere a dev or a Formoxus
   dev can see the word (Todd, 2026-10-31: "one term used internally and
   another externally just leads to confusion"). **Item**, after facet's
   `begin_list_item`/`begin_set_item`: not "element", which is Dioxus's
@@ -1017,17 +1017,58 @@ O. **The classes and `FixedKey`s that say "set" are renamed too**, since
   layout) and `ButtonRow`/`fx-button-row`, where "row" is a horizontal
   layout, not an item of a list.
 
+  **Built 2026-11-03** (Claude):
+  1. `FixedKey`s: `ListRow`/`ListRows` → `ListItem`/`ListItems`,
+     `AddRowButton` → `AddItemButton`, `RemoveRowButton` →
+     `RemoveItemButton`, `MoveRowButtons`/`MoveRowUpButton`/
+     `MoveRowDownButton` → `MoveItemButtons`/`MoveItemUpButton`/
+     `MoveItemDownButton`. Their `classes_plus:` names follow
+     (`list_item`, `add_item_button`, …). The component names
+     `AddItemButton` etc. are unchanged; a `FixedKey` is always written
+     qualified, so the two never meet.
+  2. Classes: `fx-list-row(s)` → `fx-list-item(s)`, `fx-button-add-row` →
+     `fx-button-add-item`, `fx-button-remove-row` → `fx-button-remove-item`.
+     `fx-move-buttons`, `fx-button-move-up`/`-down` never said row.
+  3. `field_kind::row` → `field_kind::item` (what `form!`'s `[]`
+     projection calls, so it shows in expansions and errors), the
+     generated loop binding `__row{n}` → `__item{n}`, `AddItemProps::rows`
+     → `item_count`, `row_path` → `item_path_at`, `new_blank_row` →
+     `new_blank_item`.
+  4. Messages: "every ITEM a widget", "one item's key — a spec names every
+     item at once", `form!`'s "a spec applies to every item", "its items are
+     edited in place".
+  5. Prose in every doc comment and test, and about 80 test names; the
+     `/t/struct-rows` route is `/t/struct-items`, and
+     `e2e/tests/new_row_focus.rs` is `new_item_focus.rs`.
+  6. **Kept, as other meanings of "row":** the textarea `rows` attribute,
+     the attribute table's and `BUILTINS`'/`WidgetName`'s rows,
+     `field_row`, the button row, a test model's field named `rows`, and
+     "in a row". The user-facing labels changed too (Todd, the same day:
+     "so we're consistent"): a list's "Remove item N", "Move item N
+     up/down".
+
+  `just ci` 1051 and `just e2e` 52/52 green.
+
 - [ ] **12.** (Claude) Merge prep: `ORDERED_LISTS_PLAN.md` marked as
   superseded where it is (boxes 2–3), its boxes 6–8 checked against this
   plan, the memory updated, and `just ci` and `just e2e` green. apcsp
   builds formoxus by PATH, so it follows whatever branch is checked out
   here: its three `.fx-list-set` selectors (2b) become `.fx-list`, and
-  its comment naming `ListSet` becomes `ListNode`.
+  its comment naming `ListSet` becomes `ListNode`. From box 11 (checked 2026-11-03):
+  `crates/web/assets/main.css` has `fx-button-add-row` and
+  `fx-button-remove-row` 20 times each and `fx-list-row` 3 times, and
+  `crates/e2e/tests/questions.rs` uses `.fx-list-set`,
+  `button.fx-button-add-row` and `.fx-list-row`.
 
 - [ ] **13.** (Claude) Gallery examples for a set and a list (Todd,
   2026-11-03: both together, after the rest of this plan), using the
   `fx-tags` preset for the set. Replaces box 10's gallery example, and is
-  where the box 9 CSS is first seen in a browser.
+  where the box 9 CSS is first seen in a browser. **Decide here:** the gallery CSS sets
+  `list-style: none` on `.fx-list-items > .fx-list-item` (for its grid of
+  ↑/↓ | item | Remove), so a list's numbers are hidden on screen, and
+  "Remove item 2" names a number only a screen reader announces. Show the
+  numbers (a `::marker` or a counter in the grid's first column), or accept
+  it.
 
 - [ ] **14.** A draft's constraint attributes must not block a submit:
   box 10 confirmed that a draft breaking its items' `pattern` does, under

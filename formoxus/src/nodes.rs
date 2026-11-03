@@ -108,7 +108,7 @@ pub trait Node: Debug {
     /// own, and do NOT report it. Not for want of somewhere to put it — since
     /// the error types merged it is exactly what `ErrorsByPath` holds — but
     /// because nothing writes one yet: `validate` only clears them, and neither
-    /// container renders them. The first writer (a `ListNode` min/max-rows
+    /// container renders them. The first writer (a `ListNode` min/max-items
     /// check, say) needs three things at once: report them here at the
     /// container's own path, as `VariantNode` does; claim them in
     /// `distribute_errors`; and render them.
@@ -119,18 +119,18 @@ pub trait Node: Debug {
     /// surface as a form error.
     fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath);
 
-    /// Apply a structural edit — choose a variant, add or remove a row.
+    /// Apply a structural edit — choose a variant, add or remove an item.
     ///
     /// One method rather than one per edit kind because the containment walk
     /// each container performs is identical regardless of the edit; only the
     /// node that owns the path cares what kind it is. `Edit::path()` is the
     /// only thing a container reads, so containers stay kind-agnostic.
     ///
-    /// `Ok(Some(path))` is the full path of the row an `AddItem` created
-    /// (`answers.#3`), which is how a caller finds a row whose key it could
-    /// not have known in advance. Every other edit, which creates no row, is
+    /// `Ok(Some(path))` is the full path of the item an `AddItem` created
+    /// (`answers.#3`), which is how a caller finds an item whose key it could
+    /// not have known in advance. Every other edit, which creates no item, is
     /// `Ok(None)`. `Err` when no node owns the path or when the edit does not
-    /// fit the node that does: an out-of-range row, a variant the enum lacks,
+    /// fit the node that does: an out-of-range item, a variant the enum lacks,
     /// an `ItemValue` of the wrong type. A refused edit changes nothing.
     fn edit(
         &mut self,
@@ -178,8 +178,8 @@ pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccess
 /// — the shape carries a field's name but no prose for it. Reuses the derive
 /// path's [`crate::label_case`], so both paths title-case identically.
 ///
-/// `None` for a `ListNode` row key (`#3`) and for an all-digit name. Neither is
-/// prose: a row key is an identity, and a tuple-struct field's "0" is a
+/// `None` for a `ListNode` item key (`#3`) and for an all-digit name. Neither is
+/// prose: an item key is an identity, and a tuple-struct field's "0" is a
 /// position. The list itself is what carries the label.
 pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
     if name.starts_with(ITEM_SIGIL) || name.chars().all(|c| c.is_ascii_digit()) {
@@ -206,10 +206,10 @@ pub(crate) fn variant_segment(variant: &str) -> String {
 /// beginning with `$` is never a field, and a descriptor never appears as the
 /// final segment of a leaf path — it is only ever a prefix.
 ///
-/// A list-row key (`answers.#3.text`) is left alone: it *is* a real element of
+/// A list-item key (`answers.#3.text`) is left alone: it *is* a real element of
 /// the model, just identified by identity rather than position. Which element
 /// it is cannot be read off the string —
-/// only `ListNode::rows` knows that — so the result names the row without
+/// only `ListNode::items` knows that — so the result names the item without
 /// placing it.
 pub fn model_path(path: &str) -> String {
     path.split('.')
@@ -232,7 +232,7 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
 ///
 /// A [`Leaf`](Self::Leaf) is what a user types into one input, and lives in the
 /// [`ValuesStore`]. A [`Structure`](Self::Structure) decides which nodes exist
-/// at all (an enum's variant name, a list's row keys), and lives only in the
+/// at all (an enum's variant name, a list's item keys), and lives only in the
 /// state, never in the store. Both cross the wire, because a server rebuilds
 /// from an empty form and has no other way to learn the structure.
 ///
@@ -274,7 +274,7 @@ pub type ValuesStore = Store<HashMap<String, String>>;
 /// as required.
 ///
 /// A struct rather than three parameters because this only grows — the variant
-/// `<select>` and the add/remove-row buttons will each need a way to signal a
+/// `<select>` and the add/remove-item buttons will each need a way to signal a
 /// structural edit back up.
 ///
 /// **`required` is a presentation hint, not the authority.** HTML5 `required`
@@ -396,23 +396,23 @@ pub enum Edit {
     },
     AddItem {
         path: String,
-        /// What the new row holds. `None` is a blank row, the one the Add
-        /// button makes: every leaf empty, an enum row with no variant chosen.
-        /// `Some` builds the row from the value the way `form_for` builds a
-        /// form from a model, so its leaves show the value and an enum row
+        /// What the new item holds. `None` is a blank item, the one the Add
+        /// button makes: every leaf empty, an enum item with no variant chosen.
+        /// `Some` builds the item from the value the way `form_for` builds a
+        /// form from a model, so its leaves show the value and an enum item
         /// starts on the value's variant.
         ///
-        /// The value must be of the list's row type (see [`ItemValue::new`]),
+        /// The value must be of the list's item type (see [`ItemValue::new`]),
         /// or the edit is refused and nothing changes. Through
-        /// [`Form::edit`](crate::form::Form::edit) or a button, a filled row's
+        /// [`Form::edit`](crate::form::Form::edit) or a button, a filled item's
         /// values also reach the store, which `validate` and `to_wire` read.
         /// [`FormState::edit`](crate::form::FormState::edit) alone puts them
         /// only in the tree.
         value: Option<ItemValue>,
-        /// Insert the new row *before* the row currently at this position, or
+        /// Insert the new item *before* the item currently at this position, or
         /// append when `None`. A position rather than a key because that is what
         /// the widget knows: an "insert here" button sits between two rendered
-        /// rows and knows only where it is. Keys identify a row across edits;
+        /// items and knows only where it is. Keys identify an item across edits;
         /// positions locate a gap at one instant, which is all an insert needs.
         before: Option<usize>,
     },
@@ -422,10 +422,10 @@ pub enum Edit {
     },
     MoveItem {
         path: String,
-        /// The position of the row to move. Positions, not keys, for the same
-        /// reason as `AddItem::before`: a ↑/↓ button knows where its row is.
+        /// The position of the item to move. Positions, not keys, for the same
+        /// reason as `AddItem::before`: a ↑/↓ button knows where its item is.
         from: usize,
-        /// The row's position AFTER the move, so the rows between shift to close
+        /// The item's position AFTER the move, so the items between shift to close
         /// the gap: in `a,b,c`, `from: 0, to: 2` gives `b,c,a`, not the swap
         /// `c,b,a`. Moving down one place from `i` is `to: i + 1`.
         to: usize,
@@ -434,7 +434,7 @@ pub enum Edit {
     /// `Some(index)` marks the item at that position and puts its value into
     /// the set's draft, where an `AddItem { value: None }` then replaces it
     /// with what the draft holds. `None` stops editing, leaving the item as it
-    /// was, and empties the draft. A set's only: a list's rows are edited in
+    /// was, and empties the draft. A set's only: a list's items are edited in
     /// place.
     EditItem {
         path: String,

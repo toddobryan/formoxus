@@ -528,9 +528,9 @@ fn choosing_a_variant_through_a_struct_node() {
 }
 
 #[gtest]
-fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
-    // `shapes.#1` — the path crosses a `ListNode`, whose rows are named by key.
-    // Edit mode, because a blank form has no rows until create-mode lengths land.
+fn choosing_a_variant_on_one_list_item_leaves_the_others_alone() {
+    // `shapes.#1` — the path crosses a `ListNode`, whose items are named by key.
+    // Edit mode, because a blank form has no items until create-mode lengths land.
     let gallery = Gallery {
         shapes: vec![Shape::Circle { radius: 1.0 }, Shape::Circle { radius: 2.0 }],
     };
@@ -549,7 +549,7 @@ fn choosing_a_variant_on_one_list_row_leaves_the_others_alone() {
             eq("shapes.#1.$Rectangle.width"),
             eq("shapes.#1.$Rectangle.height"),
         ],
-        "row 0 keeps its variant and its value; only row 1 was rebuilt"
+        "item 0 keeps its variant and its value; only item 1 was rebuilt"
     );
 
     form.distribute_form_values(&[
@@ -699,9 +699,9 @@ fn model_path_strips_variant_descriptors() {
     expect_that!(model_path("footprint.$Circle.size"), eq("footprint.size"));
     expect_that!(model_path("outer.$First.inner.$A.x"), eq("outer.inner.x"));
 
-    // A row KEY survives: it names a real element of the model. Which element
+    // An item KEY survives: it names a real element of the model. Which element
     // is a question the string can't answer — a key is an identity, not a
-    // position, and only `ListNode::rows` knows the order.
+    // position, and only `ListNode::items` knows the order.
     expect_that!(
         model_path("shapes.#0.$Circle.radius"),
         eq("shapes.#0.radius")
@@ -735,7 +735,7 @@ fn every_leaf_path_maps_back_onto_the_model() {
 // ── Edits aimed at the wrong kind of node ──────────────────────────────
 
 #[gtest]
-fn a_row_edit_aimed_at_an_enum_is_rejected() {
+fn an_item_edit_aimed_at_an_enum_is_rejected() {
     // New with `Edit`: previously `choose_variant` was the only edit, so
     // "right path, wrong kind of node" couldn't be expressed at all.
     let mut form = empty_form::<Drawing>(FormSpec::default());
@@ -745,7 +745,7 @@ fn a_row_edit_aimed_at_an_enum_is_rejected() {
             before: None,
             value: None,
         })
-        .expect_err("an enum has no rows");
+        .expect_err("an enum has no items");
     expect_that!(error.0, contains_substring("shape is an enum, not a list"));
 }
 

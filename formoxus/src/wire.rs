@@ -17,23 +17,23 @@
 //!
 //! **The values include the form's structure**, because [`Submission::accept`]
 //! rebuilds the form from an empty one, where no enum has a variant chosen and
-//! no list has rows. Beside each leaf's raw value, every enum sends its chosen
-//! variant's name at its own path, and every list sends its row keys, in
+//! no list has items. Beside each leaf's raw value, every enum sends its chosen
+//! variant's name at its own path, and every list sends its item keys, in
 //! order, at its own path:
 //!
 //! ```text
 //! title           = "Dr"          // an enum: the variant's name ("" if unchosen)
 //! shape           = "Circle"
 //! shape.$Circle.radius = "2"      // that variant's field
-//! tags            = "#0,#1"       // a list: its row keys, in order ("" if none)
+//! tags            = "#0,#1"       // a list: its item keys, in order ("" if none)
 //! tags.#0         = "rust"
 //! tags.#1         = "forms"
 //! ```
 //!
 //! [`Form::to_wire`](crate::Form::to_wire) and [`WireForm::from_model`] write
 //! all of it. A client that builds the map by hand (a script, a test) has to
-//! as well, or the server builds no variants and no rows. An unknown variant
-//! name or a malformed row list is a field error at that path, never a panic.
+//! as well, or the server builds no variants and no items. An unknown variant
+//! name or a malformed item list is a field error at that path, never a panic.
 //!
 //! ```ignore
 //! // server
@@ -77,7 +77,7 @@ use crate::{
 };
 
 /// A form's mutable state, as plain data: raw values by path, both each leaf's
-/// and the structure (variant choices, row keys; see the [module docs](self)),
+/// and the structure (variant choices, item keys; see the [module docs](self)),
 /// plus whatever anyone has objected to.
 ///
 /// This is the whole of what a server needs and the whole of what it can send
@@ -164,7 +164,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> WireForm<T> {
     /// show the corrected form.
     ///
     /// Takes the spec because paths come from the built tree, not from `T`
-    /// alone: which paths exist depends on the chosen variants and row counts
+    /// alone: which paths exist depends on the chosen variants and item counts
     /// that [`form_for`] derives from the value.
     pub fn from_model(model: &T, spec: FormSpec<T>) -> Self {
         Self::new(

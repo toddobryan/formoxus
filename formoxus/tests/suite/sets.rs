@@ -115,7 +115,7 @@ fn a_sets_items_are_a_ul_each_with_remove_and_no_moves() {
     let html = super::render_to_html(PostForm);
     expect_that!(html.matches(r#"<ul class="fx-set-items">"#).count(), eq(1));
     expect_that!(html.matches(r#"<li class="fx-set-item">"#).count(), eq(2));
-    expect_that!(html.matches("fx-button-remove-row").count(), eq(2));
+    expect_that!(html.matches("fx-button-remove-item").count(), eq(2));
     expect_that!(html, not(contains_substring("<ol")));
     expect_that!(html, not(contains_substring("fx-move-buttons")));
 }
@@ -126,7 +126,7 @@ fn a_sets_adder_follows_its_ul() {
     let html = super::render_to_html(PostForm);
     let ul_ends = html.find("</ul>").expect("the items are a <ul>");
     let add = html
-        .find("fx-button-add-row")
+        .find("fx-button-add-item")
         .expect("a set without `adder:` gets Add");
     expect_that!(add, gt(ul_ends));
 }
@@ -138,7 +138,7 @@ fn a_sets_adder_follows_its_ul() {
 fn an_empty_set_renders_no_ul_but_still_its_adder() {
     let html = super::render_to_html(UntaggedPostForm);
     expect_that!(html, not(contains_substring("<ul")));
-    expect_that!(html, contains_substring("fx-button-add-row"));
+    expect_that!(html, contains_substring("fx-button-add-item"));
 }
 
 // ── Edits ────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ fn a_set_refuses_a_move() {
     expect_that!(form.validate(), some(eq(&post())), "the set is unchanged");
 }
 
-/// A list's Add makes a blank row to type into; a set's commits its draft
+/// A list's Add makes a blank item to type into; a set's commits its draft
 /// (box 7), and an empty draft adds nothing, so a set never gets an item the
 /// user cannot fill in.
 #[gtest]
@@ -222,7 +222,7 @@ fn RemovedSetItemProbe() -> Element {
     with_store_keys(form)
 }
 
-/// The cleanup `use_form` does for a list's row reaches a set's item too: it
+/// The cleanup `use_form` does for a list's item reaches a set's item too: it
 /// finds the item through the key entry `Items` writes for both. `tags.#2` is
 /// the draft's leaf, which the store holds like any other (box 7).
 #[gtest]
@@ -285,7 +285,7 @@ fn a_set_inside_an_enum_variant_round_trips() {
 
 #[component]
 fn TagAdder(props: AddItemProps) -> Element {
-    rsx! { span { id: "tag-adder", "adds to {props.path}, which has {props.rows}" } }
+    rsx! { span { id: "tag-adder", "adds to {props.path}, which has {props.item_count}" } }
 }
 
 #[component]
@@ -318,7 +318,7 @@ fn a_set_takes_a_custom_adder() {
             html,
             contains_substring(r#"<span id="tag-adder">adds to tags, which has 2</span>"#)
         );
-        expect_that!(html, not(contains_substring("fx-button-add-row")));
+        expect_that!(html, not(contains_substring("fx-button-add-item")));
     }
 }
 
@@ -773,7 +773,7 @@ fn a_list_treated_as_a_set_renders_as_a_set() {
     ] {
         expect_that!(html.matches(r#"<ul class="fx-set-items">"#).count(), eq(1));
         expect_that!(html.matches(r#"<li class="fx-set-item">"#).count(), eq(2));
-        expect_that!(html.matches("fx-button-remove-row").count(), eq(2));
+        expect_that!(html.matches("fx-button-remove-item").count(), eq(2));
         expect_that!(html, not(contains_substring("<ol")));
         expect_that!(html, not(contains_substring("fx-move-buttons")));
     }
@@ -1070,7 +1070,7 @@ fn each_edit_says_what_it_did() {
 #[gtest]
 fn the_region_follows_the_adder() {
     let html = super::render_to_html(DuplicateAddProbe);
-    let add = html.find("fx-button-add-row").expect("the set has Add");
+    let add = html.find("fx-button-add-item").expect("the set has Add");
     let message = html.find("fx-set-message").expect("the set has its region");
     expect_that!(message, gt(add));
 }
@@ -2030,7 +2030,7 @@ fn a_list_refuses_an_item_edit() {
             index: Some(0),
         }),
         err(displays_as(contains_substring(
-            "tags is a list; its rows are edited in place"
+            "tags is a list; its items are edited in place"
         )))
     );
 }
@@ -2050,13 +2050,13 @@ fn removing_the_item_being_edited_restores_add() {
 // ── Display (box 9) ──────────────────────────────────────────────────────
 
 /// A set's Remove is named by its item, as Edit is: the set is sorted, so
-/// "Remove row 2" names nothing a user can see. A list keeps its rows'
+/// "Remove item 2" names nothing a user can see. A list keeps its items'
 /// positions (`vecs.rs`).
 #[gtest]
 fn a_sets_remove_is_named_by_its_item() {
     let html = super::render_to_html(PostForm);
     expect_that!(html, contains_substring(r#"aria-label="Remove “rust”""#));
-    expect_that!(html, not(contains_substring("Remove row")));
+    expect_that!(html, not(contains_substring("Remove item")));
 }
 
 #[component]

@@ -166,9 +166,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// Two kinds of entry (see [`RawValue`]): every leaf input's raw value, and
     /// every structure value, which decides which nodes exist at all: an enum's
     /// chosen variant name at the enum's own path (`""` when unchosen), and a
-    /// list's row keys in order at the list's own path (`tags` = `#0,#1`). A
+    /// list's item keys in order at the list's own path (`tags` = `#0,#1`). A
     /// client that builds a payload without a form (a script, a test) has to
-    /// send both, or the server rebuilds no variants and no rows.
+    /// send both, or the server rebuilds no variants and no items.
     ///
     /// Only the leaves belong in a [`ValuesStore`](crate::nodes::ValuesStore): the
     /// state owns structure, so seeding a store takes the leaves alone.
@@ -197,7 +197,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     ///   user has typed since the state last saw it. The state's own copy is
     ///   stale by every keystroke since.
     /// - A [`RawValue::Structure`]'s value comes from the ENTRY ITSELF, which is
-    ///   the state: a variant chosen in the select or a row added with a button
+    ///   the state: a variant chosen in the select or an item added with a button
     ///   lands in the state, through an `Edit`, and never in the store. Looking
     ///   it up in the store would send `""` for a choice made on an empty form,
     ///   and the old choice after the user switched variants.
@@ -243,7 +243,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// Whether `path` names a set: a `Def::Set`, or a list `treat_as_set`
-    /// marked. For `use_form`, which focuses the row an Add made, except in a
+    /// marked. For `use_form`, which focuses the item an Add made, except in a
     /// set, whose Add leaves focus in its draft.
     pub(crate) fn is_set(&self, path: &str) -> bool {
         let key = crate::build::spec_key(path);
@@ -285,10 +285,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
             return Err(no_such_path(path));
         };
-        // A structural edit can CREATE nodes: `AddItem` builds a fresh row and
+        // A structural edit can CREATE nodes: `AddItem` builds a fresh item and
         // choosing a variant reveals that variant's fields. Handing the edit the
         // spec is what builds them the way the walk built their siblings, so a
-        // row added after mount carries the spec's labels and widgets too.
+        // item added after mount carries the spec's labels and widgets too.
         self.nodes[idx].edit("", edit, &self.spec.fields)
     }
 
@@ -305,7 +305,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     /// Answer the enum at `path`, rebuilding that subtree from the chosen
     /// variant's fields. The schema-rebuild a reactive `<select>` triggers;
-    /// add/remove-row will be its sibling.
+    /// add/remove-item will be its sibling.
     ///
     /// **Both failure modes are caller bugs, not user input.** The path comes
     /// from our own node tree and the variant name from an `<option>` we

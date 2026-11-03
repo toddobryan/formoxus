@@ -9,7 +9,7 @@
 //! tripping the orphan rule — see `.claude/memory/facet_form_design_decisions.md`.
 //!
 //! - [`macro@form`] builds a `FormSpec` for a model from a declarative block:
-//!   title, per-field labels and widgets, `[]` row selectors for `Vec` fields,
+//!   title, per-field labels and widgets, `[]` item selectors for `Vec` fields,
 //!   `?` on an `Option` field (required, so a path spells every container),
 //!   `$Enum::Variant` segments for a variant's fields, nested `path => { … }`
 //!   blocks sharing a prefix, a form-wide validator, and a `buttons:` block.
@@ -55,7 +55,7 @@ pub fn form(input: TokenStream) -> TokenStream {
 ///
 /// Emits a witness borrow of the field beside the path's string form, so a
 /// typo is `E0609` at the call site instead of a runtime `no_such_path`. Works
-/// for any field, nested (`Model.venue.city`), rows (`Model.answers[].text`),
+/// for any field, nested (`Model.venue.city`), items (`Model.answers[].text`),
 /// through an `Option` (`Model.address?.city`, keyed `address.city`) or inside a
 /// variant (`Model.shape.$Shape::Circle.radius`, keyed
 /// `shape.$Circle.radius`), whether or not a `form!` names it.

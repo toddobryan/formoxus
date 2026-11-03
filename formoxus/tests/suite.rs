@@ -90,7 +90,7 @@ pub const FORM_ID: &str = "[A-Za-z][A-Za-z0-9]{7}";
 /// The check `form_for(&m, …).validate() == Some(m)` cannot make: that path
 /// keeps typed values and never rebuilds anything, so it "holds by
 /// construction" (see `roundtrip`) and stayed green through #13, where every
-/// enum's choice and every list's rows were lost on the way to a server. So
+/// enum's choice and every list's items were lost on the way to a server. So
 /// every test that round-trips a model in memory also sends it across here.
 pub fn across_the_wire<T>(model: &T) -> Result<T, formoxus::FormErrors>
 where
@@ -176,7 +176,7 @@ pub struct Harness {
     dom: VirtualDom,
     listeners: Vec<(String, ElementId)>,
     /// Each element's `aria-label`, for the ones whose label is dynamic (a
-    /// formatted string, as every row button's is). A static attribute lives
+    /// formatted string, as every item button's is). A static attribute lives
     /// in the template and never crosses as a mutation, so it is not here.
     labels: Vec<(ElementId, String)>,
 }
@@ -270,7 +270,7 @@ impl Harness {
     /// The one element listening for `event` whose `aria-label` is `label`.
     ///
     /// How a test picks one of several buttons a single edit revealed, which
-    /// registration order cannot do: a list row brings ↑, ↓ and Remove at once.
+    /// registration order cannot do: a list item brings ↑, ↓ and Remove at once.
     pub fn labelled(&self, event: &str, label: &str) -> ElementId {
         let found: Vec<ElementId> = self
             .listeners(event)
@@ -288,7 +288,7 @@ impl Harness {
 
     /// The elements listening for `event` that have no dynamic `aria-label`,
     /// in registration order: a button named by its own text ("Add",
-    /// "Cancel") among others named by a label ("Remove row 1").
+    /// "Cancel") among others named by a label ("Remove item 1").
     pub fn unlabelled(&self, event: &str) -> Vec<ElementId> {
         self.listeners(event)
             .into_iter()

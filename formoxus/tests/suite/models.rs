@@ -29,7 +29,7 @@ pub struct Location {
 }
 
 /// Used by both `enums` and `vecs` — the latter as `Vec<Shape>`, to prove each
-/// row's variant is pinned independently. `#[repr(u8)]` is required for facet
+/// item's variant is pinned independently. `#[repr(u8)]` is required for facet
 /// to derive on an enum (it needs the discriminant repr).
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

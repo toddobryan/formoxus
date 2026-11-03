@@ -1,4 +1,4 @@
-//! `[]` means "every row of this list", so it only makes sense on something
+//! `[]` means "every item of this list", so it only makes sense on something
 //! iterable — the same rule `form!` enforces, reached through `path!`.
 use facet::Facet;
 use formoxus::path;

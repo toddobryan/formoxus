@@ -209,9 +209,9 @@ struct Tally {
 }
 
 #[gtest]
-fn list_rows_report_their_own_row_keys() {
-    // Row identity, not position — `#1` is the key `ListNode::rows` assigned,
-    // which is what makes an error survive a sibling row being removed.
+fn list_items_report_their_own_item_keys() {
+    // Item identity, not position — `#1` is the key `ListNode::items` assigned,
+    // which is what makes an error survive a sibling item being removed.
     let tally = Tally {
         label: "Votes".to_string(),
         counts: vec![1, 2, 3],

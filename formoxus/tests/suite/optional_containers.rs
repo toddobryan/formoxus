@@ -229,10 +229,10 @@ fn an_empty_optional_list_collapses_to_absent() {
     // all, so "absent ⟺ every leaf underneath is empty" is vacuously true
     // and it comes back as `None` — the exact analogue of `Some("")`
     // collapsing to `None`, and unrepresentable in the DOM for the same
-    // reason (a zero-row list submits nothing).
+    // reason (a zero-item list submits nothing).
     //
     // It may not survive create-mode lengths (VEC_PLAN step 4), where a
-    // caller could legitimately ask for a present, zero-row list. If that
+    // caller could legitimately ask for a present, zero-item list. If that
     // wins, flip this test to expect `Some(vec![])` and derive presence from
     // the *length choice* rather than from emptiness.
     let mut form = form_for(
@@ -266,8 +266,8 @@ fn an_optional_list_of_structs_round_trips() {
 #[gtest]
 fn option_peels_one_layer_at_a_time() {
     // `Option<Vec<Option<String>>>` →
-    // `OptionNode(ListNode(rows of OptionNode(Field)))`, each
-    // layer contributing exactly one frame. Row 1 is empty, so it's `None`
+    // `OptionNode(ListNode(items of OptionNode(Field)))`, each
+    // layer contributing exactly one frame. Item 1 is empty, so it's `None`
     // by the same rule that makes the whole list present: some leaf under
     // `cells` is non-empty.
     let value = Matrix {
@@ -640,12 +640,12 @@ fn an_untouched_bool_inside_an_optional_struct_leaves_it_absent() {
     );
 }
 
-// ── Rows added to an Option<Vec<T>> ──
+// ── Items added to an Option<Vec<T>> ──
 //
-// `list_node` builds a list's first rows with `optional: false`, while
-// `ListNode::add_row` and `set_rows` pass the LIST's optionality, which for an
+// `list_node` builds a list's first items with `optional: false`, while
+// `ListNode::add_item` and `set_rows` pass the LIST's optionality, which for an
 // `Option<Vec<T>>` is `true`. Nothing visible differs, and these pin that: an
-// added row renders and validates exactly like one there from the start.
+// added item renders and validates exactly like one there from the start.
 
 #[component]
 fn TaggedWithAnAddedRow() -> Element {
@@ -669,7 +669,7 @@ fn TaggedWithAnAddedRow() -> Element {
 }
 
 /// Inside an `Option`, no leaf is marked `required` (see
-/// `an_optional_structs_leaves_are_not_marked_required`), and an added row is
+/// `an_optional_structs_leaves_are_not_marked_required`), and an added item is
 /// no exception in either direction.
 #[gtest]
 fn an_added_row_of_an_optional_list_is_marked_like_the_first() {
@@ -677,16 +677,16 @@ fn an_added_row_of_an_optional_list_is_marked_like_the_first() {
     expect_that!(
         input_tag(&html, "tags.#0"),
         not(contains_substring("required")),
-        "the row built with the list"
+        "the item built with the list"
     );
     expect_that!(
         input_tag(&html, "tags.#1"),
         not(contains_substring("required")),
-        "the row added after"
+        "the item added after"
     );
 }
 
-/// Left empty, an added row is refused as the first row would be, rather
+/// Left empty, an added item is refused as the first item would be, rather
 /// than read as an absent value of a `String` that cannot be absent.
 #[gtest]
 fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
@@ -712,7 +712,7 @@ fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
         ("tags.#0", ""),
         ("tags.#1", "y"),
     ]));
-    expect_that!(first_empty.validate(), none(), "an empty first row");
+    expect_that!(first_empty.validate(), none(), "an empty first item");
 
     let mut added_empty = added();
     added_empty.distribute_values(&applied(&[
@@ -720,7 +720,7 @@ fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
         ("tags.#0", "x"),
         ("tags.#1", ""),
     ]));
-    expect_that!(added_empty.validate(), none(), "an empty added row");
+    expect_that!(added_empty.validate(), none(), "an empty added item");
 
     let mut both = added();
     both.distribute_values(&applied(&[
@@ -736,15 +736,15 @@ fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
     );
 }
 
-/// One `Roster` row's three leaves, keyed under row `key`.
-fn roster_row(key: &str, [street, city, zip]: [&str; 3]) -> Vec<(String, String)> {
+/// One `Roster` item's three leaves, keyed under item `key`.
+fn roster_item(key: &str, [street, city, zip]: [&str; 3]) -> Vec<(String, String)> {
     [("street", street), ("city", city), ("zip", zip)]
         .map(|(field, value)| (format!("nodes.{key}.{field}"), value.to_string()))
         .to_vec()
 }
 
-/// The same for a struct row, where `optional` is what would decide whether
-/// an all-empty row reads as absent: it does not, added or not.
+/// The same for a struct item, where `optional` is what would decide whether
+/// an all-empty item reads as absent: it does not, added or not.
 #[gtest]
 fn an_empty_added_struct_row_of_an_optional_list_is_refused_like_the_first() {
     let added = |rows: Vec<(String, String)>| {
@@ -769,18 +769,18 @@ fn an_empty_added_struct_row_of_an_optional_list_is_refused_like_the_first() {
         form.distribute_values(&applied(&values));
         form.validate()
     };
-    let full0 = || roster_row("#0", ["1 Main", "Paris", "75001"]);
-    let full1 = || roster_row("#1", ["2 Rue", "Lyon", "69001"]);
+    let full0 = || roster_item("#0", ["1 Main", "Paris", "75001"]);
+    let full1 = || roster_item("#1", ["2 Rue", "Lyon", "69001"]);
 
     expect_that!(
-        added([roster_row("#0", ["", "", ""]), full1()].concat()),
+        added([roster_item("#0", ["", "", ""]), full1()].concat()),
         none(),
-        "an empty first row"
+        "an empty first item"
     );
     expect_that!(
-        added([full0(), roster_row("#1", ["", "", ""])].concat()),
+        added([full0(), roster_item("#1", ["", "", ""])].concat()),
         none(),
-        "an empty added row"
+        "an empty added item"
     );
     expect_that!(added([full0(), full1()].concat()), some(anything()));
 }
@@ -811,10 +811,10 @@ fn FlagsWithAnAddedRow() -> Element {
     form.render(using_fns! {})
 }
 
-/// The case the `String` tests above cannot see. A row's `optional` says it
+/// The case the `String` tests above cannot see. An item's `optional` says it
 /// is the `T` of an `Option<T>`, and a leaf's default widget follows it: an
-/// `Option<bool>` is a tri-state select, a `bool` a checkbox. Each row of an
-/// `Option<Vec<bool>>` is a `bool`, so the row added later must be a checkbox
+/// `Option<bool>` is a tri-state select, a `bool` a checkbox. Each item of an
+/// `Option<Vec<bool>>` is a `bool`, so the item added later must be a checkbox
 /// like the first, not inherit the LIST's optionality.
 #[gtest]
 fn an_added_row_of_an_optional_list_gets_the_same_widget_as_the_first() {
@@ -822,26 +822,26 @@ fn an_added_row_of_an_optional_list_gets_the_same_widget_as_the_first() {
     expect_that!(
         input_tag(&html, "flags.#0"),
         contains_substring(r#"type="checkbox""#),
-        "the row built with the list"
+        "the item built with the list"
     );
     expect_that!(
         html,
         not(contains_substring(
             r#"<select class="fx-control fx-select" id"#
         )),
-        "no row is a tri-state select"
+        "no item is a tri-state select"
     );
     expect_that!(
         input_tag(&html, "flags.#1"),
         contains_substring(r#"type="checkbox""#),
-        "the row added after"
+        "the item added after"
     );
 }
 
-/// A server builds a wire's rows through `set_rows`, the other caller of
+/// A server builds a wire's items through `set_items`, the other caller of
 /// `new_row`. A regression net for that path, not proof of the fix above: a
-/// row built as an `Option<bool>` also reads `"false"` as `Some(false)`, so
-/// this passed before rows were built with `optional: false`.
+/// item built as an `Option<bool>` also reads `"false"` as `Some(false)`, so
+/// this passed before items were built with `optional: false`.
 #[gtest]
 fn an_optional_list_of_bools_round_trips() {
     let value = Flags {
@@ -852,7 +852,7 @@ fn an_optional_list_of_bools_round_trips() {
 
 // ── A variant chosen inside an Option<enum> ──
 //
-// The enum version of the row case above: `enum_node` builds the chosen
+// The enum version of the item case above: `enum_node` builds the chosen
 // variant's fields with `optional: false`, and `VariantNode::set_variant`, which
 // rebuilds them when the user picks a variant, must too.
 

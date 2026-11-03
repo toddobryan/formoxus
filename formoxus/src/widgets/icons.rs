@@ -1,4 +1,4 @@
-//! The icons the row buttons draw, inlined as SVG.
+//! The icons the item buttons draw, inlined as SVG.
 //!
 //! From [Lucide](https://lucide.dev) (ISC license, © Lucide Contributors),
 //! each copied as its `<path>` data with Lucide's own `<svg>` attributes.

@@ -44,12 +44,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// Rebuild the form from the raw `(path, value)` pairs a client sent, and
     /// run the form's own validation over it.
     ///
-    /// The form starts EMPTY, with no variant chosen and no rows, so the pairs
+    /// The form starts EMPTY, with no variant chosen and no items, so the pairs
     /// have to carry the structure as well as the leaves: each enum's variant
-    /// name and each list's row keys at its own path, as
+    /// name and each list's item keys at its own path, as
     /// [`Form::to_wire`](crate::Form::to_wire) sends them (the
     /// [`wire`](crate::wire) module docs show the spelling). An unknown variant
-    /// name or a malformed row list is a field error at that path. An entry
+    /// name or a malformed item list is a field error at that path. An entry
     /// that is simply MISSING leaves that enum unchosen and that list empty,
     /// which a required enum then rejects, but an empty list does not.
     ///
@@ -101,7 +101,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// on the floor.
     /// **Takes a [`Path`], not a `&str`.** A typo is a compile error at the
     /// call site, so the panic below is now reachable only by a path
-    /// `path!` cannot spell — a specific row, whose index only the runtime
+    /// `path!` cannot spell — a specific item, whose index only the runtime
     /// knows. Those go through [`FormState::push_field_error`] with a string.
     ///
     /// **Still panics on a path this form does not have.** A `Path<T>` proves

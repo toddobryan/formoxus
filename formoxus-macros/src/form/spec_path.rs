@@ -15,10 +15,10 @@ use syn::{
 /// variant of the enum field before it.
 ///
 /// `venues` addresses the `ListNode` (its legend); `venues[]` addresses every
-/// row; `venues[].city` addresses the `city` field of every row. That third one
-/// is the reason `[]` exists — a row's fields are otherwise unnameable, since a
-/// row's real path contains a generated key (`venues.#0.city`) that no author
-/// could write and that would pin one row anyway.
+/// item; `venues[].city` addresses the `city` field of every item. That third one
+/// is the reason `[]` exists — an item's fields are otherwise unnameable, since a
+/// item's real path contains a generated key (`venues.#0.city`) that no author
+/// could write and that would pin one item anyway.
 ///
 /// `shape.$Shape::Circle.radius` addresses `radius` while `Circle` is chosen.
 /// The enum is named because the checks below are a `match`, and a pattern has
@@ -45,7 +45,7 @@ pub(crate) struct SpecPath {
 pub(crate) enum Segment {
     /// A field by name, or a tuple field by index (`0`), and the `?` and `[]`
     /// written after it, in order: `maybe?[]` is an `Option<Vec<T>>` and
-    /// `rows[]?` a `Vec<Option<T>>`.
+    /// `items[]?` a `Vec<Option<T>>`.
     Field {
         member: Member,
         suffixes: Vec<Suffix>,
@@ -60,7 +60,7 @@ pub(crate) enum Segment {
 pub(crate) enum Suffix {
     /// `?`: what the `Option` holds.
     Some,
-    /// `[]`: each row of the list.
+    /// `[]`: each item of the list.
     Each,
 }
 
@@ -99,10 +99,10 @@ impl SpecPath {
     /// The map key: dotted, with `[]` kept as part of the segment it followed,
     /// and a variant as `$Variant`.
     ///
-    /// `[]` survives into the key deliberately: the shape walk looks a row up by
+    /// `[]` survives into the key deliberately: the shape walk looks an item up by
     /// folding its `.#n` segment into `[]` (`build::spec_key`), so `venues[]`
-    /// names every row. Stripping it here would lose the distinction between the
-    /// list and its rows. The enum in front of a variant is dropped, since the
+    /// names every item. Stripping it here would lose the distinction between the
+    /// list and its items. The enum in front of a variant is dropped, since the
     /// runtime path never had it (`shape.$Circle.radius`).
     pub(crate) fn key(&self) -> String {
         self.segments
@@ -229,11 +229,11 @@ fn suffixes(input: ParseStream<'_>) -> Result<Vec<Suffix>> {
             let span = syn::bracketed!(brackets in input);
             if !brackets.is_empty() {
                 // `venues[0]` looks plausible and isn't supported: a spec
-                // describes every row, not one of them. Say so rather than
+                // describes every item, not one of them. Say so rather than
                 // letting the index be silently dropped.
                 return Err(syn::Error::new(
                     span.span.join(),
-                    "`[]` must be empty — a spec applies to every row, not one index",
+                    "`[]` must be empty — a spec applies to every item, not one index",
                 ));
             }
             suffixes.push(Suffix::Each);
@@ -331,7 +331,7 @@ impl Parse for SpecPath {
 /// One statement per spec path, proving the path exists on the model.
 ///
 /// Never executed — it exists so rustc checks the access. `[]` becomes a loop,
-/// which is what lets a row's field be named at all: the element type is
+/// which is what lets an item's field be named at all: the element type is
 /// inferred, so nothing has to spell it out. A variant becomes a `match` that
 /// binds the field after it, for the same reason: the field's type is
 /// inferred from the pattern. `?` binds what the `Option` holds through
@@ -396,15 +396,15 @@ fn probe_suffixes(
     match suffixes.split_first() {
         None => probe(rest, next, depth),
         Some((Suffix::Each, more)) => {
-            let row = format_ident!("__row{depth}");
-            let inner = probe_suffixes(quote!(#row), true, more, span, rest, depth + 1);
+            let binding = format_ident!("__item{depth}");
+            let inner = probe_suffixes(quote!(#binding), true, more, span, rest, depth + 1);
             // `quote_spanned!`, not `quote!`: `.iter()` is the token that
             // fails when `[]` is put on something that is not a list, and
             // with a call-site span rustc underlines the whole `form!`
             // invocation and suggests nonsense. Borrowing the segment's own
             // span puts the caret on the author's `field[]`.
             let iter = quote_spanned! { span=> #next.iter() };
-            quote! { for #row in #iter { #inner } }
+            quote! { for #binding in #iter { #inner } }
         }
         Some((Suffix::Some, more)) => {
             let held = format_ident!("__o{depth}");
@@ -425,7 +425,7 @@ fn probe_suffixes(
 /// For the projection closures `form!`'s constraint checks are built from
 /// (`|__m: &Model| &<this>`); see `formoxus::field_kind` for why those are a
 /// closure and not a witness like [`probe`]. `[]` goes through
-/// `field_kind::row`, which stands for one element, so the element's own
+/// `field_kind::item`, which stands for one element, so the element's own
 /// fields can follow it. A variant is a `match` whose other arm is
 /// `field_kind::other_variant`, which stands for the field in a variant that
 /// isn't chosen. A `?` goes through `field_kind::some`, except the path's very
@@ -435,7 +435,7 @@ fn probe_suffixes(
 ///
 /// `[]` calls `.iter()` and `?` calls `some` with the segment's own span,
 /// exactly as `probe` does, so a mistake fails here with the SAME error at the
-/// same place, and rustc shows it once. Passing `&list` to `row` instead would
+/// same place, and rustc shows it once. Passing `&list` to `item` instead would
 /// add a second, different error pointing at the whole `form!`.
 pub(crate) fn project(segments: &[Segment]) -> TokenStream2 {
     walk(segments, false, |_, _| {})
@@ -456,7 +456,7 @@ pub(crate) fn project_peeled(segments: &[Segment]) -> TokenStream2 {
 /// own "no field on `Option`" or mismatched types. That leaves two places a
 /// missing `?` type-checks anyway: the end of the path, where the field is
 /// only borrowed, and before `[]`, where `Option` has an `.iter()` of its own
-/// and would quietly make the "row" the whole list. One assertion for each,
+/// and would quietly make the "item" the whole list. One assertion for each,
 /// asking the shape whether the place is still an `Option` once every written
 /// `?` has been taken off.
 pub(crate) fn option_checks(segments: &[Segment], model: &impl quote::ToTokens) -> TokenStream2 {
@@ -495,11 +495,11 @@ fn some_call(span: Span) -> TokenStream2 {
 
 /// The place [`project`] and [`option_checks`] build: every segment applied to
 /// `__m` in turn. `peel_last` takes off the path's final `?` too, which the
-/// projection keeps; `before_rows` sees the place each `[]` is applied to.
+/// projection keeps; `before_items` sees the place each `[]` is applied to.
 fn walk(
     segments: &[Segment],
     peel_last: bool,
-    mut before_rows: impl FnMut(&TokenStream2, Span),
+    mut before_items: impl FnMut(&TokenStream2, Span),
 ) -> TokenStream2 {
     let mut place = quote!(__m);
     let mut segments = segments.iter().peekable();
@@ -534,9 +534,9 @@ fn walk(
         for (i, suffix) in suffixes.iter().enumerate() {
             match suffix {
                 Suffix::Each => {
-                    before_rows(&place, span);
+                    before_items(&place, span);
                     let iter = quote_spanned! { span=> #place.iter() };
-                    place = quote! { (*::formoxus::field_kind::row(#iter)) };
+                    place = quote! { (*::formoxus::field_kind::item(#iter)) };
                 }
                 Suffix::Some if last_segment && i == suffixes.len() - 1 && !peel_last => {}
                 Suffix::Some => {
@@ -557,7 +557,7 @@ mod tests {
     use googletest::prelude::*;
     use quote::quote;
 
-    // ── `[]` — each row of a list ────────────────────────────────────────
+    // ── `[]` — each item of a list ────────────────────────────────────────
 
     #[gtest]
     fn a_bare_list_path_addresses_the_list_itself() {
@@ -568,7 +568,7 @@ mod tests {
     }
 
     #[gtest]
-    fn empty_brackets_address_every_row() {
+    fn empty_brackets_address_every_item() {
         let spec = parse(quote! { Quiz { answers[] => { widget: textarea } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("answers[]"));
         expect_that!(fields(&spec)[0].1, eq("textarea"));
@@ -576,9 +576,9 @@ mod tests {
 
     #[gtest]
     fn brackets_compose_with_a_field_below_them() {
-        // The case that `[]` exists for: a row's own field. `venues.#0.city` is
+        // The case that `[]` exists for: an item's own field. `venues.#0.city` is
         // the real node path, which no author can write and which would pin one
-        // row if they could.
+        // item if they could.
         let spec = parse(quote! { Trip { venues[].city => { label: "City" } } }).unwrap();
         expect_that!(fields(&spec)[0].0, eq("venues[].city"));
     }
@@ -594,9 +594,9 @@ mod tests {
     #[gtest]
     fn an_indexed_bracket_is_rejected() {
         // `venues[0]` reads as if it would work; refusing it is better than
-        // silently dropping the index and applying to every row.
+        // silently dropping the index and applying to every item.
         let msg = err_of(quote! { Quiz { answers[0] => { label: "First" } } });
-        expect_that!(msg, contains_substring("every row"));
+        expect_that!(msg, contains_substring("every item"));
     }
 
     // ── The witness ──────────────────────────────────────────────────────
@@ -636,40 +636,40 @@ mod tests {
     }
 
     #[gtest]
-    fn a_row_selector_becomes_a_loop() {
-        // The loop is what makes a row's type INFERRED — the macro never has to
+    fn an_item_selector_becomes_a_loop() {
+        // The loop is what makes an item's type INFERRED — the macro never has to
         // name the element type, which it could not do anyway.
         expect_that!(
             witness_of(quote! { Quiz { answers[] => { widget: textarea } } }),
-            eq("for __row0 in __s . answers . iter () { let _ = & __row0 ; }")
+            eq("for __item0 in __s . answers . iter () { let _ = & __item0 ; }")
         );
     }
 
     #[gtest]
-    fn a_row_field_is_checked_through_the_loop_binding() {
+    fn an_item_field_is_checked_through_the_loop_binding() {
         expect_that!(
             witness_of(quote! { Trip { venues[].city => { label: "City" } } }),
-            eq("for __row0 in __s . venues . iter () { let _ = & __row0 . city ; }")
+            eq("for __item0 in __s . venues . iter () { let _ = & __item0 . city ; }")
         );
     }
 
     #[gtest]
-    fn nested_row_selectors_nest_loops_with_distinct_bindings() {
-        // Depth-indexed bindings rather than shadowing: `__row0`/`__row1` keep a
+    fn nested_item_selectors_nest_loops_with_distinct_bindings() {
+        // Depth-indexed bindings rather than shadowing: `__item0`/`__item1` keep a
         // rustc error pointing at the loop that actually failed.
         expect_that!(
             witness_of(quote! { Grid { rows[].cells[] => { widget: textarea } } }),
-            eq("for __row0 in __s . rows . iter () \
-                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 ; } }")
+            eq("for __item0 in __s . rows . iter () \
+                 { for __item1 in __item0 . cells . iter () { let _ = & __item1 ; } }")
         );
     }
 
     #[gtest]
-    fn a_field_below_a_nested_row_keeps_walking() {
+    fn a_field_below_a_nested_item_keeps_walking() {
         expect_that!(
             witness_of(quote! { Grid { rows[].cells[].text => { label: "Text" } } }),
-            eq("for __row0 in __s . rows . iter () \
-                 { for __row1 in __row0 . cells . iter () { let _ = & __row1 . text ; } }")
+            eq("for __item0 in __s . rows . iter () \
+                 { for __item1 in __item0 . cells . iter () { let _ = & __item1 . text ; } }")
         );
     }
 
@@ -743,7 +743,7 @@ mod tests {
     }
 
     #[gtest]
-    fn a_keyword_segment_works_below_a_row_selector() {
+    fn a_keyword_segment_works_below_an_item_selector() {
         let spec = parse(quote! { Model { rows[].r#match => { label: "Arm" } } }).expect("parses");
         expect_that!(
             fields(&spec)
@@ -785,14 +785,14 @@ mod tests {
         project(&path.segments).to_string()
     }
 
-    /// A place, not a reference: `row` yields `&T`, so it is dereferenced to
+    /// A place, not a reference: `item` yields `&T`, so it is dereferenced to
     /// let the next field follow, and the closure's own `&` then makes the
     /// field's type `T` rather than `&T`.
     #[gtest]
-    fn a_row_segment_projects_through_row() {
+    fn an_item_segment_projects_through_item() {
         expect_that!(
             projection_of(quote! { Trip { venues[].city => { label: "City" } } }),
-            eq("(* :: formoxus :: field_kind :: row (__m . venues . iter ())) . city")
+            eq("(* :: formoxus :: field_kind :: item (__m . venues . iter ())) . city")
         );
     }
 
@@ -827,7 +827,7 @@ mod tests {
     }
 
     #[gtest]
-    fn a_variant_composes_with_rows_on_either_side() {
+    fn a_variant_composes_with_items_on_either_side() {
         let spec = parse(quote! {
             Drawing { shapes[].$Shape::Poly.points[].x => { label: "X" } }
         })
@@ -894,11 +894,11 @@ mod tests {
     }
 
     #[gtest]
-    fn a_row_inside_a_variant_loops_over_the_bound_field() {
+    fn an_item_inside_a_variant_loops_over_the_bound_field() {
         expect_that!(
             witness_of(quote! { D { s.$S::Poly.points[] => { label: "P" } } }),
             eq("match & __s . s { S :: Poly { points : __v0 , .. } => \
-                { for __row1 in __v0 . iter () { let _ = & __row1 ; } } \
+                { for __item1 in __v0 . iter () { let _ = & __item1 ; } } \
                 # [allow (unreachable_patterns)] _ => { } }")
         );
     }
@@ -1052,7 +1052,7 @@ mod tests {
             witness_of(quote! { M { maybe?[] => { widget: email } } }),
             eq(
                 "{ let __p = & __s . maybe ; let __o0 = :: formoxus :: field_kind :: some (__p) ; \
-                for __row1 in __o0 . iter () { let _ = & __row1 ; } }"
+                for __item1 in __o0 . iter () { let _ = & __item1 ; } }"
             )
         );
     }
@@ -1098,7 +1098,7 @@ mod tests {
     /// One check at the end, on the place with every `?` taken off, and one
     /// before each `[]`: the two places a missing `?` type-checks anyway.
     #[gtest]
-    fn option_checks_cover_the_end_and_each_row_selector() {
+    fn option_checks_cover_the_end_and_each_item_selector() {
         let out = option_checks_of(quote! { M { maybe?[] => { widget: email } } });
         expect_that!(out.matches("const _").count(), eq(2));
         expect_that!(
@@ -1111,7 +1111,7 @@ mod tests {
         expect_that!(
             out,
             contains_substring(
-                "shape_of (| __m : & M | & (* :: formoxus :: field_kind :: row ((* { let __p = & \
+                "shape_of (| __m : & M | & (* :: formoxus :: field_kind :: item ((* { let __p = & \
                  __m . maybe ; :: formoxus :: field_kind :: some (__p) }) . iter ())))"
             )
         );

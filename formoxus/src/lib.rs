@@ -119,7 +119,7 @@ pub use formoxus_macros::using_fns;
 /// The witness trick `form!` uses on its own field entries, available for any
 /// field: it emits a borrow of the field beside the path's string form, so a
 /// typo is a compile error rather than a `no_such_path` at runtime. Nested
-/// paths (`Model.venue.city`), row paths (`Model.answers[].text`) and variant
+/// paths (`Model.venue.city`), item paths (`Model.answers[].text`) and variant
 /// paths (`Model.shape.$Shape::Circle.radius`) work the same way, and an
 /// `Option` field takes a `?` (`Model.address?.city`, `Model.nickname?`),
 /// which the path's string drops. A variant

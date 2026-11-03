@@ -433,12 +433,12 @@ fn a_dotted_path_reaches_exactly_one_nested_field() {
     expect_that!(html, not(contains_substring(">City<")));
 }
 
-// ── `[]`, the row selector ───────────────────────────────────────────────
+// ── `[]`, the item selector ───────────────────────────────────────────────
 
 #[component]
 fn ListLabelAndRowWidgets() -> Element {
     // Both halves of the list vocabulary in one spec: `stops` addresses the
-    // `ListNode` itself (its legend), `stops[]` every row. That they can coexist is
+    // `ListNode` itself (its legend), `stops[]` every item. That they can coexist is
     // the reason the parser compares on the rendered key rather than on idents.
     use_form(|| {
         form_for(
@@ -455,7 +455,7 @@ fn ListLabelAndRowWidgets() -> Element {
 }
 
 #[gtest]
-fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
+fn an_item_selector_reaches_every_item_and_the_list_keeps_its_own_label() {
     let html = render_to_html(ListLabelAndRowWidgets);
     // The list's own label, on the `fieldset`'s `legend`.
     expect_that!(
@@ -464,9 +464,9 @@ fn a_row_selector_reaches_every_row_and_the_list_keeps_its_own_label() {
             r#"<legend class="fx-legend fx-field-label">Stops along the way</legend>"#
         )
     );
-    // And every row got the widget — two rows in `a_trip`, so exactly two.
+    // And every item got the widget — two items in `a_trip`, so exactly two.
     expect_that!(html.matches("type=\"email\"").count(), eq(2));
-    // Rows still hold their values: the override is presentational only.
+    // Items still hold their values: the override is presentational only.
     expect_that!(html, contains_substring("a@example.com"));
     expect_that!(html, contains_substring("b@example.com"));
 }
@@ -716,8 +716,8 @@ fn a_question_mark_reaches_a_variant_inside_an_option() {
 }
 
 #[gtest]
-fn a_question_mark_reaches_the_rows_of_an_optional_list() {
-    // Without the `?`, `Option::iter` would have made the whole list the "row";
+fn a_question_mark_reaches_the_items_of_an_optional_list() {
+    // Without the `?`, `Option::iter` would have made the whole list the "item";
     // the const check refuses that spelling (`tests/ui/form_option_list_*`).
     let html = render_to_html(ThroughOptions);
     expect_that!(html.matches(r#"type="email""#).count(), eq(2));
@@ -1113,7 +1113,7 @@ struct Listing {
 
 /// Every place a constraint may legitimately sit, so the `const _` checks
 /// `form!` emits must let each through: an `Option` is judged by what it
-/// holds, and a nested field and a `[]` row by the leaf's own type. A newtype
+/// holds, and a nested field and a `[]` item by the leaf's own type. A newtype
 /// is NOT among them: it has no default field, so a setting on one does not
 /// compile (`tests/ui/form_setting_on_a_newtype`). The rejections are trybuild
 /// goldens in `tests/ui/`, since they cannot compile.

@@ -2,12 +2,12 @@
 //! field's settings (`min: 3`) will expand to.
 //!
 //! The shape walk builds the leaf from the constructor while it walks, so
-//! nothing is mutated afterwards. Each test names a leaf inside a `Vec` row,
+//! nothing is mutated afterwards. Each test names a leaf inside a `Vec` item,
 //! gives it a field the default walk would never build (`CapField`, with a
 //! setting baked in, the way `min: 3` would be), and checks the field's own
-//! `check` runs. A row's leaves come to exist three ways, so the spec has
+//! `check` runs. An item's leaves come to exist three ways, so the spec has
 //! three routes to reach: built by `form_for` from a value, added by `AddItem`,
-//! and revealed by `ChooseVariant` inside a row.
+//! and revealed by `ChooseVariant` inside an item.
 
 use facet::Facet;
 use formoxus::error::ValidationMessage;
@@ -111,9 +111,9 @@ fn without_a_constructor_the_default_field_takes_any_u32() {
     );
 }
 
-/// Route 1: a row `form_for` builds from the value.
+/// Route 1: an item `form_for` builds from the value.
 #[gtest]
-fn a_constructor_reaches_a_row_built_from_the_value() {
+fn a_constructor_reaches_an_item_built_from_the_value() {
     let trip = Trip {
         venues: vec![Venue {
             city: "Paris".into(),
@@ -132,10 +132,10 @@ fn a_constructor_reaches_a_row_built_from_the_value() {
     );
 }
 
-/// Route 2: a row added after the form exists, which `AddItem` builds through
+/// Route 2: an item added after the form exists, which `AddItem` builds through
 /// the same walk, spec and all.
 #[gtest]
-fn a_constructor_reaches_a_row_added_later() {
+fn a_constructor_reaches_an_item_added_later() {
     let spec = FormSpec::default().with_node("venues[].capacity", cap_at_100());
     let mut state = empty_form::<Trip>(spec);
     state
@@ -155,10 +155,10 @@ fn a_constructor_reaches_a_row_added_later() {
     );
 }
 
-/// Route 3a: a variant's field inside a row, revealed by choosing the variant
-/// after the row was added.
+/// Route 3a: a variant's field inside an item, revealed by choosing the variant
+/// after the item was added.
 #[gtest]
-fn a_constructor_reaches_a_variant_chosen_inside_an_added_row() {
+fn a_constructor_reaches_a_variant_chosen_inside_an_added_item() {
     let spec = FormSpec::default().with_node("shapes[].$Circle.radius", cap_at_100());
     let mut state = empty_form::<Drawing>(spec);
     state
@@ -312,9 +312,9 @@ fn a_const_str_table_serves_a_string_field() {
     );
 }
 
-/// Through a `[]` row, as `form!` projects one.
+/// Through a `[]` item, as `form!` projects one.
 #[gtest]
-fn choices_reach_a_row() {
+fn choices_reach_an_item() {
     let trip = Trip {
         venues: vec![Venue {
             city: "Paris".into(),
@@ -324,7 +324,7 @@ fn choices_reach_a_row() {
     let spec = FormSpec::default().with_node(
         "venues[].city",
         choice_field_for(
-            |m: &Trip| &formoxus::field_kind::row(m.venues.iter()).city,
+            |m: &Trip| &formoxus::field_kind::item(m.venues.iter()).city,
             [("Paris", "Paris"), ("Rome", "Rome")],
         ),
     );

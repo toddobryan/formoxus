@@ -28,7 +28,7 @@ pub(crate) struct FieldBody {
     pub(crate) widget: Option<WidgetRef>,
     pub(crate) label: Option<Expr>,
     pub(crate) choices: Option<(Ident, Expr)>,
-    /// `adder: SomeComponent`, the component that adds the list's rows in
+    /// `adder: SomeComponent`, the component that adds the list's items in
     /// place of the Add button. The key is kept for the list check's span.
     pub(crate) adder: Option<(Ident, syn::Path)>,
     /// `item: SomeComponent`, what shows each item's text in a set (box 9).
@@ -2006,10 +2006,10 @@ mod tests {
         );
     }
 
-    /// `rows[]` is every row of the outer list, which for a `Vec<Vec<_>>` is
+    /// `rows[]` is every item of the outer list, which for a `Vec<Vec<_>>` is
     /// each inner list: the key the spec gets is the path as written.
     #[gtest]
-    fn adder_on_every_row_keeps_the_row_path() {
+    fn adder_on_every_item_keeps_the_items_path() {
         let spec = parse(quote! { Source { rows[] => { adder: SearchToAdd } } }).unwrap();
         expect_that!(
             spec.expand().to_string(),
@@ -2029,11 +2029,11 @@ mod tests {
         );
     }
 
-    /// On `x[]`, the likely mistake is putting it with the rows' label, so
+    /// On `x[]`, the likely mistake is putting it with the items' label, so
     /// the refusal says where it goes instead. Only that message: the path is
     /// known at expansion, so the plain one is not emitted beside it.
     #[gtest]
-    fn adder_on_every_row_says_to_drop_the_brackets() {
+    fn adder_on_every_item_says_to_drop_the_brackets() {
         let spec = parse(quote! { Source { answers[] => { adder: SearchToAdd } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(

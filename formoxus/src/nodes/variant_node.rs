@@ -349,7 +349,7 @@ impl Node for VariantNode {
     }
 
     fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
-        // The choice goes out even when unchosen, as `""`, so a list row that
+        // The choice goes out even when unchosen, as `""`, so a list item that
         // holds an unchosen optional enum still has an entry to be rebuilt from.
         // An `Unknown` sends its bad name back, so a reply shows what was rejected.
         let data = match &self.choice {
