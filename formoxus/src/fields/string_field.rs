@@ -12,6 +12,11 @@ pub struct StringField {
     /// HTML `pattern` syntax: anchored to the whole value and compiled with
     /// the `v` flag, as a browser does. `form!` checks it compiles.
     pub pattern: Option<&'static str>,
+    /// Read the text as typed (`no_trim` in `form!`), rather than trimmed of
+    /// leading and trailing whitespace, which makes a field of spaces empty.
+    /// Django's `strip=False`. A password input is never trimmed, set or not:
+    /// its spaces are part of it.
+    pub no_trim: bool,
 }
 
 impl Field for StringField {
@@ -38,6 +43,10 @@ impl Field for StringField {
             attrs = attrs.with_default(Attr::Pattern, AttrValue::Regex(patt));
         }
         attrs
+    }
+
+    fn trims(&self, password: bool) -> bool {
+        !self.no_trim && !password
     }
 
     fn check(&self, value: &Self::Value) -> Vec<ValidationMessage> {

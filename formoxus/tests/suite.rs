@@ -73,6 +73,8 @@ mod spec_constructors;
 mod specs;
 #[path = "suite/submissions.rs"]
 mod submissions;
+#[path = "suite/trim.rs"]
+mod trim;
 #[path = "suite/vecs.rs"]
 mod vecs;
 #[path = "suite/widgets.rs"]

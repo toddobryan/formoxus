@@ -55,6 +55,18 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
     fn choices(&self) -> Option<Vec<Choice>> {
         None
     }
+
+    /// Whether the raw text is trimmed of leading and trailing whitespace
+    /// before it is read (#16): where it becomes a value, never in the input,
+    /// which keeps what was typed. `password` is whether the field renders as
+    /// a password input, where a space is part of the secret, so a field
+    /// that trims text should not trim it.
+    ///
+    /// `false` by default: a `bool`'s or a choice's raw text is written by a
+    /// control formoxus renders, and is read exactly as sent.
+    fn trims(&self, _password: bool) -> bool {
+        false
+    }
 }
 
 /// Parse a raw input string into `X` using `X`'s own facet parse vtable —

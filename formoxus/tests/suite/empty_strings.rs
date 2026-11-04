@@ -90,14 +90,16 @@ fn none_and_some_empty_are_indistinguishable() {
 
 #[gtest]
 fn non_empty_strings_are_untouched() {
-    // Guard on the collapse: it must catch `""` and nothing else. A string of
-    // spaces is a real value — trimming is a validator's job, not populating's.
+    // Guard on the collapse: populating catches `""` and nothing else. A
+    // string of spaces is the model's own value, which populating leaves as
+    // it is; it is RAW TEXT that is trimmed, where it is read (#16), so
+    // across the wire the same spaces arrive as absence.
     let value = Optional {
         body: Some("   ".to_string()),
     };
     let mut form = form_for(&value, FormSpec::default());
     expect_that!(form.validate(), some(eq(&value)));
-    expect_that!(across_the_wire(&value), ok(eq(&value)));
+    expect_that!(across_the_wire(&value), ok(eq(&Optional { body: None })));
 
     let value = Required {
         body: "hello".to_string(),

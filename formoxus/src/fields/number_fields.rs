@@ -105,6 +105,12 @@ impl<T: Number> Field for NumberField<T> {
         TextInput.into()
     }
 
+    /// Always: no number has a meaningful leading or trailing space, and
+    /// without it `" 42"` would not parse.
+    fn trims(&self, _password: bool) -> bool {
+        true
+    }
+
     /// `min` and `max`, so the browser checks what `check` does.
     fn widget_attrs(&self) -> FieldAttrs {
         let mut attrs = FieldAttrs::default();

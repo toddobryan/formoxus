@@ -4,7 +4,7 @@ error[E0609]: no field `required_true` on type `&mut StringField`
 14 |             name => { required_true },
    |                       ^^^^^^^^^^^^^ unknown field
    |
-   = note: available fields are: `min_length`, `max_length`, `pattern`
+   = note: available fields are: `min_length`, `max_length`, `pattern`, `no_trim`
 
 error[E0080]: evaluation panicked: `required_true` applies only to a bool field, where it means the value must be true; every other field is already required unless its type is an `Option`
   --> tests/ui/form_required_on_a_string.rs:14:23

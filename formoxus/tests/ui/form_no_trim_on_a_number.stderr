@@ -1,0 +1,7 @@
+error[E0609]: no field `no_trim` on type `&mut NumberField<u8>`
+  --> tests/ui/form_no_trim_on_a_number.rs:13:43
+   |
+13 |     let _ = form! { Order { quantity => { no_trim } } };
+   |                                           ^^^^^^^ unknown field
+   |
+   = note: available fields are: `min`, `max`

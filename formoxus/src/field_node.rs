@@ -168,6 +168,12 @@ impl<F: Field> FieldNode<F> {
         self.widget.name() == CheckboxInput::NAME
     }
 
+    /// Whether this field renders as a password input, whose text is never
+    /// trimmed.
+    fn is_password(&self) -> bool {
+        self.widget.name() == crate::widgets::PasswordInput::NAME
+    }
+
     fn is_unticked_checkbox(&self) -> bool {
         matches!(self.value, FieldValue::Empty) && self.is_checkbox()
     }
@@ -237,14 +243,25 @@ impl<F: Field> Node for FieldNode<F> {
             return; // nothing supplied for this field; leave it as it stands
         };
 
+        // Trimmed here, where the text becomes a value, and nowhere else: the
+        // store keeps what was typed, so the input never loses a space the
+        // user is still typing past (#16). The server reads the same raw
+        // text through here, so it trims the same way.
+        let text = if self.field.trims(self.is_password()) {
+            raw.trim()
+        } else {
+            raw.as_str()
+        };
+
         // An empty input means "unfilled", which is what `Empty` encodes —
         // that's what lets required-validation still fire on a blanked field.
-        if raw.is_empty() {
+        // After trimming, so a field of spaces is unfilled too.
+        if text.is_empty() {
             self.value = FieldValue::Empty;
             return;
         }
 
-        self.value = match self.field.parse(raw) {
+        self.value = match self.field.parse(text) {
             Ok(t) => FieldValue::Valid(t),
             Err(error) => FieldValue::Invalid {
                 raw: raw.clone(),

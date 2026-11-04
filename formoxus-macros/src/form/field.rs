@@ -48,6 +48,11 @@ pub(crate) struct FieldBody {
     /// `validator: check`, the field's own check: a `fn` or closure from the
     /// field's value (an `Option`'s inner one) to its messages.
     pub(crate) validator: Option<Expr>,
+    /// The bare flag `no_trim`: read a text field's raw text as typed rather
+    /// than trimmed (#16). A setting on the field, so a field without one,
+    /// like a number's, does not compile. The key, since a flag has nothing
+    /// else, is what that error is spanned on.
+    pub(crate) no_trim: Option<Ident>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -341,7 +346,7 @@ impl FieldBody {
     /// `span` is the field's path: the closure's own tokens carry it, so an
     /// error about the closure as a whole lands on the path.
     pub(crate) fn settings_tokens(&self, span: Span) -> Option<TokenStream2> {
-        let sets: Vec<TokenStream2> = self
+        let mut sets: Vec<TokenStream2> = self
             .attrs
             .0
             .iter()
@@ -350,6 +355,11 @@ impl FieldBody {
                 _ => None,
             })
             .collect();
+        // Spanned on the key, so a field with no `no_trim` (a number's, a
+        // `bool`'s) is "no field `no_trim`" right there.
+        if let Some(key) = &self.no_trim {
+            sets.push(quote_spanned! { key.span()=> __f.no_trim = true; });
+        }
         (!sets.is_empty()).then(|| quote_spanned! { span=> |__f| { #(#sets)* } })
     }
 
@@ -688,6 +698,13 @@ impl Parse for FieldBody {
         if fb.is_empty() && fb.nested.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
+        if let (Some(_), Some(key)) = (&fb.choices, &fb.no_trim) {
+            return Err(syn::Error::new(
+                key.span(),
+                "`no_trim` cannot be combined with `choices`: a choice's value is written by the \
+                 control formoxus renders, and is already read exactly as sent",
+            ));
+        }
         if fb.choices.is_some()
             && let Some((AttrId::Std(attr), parsed)) =
                 fb.attrs.0.iter().find(|(attr_id, _)| is_validated(attr_id))
@@ -789,14 +806,23 @@ impl FieldBody {
                 self.sort_by = Some(SortBy::parse(key, body)?);
                 Ok(())
             }
-            "set" => {
+            // The bare flags: a key alone, kept for the span of what checks it.
+            "set" | "no_trim" => {
                 if body.peek(Token![:]) {
                     return Err(flag_with_value(&key));
                 }
-                if self.set.is_some() {
-                    return Err(syn::Error::new_spanned(&key, "`set` is given twice"));
+                let flag = if name == "set" {
+                    &mut self.set
+                } else {
+                    &mut self.no_trim
+                };
+                if flag.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        &key,
+                        format!("`{name}` is given twice"),
+                    ));
                 }
-                self.set = Some(key);
+                *flag = Some(key);
                 Ok(())
             }
             _ => {
@@ -814,6 +840,7 @@ impl FieldBody {
             && self.label.is_none()
             && self.help_text.is_none()
             && self.validator.is_none()
+            && self.no_trim.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
@@ -1280,6 +1307,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "label".to_string(),
         "help_text".to_string(),
         "validator".to_string(),
+        "no_trim".to_string(),
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
@@ -1456,6 +1484,44 @@ mod tests {
         expect_that!(out, contains_substring(". validator (must_be_adult)"));
     }
 
+    /// `no_trim` is a setting on the field, so it rides `field_for`'s closure
+    /// like `max_length` does.
+    #[gtest]
+    fn no_trim_expands_to_a_setting() {
+        let spec = parse(quote! { Source { notes => { no_trim } } }).unwrap();
+        let out = spec.expand().to_string();
+        expect_that!(
+            out,
+            contains_substring(":: formoxus :: field_kind :: field_for")
+        );
+        expect_that!(out, contains_substring("__f . no_trim = true ;"));
+    }
+
+    #[gtest]
+    fn no_trim_given_twice_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { notes => { no_trim, no_trim } } }),
+            contains_substring("`no_trim` is given twice")
+        );
+    }
+
+    /// A flag, like `set`: it takes no value.
+    #[gtest]
+    fn no_trim_with_a_value_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { notes => { no_trim: true } } }),
+            contains_substring("no_trim")
+        );
+    }
+
+    #[gtest]
+    fn no_trim_beside_choices_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { state => { choices: STATES, no_trim } } }),
+            contains_substring("`no_trim` cannot be combined with `choices`")
+        );
+    }
+
     #[gtest]
     fn a_validator_given_twice_is_refused() {
         expect_that!(
@@ -1507,7 +1573,7 @@ mod tests {
                 "validator" => quote!(#ident: no_rust_please),
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
-                "set" => quote!(#ident),
+                "set" | "no_trim" => quote!(#ident),
                 "sort_by" => quote!(#ident: String::cmp),
                 "feedback" => quote!(#ident: |_| None),
                 "item" => quote!(#ident: TagChip),
