@@ -48,6 +48,7 @@ impl LeafArgs<'_> {
             name: self.name.to_string(),
             label: spec.and_then(|s| s.label.clone()),
             help_text: spec.and_then(|s| s.help_text.clone()),
+            validator: spec.and_then(|s| s.validator.clone()),
             optional: self.optional,
             attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
             widget: spec
@@ -101,6 +102,8 @@ pub struct FieldNode<F: Field> {
     pub name: String,
     pub label: Option<String>,
     pub help_text: Option<String>,
+    /// The spec's `validator:`, run once the field's own checks pass.
+    pub validator: Option<crate::nodes::FieldValidator>,
     pub optional: bool,
     /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
@@ -340,6 +343,16 @@ impl<F: Field> Node for FieldNode<F> {
                 .expect("`Boolean` input kind is only ever derived from a `bool` shape");
             self.errors.extend(self.field.check(&value));
         }
+        // The dev's own check, last, and only on a value the field's own
+        // checks passed: Django's validators run after `clean`, the same way.
+        if self.errors.is_empty() {
+            let messages = self
+                .validator
+                .as_ref()
+                .map(|validator| validator.messages_for(self))
+                .unwrap_or_default();
+            self.errors.extend(messages);
+        }
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
@@ -451,6 +464,7 @@ mod tests {
             name: "f".to_string(),
             label: None,
             help_text: None,
+            validator: None,
             optional: false,
             attrs: FieldAttrs::default(),
             widget: field.default_widget(false),

@@ -1,0 +1,52 @@
+error[E0631]: type mismatch in function arguments
+  --> tests/ui/form_validator_of_the_wrong_type.rs:21:50
+   |
+12 | fn not_empty(name: &str) -> Vec<ValidationMessage> {
+   | -------------------------------------------------- found signature defined here
+...
+21 |     let _ = form! { Signup { age => { validator: not_empty } } };
+   |                                                  ^^^^^^^^^ expected due to this
+   |
+   = note: expected function signature `fn(u8) -> _`
+              found function signature `fn(&str) -> _`
+note: required by a bound in `formoxus::field_kind::validators::CopyValidator::validator`
+  --> src/field_kind.rs
+   |
+   |         fn validator(
+   |            --------- required by a bound in this associated function
+   |             &self,
+   |             check: impl Fn(V) -> Vec<ValidationMessage> + Send + Sync + 'static,
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `CopyValidator::validator`
+help: consider wrapping the function in a closure
+   |
+21 |     let _ = form! { Signup { age => { validator: |arg0: u8| not_empty(/* &str */) } } };
+   |                                                  ++++++++++          ++++++++++++
+
+error[E0631]: type mismatch in function arguments
+  --> tests/ui/form_validator_of_the_wrong_type.rs:22:50
+   |
+16 | fn must_be_adult(age: &u8) -> Vec<ValidationMessage> {
+   | ---------------------------------------------------- found signature defined here
+...
+22 |     let _ = form! { Signup { age => { validator: must_be_adult } } };
+   |                                                  ^^^^^^^^^^^^^ expected due to this
+   |
+   = note: expected function signature `fn(u8) -> _`
+              found function signature `fn(&u8) -> _`
+note: required by a bound in `formoxus::field_kind::validators::CopyValidator::validator`
+  --> src/field_kind.rs
+   |
+   |         fn validator(
+   |            --------- required by a bound in this associated function
+   |             &self,
+   |             check: impl Fn(V) -> Vec<ValidationMessage> + Send + Sync + 'static,
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `CopyValidator::validator`
+help: consider wrapping the function in a closure
+   |
+22 |     let _ = form! { Signup { age => { validator: |age: u8| must_be_adult(&age) } } };
+   |                                                  +++++++++              ++++++
+help: consider adjusting the signature so it does not borrow its argument
+   |
+16 - fn must_be_adult(age: &u8) -> Vec<ValidationMessage> {
+16 + fn must_be_adult(age: u8) -> Vec<ValidationMessage> {
+   |

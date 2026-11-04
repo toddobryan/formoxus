@@ -24,6 +24,9 @@ pub struct ListNode {
     pub label: Option<String>,
     /// Its hint (`help_text:`), under the legend.
     pub help_text: Option<String>,
+    /// Its own check (`validator:`), over the whole collection once every
+    /// item is valid; its messages go under the legend with the list's own.
+    pub validator: Option<crate::nodes::FieldValidator>,
     pub optional: bool,
     pub adder: ItemAdder,
     pub items: Items,
@@ -148,6 +151,14 @@ impl Node for ListNode {
 
     fn validate(&mut self) {
         self.items.validate();
+        if !self.items.has_errors_within() {
+            let messages = self
+                .validator
+                .as_ref()
+                .map(|validator| validator.messages_for(self))
+                .unwrap_or_default();
+            self.items.add_errors(messages);
+        }
     }
 
     fn has_errors_within(&self) -> bool {

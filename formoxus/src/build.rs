@@ -652,6 +652,7 @@ fn list_node(
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
+        validator: spec.and_then(|s| s.validator.clone()),
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
         items: Items::new(shape, items),
@@ -740,6 +741,7 @@ fn set_node(
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
+        validator: spec.and_then(|s| s.validator.clone()),
         optional,
         // A set's own default, not a list's: a set has no use for a blank
         // item, so its Add commits the draft (`SETS_PLAN.md` 7d).
@@ -779,6 +781,7 @@ fn struct_node(
         optional,
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
+        validator: spec.and_then(|s| s.validator.clone()),
         nodes: nodes_for(shape, peek, walk, prefix, /* optional */ false),
         errors: Vec::new(),
     })
@@ -806,6 +809,7 @@ fn enum_node(
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
+        validator: spec.and_then(|s| s.validator.clone()),
         enum_type,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it
         choice: match variant {

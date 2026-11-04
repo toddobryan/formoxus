@@ -7,7 +7,7 @@ use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
-use crate::widgets::{described_by, field_help};
+use crate::widgets::{FieldErrors, described_by, field_help};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use formoxus_spec::FixedKey;
@@ -19,6 +19,9 @@ pub struct StructNode {
     pub label: Option<String>,
     /// Its hint (`help_text:`), under the legend.
     pub help_text: Option<String>,
+    /// Its own check (`validator:`), over the whole struct once every field
+    /// is valid.
+    pub validator: Option<crate::nodes::FieldValidator>,
     pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
 }
@@ -37,10 +40,12 @@ impl Node for StructNode {
     fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
         let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
-        let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, false);
+        // `here`, not `within`: a bad field is its own error, not the struct's.
+        let invalid = self.has_errors_here();
+        let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::StructLegend, false);
         let id = ctx.id(&self.name);
-        let describedby = described_by(&id, self.help_text.is_some(), false);
+        let describedby = described_by(&id, self.help_text.is_some(), invalid);
         rsx! {
             fieldset { class: fieldset_class,
                 aria_describedby: describedby,
@@ -48,6 +53,14 @@ impl Node for StructNode {
                     legend { class: legend_class, "{text}" }
                 }
                 {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
+                // Its own errors under its name, as a list's are, before its
+                // fields: `aria-describedby` on a group varies between screen
+                // readers, so reading order has to carry them too.
+                FieldErrors {
+                    field_id: id.clone(),
+                    errors: self.errors.clone(),
+                    classes: ctx.classes.clone(),
+                }
                 { nodes_rendered.into_iter() }
             }
         }
@@ -57,6 +70,14 @@ impl Node for StructNode {
         self.errors.clear();
         for m in &mut self.nodes {
             m.validate();
+        }
+        if !self.has_errors_within() {
+            let messages = self
+                .validator
+                .as_ref()
+                .map(|validator| validator.messages_for(self))
+                .unwrap_or_default();
+            self.errors.extend(messages);
         }
     }
 
@@ -86,6 +107,11 @@ impl Node for StructNode {
 
     fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
+        // Its own, at its own path, as a list's are: a validator's, a
+        // server's, or a form validator's `path!(Model.address)`.
+        if !self.errors.is_empty() {
+            out.insert(nested.clone(), self.errors.clone());
+        }
         for m in &self.nodes {
             m.collect_errors(&nested, out);
         }
@@ -100,6 +126,9 @@ impl Node for StructNode {
 
     fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
         let nested = qualify(prefix, &self.name);
+        if let Some(found) = errors.shift_remove(&nested) {
+            self.errors.extend(found);
+        }
         for m in &mut self.nodes {
             m.distribute_errors(&nested, errors);
         }

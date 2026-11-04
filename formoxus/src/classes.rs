@@ -324,6 +324,10 @@ impl Classes {
     /// added later panics here until it is given a class, instead of silently
     /// rendering unclassed. A dev's own widget is not in the list: a preset
     /// classes only the widgets it knows.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "a table with one entry per fixed slot, which grows with every slot; splitting it would only hide the list"
+    )]
     pub fn fx() -> Self {
         let mut slots = IndexMap::new();
         for (name, parts) in BUILTINS {
@@ -389,14 +393,17 @@ impl Classes {
                 FixedKey::MoveItemDownButton,
                 Slot::new("fx-button fx-button-move-down"),
             ),
-            (FixedKey::Struct, Slot::new("fx-group fx-struct")),
+            (
+                FixedKey::Struct,
+                Slot::new("fx-group fx-struct").with_invalid("fx-invalid"),
+            ),
             (
                 FixedKey::StructLegend,
                 Slot::new("fx-legend fx-field-label"),
             ),
-            // `fx-invalid` like the radio group's fieldset, the other `fieldset`
-            // that carries its own errors: a list's own (item count, a rejected
-            // item-key entry), never an item's.
+            // `fx-invalid` like the radio group's fieldset, as every `fieldset`
+            // carrying its own errors has: a struct's or a list's own (its
+            // `validator:`'s, a rejected item-key entry), never a field's.
             (
                 FixedKey::List,
                 Slot::new("fx-group fx-list").with_invalid("fx-invalid"),
@@ -769,8 +776,11 @@ mod tests {
             // The fixed slots with an invalid class: a list's or a set's
             // fieldset carries its own errors, as the radio group's does (#13).
             // And a set's message, for a refusal.
-            let invalid = matches!(slot, FixedKey::List | FixedKey::Set | FixedKey::SetMessage)
-                .then_some("fx-invalid");
+            let invalid = matches!(
+                slot,
+                FixedKey::Struct | FixedKey::List | FixedKey::Set | FixedKey::SetMessage
+            )
+            .then_some("fx-invalid");
             expect_that!(
                 base_of(&fx, SlotKey::Fixed(slot)),
                 eq(Some((base, invalid))),

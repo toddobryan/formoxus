@@ -76,6 +76,14 @@ fn trip_spec() -> FormSpec<Trip> {
             // Every stop is one of the cities; formoxus refuses anything else
             // on submit, however it arrives.
             stops[] => { widget: select, choices: CITIES },
+            // A check of the whole list, shown under its legend on Save.
+            stops => {
+                validator: |stops: &[String]| if stops.len() < 2 {
+                    vec!["A trip needs at least two stops.".into()]
+                } else {
+                    Vec::new()
+                }
+            },
             buttons: { save: { type: submit } }
         }
     }

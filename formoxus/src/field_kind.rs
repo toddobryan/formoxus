@@ -71,6 +71,128 @@ where
     NodeCtor::new(move |args| Box::new(args.node(field.clone())))
 }
 
+/// The type a projection reaches, for `validator:`
+/// (`(&&validator_for(|__m: &Account| &__m.age)).validator(must_be_adult)`,
+/// see [`validators`] for the `&&`). The
+/// projection is never called; `form!` writes it through any `?` in the
+/// path, so an `Option` field's check takes what the `Option` holds.
+///
+/// Two calls for the reason [`set_items_of`] is two: a method on the result
+/// is checked once `P` is known, so a check over the wrong type is reported
+/// at the check, and an un-annotated closure gets its argument type from the
+/// field.
+pub fn validator_for<M, P: Facet<'static> + 'static>(_: fn(&M) -> &P) -> ValidatorFor<P> {
+    ValidatorFor(PhantomData)
+}
+
+/// A field's type, from [`validator_for`], waiting for its check.
+pub struct ValidatorFor<P>(PhantomData<fn(&P)>);
+
+impl<P> std::fmt::Debug for ValidatorFor<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ValidatorFor")
+    }
+}
+
+/// The `.validator(check)` that [`validator_for`]'s result is called with,
+/// taking the field's value as clippy would have a parameter take it: a
+/// `String` as `&str`, a `Vec<T>` as `&[T]`, a number or `bool` by value,
+/// and anything else by reference (`&Question`, `&BTreeSet<String>`).
+///
+/// One method name with a different parameter per field type, which Rust
+/// has no overloading for, so it is "autoref specialization": each specific
+/// trait is implemented for `&ValidatorFor<…>`, the general one for
+/// `ValidatorFor<P>`, and `form!` calls `(&&validator_for(…)).validator(…)`.
+/// Method lookup tries the receiver `&&ValidatorFor<P>` first, which only a
+/// specific impl takes, and only then `&ValidatorFor<P>`, the general one.
+/// The method is chosen before its argument is checked, so an un-annotated
+/// closure still gets its parameter type (`|name| …` is a `&str`).
+///
+/// Hidden: `form!` brings these into scope in the block it writes the call
+/// in; nothing else names them.
+#[doc(hidden)]
+pub mod validators {
+    use facet::Facet;
+
+    use super::ValidatorFor;
+    use crate::error::ValidationMessage;
+    use crate::nodes::FieldValidator;
+
+    /// A `String` field's check, over `&str`.
+    pub trait StrValidator {
+        fn validator(
+            &self,
+            check: impl Fn(&str) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator;
+    }
+
+    impl StrValidator for &ValidatorFor<String> {
+        fn validator(
+            &self,
+            check: impl Fn(&str) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator {
+            FieldValidator::new(move |value: &String| check(value))
+        }
+    }
+
+    /// A `Vec<T>` field's check, over `&[T]`.
+    pub trait SliceValidator<T> {
+        fn validator(
+            &self,
+            check: impl Fn(&[T]) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator;
+    }
+
+    impl<T: Facet<'static> + 'static> SliceValidator<T> for &ValidatorFor<Vec<T>> {
+        fn validator(
+            &self,
+            check: impl Fn(&[T]) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator {
+            FieldValidator::new(move |value: &Vec<T>| check(value))
+        }
+    }
+
+    /// A number's or `bool`'s check, over the value itself.
+    pub trait CopyValidator<V> {
+        fn validator(
+            &self,
+            check: impl Fn(V) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator;
+    }
+
+    macro_rules! by_value {
+        ($($t:ty),* $(,)?) => {$(
+            impl CopyValidator<$t> for &ValidatorFor<$t> {
+                fn validator(
+                    &self,
+                    check: impl Fn($t) -> Vec<ValidationMessage> + Send + Sync + 'static,
+                ) -> FieldValidator {
+                    FieldValidator::new(move |value: &$t| check(*value))
+                }
+            }
+        )*};
+    }
+
+    by_value!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, bool);
+
+    /// Any other field's check, over a reference to its value.
+    pub trait RefValidator<P> {
+        fn validator(
+            &self,
+            check: impl Fn(&P) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator;
+    }
+
+    impl<P: Facet<'static> + 'static> RefValidator<P> for ValidatorFor<P> {
+        fn validator(
+            &self,
+            check: impl Fn(&P) -> Vec<ValidationMessage> + Send + Sync + 'static,
+        ) -> FieldValidator {
+            FieldValidator::new(check)
+        }
+    }
+}
+
 /// The value type of a model field's default field: `u8` for a `u8` or an
 /// `Option<u8>`. What a choice field over that model field chooses among.
 type ValueOf<P> = <<P as DefaultField>::Field as Field>::Value;

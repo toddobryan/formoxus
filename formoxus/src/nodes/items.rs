@@ -115,6 +115,11 @@ impl Items {
         self.has_errors_here() || self.iter().any(|r| r.has_errors_within())
     }
 
+    /// The container's own messages, from its `validator:`, after `validate`.
+    pub(crate) fn add_errors(&mut self, messages: Vec<ValidationMessage>) {
+        self.errors.extend(messages);
+    }
+
     pub(crate) fn has_errors_here(&self) -> bool {
         !self.errors.is_empty()
     }

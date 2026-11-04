@@ -267,6 +267,74 @@ impl RawValue {
     }
 }
 
+/// A field's own check (`validator:` on a field in `form!`): its value, typed,
+/// in; messages for that field out, with no path, since it is the field's.
+///
+/// Erased so one spec type holds a check for any field, and an `Arc<dyn Fn>`
+/// so a closure can capture app state, as a set's `feedback:` can. Built
+/// typed by [`FieldValidator::new`], which reads the node's value as `P`:
+/// straight off a leaf, or rebuilt from a container's children the way a
+/// model is built from the whole tree.
+#[derive(Clone)]
+pub struct FieldValidator(
+    #[allow(clippy::type_complexity)]
+    std::sync::Arc<dyn Fn(&dyn Node) -> Vec<crate::error::ValidationMessage> + Send + Sync>,
+);
+
+impl FieldValidator {
+    /// A check over values of type `P`, the field's own type (an `Option`'s
+    /// inner one, since it runs only on a value that is there).
+    pub fn new<P: facet::Facet<'static> + 'static>(
+        check: impl Fn(&P) -> Vec<crate::error::ValidationMessage> + Send + Sync + 'static,
+    ) -> Self {
+        Self(std::sync::Arc::new(move |node| {
+            with_value::<P, _>(node, &check).unwrap_or_default()
+        }))
+    }
+
+    /// The messages for `node`, which its own validation has found nothing
+    /// wrong with. None when its value cannot be read as the check's type.
+    pub(crate) fn messages_for(&self, node: &dyn Node) -> Vec<crate::error::ValidationMessage> {
+        (self.0)(node)
+    }
+}
+
+/// `node`'s value as a `P`, handed to `f`: a leaf's own, or else the value
+/// its tree writes, built as `FormState::validate` builds the model. `None`
+/// when it cannot be built as a `P`.
+fn with_value<P: facet::Facet<'static> + 'static, R>(
+    node: &dyn Node,
+    f: impl FnOnce(&P) -> R,
+) -> Option<R> {
+    if let Some(peek) = node.peek_value()
+        && let Ok(value) = peek.get::<P>()
+    {
+        return Some(f(value));
+    }
+    let partial = Partial::alloc::<P>().ok()?;
+    let value = node
+        .write_value_into(partial)
+        .ok()?
+        .build()
+        .ok()?
+        .materialize::<P>()
+        .ok()?;
+    Some(f(&value))
+}
+
+impl Debug for FieldValidator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FieldValidator(..)")
+    }
+}
+
+/// The same check only when it is the same `Arc`: a closure has no `==`.
+impl PartialEq for FieldValidator {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// A node's value as the user reads it ([`Node::shown`]), in pieces, so the
 /// label case it is shown in can wait until it is known: a variant's name is
 /// cased as the form's `<select>`s case it, which is resolved when the form

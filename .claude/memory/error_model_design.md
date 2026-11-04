@@ -135,6 +135,39 @@ This is also the first place a validator gets compile-checked paths.
 
 ## Per-field validators
 
+**BUILT 2026-11-03 (C4), and NOT as designed below** (that design predates
+typed field constructors). Todd's calls: a validator returns
+`Vec<ValidationMessage>` (several checks, several messages; no path, the
+field is the path); ONE `validator:` per field; on EVERY kind of field, not
+just leaves: a leaf (incl. an `Option`'s inner value via `?` and a newtype,
+rebuilt), a struct, an enum, a list, a set, and items via `x[]`.
+- `form!`: `x => { validator: check }` expands to
+  `.with_field_validator(key, field_kind::validator_for(|__m| &place).validator(check))`,
+  `place` through any `?` (`project_peeled`), spanned on the check, so a
+  wrong type is an error AT the check (golden `form_validator_of_the_wrong_type`).
+  No `dyn Any` downcast: the type comes from the projection, as `sort_by`'s does.
+- Runtime: `nodes::FieldValidator`, an erased `Arc<dyn Fn(&dyn Node) -> Vec<_>>`
+  (closures may capture, `Send + Sync`); reads the value off `peek_value()` or
+  rebuilds it with `Partial` + `write_value_into`. Every node runs it at the
+  END of `validate`, only when nothing under it failed (a leaf: after its own
+  checks). Messages land where that node shows its own errors; a STRUCT got
+  that place the same day (claims/collects/renders its own errors under its
+  legend, `fx-invalid`), which also fixed `path!(Model.a_struct)` errors
+  falling through to the form.
+- **The check's parameter is what clippy would want** (Todd, same day): a
+  `String` field's check takes `&str`, a `Vec<T>`'s `&[T]`, a number's or
+  `bool`'s the value, anything else `&P`. AUTOREF SPECIALIZATION in
+  `field_kind::validators`: specific traits on `&ValidatorFor<…>`, the general
+  `RefValidator` on `ValidatorFor<P>`, and `form!` writes
+  `(&&validator_for(…)).validator(check)` in a block that `use`s the four
+  traits BY NAME (a glob trips the dev's `clippy::wildcard_imports`, since the
+  block is spanned as the dev's code). Un-annotated closures still infer: the
+  method is picked before its argument is checked. `Borrow<Q>` was rejected
+  because it breaks that inference. `char` is not a field type, so not in the
+  by-value list.
+
+The original design, kept for history:
+
 Same conversation, same mechanism. `FieldSpec` is type-erased (one struct for
 every field) so `fn(&T)` cannot live there — the answer is the one
 `WidgetType::Custom` already uses: an **`fn` pointer, not `Box<dyn Fn>`** (a

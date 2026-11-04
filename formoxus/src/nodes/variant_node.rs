@@ -53,6 +53,9 @@ pub struct VariantNode {
     pub label: Option<String>,
     /// Its hint (`help_text:`), under the legend, describing the select.
     pub help_text: Option<String>,
+    /// Its own check (`validator:`), over the whole enum once a variant is
+    /// chosen and its fields are valid; its messages are the select's.
+    pub validator: Option<crate::nodes::FieldValidator>,
     pub enum_type: &'static EnumType,
     pub choice: VariantChoice,
     pub nodes: Vec<Box<dyn Node>>,
@@ -311,6 +314,14 @@ impl Node for VariantNode {
             VariantChoice::Named(_) => {
                 for m in &mut self.nodes {
                     m.validate();
+                }
+                if !self.has_errors_within() {
+                    let messages = self
+                        .validator
+                        .as_ref()
+                        .map(|validator| validator.messages_for(self))
+                        .unwrap_or_default();
+                    self.errors.extend(messages);
                 }
             }
         }

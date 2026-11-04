@@ -29,6 +29,7 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         name: name.to_string(),
         label: None,
         help_text: None,
+        validator: None,
         optional: false,
         attrs: FieldAttrs::default(),
         widget: TextInput.into(),
@@ -61,6 +62,7 @@ fn location_struct_node(
         optional: false,
         label: Some("Location".to_string()),
         help_text: None,
+        validator: None,
         nodes: location_nodes(street, city, zip),
         errors: Vec::new(),
     })

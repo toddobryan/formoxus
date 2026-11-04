@@ -47,7 +47,7 @@ pub fn Gallery() -> Element {
 
         Example {
             title: "A list chosen from a list",
-            note: "Trip stops: each picked from the cities, in travel order. Unlike a set, the same city can come twice.",
+            note: "Trip stops: each picked from the cities, in travel order. Unlike a set, the same city can come twice. A validator on the whole list wants at least two: remove one and Save.",
             lists::ChosenStops {},
         }
 

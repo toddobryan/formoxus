@@ -30,6 +30,9 @@ pub struct FieldSpec {
     /// The field's hint (`help_text:`), shown under its caption and
     /// describing its control.
     pub help_text: Option<String>,
+    /// The field's own check (`validator:`), run once everything under the
+    /// field is valid; its messages are the field's.
+    pub validator: Option<crate::nodes::FieldValidator>,
     pub attrs: FieldAttrs,
     pub widget: Option<AnyWidget>,
     /// Builds this leaf during the shape walk, instead of the default field
@@ -157,6 +160,19 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_label(mut self, path: &str, l: &str) -> Self {
         self.field(path).label = Some(l.to_string());
+        self
+    }
+
+    /// A check of the field at `path`, of any kind (`validator:` in `form!`):
+    /// its messages are shown where that field shows its own errors. Runs
+    /// only once everything under the field is valid, so a struct's check
+    /// sees a whole struct, and only on a value that is there.
+    pub fn with_field_validator(
+        mut self,
+        path: &str,
+        validator: crate::nodes::FieldValidator,
+    ) -> Self {
+        self.field(path).validator = Some(validator);
         self
     }
 

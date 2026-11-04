@@ -579,6 +579,27 @@ impl FieldSpec {
             .help_text
             .as_ref()
             .map(|h| quote! { .with_help_text(#key, &#h) });
+        // Through any `?`, so an `Option` field's check takes what it holds,
+        // and spanned onto the check, so one over the wrong type is reported
+        // there rather than across the whole `form!`.
+        let validator = self.body.validator.as_ref().map(|check| {
+            let check_span = syn::spanned::Spanned::span(check);
+            let place = respan(project_peeled(&self.path.segments), check_span);
+            // `&&` and the traits by name, not a glob, since this is spanned
+            // as the dev's own code and clippy's `wildcard_imports` would say
+            // so: `field_kind::validators` picks the check's parameter type
+            // from the field's (`&str` for a `String`).
+            let typed = quote_spanned! { check_span=>
+                {
+                    #[allow(unused_imports)]
+                    use ::formoxus::field_kind::validators::{
+                        CopyValidator, RefValidator, SliceValidator, StrValidator,
+                    };
+                    (&&::formoxus::field_kind::validator_for(|__m: &#model| &#place)).validator(#check)
+                }
+            };
+            quote! { .with_field_validator(#key, #typed) }
+        });
         let widget = self.body.widget.as_ref().map(|w| {
             let w = w.expr();
             quote! { .with_widget(#key, #w) }
@@ -660,7 +681,7 @@ impl FieldSpec {
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #help_text #widget #node #attrs #adder #set #sort_by #feedback #item }
+        quote! { #label #help_text #widget #node #attrs #adder #set #sort_by #feedback #item #validator }
     }
 }
 

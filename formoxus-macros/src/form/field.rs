@@ -45,6 +45,9 @@ pub(crate) struct FieldBody {
     /// `feedback: closure`, a set's words for what an edit did (I′). The key
     /// is kept for the checks' span.
     pub(crate) feedback: Option<(Ident, Expr)>,
+    /// `validator: check`, the field's own check: a `fn` or closure from the
+    /// field's value (an `Option`'s inner one) to its messages.
+    pub(crate) validator: Option<Expr>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -703,7 +706,7 @@ impl Parse for FieldBody {
 }
 
 impl FieldBody {
-    /// One `key: value` (or bare flag) entry: `widget`, `label`, `help_text`, `choices`,
+    /// One `key: value` (or bare flag) entry: `widget`, `label`, `help_text`, `validator`, `choices`,
     /// `adder`, `set`, `sort_by`, `feedback`, `item`, a table attribute by its
     /// `snake_case` variant name, or a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
@@ -729,7 +732,8 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" | "help_text" | "choices" | "adder" | "feedback" | "item" => {
+            "widget" | "label" | "help_text" | "validator" | "choices" | "adder" | "feedback"
+            | "item" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -748,6 +752,11 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.help_text = Some(body.parse()?);
+                } else if name == "validator" {
+                    if self.validator.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.validator = Some(body.parse()?);
                 } else if name == "adder" {
                     if self.adder.is_some() {
                         return Err(given_twice());
@@ -804,6 +813,7 @@ impl FieldBody {
         self.widget.is_none()
             && self.label.is_none()
             && self.help_text.is_none()
+            && self.validator.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
@@ -1261,7 +1271,7 @@ fn owned(attr: Attr) -> String {
     )
 }
 
-/// Every identifier key a field body accepts: `widget`, `label`, `help_text`, `choices`,
+/// Every identifier key a field body accepts: `widget`, `label`, `help_text`, `validator`, `choices`,
 /// `adder`, `set`, `sort_by`, `feedback`, `item`, then each table attribute an author
 /// may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
@@ -1269,6 +1279,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "widget".to_string(),
         "label".to_string(),
         "help_text".to_string(),
+        "validator".to_string(),
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
@@ -1431,6 +1442,28 @@ mod tests {
         );
     }
 
+    /// `validator:` expands to the check over the field's type, through the
+    /// `?` of an `Option` field, so its check takes what the `Option` holds.
+    #[gtest]
+    fn a_validator_expands_through_the_option() {
+        let spec = parse(quote! { Source { age? => { validator: must_be_adult } } }).unwrap();
+        let out = spec.expand().to_string();
+        expect_that!(out, contains_substring(". with_field_validator (\"age\" ,"));
+        expect_that!(
+            out,
+            contains_substring(":: formoxus :: field_kind :: validator_for")
+        );
+        expect_that!(out, contains_substring(". validator (must_be_adult)"));
+    }
+
+    #[gtest]
+    fn a_validator_given_twice_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { notes => { validator: a, validator: b } } }),
+            contains_substring("`validator` is given twice")
+        );
+    }
+
     #[gtest]
     fn help_text_given_twice_is_refused() {
         expect_that!(
@@ -1471,6 +1504,7 @@ mod tests {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
                 "help_text" => quote!(#ident: "A hint"),
+                "validator" => quote!(#ident: no_rust_please),
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" => quote!(#ident),
