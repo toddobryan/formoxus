@@ -106,3 +106,69 @@ pub fn ChosenStops() -> Element {
         }
     }
 }
+
+// ── Lists inside a list ──────────────────────────────────────────────────
+
+/// A quiz built from sections, each a different kind: every question in
+/// order, or a few drawn at random from a pool.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Quiz {
+    title: String,
+    sections: Vec<Section>,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Section {
+    InOrder { questions: Vec<String> },
+    Drawn { how_many: u8, pool: Vec<String> },
+}
+
+fn quiz_spec() -> FormSpec<Quiz> {
+    form! {
+        Quiz {
+            title: "A quiz",
+            sections[].$Section::Drawn.how_many => { min: 1 },
+            buttons: { save: { type: submit } }
+        }
+    }
+}
+
+/// A list of sections, each an enum whose variants hold a list of their own.
+/// Every level has its own ↑/↓ and Add, a section's kind can change in
+/// place, and a moved section takes its questions with it.
+#[component]
+pub fn NestedSections() -> Element {
+    let mut submitted = use_signal(|| None::<String>);
+    let form = use_form(|| {
+        form_for(
+            &Quiz {
+                title: "Unit 1".to_string(),
+                sections: vec![
+                    Section::InOrder {
+                        questions: ["What is a cell?", "Name its parts."]
+                            .map(String::from)
+                            .into(),
+                    },
+                    Section::Drawn {
+                        how_many: 2,
+                        pool: ["Mitosis?", "Meiosis?", "Osmosis?"]
+                            .map(String::from)
+                            .into(),
+                    },
+                ],
+            },
+            quiz_spec(),
+        )
+    });
+    rsx! {
+        {form.render(using_fns! {
+            save: move |model: Quiz| async move {
+                submitted.set(Some(format!("{model:?}")));
+            },
+        })}
+        if let Some(text) = submitted() {
+            article { "Validated model: " code { "{text}" } }
+        }
+    }
+}

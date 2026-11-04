@@ -48,6 +48,7 @@ pub fn TestForm(slug: String) -> Element {
         "bare" => rsx! { Bare {} },
         "reorder" => rsx! { Reorder {} },
         "struct-items" => rsx! { StructItems {} },
+        "assignment" => rsx! { AssignmentForm {} },
         "adder" => rsx! { Adder {} },
         "tags" => rsx! { Tags {} },
         "tags-pattern" => rsx! { TagsPattern {} },
@@ -506,7 +507,8 @@ struct Person {
 }
 
 /// Reset and submit, over a SEEDED form — reset has nothing to restore otherwise.
-/// Built with `form_for` rather than `empty_form`, as is `textarea-seeded`.
+/// Built with `form_for` rather than `empty_form`, as are `textarea-seeded`
+/// and `assignment`.
 #[component]
 fn Buttons() -> Element {
     let mut submitted = use_signal(|| None::<String>);
@@ -611,6 +613,64 @@ fn StructItems() -> Element {
             }
         },
     )
+}
+
+// ── assignment ───────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Assignment {
+    groups: Vec<QuestionGroup>,
+}
+
+/// apcsp's assignment shape (`ORDERED_LISTS_PLAN.md` box 7), with built-in
+/// widgets: a list of enum groups, each holding a list of question ids.
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum QuestionGroup {
+    All { questions: Vec<String> },
+    Random { how_many: u8, set: Vec<String> },
+}
+
+/// A list inside an enum inside a list, seeded, so a test can move and add
+/// at both levels and see each click land on its own list.
+#[component]
+fn AssignmentForm() -> Element {
+    let mut submitted = use_signal(|| None::<String>);
+    let seeded = Assignment {
+        groups: vec![
+            QuestionGroup::All {
+                questions: vec!["q1".into(), "q2".into(), "q3".into()],
+            },
+            QuestionGroup::Random {
+                how_many: 2,
+                set: vec!["q4".into(), "q5".into()],
+            },
+        ],
+    };
+    let form = use_form(move || {
+        form_for(
+            &seeded,
+            form! {
+                Assignment {
+                    buttons: { save: { type: submit } }
+                }
+            },
+        )
+    });
+    rsx! {
+        Harness {
+            title: "assignment".to_string(),
+            note: "Groups of questions: an All group (q1–q3) and a Random group (q4, q5). Each level has its own ↑/↓ and Add.".to_string(),
+            submitted: submitted().unwrap_or_default(),
+            {
+                form.render(using_fns! {
+                    save: move |model: Assignment| async move {
+                        submitted.set(Some(format!("{model:#?}")));
+                    },
+                })
+            }
+        }
+    }
 }
 
 // ── adder ────────────────────────────────────────────────────────────────

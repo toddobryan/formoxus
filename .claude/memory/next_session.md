@@ -1,11 +1,46 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-11-03 NEWEST: box 12 (merge prep) DONE, branch `sets` ready to fast-forward onto main; next apcsp. Before that: box 13 (4 gallery examples) + the seeded-textarea fix COMMITTED; next box 12 (merge prep), then apcsp after the merge. Before that: box 14 (draft constraints off its input, checked on Add) built, UNCOMMITTED, ci 1054 + e2e 53 green; next box 13 (galleries), then 12. Before that: box 11 (rows -> items) built by Claude and committed, just ci 1051 + e2e 52 green; list labels now Remove item N / Move item N (Todd). Before that: box 10 (e2e /t/tags, 11 tests, suite 52/52) built by Claude and committed; the set's Save became Replace (aria-label: Replace plus the item's text); gallery DEFERRED to box 13 (set + list together); pattern gap CONFIRMED, box 14. Next: box 11 (rows -> items). Before that: box 9 (display + `item:` item views) built by Claude and committed, just ci green 1050; next box 10. Before that: box 8 (Edit through the draft) built by Claude, decisions accepted, committed; just ci green 1036. Before that: box 6 committed d3d4852; box 7 (set draft adder) built by Claude, committed 213f67b, just ci green 1017; next box 8. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-03 NEWEST: ORDERED_LISTS box 6 DONE (no code), box 7 DONE incl. path!(…[i]) so a validator names one item (indexed_paths.md), #17 FIXED (variant select name); COMMITTED, ci 1086 + e2e 58 + apcsp green; next apcsp box 8. Before that: `sets` MERGED into main and pushed (42e4de3), all other branches deleted; apcsp renames + list-item layout fix COMMITTED there (4141a4d, not pushed); next ORDERED_LISTS 6-8. Before that: box 12 (merge prep) DONE. Before that: box 13 (4 gallery examples) + the seeded-textarea fix COMMITTED; next box 12 (merge prep), then apcsp after the merge. Before that: box 14 (draft constraints off its input, checked on Add) built, UNCOMMITTED, ci 1054 + e2e 53 green; next box 13 (galleries), then 12. Before that: box 11 (rows -> items) built by Claude and committed, just ci 1051 + e2e 52 green; list labels now Remove item N / Move item N (Todd). Before that: box 10 (e2e /t/tags, 11 tests, suite 52/52) built by Claude and committed; the set's Save became Replace (aria-label: Replace plus the item's text); gallery DEFERRED to box 13 (set + list together); pattern gap CONFIRMED, box 14. Next: box 11 (rows -> items). Before that: box 9 (display + `item:` item views) built by Claude and committed, just ci green 1050; next box 10. Before that: box 8 (Edit through the draft) built by Claude, decisions accepted, committed; just ci green 1036. Before that: box 6 committed d3d4852; box 7 (set draft adder) built by Claude, committed 213f67b, just ci green 1017; next box 8. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-11-03, newest: box 12 DONE; `sets` is ready to merge
+## ▶ 2026-11-03, newest: boxes 6–7 + #17 + indexed `path!` COMMITTED
+
+The box 7 blocker is solved: `path!(Model.list[i])`, see
+[[indexed-paths]]. `just ci` 1086, `just e2e` 58, apcsp `check` + `test` green
+against it (apcsp never relied on `Path: Copy`). Next: apcsp's box 8 (the
+assignment form, `SearchToAdd` as the adder, its duplicate check through
+`path!(…[g]…[q])`), and its `select[id$=…]` e2e workaround → `select[name=…]`.
+
+## ▶ 2026-11-03: boxes 6–7 + #17 built
+
+`ORDERED_LISTS_PLAN.md` box 6: nothing to build, a custom widget is already
+a display-only list item (`vecs.rs` `a_display_only_item_*`). Box 7:
+`tests/suite/assignment_shape.rs` (8), e2e `/t/assignment` (3), gallery
+"Lists inside a list". **Blocked in box 7:** a `validator:` cannot put an
+error on ONE item: `path!` has `[]` but no index, `Path` has no public
+constructor, errors key by item key while a validator sees indices. Server
+errors via `absorb` work. Proposal raised with Todd: index segments in
+`path!`, resolved index → key by `FormState`. #17: `VariantSelect` sets
+`name` to the enum's path (suite + e2e, mutation-checked); apcsp's
+`select[id$=…]` workaround in its e2e can now become `select[name=…]`.
+
+## ▶ 2026-11-03: merged; apcsp renames + layout committed (4141a4d)
+
+`sets` fast-forwarded into `main` and pushed (42e4de3); `sets`,
+`radio-group` and `widget` deleted locally and on origin (all merged).
+In apcsp-dioxus: the class renames in `main.scss` (+ `main.css` regenerated
+with the pinned sass, a renames-only diff), `questions.rs` selectors, one
+`FieldSet` comment. `just check`, `just test` (184) and `just e2e` (27)
+green. Also fixed (Todd's go): apcsp's `.fx-list-item > :first-child
+{ flex: 1 }` assumed the field came first, but every list now starts with
+`.fx-move-buttons`; the field is now `> :not(.fx-move-buttons,
+.fx-button-remove-item)`, and ↑/↓ are compact + secondary like Remove,
+stacked. Seen in a browser. Committed in apcsp as 4141a4d, NOT pushed.
+Next there: ORDERED_LISTS_PLAN boxes 6–8.
+
+## ▶ 2026-11-03: box 12 DONE; `sets` is ready to merge
 
 Every box of `SETS_PLAN.md` is ticked (boxes 2–5 had only their parents
 left open). `main` has not moved since 314bcd4, so the merge is a

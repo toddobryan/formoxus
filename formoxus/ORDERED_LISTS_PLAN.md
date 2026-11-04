@@ -10,9 +10,9 @@
 >    `form!`) has no order to change (`SETS_PLAN.md` box 3).
 > 2. **Boxes 1, 4, 5, done,** and carried through the renames.
 > 3. **3b, still parked.**
-> 4. **Boxes 6–8, still open,** and all for apcsp: nothing in
->    `SETS_PLAN.md` covers them. (Box 9 there gives a SET item a
->    display-only view, `item:`; box 6 here asks the same of a LIST item.)
+> 4. **Boxes 6–8, for apcsp:** nothing in `SETS_PLAN.md` covered them. Box
+>    6 DONE 2026-11-03 (nothing to build); box 7 DONE 2026-11-03, with
+>    `path!(…[i])` so a validator can name one item; box 8 is in apcsp.
 
 Written 2026-10-29 by Claude, from apcsp-dioxus, for Todd to build. apcsp
 wants its "new assignment" page to be a formoxus form, and formoxus lists
@@ -488,16 +488,53 @@ or reordered without renaming".
     Cleared by the row's path (`apply_edit` finds its key first), not by
     its current leaves, so an unchosen variant's values go too.
 
-- [ ] **6.** (Todd, small, maybe nothing) Confirm a custom widget on a
+- [x] **6.** (Todd, small, maybe nothing) Confirm a custom widget on a
   `String` leaf works as a display-only row: hidden input with the id,
   plus whatever the widget draws, and no `<label>` (E).
   - Test (Claude): the row renders its display, has no `<label>`, and
     submits its value.
 
-- [ ] **7.** (Claude) The apcsp shape end to end in the suite:
+  **Done 2026-11-03: nothing to build.** A custom widget on a `Vec<String>`
+  item already renders as a display-only item: a dev's widget draws a
+  hidden input and its text, gets no `<label>` (an unnamed item has none),
+  keeps the list's ↑/↓ and Remove, and its value reaches the model. Four
+  tests, `vecs.rs` `a_display_only_item_*`. One thing a dev's widget must
+  do itself: render its errors (`FieldErrors`), as box 7's does.
+
+- [x] **7.** (Claude) The apcsp shape end to end in the suite:
   `Vec<enum { All { questions: Vec<String>, … }, … }>` with moves, the
   adder, and a validator error on one nested row ("already in group 1").
   Then an e2e form and a gallery example.
+
+  **Built 2026-11-03** (Claude), except the validator error, which is
+  blocked (below). Suite `tests/suite/assignment_shape.rs` (8 tests), on
+  apcsp's own model (`All { questions }`, `Random`/`Streak { how_many, set }`,
+  so a field named `set` nests): round trip; a group's move carries its
+  questions; a question's move reorders only its group; a filled add after
+  a move lands by key; `form!` reaching every nested list through
+  `groups[].$QuestionGroup::All.questions` with `adder:` and `[] => {
+  widget: }`; both levels' ↑/↓; an error at one nested item (absorbed, as a
+  server sends it) beside that item only; the nested adder through
+  `Harness`. e2e `/t/assignment` (3 tests: each list's ↑/↓ and Add move
+  only it; the variant picker found by `name`, #17). Gallery: "Lists
+  inside a list", quiz sections.
+
+  **Then a validator naming one item, BUILT the same day** (Claude, at
+  Todd's go; it was blocked: `path!` spelled `x[]` but no index, and
+  errors key by item KEY while a validator sees indices). `path!` takes
+  `[i]` on a `Vec` (`groups[g].$QuestionGroup::Random.set[q]`), any `usize`
+  expression, keyed `groups[{}]…` and formatted where written; `Path` holds
+  a `Cow` (no longer `Copy`). `FormState` resolves each `[n]` to the nth
+  item's key (`path::resolve_indices`, from the containers' structure
+  entries) in `validate` and `push_field_error` (so `reject_field` too), and
+  `WireForm::errors_at` from the values it carries; past the end it falls
+  to the form-level "At path: …" message. `[i]` on a set is a compile error
+  (`path::Indexable`, Vec only: a set's iteration order need not be its
+  shown order); `form!` still refuses `[0]`, now pointing at `path!`.
+  Suite: 5 more in `assignment_shape.rs` (the duplicate check, the error
+  following its key after a move, rendered, `reject_field` + `errors_at`,
+  past the end); `path::tests` for the resolver; goldens
+  `path_index_on_a_set`, `path_index_not_a_usize`, `form_index_in_a_spec`.
 
 - [ ] **8.** (Todd, in apcsp-dioxus) Pick it up there: the assignment form,
   `SearchToAdd` as the adder, the question row as the row widget, and

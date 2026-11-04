@@ -50,6 +50,12 @@ pub fn Gallery() -> Element {
             note: "Trip stops: each picked from the cities, in travel order. Unlike a set, the same city can come twice.",
             lists::ChosenStops {},
         }
+
+        Example {
+            title: "Lists inside a list",
+            note: "Quiz sections: a list of enums, each kind holding a list of questions. Move a section and its questions go with it; each list has its own ↑/↓ and Add.",
+            lists::NestedSections {},
+        }
     }
 }
 

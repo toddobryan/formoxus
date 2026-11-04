@@ -1938,3 +1938,85 @@ fn an_adder_reading_the_store_sees_a_removed_item_go() {
         contains_substring("answers has 0, first , stored 0")
     );
 }
+
+// ── A display-only item (ORDERED_LISTS_PLAN box 6) ───────────────────────
+
+/// A dev's widget that shows its value rather than taking input: a hidden
+/// input carrying the value, the value as text, and no `<label>`, since
+/// there is nothing to type into (`ORDERED_LISTS_PLAN.md` decision E). What
+/// apcsp's question items are: a question's id, shown as the question.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Shown;
+
+impl formoxus::widgets::Widget for Shown {
+    const NAME: &'static str = "shown";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [formoxus::attrs::Tag] = &[];
+
+    fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
+        let current = get_current(&props.path, props.values);
+        rsx! {
+            input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
+            span { class: "shown", "{current}" }
+        }
+    }
+}
+
+#[component]
+fn ShownItems() -> Element {
+    let form = use_form(|| form_for(&quiz(), form! { Quiz { answers[] => { widget: Shown } } }));
+    form.render(formoxus::using_fns! {})
+}
+
+/// The `<ol>` of `answers`, where the items are.
+fn answers_items(html: &str) -> &str {
+    let start = html.find("<ol").expect("the list renders its items");
+    let end = html[start..].find("</ol>").expect("the <ol> closes") + start;
+    &html[start..end]
+}
+
+#[gtest]
+fn a_display_only_item_renders_its_hidden_input_and_text() {
+    let html = super::render_to_html(ShownItems);
+    let items = answers_items(&html);
+    expect_that!(
+        items,
+        all![
+            contains_regex(r#"<input type="hidden" id="[^"]+" name="answers\.#0" value="alpha"/>"#),
+            contains_regex(r#"<input type="hidden" id="[^"]+" name="answers\.#1" value="beta"/>"#),
+            contains_substring(r#"<span class="shown">alpha</span>"#),
+            contains_substring(r#"<span class="shown">beta</span>"#),
+        ]
+    );
+}
+
+/// Decision E: only an input needs a label, and the list's `<legend>` names
+/// what the user is answering.
+#[gtest]
+fn a_display_only_item_has_no_label() {
+    let html = super::render_to_html(ShownItems);
+    expect_that!(answers_items(&html), not(contains_substring("<label")));
+    expect_that!(html, contains_substring("<legend"));
+}
+
+/// Its value reaches the model, both from the form's own store and across
+/// the wire, though nothing types it in.
+#[gtest]
+fn a_display_only_items_value_reaches_the_model() {
+    let mut form = form_for(&quiz(), form! { Quiz { answers[] => { widget: Shown } } });
+    expect_that!(form.validate(), some(eq(&quiz())));
+    expect_that!(across_the_wire(&quiz()), ok(eq(&quiz())));
+}
+
+/// And it still has the list's own buttons: ↑/↓ and Remove, by number.
+#[gtest]
+fn a_display_only_item_keeps_the_lists_buttons() {
+    let html = super::render_to_html(ShownItems);
+    expect_that!(
+        answers_items(&html),
+        all![
+            contains_substring(r#"aria-label="Move item 2 up""#),
+            contains_substring(r#"aria-label="Remove item 1""#),
+        ]
+    );
+}
