@@ -106,6 +106,17 @@ fn author_attributes_reach_the_textarea() {
     expect_that!(tag(&html, "textarea"), contains_substring("rows=4"));
 }
 
+/// `placeholder` is valid on a `<textarea>` as on a text `<input>`, and
+/// `Textarea` passes it through.
+#[gtest]
+fn a_placeholder_reaches_the_textarea() {
+    let html = render!(form! { Person { name => { widget: textarea, placeholder: "About you" } } });
+    expect_that!(
+        tag(&html, "textarea"),
+        contains_substring(r#"placeholder="About you""#)
+    );
+}
+
 #[gtest]
 fn author_attributes_reach_the_checkbox() {
     let html = render!(form! { Terms { agreed => { "data-terms": "v2" } } });

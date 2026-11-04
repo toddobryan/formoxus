@@ -2461,3 +2461,23 @@ fn the_forms_label_case_reaches_items_and_messages() {
         ]
     );
 }
+
+// ── A dev's attributes reach the draft ───────────────────────────────────
+
+#[component]
+fn PlaceholderDraftForm() -> Element {
+    let form = use_form(|| empty_form(form! { Tagged { tags[] => { placeholder: "Add a tag" } } }));
+    form.render(using_fns! {})
+}
+
+/// The draft keeps only `maxlength` of its FIELD's own attributes (box 14),
+/// but a dev's, like `placeholder`, are not constraints and all reach it:
+/// "Add a tag" is the hint the draft most wants.
+#[gtest]
+fn a_placeholder_reaches_the_draft() {
+    let html = super::render_to_html(PlaceholderDraftForm);
+    expect_that!(
+        html,
+        contains_regex(r#"<input [^>]*name="tags\.#0"[^>]*placeholder="Add a tag""#)
+    );
+}
