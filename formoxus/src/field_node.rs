@@ -10,6 +10,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
+use crate::nodes::Shown;
 use crate::nodes::{
     Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label, qualify,
 };
@@ -209,12 +210,14 @@ impl<F: Field> Node for FieldNode<F> {
     /// The choice's label for a value that is one of the choices; the value
     /// itself otherwise, which includes one that is no longer a choice, so
     /// the user still sees what it was.
-    fn shown_text(&self) -> String {
+    fn shown(&self) -> Shown {
         let raw = self.raw_value();
-        self.field
-            .choices()
-            .and_then(|choices| choices.into_iter().find(|choice| choice.value == raw))
-            .map_or(raw, |choice| choice.display)
+        Shown::plain(
+            self.field
+                .choices()
+                .and_then(|choices| choices.into_iter().find(|choice| choice.value == raw))
+                .map_or(raw, |choice| choice.display),
+        )
     }
 
     fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {

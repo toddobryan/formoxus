@@ -2373,3 +2373,91 @@ fn a_message_names_an_item_by_its_label() {
         contains_substring(done("“Chicago” was added successfully."))
     );
 }
+
+// ── A set of a unit enum names items as its select does ─────────────────
+
+#[derive(Facet, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum Region {
+    NewEngland,
+    PacificNorthwest,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Trips {
+    regions: BTreeSet<Region>,
+}
+
+#[component]
+fn RegionsProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Trips {
+                regions: [Region::NewEngland].into(),
+            },
+            form! { Trips { regions => { sort_by: Region::cmp } } },
+        )
+    });
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "regions".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Region::PacificNorthwest)),
+        })
+        .expect("a new region is added")
+    });
+    form.render(using_fns! {})
+}
+
+/// A variant reads as the draft's `<select>` offers it, label-cased, in the
+/// item, its buttons and the message, not as its Rust name.
+#[gtest]
+fn a_unit_enum_item_is_shown_label_cased() {
+    let html = super::render_to_html(RegionsProbe);
+    expect_that!(
+        html,
+        all![
+            contains_substring(r#"<li class="fx-set-item">New England<"#),
+            contains_substring(r#"aria-label="Remove “Pacific Northwest”""#),
+            contains_substring(done("“Pacific Northwest” was added successfully.")),
+            // The select it was chosen in, for comparison.
+            contains_substring(r#"<option value="NewEngland">New England</option>"#),
+            not(contains_substring(">NewEngland<")),
+        ]
+    );
+}
+
+#[component]
+fn LowerRegionsProbe() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Trips {
+                regions: [Region::NewEngland].into(),
+            },
+            form! { Trips { label_case: "label case", regions => { sort_by: Region::cmp } } },
+        )
+    });
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "regions".to_string(),
+            before: None,
+            value: Some(ItemValue::new(Region::PacificNorthwest)),
+        })
+        .expect("a new region is added")
+    });
+    form.render(using_fns! {})
+}
+
+/// The case is the form's, applied when it renders: the message was made at
+/// the edit, before the case was known, and still follows it.
+#[gtest]
+fn the_forms_label_case_reaches_items_and_messages() {
+    let html = super::render_to_html(LowerRegionsProbe);
+    expect_that!(
+        html,
+        all![
+            contains_substring(r#"<li class="fx-set-item">new england<"#),
+            contains_substring(done("“pacific northwest” was added successfully.")),
+        ]
+    );
+}

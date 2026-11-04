@@ -9,7 +9,7 @@ use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
-use crate::nodes::{NodeContext, RawValue};
+use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::widgets::VariantSelect;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
@@ -188,6 +188,12 @@ fn legend_id(field_id: &str) -> String {
 impl Node for VariantNode {
     fn name(&self) -> String {
         self.name.clone()
+    }
+
+    /// The chosen variant's name, cased as the `<select>` shows it, then its
+    /// fields'.
+    fn shown(&self) -> Shown {
+        Shown::of_values(self).first_is_a_variant()
     }
 
     fn label(&self, case: LabelCase) -> Option<String> {

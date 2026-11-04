@@ -45,19 +45,12 @@ pub trait Node: Debug {
     fn raw_value(&self) -> String;
     /// This node's value as the user reads it, for naming it where it is not
     /// an input: a set's item, its Edit and Remove, its messages. The entries
-    /// [`collect_values`](Self::collect_values) sends, joined: a string's
-    /// text, a newtype's inner value, a unit enum's variant name, each field
-    /// of a struct. A leaf whose value is one of its choices gives the
-    /// choice's label instead, which is what its `<select>` showed.
-    fn shown_text(&self) -> String {
-        let mut values = Vec::new();
-        self.collect_values("", &mut values);
-        values
-            .into_iter()
-            .map(|value| value.into_pair().1)
-            .filter(|text| !text.is_empty())
-            .collect::<Vec<_>>()
-            .join(", ")
+    /// [`collect_values`](Self::collect_values) sends: a string's text, a
+    /// newtype's inner value, each field of a struct. A leaf whose value is
+    /// one of its choices gives the choice's label instead, and a variant its
+    /// name to be label-cased, which is what each one's `<select>` showed.
+    fn shown(&self) -> Shown {
+        Shown::of_values(self)
     }
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
@@ -271,6 +264,72 @@ impl RawValue {
             | RawValue::Structure { path: p, data: d }
             | RawValue::Draft { path: p, data: d } => (p, d),
         }
+    }
+}
+
+/// A node's value as the user reads it ([`Node::shown`]), in pieces, so the
+/// label case it is shown in can wait until it is known: a variant's name is
+/// cased as the form's `<select>`s case it, which is resolved when the form
+/// renders, not when an edit is made.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Shown(Vec<ShownPiece>);
+
+#[derive(Clone, Debug, PartialEq)]
+struct ShownPiece {
+    text: String,
+    /// A variant's name, shown in the form's label case.
+    cased: bool,
+}
+
+impl Shown {
+    /// One piece, shown as it is: a choice's label.
+    pub(crate) fn plain(text: String) -> Self {
+        Self(vec![ShownPiece { text, cased: false }])
+    }
+
+    /// The entries `node.collect_values` sends, each shown as it is.
+    pub(crate) fn of_values<N: Node + ?Sized>(node: &N) -> Self {
+        let mut values = Vec::new();
+        node.collect_values("", &mut values);
+        Self(
+            values
+                .into_iter()
+                .map(|value| ShownPiece {
+                    text: value.into_pair().1,
+                    cased: false,
+                })
+                .collect(),
+        )
+    }
+
+    /// Mark the first piece a variant's name: a `VariantNode` writes its own
+    /// entry before its fields'.
+    pub(crate) fn first_is_a_variant(mut self) -> Self {
+        if let Some(first) = self.0.first_mut() {
+            first.cased = true;
+        }
+        self
+    }
+
+    /// The text, in `case`: the pieces that are not empty, joined.
+    pub fn in_case(&self, case: LabelCase) -> String {
+        self.0
+            .iter()
+            .filter(|piece| !piece.text.is_empty())
+            .map(|piece| {
+                if piece.cased {
+                    piece.text.as_str().to_case(case)
+                } else {
+                    piece.text.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// Whether there is nothing to show at all.
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(|piece| piece.text.is_empty())
     }
 }
 

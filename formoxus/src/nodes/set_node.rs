@@ -26,8 +26,9 @@ use crate::{
     build::retain_first,
     error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
+    label_case::LabelCase,
     nodes::{
-        Edit, Items, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label,
+        Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, ValuesByPath, default_label,
         ensure_owned, owns, qualify,
     },
     widgets::{
@@ -398,9 +399,38 @@ impl PartialEq for SetFeedback {
 /// was refused.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SetMessage {
-    pub text: String,
+    words: Words,
     /// A refusal (a duplicate), which renders with the slot's invalid class.
     pub refused: bool,
+}
+
+/// A message's words: a dev's, said already, or formoxus's own, with the
+/// items still to be named, since an item's text can wait on the label case
+/// ([`Shown`]), which is known when the set renders, not when it is edited.
+#[derive(Clone, Debug, PartialEq)]
+enum Words {
+    Said(String),
+    Added(Shown),
+    Removed(Shown),
+    Duplicate(Shown),
+    Changed { from: Shown, to: Shown },
+}
+
+impl SetMessage {
+    /// The line, with its items named in `case`.
+    pub fn text(&self, case: LabelCase) -> String {
+        match &self.words {
+            Words::Said(text) => text.clone(),
+            Words::Added(item) => format!("“{}” was added successfully.", item.in_case(case)),
+            Words::Removed(item) => format!("“{}” was removed successfully.", item.in_case(case)),
+            Words::Duplicate(item) => format!("“{}” is already there.", item.in_case(case)),
+            Words::Changed { from, to } => format!(
+                "“{}” was changed to “{}” successfully.",
+                from.in_case(case),
+                to.in_case(case)
+            ),
+        }
+    }
 }
 
 impl SetNode {
@@ -418,7 +448,7 @@ impl SetNode {
         // The set's own path: the item buttons' edits are addressed to it.
         let path = ctx.path(&self.name);
         let name = item.name();
-        let text = item_text(item);
+        let text = item_text(item, ctx.label_case);
         let editing = self.editing.as_deref() == Some(name.as_str());
         let mut errors = ErrorsByPath::default();
         item.collect_errors(&path, &mut errors);
@@ -581,38 +611,38 @@ impl SetNode {
     /// there is one, else formoxus's own words. A duplicate is a refusal, so
     /// it renders with the slot's invalid class.
     fn message_for(&self, event: NodeEvent<'_>) -> Option<SetMessage> {
-        let text = match &self.feedback {
-            Some(feedback) => feedback.describe(event),
-            None => default_message(event),
-        }?;
+        let words = match &self.feedback {
+            Some(feedback) => Words::Said(feedback.describe(event)?),
+            None => default_words(event)?,
+        };
         Some(SetMessage {
-            text,
+            words,
             refused: matches!(event, NodeEvent::Duplicate(_)),
         })
     }
 }
 
 /// formoxus's own words for what an edit did, Django's way (I′), or `None` for
-/// an item with nothing to name.
-fn default_message(event: NodeEvent<'_>) -> Option<String> {
-    let named = |item: &dyn Node| Some(item_text(item)).filter(|text| !text.is_empty());
+/// an item with nothing to name. Worded by [`SetMessage::text`].
+fn default_words(event: NodeEvent<'_>) -> Option<Words> {
+    let named = |item: &dyn Node| Some(item.shown()).filter(|shown| !shown.is_empty());
     Some(match event {
-        NodeEvent::Added(item) => format!("“{}” was added successfully.", named(item)?),
-        NodeEvent::Removed(item) => format!("“{}” was removed successfully.", named(item)?),
-        NodeEvent::Duplicate(item) => format!("“{}” is already there.", named(item)?),
-        NodeEvent::Changed { from, to } => format!(
-            "“{}” was changed to “{}” successfully.",
-            named(from)?,
-            named(to)?
-        ),
+        NodeEvent::Added(item) => Words::Added(named(item)?),
+        NodeEvent::Removed(item) => Words::Removed(named(item)?),
+        NodeEvent::Duplicate(item) => Words::Duplicate(named(item)?),
+        NodeEvent::Changed { from, to } => Words::Changed {
+            from: named(from)?,
+            to: named(to)?,
+        },
     })
 }
 
-/// An item as the user sees it, shown and named in its buttons and messages:
-/// [`Node::shown_text`], so a choice's label where the item has choices,
-/// never a `Display` the type may not have.
-fn item_text(item: &dyn Node) -> String {
-    item.shown_text()
+/// An item as the user sees it, shown and named in its buttons:
+/// [`Node::shown`] in the form's label case, so a choice's label where the
+/// item has choices and a variant cased as its `<select>` shows it, never a
+/// `Display` the type may not have.
+fn item_text(item: &dyn Node, case: LabelCase) -> String {
+    item.shown().in_case(case)
 }
 
 impl Node for SetNode {
@@ -620,7 +650,7 @@ impl Node for SetNode {
         self.name.clone()
     }
 
-    fn label(&self, case: crate::label_case::LabelCase) -> Option<String> {
+    fn label(&self, case: LabelCase) -> Option<String> {
         self.label
             .clone()
             .or_else(|| default_label(&self.name, case))
@@ -880,7 +910,7 @@ impl Node for SetNode {
                                 self.items
                                     .iter()
                                     .find(|item| &item.name() == name)
-                                    .map(|item| item_text(&**item))
+                                    .map(|item| item_text(&**item, ctx.label_case))
                             }),
                         },
                         "ItemAdder",
@@ -894,7 +924,7 @@ impl Node for SetNode {
                     class: message_class,
                     role: "status",
                     if let Some(message) = &self.message {
-                        "{message.text}"
+                        "{message.text(ctx.label_case)}"
                     }
                 }
             }
