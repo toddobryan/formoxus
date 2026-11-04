@@ -63,8 +63,9 @@ impl FormErrors {
     }
 
     /// The messages at `path`, or the form's own for `None`. A path is looked
-    /// up as written: these errors hold no item keys, so a path with an index
-    /// (`path!(Quiz.answers[i])`) finds nothing here. Look one up through
+    /// up as written: these errors hold no item keys, so a path naming one
+    /// item (`path!(Quiz.answers[i])`, `path!(Post.tags[= "rust"])`) finds
+    /// nothing here. Look one up through
     /// [`WireForm::errors_at`](crate::WireForm::errors_at), which has them.
     pub fn messages_at<T>(&self, path: Option<Path<T>>) -> Vec<String> {
         match path {

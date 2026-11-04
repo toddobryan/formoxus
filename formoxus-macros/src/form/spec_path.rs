@@ -68,6 +68,10 @@ pub(crate) enum Suffix {
     /// [`SpecPath`]'s own parse refuses it. See
     /// [`parse_indexed`](SpecPath::parse_indexed).
     At(Box<syn::Expr>),
+    /// `[= value]`: ONE item of a set, the one equal to the value the
+    /// expression refers to at run time. [`path!`](crate::path) only, and
+    /// only last: a set's item is a leaf, so nothing follows it.
+    Value(Box<syn::Expr>),
 }
 
 impl Segment {
@@ -114,30 +118,50 @@ impl SpecPath {
         self.spelled(&mut |_| "[]".to_string())
     }
 
-    /// The key as a `format!` string and the index expressions it takes, in
-    /// order: `groups[i].$Random.set[j]` is `"groups[{}].$Random.set[{}]"`
-    /// and `[i, j]`. What [`path!`](crate::path) builds a path with an index
-    /// from, at run time. No segment can hold a brace, so nothing needs
-    /// escaping.
-    pub(crate) fn key_format(&self) -> (String, Vec<syn::Expr>) {
-        let mut indices = Vec::new();
-        let format = self.spelled(&mut |index| {
-            indices.push(index.clone());
-            "[{}]".to_string()
+    /// The key as a `format!` string and the arguments it takes, in order:
+    /// `groups[i].$Random.set[j]` is `"groups[{}].$Random.set[{}]"` with `i`
+    /// and `j`, each checked as a `usize`; `tags[= &t]` is `"tags{}"` with
+    /// `item_value_key(&t)`, which writes its own brackets. What
+    /// [`path!`](crate::path) builds a path from at run time. No segment
+    /// can hold a brace, so nothing needs escaping.
+    pub(crate) fn key_format(&self) -> (String, Vec<TokenStream2>) {
+        let mut arguments = Vec::new();
+        let format = self.spelled(&mut |selector| match selector {
+            Selector::Index(index) => {
+                // The `let` puts a wrong type's error on the author's
+                // expression rather than inside `format!`.
+                arguments.push(quote! { { let __index: usize = #index; __index } });
+                "[{}]".to_string()
+            }
+            Selector::Value(value) => {
+                arguments.push(quote! { ::formoxus::path::item_value_key(#value) });
+                "{}".to_string()
+            }
         });
-        (format, indices)
+        (format, arguments)
     }
 
-    /// Whether any segment names one item by index.
-    pub(crate) fn has_indices(&self) -> bool {
+    /// Whether any segment names one item, by index or by value: a path
+    /// built at run time.
+    pub(crate) fn names_one_item(&self) -> bool {
         self.segments.iter().any(|segment| {
             matches!(segment, Segment::Field { suffixes, .. }
-                if suffixes.iter().any(|suffix| matches!(suffix, Suffix::At(_))))
+                if suffixes.iter().any(|suffix| matches!(suffix, Suffix::At(_) | Suffix::Value(_))))
         })
     }
 
-    /// The dotted spelling, with each `[i]` written by `index`.
-    fn spelled(&self, index: &mut dyn FnMut(&syn::Expr) -> String) -> String {
+    /// Whether a segment names a set's item by value, whose witness has to
+    /// see the value, so must be a closure rather than a `fn`.
+    pub(crate) fn has_value(&self) -> bool {
+        self.segments.iter().any(|segment| {
+            matches!(segment, Segment::Field { suffixes, .. }
+                if suffixes.iter().any(|suffix| matches!(suffix, Suffix::Value(_))))
+        })
+    }
+
+    /// The dotted spelling, with each `[i]` and `[= value]` written by
+    /// `selector`.
+    fn spelled(&self, selector: &mut dyn FnMut(Selector<'_>) -> String) -> String {
         self.segments
             .iter()
             .map(|s| match s {
@@ -153,7 +177,10 @@ impl SpecPath {
                     for suffix in suffixes {
                         match suffix {
                             Suffix::Each => name.push_str("[]"),
-                            Suffix::At(at) => name.push_str(&index(at)),
+                            Suffix::At(at) => name.push_str(&selector(Selector::Index(at))),
+                            Suffix::Value(value) => {
+                                name.push_str(&selector(Selector::Value(value)));
+                            }
                             Suffix::Some => {}
                         }
                     }
@@ -223,6 +250,12 @@ impl SpecPath {
     }
 }
 
+/// What a run-time key is built from at one `[i]` or `[= value]`.
+pub(crate) enum Selector<'a> {
+    Index(&'a syn::Expr),
+    Value(&'a syn::Expr),
+}
+
 fn two_variants(span: Span) -> syn::Error {
     syn::Error::new(
         span,
@@ -265,6 +298,16 @@ fn suffixes(input: ParseStream<'_>, indexed: bool) -> Result<Vec<Suffix>> {
             let span = syn::bracketed!(brackets in input);
             if brackets.is_empty() {
                 suffixes.push(Suffix::Each);
+            } else if indexed && brackets.peek(Token![=]) {
+                brackets.parse::<Token![=]>()?;
+                suffixes.push(Suffix::Value(Box::new(brackets.parse()?)));
+                if !input.is_empty() {
+                    // A set holds leaves, so its item is where a path ends.
+                    return Err(input.error(
+                        "nothing follows `[= value]` — a set's item is a leaf, so the path \
+                         ends there",
+                    ));
+                }
             } else if indexed {
                 suffixes.push(Suffix::At(Box::new(brackets.parse()?)));
             } else {
@@ -275,7 +318,8 @@ fn suffixes(input: ParseStream<'_>, indexed: bool) -> Result<Vec<Suffix>> {
                 return Err(syn::Error::new(
                     span.span.join(),
                     "`[]` must be empty — a spec applies to every item, not one index; \
-                     `path!(Model.list[i])` names one item, for an error about it",
+                     `path!(Model.list[i])` or `path!(Model.set[= value])` names one item, \
+                     for an error about it",
                 ));
             }
         } else {
@@ -465,6 +509,20 @@ fn probe_suffixes(
         // that the field is a `Vec`: a set's iteration order need not be
         // the order its items are shown in, so an index into one would name
         // the wrong item. `path::Indexable` is only a `Vec`, and says so.
+        // The value is checked, not looped over: a set's item is a leaf, so
+        // `[= value]` is the path's end, and what it adds is that the field
+        // is a set and the value one of its items (`path::ItemOf`).
+        Some((Suffix::Value(value), _)) => {
+            let set = crate::form::respan(
+                if is_ref {
+                    quote!(#next)
+                } else {
+                    quote!(&#next)
+                },
+                span,
+            );
+            quote_spanned! { span=> ::formoxus::path::ItemOf::is_item(#set, #value); }
+        }
         Some((Suffix::At(_), more)) => {
             let binding = format_ident!("__item{depth}");
             let inner = probe_suffixes(quote!(#binding), true, more, span, rest, depth + 1);
@@ -609,7 +667,7 @@ fn walk(
         let last_segment = segments.peek().is_none();
         for (i, suffix) in suffixes.iter().enumerate() {
             match suffix {
-                Suffix::Each | Suffix::At(_) => {
+                Suffix::Each | Suffix::At(_) | Suffix::Value(_) => {
                     before_items(&place, span);
                     let iter = quote_spanned! { span=> #place.iter() };
                     place = quote! { (*::formoxus::field_kind::item(#iter)) };
@@ -684,11 +742,44 @@ mod tests {
         let path =
             syn::parse::Parser::parse2(SpecPath::parse_indexed, quote! { rows[i][].cells[n - 1] })
                 .expect("an index parses where `path!` reads a path");
-        expect_that!(path.has_indices(), eq(true));
-        let (format, indices) = path.key_format();
+        expect_that!(path.names_one_item(), eq(true));
+        expect_that!(path.has_value(), eq(false));
+        let (format, arguments) = path.key_format();
         expect_that!(format, eq("rows[{}][].cells[{}]"));
-        let indices: Vec<String> = indices.iter().map(|e| quote!(#e).to_string()).collect();
-        expect_that!(indices, elements_are![eq("i"), eq("n - 1")]);
+        let arguments: Vec<String> = arguments.iter().map(ToString::to_string).collect();
+        expect_that!(
+            arguments,
+            elements_are![
+                eq("{ let __index : usize = i ; __index }"),
+                eq("{ let __index : usize = n - 1 ; __index }")
+            ]
+        );
+    }
+
+    /// `[= value]` keys as a bare `{}`: `item_value_key` writes the brackets.
+    #[gtest]
+    fn a_value_parse_keys_through_item_value_key() {
+        let path =
+            syn::parse::Parser::parse2(SpecPath::parse_indexed, quote! { groups[g].tags[= &t] })
+                .expect("a value parses last in a `path!` path");
+        expect_that!(path.has_value(), eq(true));
+        let (format, arguments) = path.key_format();
+        expect_that!(format, eq("groups[{}].tags{}"));
+        expect_that!(
+            arguments[1].to_string(),
+            eq(":: formoxus :: path :: item_value_key (& t)")
+        );
+    }
+
+    /// A set's item is a leaf, so a value ends the path.
+    #[gtest]
+    fn nothing_may_follow_a_value() {
+        let err = syn::parse::Parser::parse2(SpecPath::parse_indexed, quote! { tags[= &t].len })
+            .expect_err("a segment after a value is refused");
+        expect_that!(
+            err.to_string(),
+            contains_substring("nothing follows `[= value]`")
+        );
     }
 
     // ── The witness ──────────────────────────────────────────────────────

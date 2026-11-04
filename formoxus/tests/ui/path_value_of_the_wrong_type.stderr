@@ -1,0 +1,23 @@
+error[E0277]: the trait bound `std::string::String: Borrow<{integer}>` is not satisfied
+  --> tests/ui/path_value_of_the_wrong_type.rs:13:31
+   |
+13 |     let _ = path!(Post.tags[= &7]);
+   |                        ----   ^^ the trait `Borrow<{integer}>` is not implemented for `std::string::String`
+   |                        |
+   |                        required by a bound introduced by this call
+   |
+help: the trait `Borrow<{integer}>` is not implemented for `std::string::String`
+      but trait `Borrow<str>` is implemented for it
+  --> $RUST/alloc/src/str.rs
+   |
+   | impl Borrow<str> for String {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for that trait implementation, expected `str`, found `{integer}`
+note: required by a bound in `formoxus::path::ItemOf::is_item`
+  --> src/path.rs
+   |
+   |     fn is_item<Q: ?Sized>(&self, _value: &Q)
+   |        ------- required by a bound in this associated function
+   |     where
+   |         Self::Item: Borrow<Q>,
+   |                     ^^^^^^^^^ required by this bound in `ItemOf::is_item`

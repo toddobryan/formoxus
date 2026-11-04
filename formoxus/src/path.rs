@@ -6,10 +6,11 @@
 //! one is [`path!`](macro@crate::path), which emits a witness borrow of the
 //! field beside it.
 //!
-//! A path may name ONE item of a `Vec` by index, `path!(Quiz.answers[i])`, for
-//! an error about that item: the index is a run-time value, so that path is
-//! built when it is written, and the form turns `answers[2]` into the third
-//! item's key (`answers.#5`) when the error is placed.
+//! A path may name ONE item, for an error about it: of a `Vec` by index,
+//! `path!(Quiz.answers[i])`, or of a set by value, `path!(Post.tags[= "rust"])`.
+//! Either is a run-time value, so that path is built when it is written, and
+//! the form turns it into the item's key (`answers.#5`, `tags.#2`) when the
+//! error is placed.
 //!
 //! ```ignore
 //! submission.reject_field(path!(Signup.email), "already registered")
@@ -19,7 +20,10 @@
 //! the caret on the segment. The alternative — `reject_field("emial", …)` — is
 //! a panic on a server, discovered by a user.
 
+use facet::{Facet, Peek};
+use std::borrow::Borrow;
 use std::borrow::Cow;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -107,6 +111,38 @@ impl<T> Indexable for Vec<T> {
     }
 }
 
+/// What [`path!`](macro@crate::path)'s witness checks a `[= value]` segment
+/// with (`ItemOf::is_item`, never called at run time): only a set has it, and
+/// only a reference to something its items borrow as (`&str` for a set of
+/// `String`s) is a value of one.
+///
+/// Only a set, because only a set's items are unique by value, so a value
+/// names one item; a `Vec` can hold it twice, and is named by index, `[i]`.
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`[= value]` names one item of a set by its value, and `{Self}` is not a set",
+    label = "not a set",
+    note = "a `Vec` can hold a value twice, so its items are named by index: `[i]`"
+)]
+pub trait ItemOf {
+    #[doc(hidden)]
+    type Item;
+    #[doc(hidden)]
+    fn is_item<Q: ?Sized>(&self, _value: &Q)
+    where
+        Self::Item: Borrow<Q>,
+    {
+    }
+}
+
+impl<T> ItemOf for BTreeSet<T> {
+    type Item = T;
+}
+
+impl<T, S> ItemOf for HashSet<T, S> {
+    type Item = T;
+}
+
 // Every impl below is hand-written for one reason: `#[derive]` would add a
 // `T: Clone`/`T: Debug`/… bound that is never satisfied by anything real here.
 // A `Path<T>` contains no `T`, so none of these depend on `T` at all — the same
@@ -152,54 +188,135 @@ impl<T> AsRef<str> for Path<T> {
     }
 }
 
-/// `path` with each `[n]` replaced by the `n`th item's key, `n` counted from
-/// 0 in the order `item_keys` lists them: `groups[1].$Random.set[0]` is
+/// `path` with each index and each value resolved to the key of the item it
+/// names, or `None` when one names no item.
+///
+/// An index, `[n]`, is the `n`th item counted from 0 in the order the
+/// container's entry lists its keys: `groups[1].$Random.set[0]` is
 /// `groups.#3.$Random.set.#0` when `groups` is `"#0,#3"` and that group's set
-/// is `"#0,#1"`. Each list's keys are read by the path resolved so far, so an
-/// index inside an item finds that item's list.
+/// is `"#0,#1"`. A value, `[=text]` (encoded by [`item_value_key`]), is the
+/// item whose own entry is that text: `tags[=rust]` is `tags.#2` when
+/// `tags.#2` is `"rust"`. Each container's entry is read by the path
+/// resolved so far, so an index or value inside an item finds that item's
+/// container.
 ///
-/// `item_keys` gives a container's structure entry by its path, as
-/// `collect_values` writes it: [`crate::FormState`] reads its own, and
-/// [`crate::WireForm`] the one it carries.
+/// `entry` gives an entry by its path, as `collect_values` writes them: a
+/// container's item keys, a leaf's text, a variant's name. [`crate::FormState`]
+/// reads its own, and [`crate::WireForm`] the ones it carries.
 ///
-/// `None` when an index is past the end of its list, or names something with
-/// no item keys at all: an entry is item keys only if each is `#` and a
-/// number, so a leaf's text is never read as one. A path without an index is returned as it is, which
-/// is every path but one a validator wrote with `path!(…[i])`.
+/// `None` when an index is past the end of its list, a value is no item's,
+/// or either is applied to something with no item keys at all: an entry is
+/// item keys only if each is `#` and a number, so a leaf's text is never read
+/// as one. A path with neither is returned as it is, which is every path but
+/// one a validator wrote with `path!(…[i])` or `path!(…[= value])`.
 pub(crate) fn resolve_indices<'k>(
     path: &str,
-    item_keys: impl Fn(&str) -> Option<&'k str>,
+    entry: impl Fn(&str) -> Option<&'k str>,
 ) -> Option<String> {
     if !path.contains('[') {
         return Some(path.to_string());
     }
     let mut resolved = String::with_capacity(path.len());
     for segment in path.split('.') {
-        let (name, mut indices) = segment.split_at(segment.find('[').unwrap_or(segment.len()));
+        let (name, mut selectors) = segment.split_at(segment.find('[').unwrap_or(segment.len()));
         if !resolved.is_empty() {
             resolved.push('.');
         }
         resolved.push_str(name);
-        while let Some(after) = indices.strip_prefix('[') {
-            let (digits, rest) = after.split_once(']')?;
-            let index: usize = digits.parse().ok()?;
-            let keys = item_keys(&resolved)?;
+        while let Some(after) = selectors.strip_prefix('[') {
+            let (selector, rest) = after.split_once(']')?;
+            let keys = entry(&resolved)?;
             if !keys
                 .split(',')
                 .all(|key| key.is_empty() || is_item_key(key))
             {
                 return None;
             }
-            let key = keys.split(',').filter(|key| !key.is_empty()).nth(index)?;
+            let mut keys = keys.split(',').filter(|key| !key.is_empty());
+            let key = match selector.strip_prefix('=') {
+                Some(encoded) => {
+                    let text = decode(encoded)?;
+                    keys.find(|key| entry(&format!("{resolved}.{key}")) == Some(text.as_str()))?
+                }
+                None => keys.nth(selector.parse().ok()?)?,
+            };
             resolved.push('.');
             resolved.push_str(key);
-            indices = rest;
+            selectors = rest;
         }
-        if !indices.is_empty() {
+        if !selectors.is_empty() {
             return None;
         }
     }
     Some(resolved)
+}
+
+/// What [`path!`](macro@crate::path) writes for `[= value]`: the value's text
+/// as its item's entry holds it, encoded so it cannot end the segment or the
+/// path (`.`, `[`, `]`) or be misread (`%`). The text is the one a set's
+/// item node writes for that value: a newtype's inner scalar, a unit enum's
+/// variant name, any other leaf's display, the way `build::node_for_shape`
+/// reads them. A set holds nothing but those.
+#[doc(hidden)]
+pub fn item_value_key<Q: for<'f> Facet<'f> + ?Sized>(value: &Q) -> String {
+    let text = entry_text(Peek::new(value));
+    let mut encoded = String::with_capacity(text.len() + 3);
+    encoded.push_str("[=");
+    for c in text.chars() {
+        match c {
+            '%' => encoded.push_str("%25"),
+            '.' => encoded.push_str("%2E"),
+            '[' => encoded.push_str("%5B"),
+            ']' => encoded.push_str("%5D"),
+            c => encoded.push(c),
+        }
+    }
+    encoded.push(']');
+    encoded
+}
+
+/// The entry an item node holding `value` writes for itself.
+fn entry_text(value: Peek<'_, '_>) -> String {
+    let shape = value.shape();
+    if shape.scalar_type().is_none() {
+        if crate::build::newtype_inner(shape).is_some()
+            && let Some(inner) = value
+                .into_struct()
+                .ok()
+                .and_then(|newtype| newtype.field(0).ok())
+        {
+            return inner.to_string();
+        }
+        if let Some(variant) = value
+            .into_enum()
+            .ok()
+            .and_then(|e| e.variant_name_active().ok())
+        {
+            return variant.to_string();
+        }
+    }
+    value.to_string()
+}
+
+/// The reverse of [`item_value_key`]'s escaping; `None` for a `%` not
+/// followed by one of the four codes it writes.
+fn decode(encoded: &str) -> Option<String> {
+    let mut text = String::with_capacity(encoded.len());
+    let mut rest = encoded;
+    while let Some(at) = rest.find('%') {
+        text.push_str(&rest[..at]);
+        let code = rest.get(at + 1..at + 3)?;
+        text.push(match code {
+            "25" => '%',
+            "2E" => '.',
+            "5B" => '[',
+            "5D" => ']',
+            _ => return None,
+        });
+        rest = &rest[at + 3..];
+    }
+    text.push_str(rest);
+    Some(text)
 }
 
 /// `#` and digits: an item's key, as `collect_values` names one.
@@ -321,5 +438,89 @@ mod tests {
         expect_that!(resolve_indices("answers[x]", &keys), none());
         expect_that!(resolve_indices("answers[0", &keys), none());
         expect_that!(resolve_indices("answers[0]x", &keys), none());
+    }
+
+    // ── values: `[=text]` ────────────────────────────────────────────────
+
+    fn tags() -> HashMap<String, String> {
+        keys(&[
+            ("tags", "#0,#2,#3"),
+            ("tags.#0", "go"),
+            ("tags.#2", "rust"),
+            ("tags.#3", "v1.2 [beta] 100%"),
+        ])
+    }
+
+    /// A value is the item whose own entry is that text, whatever its place.
+    #[gtest]
+    fn a_value_becomes_the_key_of_the_item_holding_it() {
+        let key = super::item_value_key("rust");
+        expect_that!(key, eq("[=rust]"));
+        expect_that!(
+            resolve_indices(&format!("tags{key}"), &tags()),
+            some(eq("tags.#2"))
+        );
+    }
+
+    /// The four characters that could end a segment or be misread are
+    /// encoded, and decoded back before the match.
+    #[gtest]
+    fn a_value_with_a_dot_brackets_or_a_percent_still_resolves() {
+        let key = super::item_value_key("v1.2 [beta] 100%");
+        expect_that!(key, eq("[=v1%2E2 %5Bbeta%5D 100%25]"));
+        expect_that!(
+            resolve_indices(&format!("tags{key}"), &tags()),
+            some(eq("tags.#3"))
+        );
+    }
+
+    #[gtest]
+    fn a_value_no_item_holds_names_nothing() {
+        expect_that!(resolve_indices("tags[=java]", &tags()), none());
+    }
+
+    /// Only `item_value_key` writes a value, and only these four codes.
+    #[gtest]
+    fn a_malformed_encoding_names_nothing() {
+        expect_that!(resolve_indices("tags[=r%7Ast]", &tags()), none());
+        expect_that!(resolve_indices("tags[=rust%2]", &tags()), none());
+    }
+
+    /// An index finds the item, and a value then finds an item of the set
+    /// inside it.
+    #[gtest]
+    fn an_index_then_a_value_resolve_in_turn() {
+        let keys = keys(&[
+            ("groups", "#0,#3"),
+            ("groups.#3.$Random.set", "#0,#4"),
+            ("groups.#3.$Random.set.#0", "q1"),
+            ("groups.#3.$Random.set.#4", "q2"),
+        ]);
+        expect_that!(
+            resolve_indices("groups[1].$Random.set[=q2]", &keys),
+            some(eq("groups.#3.$Random.set.#4"))
+        );
+    }
+
+    /// A value's text is what its item node writes: a newtype's inner value,
+    /// a unit enum's variant name, a number's display.
+    #[gtest]
+    fn a_values_text_is_its_item_entry() {
+        #[derive(facet::Facet)]
+        struct Tag(String);
+        #[derive(facet::Facet)]
+        #[repr(u8)]
+        #[allow(dead_code)]
+        enum Day {
+            Monday,
+            Friday,
+        }
+        expect_that!(
+            super::item_value_key(&Tag("rust".to_string())),
+            eq("[=rust]")
+        );
+        expect_that!(super::item_value_key(&Day::Friday), eq("[=Friday]"));
+        expect_that!(super::item_value_key(&7_u8), eq("[=7]"));
+        expect_that!(super::item_value_key(&1.5_f64), eq("[=1%2E5]"));
     }
 }

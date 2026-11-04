@@ -268,17 +268,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    /// Every list's and set's item keys, in the order shown, by the
-    /// container's path: what `collect_values` sends as its structure entry
-    /// (`"answers"` → `"#0,#5"`). What [`crate::path::resolve_indices`] reads.
+    /// Every entry `collect_values` sends, by path: each list's and set's
+    /// item keys in the order shown (`"answers"` → `"#0,#5"`), and each
+    /// item's own text, which a set's item is found by. What
+    /// [`crate::path::resolve_indices`] reads.
     fn item_keys(&self) -> HashMap<String, String> {
-        self.raw_values()
-            .into_iter()
-            .filter_map(|value| match value {
-                RawValue::Structure { path, data } => Some((path, data)),
-                RawValue::Leaf { .. } | RawValue::Draft { .. } => None,
-            })
-            .collect()
+        self.collect_values().into_iter().collect()
     }
 
     pub fn distribute_errors(&mut self, mut errors: ErrorsByPath) -> ErrorsByPath {
@@ -312,11 +307,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     /// Put `message` on the node at `path`, or say there is none.
     ///
-    /// `path` may name an item by index, `answers[2]`, as a
-    /// [`path!`](macro@crate::path) with `[i]` spells it: the third item,
-    /// counted in the order the items are shown, which for a `Vec` is the
-    /// model's own order. It is resolved to that item's key (`answers.#5`)
-    /// here, so an index past the end is no path at all.
+    /// `path` may name one item as a [`path!`](macro@crate::path) spells it:
+    /// by index, `answers[2]`, the third item in the order shown, which for a
+    /// `Vec` is the model's own; or by value, `tags[=rust]`, the item holding
+    /// that text. It is resolved to that item's key (`answers.#5`) here, so
+    /// an index past the end or a value no item holds is no path at all.
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
         let keyed = keyed_or_as_written(path, &self.item_keys());
         let mut this_error = ErrorsByPath::default();

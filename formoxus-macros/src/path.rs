@@ -71,26 +71,34 @@ impl PathInput {
         let model = &self.model;
         let witness = probe(&self.field.segments, quote!(__s), 0);
         let options = option_checks(&self.field.segments, model);
-        let path = if self.field.has_indices() {
-            // Each index is evaluated once, where the path is written, and
-            // must be a `usize`: the `let` puts a wrong type's error on the
-            // author's expression rather than inside `format!`.
-            let (format, indices) = self.field.key_format();
+        let path = if self.field.names_one_item() {
+            // Each index and value is evaluated once, where the path is
+            // written.
+            let (format, arguments) = self.field.key_format();
             quote! {
                 ::formoxus::path::Path::<#model>::__new_indexed(::std::format!(
                     #format,
-                    #({ let __index: usize = #indices; __index }),*
+                    #(#arguments),*
                 ))
             }
         } else {
             let key = self.field.key();
             quote! { ::formoxus::path::Path::<#model>::__new(#key) }
         };
+        // A closure, never called, where the witness has to see a value the
+        // author wrote (`tags[= &t]`): a `fn` item cannot capture `t`.
+        let witness = if self.field.has_value() {
+            quote! { let _ = |__s: &#model| { #witness }; }
+        } else {
+            quote! {
+                #[allow(unused)]
+                fn __formoxus_path_witness(__s: &#model) { #witness }
+            }
+        };
 
         quote! {
             {
-                #[allow(unused)]
-                fn __formoxus_path_witness(__s: &#model) { #witness }
+                #witness
                 #options
 
                 #path
@@ -159,6 +167,25 @@ mod tests {
             out,
             contains_substring(":: formoxus :: path :: Indexable :: items")
         );
+    }
+
+    /// `[= value]`: the witness is a closure, so it can see the value, and
+    /// checks the field is a set holding that value's type.
+    #[gtest]
+    fn a_value_witnesses_in_a_closure() {
+        let out = expand(quote! { Post.tags[= "rust"] });
+        expect_that!(out, contains_substring("let _ = | __s : & Post |"));
+        expect_that!(
+            out,
+            contains_substring(
+                ":: formoxus :: path :: ItemOf :: is_item (& __s . tags , \"rust\")"
+            )
+        );
+        expect_that!(
+            out,
+            contains_substring(":: formoxus :: path :: item_value_key (\"rust\")")
+        );
+        expect_that!(out, not(contains_substring("fn __formoxus_path_witness")));
     }
 
     /// Without an index, the key stays a literal and the path a `const`-built one.

@@ -1,0 +1,16 @@
+error[E0277]: `[= value]` names one item of a set by its value, and `Vec<std::string::String>` is not a set
+  --> tests/ui/path_value_on_a_list.rs:13:24
+   |
+13 |     let _ = path!(Quiz.answers[= "alpha"]);
+   |                        ^^^^^^^ not a set
+   |
+   = help: the trait `formoxus::path::ItemOf` is not implemented for `Vec<std::string::String>`
+   = note: a `Vec` can hold a value twice, so its items are named by index: `[i]`
+help: the following other types implement trait `formoxus::path::ItemOf`
+  --> src/path.rs
+   |
+   | impl<T> ItemOf for BTreeSet<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `BTreeSet<T>`
+...
+   | impl<T, S> ItemOf for HashSet<T, S> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `HashSet<T, S>`

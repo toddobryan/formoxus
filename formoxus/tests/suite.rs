@@ -57,6 +57,8 @@ mod newtypes;
 mod optional_containers;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
+#[path = "suite/set_item_errors.rs"]
+mod set_item_errors;
 #[path = "suite/sets.rs"]
 mod sets;
 #[path = "suite/snapshot.rs"]

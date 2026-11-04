@@ -140,9 +140,10 @@ impl<T> WireForm<T> {
         self.form_errors().iter().map(|fe| fe.0.clone()).collect()
     }
 
-    /// The messages at `path`. A path with an index (`path!(Quiz.answers[i])`)
-    /// is resolved to that item's key through the item keys these values
-    /// carry, as the form placed it; one past the end has none.
+    /// The messages at `path`. A path naming one item, by index
+    /// (`path!(Quiz.answers[i])`) or by value (`path!(Post.tags[= "rust"])`),
+    /// is resolved to that item's key through the entries these values
+    /// carry, as the form placed it; one naming no item has none.
     #[expect(
         clippy::needless_pass_by_value,
         reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"

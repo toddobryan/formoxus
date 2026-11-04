@@ -104,9 +104,10 @@ impl<T> ValidationError<T> {
     /// An error shown beside the field `path` names. Build the path with
     /// [`path!`](macro@crate::path) so a typo is a compile error:
     /// `ValidationError::at(path!(Model.field), "…")`. One item of a `Vec` is
-    /// named by its index in the model, `path!(Model.answers[i])`, and the
-    /// error goes beside that item; an index past the end puts it with the
-    /// form's own errors instead.
+    /// named by its index in the model, `path!(Model.answers[i])`, and one
+    /// item of a set by its value, `path!(Model.tags[= "rust"])`; the error
+    /// goes beside that item. An index past the end, or a value no item
+    /// holds, puts it with the form's own errors instead.
     pub fn at(path: Path<T>, message: impl Into<ValidationMessage>) -> Self {
         ValidationError {
             path: Some(path),

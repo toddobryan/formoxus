@@ -68,8 +68,16 @@ pub fn form(input: TokenStream) -> TokenStream {
 /// it places the error, wherever moves and removals have left the item. An
 /// index past the end names no item, so the error is shown with the form's
 /// own. Only on a `Vec`: a set iterates in an order that need not be the
-/// order it is shown in, so `[i]` on one does not compile. `form!` takes
-/// only `[]`, since its settings apply to every item.
+/// order it is shown in, so `[i]` on one does not compile.
+///
+/// **One item of a set, by value:** `Model.tags[= "rust"]` or
+/// `Model.days[= &day]`, a reference to the value (or to what the items
+/// borrow as: `&str` for a set of `String`s). A set's items are unique by
+/// value, so a value names one; the form finds it by the text its item
+/// holds, wherever it is. Last in the path, since a set's item is a leaf; a
+/// value no item holds names none, so the error is shown with the form's
+/// own. Only on a set: a `Vec` can hold a value twice. `form!` takes only
+/// `[]`, since its settings apply to every item.
 ///
 /// ```ignore
 /// fn one_group_per_question(a: &Assignment) -> Vec<ValidationError<Assignment>> {
