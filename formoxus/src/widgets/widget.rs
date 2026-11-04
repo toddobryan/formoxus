@@ -71,6 +71,7 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
 pub(crate) trait DynWidget: Debug + Send + Sync {
     fn render(&self, props: WidgetProps) -> Element;
     fn name(&self) -> &'static str;
+    fn extends(&self) -> AttrSet;
     fn clone_box(&self) -> Box<dyn DynWidget>;
     fn as_any(&self) -> &dyn Any;
     fn eq_dyn(&self, other: &dyn DynWidget) -> bool;
@@ -82,6 +83,9 @@ impl<W: Widget> DynWidget for W {
     }
     fn name(&self) -> &'static str {
         W::NAME
+    }
+    fn extends(&self) -> AttrSet {
+        W::EXTENDS
     }
     fn clone_box(&self) -> Box<dyn DynWidget> {
         Box::new(self.clone())
@@ -112,6 +116,10 @@ impl AnyWidget {
     }
     pub fn name(&self) -> &'static str {
         self.0.name()
+    }
+    /// The widget's [`Widget::EXTENDS`]: the attributes its element takes.
+    pub fn extends(&self) -> AttrSet {
+        self.0.extends()
     }
 }
 impl<W: Widget> From<W> for AnyWidget {

@@ -598,7 +598,7 @@ fn TupleVariantFields() -> Element {
             form! {
                 Meter {
                     reading.$Reading::Pair.0 => { label: "Where" },
-                    reading.$Reading::Pair.1 => { min: 3 },
+                    reading.$Reading::Pair.1 => { widget: number, min: 3 },
                 }
             },
         )

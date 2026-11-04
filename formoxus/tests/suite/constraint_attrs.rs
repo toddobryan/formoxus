@@ -71,15 +71,16 @@ fn a_pattern_reaches_the_dom_unanchored() {
     expect_that!(html, not(contains_substring("^(?:")));
 }
 
+/// On a `number` input, which takes `min` and `max`.
 #[gtest]
-fn a_numeric_bound_reaches_the_input() {
+fn a_numeric_bound_reaches_a_number_input() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| {
             empty_form(form! {
                 Counts {
-                    whole => { min: 1, max: 9 },
-                    fraction => { min: 0.5 },
+                    whole => { widget: number, min: 1, max: 9 },
+                    fraction => { widget: number, min: 0.5 },
                 }
             })
         });
@@ -91,16 +92,50 @@ fn a_numeric_bound_reaches_the_input() {
     expect_that!(html, contains_substring("min=0.5"));
 }
 
+/// A number's default widget is a TEXT input (so `parse` can say what is
+/// wrong with a half-typed `-`), which takes no `min` or `max` (#4): the
+/// browser would ignore them, and the markup would be invalid. The bounds
+/// still hold, through `check`.
+#[gtest]
+fn a_numeric_bound_stays_off_a_text_input_but_is_still_checked() {
+    #[component]
+    fn App() -> Element {
+        let form = use_form(|| empty_form(form! { Counts { whole => { min: 1, max: 9 } } }));
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(
+        html,
+        contains_regex(r#"<input [^>]*type="text"[^>]*name="whole""#)
+    );
+    expect_that!(html, not(contains_substring("min=")));
+    expect_that!(html, not(contains_substring("max=")));
+
+    let mut form = empty_form(form! { Counts { whole => { min: 1, max: 9 } } });
+    form.distribute_values(
+        &[
+            ("whole".to_string(), "12".to_string()),
+            ("fraction".to_string(), "0.5".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    expect_that!(form.validate(), none());
+    expect_that!(form.collect_errors().fields.get("whole"), some(anything()));
+}
+
 /// **No `step`, deliberately.** `<input type="number">` has an implicit
 /// `step=1` and would reject `0.5` — but formoxus never defaults a float to
 /// `type="number"` (`Int`/`Float` default to `Text`), so the only way to meet
-/// that is an explicit `widget: number`, and then supplying `step` is the
-/// author's job. See the note on `Field::constraint_attributes`.
+/// that is an explicit `widget: number`, as here, and then supplying `step`
+/// is the author's job. See the note on `Field::constraint_attributes`.
 #[gtest]
 fn no_step_is_emitted_for_a_float() {
     #[component]
     fn App() -> Element {
-        let form = use_form(|| empty_form(form! { Counts { fraction => { min: 0.5, max: 9.5 } } }));
+        let form = use_form(|| {
+            empty_form(form! { Counts { fraction => { widget: number, min: 0.5, max: 9.5 } } })
+        });
         form.render(using_fns! {})
     }
     let html = render(App);
@@ -170,31 +205,49 @@ fn a_hidden_input_gets_no_constraints() {
     expect_that!(html, not(contains_substring("maxlength")));
 }
 
-// ── Emitted even where HTML says they do not belong ──────────────────────
+// ── Only where the element takes them (#4) ───────────────────────────────
 //
-// These pin a DECISION, not an accident: formoxus emits every derived
-// attribute onto whatever element the widget renders and lets the browser
-// ignore what does not apply. That is invalid HTML, knowingly — the W3C
-// validator flags 50 of the 70 (input type, attribute) pairs, so there was no
-// coherent subset to carve out. Tracked in
-// <https://github.com/toddobryan/formoxus/issues/4>. If that issue is fixed,
-// these tests are the ones that should change.
+// A field's constraints are its own whatever renders it, but an element only
+// takes some: a `<textarea>` has no `pattern`. So the markup gets those the
+// widget's element takes (its `EXTENDS`), and `check` still judges the value
+// by all of them: the browser just cannot help with the one it lacks.
+
+#[component]
+fn PatternedTextarea() -> Element {
+    let form = use_form(|| {
+        empty_form(form! {
+            Bio { about => { max_length: 200, pattern: r"\w+", widget: textarea } }
+        })
+    });
+    form.render(using_fns! {})
+}
 
 #[gtest]
-fn a_textarea_gets_pattern_although_html_has_no_such_attribute() {
-    #[component]
-    fn App() -> Element {
-        let form = use_form(|| {
-            empty_form(form! {
-                Bio { about => { max_length: 200, pattern: r"\w+", widget: textarea } }
-            })
-        });
-        form.render(using_fns! {})
-    }
-    let html = render(App);
+fn a_textarea_gets_maxlength_but_not_pattern() {
+    let html = render(PatternedTextarea);
     expect_that!(html, contains_substring("<textarea"));
     expect_that!(html, contains_substring("maxlength=200"));
-    expect_that!(html, contains_substring(r#"pattern="\w+""#));
+    expect_that!(html, not(contains_substring("pattern=")));
+}
+
+/// Off the element, not off the field: the pattern still refuses a value.
+#[gtest]
+fn a_textareas_pattern_is_still_checked() {
+    let mut form = empty_form(form! {
+        Bio { about => { pattern: r"\w+", widget: textarea } }
+    });
+    form.distribute_values(
+        &[("about".to_string(), "two words".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    expect_that!(form.validate(), none());
+    expect_that!(
+        form.collect_errors().fields.get("about"),
+        some(elements_are![eq(&ValidationMessage::from(
+            r"input should match the regular expression \w+"
+        ))])
+    );
 }
 
 // A constraint beside `choices` used to be tested here, rendering `maxlength`

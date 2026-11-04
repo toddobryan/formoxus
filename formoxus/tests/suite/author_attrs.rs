@@ -15,8 +15,8 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::AttrSet;
 use formoxus::attrs::{AttrKey, AttrValue, Tag};
+use formoxus::attrs::{AttrSet, HtmlElement, InputType};
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
@@ -161,7 +161,8 @@ fn a_hidden_input_gets_no_author_attributes() {
     expect_that!(html, not(contains_substring("data-x")));
 }
 
-/// A custom widget that spreads whatever it is handed onto one `<input>`.
+/// A custom widget that spreads whatever it is handed onto one text
+/// `<input>`, and says so in `EXTENDS`.
 ///
 /// Hand-built rather than named in `form!`, so this pins the runtime half on
 /// its own: what `FieldNode::render` hands a widget in `WidgetProps`.
@@ -170,7 +171,7 @@ struct Spreading;
 
 impl Widget for Spreading {
     const NAME: &'static str = "spreading";
-    const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Text));
     const PARTS: &'static [Tag] = &[];
 
     fn render(&self, props: WidgetProps) -> Element {
@@ -179,11 +180,11 @@ impl Widget for Spreading {
     }
 }
 
-/// **A custom widget gets the field's attributes, formoxus's own included.**
-/// Not only the author's: a constraint like `maxlength` is what the browser
-/// enforces, so a custom widget that never saw it would accept what `check`
-/// later rejects. The `Custom` arm once passed only the caller's extras, and
-/// nothing failed.
+/// **A custom widget gets the field's attributes, formoxus's own included,**
+/// as far as its `EXTENDS` says its element takes them (#4). Not only the
+/// author's: a constraint like `maxlength` is what the browser enforces, so a
+/// custom widget that never saw it would accept what `check` later rejects.
+/// The `Custom` arm once passed only the caller's extras, and nothing failed.
 #[gtest]
 fn a_custom_widget_receives_the_fields_attributes() {
     let html = render!(

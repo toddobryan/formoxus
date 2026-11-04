@@ -106,3 +106,12 @@ compute_step()` no longer compiles. A way back in is a Step 8 box in
 `formoxus/FIELDS_PLAN.md` ("Runtime attribute values").
 Todd chose the new type over `String` (no unquoted numbers) and `Bound` (no
 `"any"`), knowing it has one user.
+
+**#4 FIXED 2026-11-03 (uncommitted at writing).** `FieldNode::render` keeps a
+field's OWN attributes only where its widget's element takes them
+(`own.keeping(|a| widget.extends().contains(a))`, via a new
+`AnyWidget::extends`). So a `<textarea>` loses `pattern`, and a number on its
+DEFAULT text input loses `min`/`max` (they reach a `widget: number`). `check`
+still judges every constraint, client and server. A custom widget now gets
+the field's constraints only as far as its `EXTENDS` declares (apcsp's
+`MarkdownWidget` is `valid_on(Textarea)`: keeps `maxlength`, loses `pattern`).

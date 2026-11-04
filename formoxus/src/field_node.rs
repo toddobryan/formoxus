@@ -292,11 +292,19 @@ impl<F: Field> Node for FieldNode<F> {
         // Bounds resolved to the field's kind here, so no widget needs it.
         // In a set's draft, only `maxlength` of the field's own: see
         // `NodeContext::in_draft`.
+        //
+        // And only those the widget's element takes (#4): a `String` field's
+        // `pattern` is its own whatever renders it, but a `<textarea>` has no
+        // `pattern`, and emitting one is invalid HTML. Dropped from the
+        // markup only: `check` still judges the value by it. A dev's own
+        // attributes need no such filter, since `form!` refuses one the
+        // widget does not take.
+        let extends = self.widget.extends();
         let own = self.field.widget_attrs();
         let own = if ctx.in_draft {
-            own.keeping(|attr| attr == Attr::MaxLength)
+            own.keeping(|attr| attr == Attr::MaxLength && extends.contains(attr))
         } else {
-            own
+            own.keeping(|attr| extends.contains(attr))
         };
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
