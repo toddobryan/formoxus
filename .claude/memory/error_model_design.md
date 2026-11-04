@@ -192,6 +192,9 @@ entry vs. one inside a field body) and two words for one concept reads worse.
 
 ## ErrorsStore — AGREED IN PRINCIPLE, DELIBERATELY DEFERRED
 
+**SUPERSEDED 2026-11-04 by `formoxus/ERRORS_PLAN.md`:** errors leave the nodes for a flat
+map and a store, not a projection of the tree. Kept for the reasoning.
+
 **Called `ErrorsByPath` when this was written.** Renamed here on 2026-09-29,
 when Todd split the values pair for the same reason: `ValuesByPath` became the
 plain `HashMap`/`IndexMap` of raw values and `ValuesStore` became the

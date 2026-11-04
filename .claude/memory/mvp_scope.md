@@ -1,6 +1,6 @@
 ---
 name: mvp-scope
-description: "The agreed MVP scope and ORDER for formoxus, settled with Todd 2026-09-29. Ten items, sequenced by one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
+description: "The agreed MVP scope and ORDER for formoxus. CURRENT as of 2026-11-04: ErrorsStore + live validation, then range/checkbox_multiple/select_multiple/file (file is for apcsp's assignment uploads), then docs. First settled 2026-09-29 on one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are still deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
 metadata:
   type: project
 ---
@@ -19,7 +19,34 @@ describes the deleted derive path). The survey this was drawn from is
    documenting the `form!` grammar comes *after* the three items that add
    grammar to it (C6, C4, C5), not before.
 
-## CURRENT ORDER — revised by Todd 2026-09-30, supersedes the numbering below
+## ROAD TO PUBLISH — Todd, 2026-11-04, supersedes everything below
+
+What is left, in order:
+
+1. **`ErrorsStore` + live validation**, together. `formoxus/ERRORS_PLAN.md`,
+   not written yet.
+2. **The missing widgets, all four:** `range`, `checkbox_multiple`,
+   `select_multiple`, `file`. After 1 so they are written against the final
+   `WidgetProps`; before 3 so the doc pass covers them.
+3. **A1 (`form!` grammar docs), then A2 (the doc pass).**
+4. **A4 (`wasm-opt`)**, assumed still last.
+
+A3 (facet version): wait for 0.50 to go stable. #18, #7, #8 and #19 (the GOV.UK
+preset) come after.
+
+**Why `file` is in:** "I really need File so that students can upload
+assignments" (Todd), which makes it an apcsp requirement, not parity. It needs
+its own design: a file-carrying model type and multipart handling
+([[widget-table-and-choice]]). The other two multi-pick widgets were blocked on
+"a leaf holds ONE string" ([[choice-fields-design]]), a note older than sets:
+`SetNode` may make them a new way to render a set, not checked yet.
+
+This reverses "Deliberately OUT" below for those widgets, as the 2026-11-03
+road to publish already had for `ErrorsStore`, live validation, #4 and item
+counts. The list below is kept as history; dates, `Decimal` and `Uuid` are still
+out.
+
+## ORDER AS OF 2026-09-30 (history) — supersedes the numbering below
 
 Step 1 is **DONE** (all its breaking changes landed, last commit `3f04386`).
 Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
@@ -116,14 +143,14 @@ still accurate — only their order moved.
 10. **A4 — `wasm-opt`.** A `just` recipe and a README note. See
     [[pre-publish-checklist]], which has the rest of the release mechanics.
 
-## Deliberately OUT
+## Deliberately OUT (as of 2026-09-29; see ROAD TO PUBLISH for what has moved in)
 
 - **Dates, times, `Decimal`, `Uuid`** — the largest functional hole and the most
   likely thing to be asked for (`<input type=date>` renders, but the field must
   be modelled as a `String`). Out because it is purely ADDITIVE: it pays no
   breaking-change tax, so it is the cheapest thing to defer. **The one to
   revisit if the line moves.**
-- `select_multiple`, `checkbox_multiple`, `file` — `form!` now refuses them at
+- **IN since 2026-11-04.** `select_multiple`, `checkbox_multiple`, `file` — `form!` now refuses them at
   compile time, which is honest rather than silent, so shippable
   ([[widget-table-and-choice]]). `file` is much larger than the other two.
 - Dynamic choices / `Provider` ([[choice-fields-design]] — the `Box<dyn Fn>`
