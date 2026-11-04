@@ -47,6 +47,7 @@ impl LeafArgs<'_> {
         FieldNode {
             name: self.name.to_string(),
             label: spec.and_then(|s| s.label.clone()),
+            help_text: spec.and_then(|s| s.help_text.clone()),
             optional: self.optional,
             attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
             widget: spec
@@ -99,6 +100,7 @@ impl PartialEq for NodeCtor {
 pub struct FieldNode<F: Field> {
     pub name: String,
     pub label: Option<String>,
+    pub help_text: Option<String>,
     pub optional: bool,
     /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
     pub attrs: FieldAttrs,
@@ -281,6 +283,7 @@ impl<F: Field> Node for FieldNode<F> {
             self.is_checkbox(),
             ctx.required,
             self.has_errors_here(),
+            self.help_text.as_deref(),
             &own.then(&self.attrs),
         )
         .resolve_bounds(self.field_type());
@@ -291,6 +294,7 @@ impl<F: Field> Node for FieldNode<F> {
             label: self
                 .label(ctx.label_case)
                 .or_else(|| ctx.label_if_unnamed.clone()),
+            help_text: self.help_text.clone(),
             errors: self.errors.clone(),
             classes: ctx.classes.clone(),
             values: ctx.values,
@@ -446,6 +450,7 @@ mod tests {
         FieldNode {
             name: "f".to_string(),
             label: None,
+            help_text: None,
             optional: false,
             attrs: FieldAttrs::default(),
             widget: field.default_widget(false),

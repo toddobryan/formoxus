@@ -22,6 +22,11 @@ pub struct WidgetProps {
     /// server does not have.
     pub path: String,
     pub label: Option<String>,
+    /// The field's hint (`help_text:`), which [`field_row`](super::field_row::field_row)
+    /// renders after the caption, and its control's `aria-describedby` in
+    /// `attrs` already names. A widget not using `field_row` renders it with
+    /// [`field_help`](super::field_help).
+    pub help_text: Option<String>,
     pub errors: Vec<ValidationMessage>,
     pub attrs: FieldAttrs,
     pub extra_attrs: Vec<Attribute>,

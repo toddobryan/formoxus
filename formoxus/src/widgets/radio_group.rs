@@ -6,7 +6,9 @@ use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, Wi
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
-use crate::widgets::{FieldErrors, Widget, get_current, widget_props::WidgetProps, write_value};
+use crate::widgets::{
+    FieldErrors, Widget, field_help, get_current, widget_props::WidgetProps, write_value,
+};
 
 /// Radio buttons, one per choice, for a REQUIRED field: a picked radio
 /// can't be un-picked. Over a `bool` without choices it offers true and
@@ -168,6 +170,9 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                     }
                 }
             }
+            // After the legend, as `field_row` puts it after a caption; the
+            // fieldset's `aria-describedby`, in `attrs`, names it.
+            {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
             { radios.into_iter() }
             FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
         }

@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{FixedKey, Tag};
 
 use crate::classes::Classes;
-use crate::widgets::{FieldErrors, Widget, WidgetProps};
+use crate::widgets::{FieldErrors, Widget, WidgetProps, field_help};
 
 /// Which side of its form control a field's caption goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,7 +18,11 @@ pub enum LabelSide {
     After,
 }
 
-/// `div > label + control + errors`, around a `control` the widget built.
+/// `div > label + help + control + errors`, around a `control` the widget
+/// built; a checkbox's caption follows its control, so `control + label +
+/// help + errors`. The hint goes right after the caption either way, as
+/// Django's own field template puts it: what the field wants is read before
+/// it is answered.
 ///
 /// The widget still sets the control's own `class`, `id` and attributes: a
 /// wrapper cannot add attributes to a finished `Element`. A plain fn, not a
@@ -45,9 +49,13 @@ pub fn field_row<W: Widget>(
         &props.classes,
         props.is_invalid(),
     );
+    let captioned = rsx! {
+        {label}
+        {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
+    };
     let (before, after) = match side {
-        LabelSide::Before => (label, rsx! {}),
-        LabelSide::After => (rsx! {}, label),
+        LabelSide::Before => (captioned, rsx! {}),
+        LabelSide::After => (rsx! {}, captioned),
     };
     rsx! {
         div {

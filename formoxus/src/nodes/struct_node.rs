@@ -7,6 +7,7 @@ use crate::nodes::{
     Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
+use crate::widgets::{described_by, field_help};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use formoxus_spec::FixedKey;
@@ -16,6 +17,8 @@ pub struct StructNode {
     pub name: String,
     pub optional: bool,
     pub label: Option<String>,
+    /// Its hint (`help_text:`), under the legend.
+    pub help_text: Option<String>,
     pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
 }
@@ -36,11 +39,15 @@ impl Node for StructNode {
         let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, false);
         let legend_class = ctx.classes.fixed_class(FixedKey::StructLegend, false);
+        let id = ctx.id(&self.name);
+        let describedby = described_by(&id, self.help_text.is_some(), false);
         rsx! {
             fieldset { class: fieldset_class,
+                aria_describedby: describedby,
                 if let Some(text) = self.label(ctx.label_case) {
                     legend { class: legend_class, "{text}" }
                 }
+                {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
                 { nodes_rendered.into_iter() }
             }
         }

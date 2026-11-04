@@ -23,7 +23,10 @@ fn post_spec() -> FormSpec<Post> {
             // Case-insensitive, so `Rust` sorts beside `rust` rather than
             // before every lowercase tag. Two such tags are still two: the set
             // compares by the model's own `==`.
-            tags => { sort_by: unicode_case_insensitive },
+            tags => {
+                sort_by: unicode_case_insensitive,
+                help_text: "Press Enter to add one. Edit puts a tag back in the box.",
+            },
             // The gallery's chips preset (`main.css`), one class on the set.
             classes_plus: { set: + ["fx-tags"] },
             buttons: { save: { type: submit } }

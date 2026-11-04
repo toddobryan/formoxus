@@ -47,6 +47,8 @@ mod errors;
 mod form_macro;
 #[path = "suite/forms.rs"]
 mod forms;
+#[path = "suite/help_text.rs"]
+mod help_text;
 #[path = "suite/into_slot.rs"]
 mod into_slot;
 #[path = "suite/label_case.rs"]

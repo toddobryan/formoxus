@@ -27,6 +27,9 @@ pub(crate) struct FieldSpec {
 pub(crate) struct FieldBody {
     pub(crate) widget: Option<WidgetRef>,
     pub(crate) label: Option<Expr>,
+    /// `help_text: "…"`, the field's hint: any expression a `&str` can be
+    /// borrowed from, as `label:`'s is.
+    pub(crate) help_text: Option<Expr>,
     pub(crate) choices: Option<(Ident, Expr)>,
     /// `adder: SomeComponent`, the component that adds the list's items in
     /// place of the Add button. The key is kept for the list check's span.
@@ -700,7 +703,7 @@ impl Parse for FieldBody {
 }
 
 impl FieldBody {
-    /// One `key: value` (or bare flag) entry: `widget`, `label`, `choices`,
+    /// One `key: value` (or bare flag) entry: `widget`, `label`, `help_text`, `choices`,
     /// `adder`, `set`, `sort_by`, `feedback`, `item`, a table attribute by its
     /// `snake_case` variant name, or a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
@@ -726,7 +729,7 @@ impl FieldBody {
         let key = Ident::parse_any(body)?;
         let name = key.to_string();
         match name.as_str() {
-            "widget" | "label" | "choices" | "adder" | "feedback" | "item" => {
+            "widget" | "label" | "help_text" | "choices" | "adder" | "feedback" | "item" => {
                 body.parse::<Token![:]>()?;
                 let given_twice =
                     || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
@@ -740,6 +743,11 @@ impl FieldBody {
                         return Err(given_twice());
                     }
                     self.label = Some(body.parse()?);
+                } else if name == "help_text" {
+                    if self.help_text.is_some() {
+                        return Err(given_twice());
+                    }
+                    self.help_text = Some(body.parse()?);
                 } else if name == "adder" {
                     if self.adder.is_some() {
                         return Err(given_twice());
@@ -795,6 +803,7 @@ impl FieldBody {
     pub(crate) fn is_empty(&self) -> bool {
         self.widget.is_none()
             && self.label.is_none()
+            && self.help_text.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
@@ -1252,13 +1261,14 @@ fn owned(attr: Attr) -> String {
     )
 }
 
-/// Every identifier key a field body accepts: `widget`, `label`, `choices`,
+/// Every identifier key a field body accepts: `widget`, `label`, `help_text`, `choices`,
 /// `adder`, `set`, `sort_by`, `feedback`, `item`, then each table attribute an author
 /// may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
         "label".to_string(),
+        "help_text".to_string(),
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
@@ -1405,6 +1415,30 @@ mod tests {
 
     /// A label is any expression, not just a literal, so a shared const or a
     /// translation call works.
+    /// `help_text:` expands as `label:` does: any expression a `&str` can be
+    /// borrowed from, after the label's call.
+    #[gtest]
+    fn help_text_expands_to_with_help_text() {
+        let spec = parse(quote! {
+            Source { notes => { label: "Notes", help_text: NOTES_HELP } }
+        })
+        .unwrap();
+        expect_that!(
+            spec.expand().to_string(),
+            contains_substring(
+                ". with_label (\"notes\" , & \"Notes\") . with_help_text (\"notes\" , & NOTES_HELP)"
+            )
+        );
+    }
+
+    #[gtest]
+    fn help_text_given_twice_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { notes => { help_text: "a", help_text: "b" } } }),
+            contains_substring("`help_text` is given twice")
+        );
+    }
+
     #[gtest]
     fn a_label_may_be_any_expression() {
         let spec = parse(quote! { Source { notes => { label: NOTES_LABEL } } }).unwrap();
@@ -1436,6 +1470,7 @@ mod tests {
             let entry = match key.as_str() {
                 "widget" => quote!(#ident: textarea),
                 "label" => quote!(#ident: "A label"),
+                "help_text" => quote!(#ident: "A hint"),
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" => quote!(#ident),

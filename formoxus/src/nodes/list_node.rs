@@ -11,8 +11,8 @@ use crate::nodes::{
     Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
-use crate::widgets::errors::errors_id;
 use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
+use crate::widgets::{described_by, field_help};
 use dioxus::core::{DynamicNode, VComponent};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
@@ -22,6 +22,8 @@ use formoxus_spec::FixedKey;
 pub struct ListNode {
     pub name: String,
     pub label: Option<String>,
+    /// Its hint (`help_text:`), under the legend.
+    pub help_text: Option<String>,
     pub optional: bool,
     pub adder: ItemAdder,
     pub items: Items,
@@ -59,7 +61,7 @@ impl Node for ListNode {
         let path = ctx.path(&self.name);
         // `here`, not `within`: a bad cell is its item's error, not the list's.
         let invalid = self.has_errors_here();
-        let describedby = invalid.then(|| errors_id(&id));
+        let describedby = described_by(&id, self.help_text.is_some(), invalid);
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::List, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::ListLegend, false);
@@ -74,6 +76,7 @@ impl Node for ListNode {
                 if let Some(text) = self.label(ctx.label_case) {
                     legend { class: legend_class, "{text}" }
                 }
+                {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
                 // Right after the legend, so the list's own messages are also
                 // read in order straight after its name: support for
                 // `aria-describedby` on a group varies between screen readers.

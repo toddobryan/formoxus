@@ -59,6 +59,7 @@
 
 pub mod errors;
 pub mod field_row;
+pub mod help;
 pub(crate) mod icons;
 pub mod input;
 pub mod item_buttons;
@@ -76,6 +77,7 @@ pub(crate) mod widget_props;
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
 pub use field_row::{LabelSide, field_label, field_row, required_marker};
+pub use help::{described_by, field_help, help_id};
 pub use input::{
     CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
     NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,

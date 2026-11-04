@@ -42,7 +42,7 @@ Todd reordered the rest as "4, 3, 6, 5, 7, 8, 9", with #6 still next:
      class-config SYSTEM with only `fx()` + `bare()` presets (P3; framework
      presets are post-MVP). See `formoxus/ATTRIBUTES_PLAN.md` "Before Step 4".
 4. **Issue #9 — `aria-describedby`** (was item 3) — now P1 of C6, above
-5. **C5 — `help_text`** (was item 6) — moved AHEAD of per-field validators, so
+5. ~~**C5 — `help_text`**~~ DONE 2026-11-03 (was item 6) — moved AHEAD of per-field validators, so
    help text arrives right after the describedby mechanism it will join
 6. **C4 — per-field validators** (was item 5)
 7. **A3 — the facet version decision**

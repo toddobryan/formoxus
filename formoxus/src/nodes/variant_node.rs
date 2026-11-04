@@ -10,9 +10,9 @@ use crate::nodes::{
     qualify, variant_segment,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
-use crate::widgets::VariantSelect;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
+use crate::widgets::{VariantSelect, field_help};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -51,6 +51,8 @@ pub struct VariantNode {
     pub field_attrs: FieldAttrs,
     pub name: String,
     pub label: Option<String>,
+    /// Its hint (`help_text:`), under the legend, describing the select.
+    pub help_text: Option<String>,
     pub enum_type: &'static EnumType,
     pub choice: VariantChoice,
     pub nodes: Vec<Box<dyn Node>>,
@@ -243,6 +245,7 @@ impl Node for VariantNode {
             false,
             ctx.required,
             self.has_errors_here(),
+            self.help_text.as_deref(),
             &field_attrs,
         );
 
@@ -260,6 +263,10 @@ impl Node for VariantNode {
                         }
                     }
                 }
+                // Here, after the legend, rather than through the select's
+                // props: the legend is the select's caption, and the hint
+                // belongs under it, not between it and nothing.
+                {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
                 VariantSelect {
                     variants: self.variants(),
                     selected: self.chosen(),
@@ -271,6 +278,9 @@ impl Node for VariantNode {
                         // The legend above already names this group; a second copy
                         // beside the select would just be the same word twice.
                         label: None,
+                        // Rendered above, under the legend; the select's
+                        // `aria-describedby`, in `attrs`, names it.
+                        help_text: None,
                         classes: ctx.classes.clone(),
                         errors: self.errors.clone(),
                         attrs,

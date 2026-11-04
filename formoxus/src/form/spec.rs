@@ -27,6 +27,9 @@ type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldSpec {
     pub label: Option<String>,
+    /// The field's hint (`help_text:`), shown under its caption and
+    /// describing its control.
+    pub help_text: Option<String>,
     pub attrs: FieldAttrs,
     pub widget: Option<AnyWidget>,
     /// Builds this leaf during the shape walk, instead of the default field
@@ -154,6 +157,14 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_label(mut self, path: &str, l: &str) -> Self {
         self.field(path).label = Some(l.to_string());
+        self
+    }
+
+    /// A hint for the field at `path` (`help_text:` in `form!`): a line under
+    /// its caption saying what it wants, which its control is described by
+    /// (`aria-describedby`). On a list, set, struct or enum, under its legend.
+    pub fn with_help_text(mut self, path: &str, text: &str) -> Self {
+        self.field(path).help_text = Some(text.to_string());
         self
     }
 

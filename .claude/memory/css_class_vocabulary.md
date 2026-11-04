@@ -272,3 +272,8 @@ in `classes_plus:`.
 `add_item_button`, …). Everything above that says `-row` predates it.
 `fx-button-row` (the button row) and `field_row` are a different "row" and
 kept their names.
+
+**2026-11-03: `fx-help-text`** (slot `FixedKey::HelpText`, written `help_text`
+in `classes_plus:`), the `<div id="{field id}-help">` a field's `help_text:`
+renders right after its caption or legend. Its own slot so a theme can mute it
+apart from captions and errors; `bare()` leaves it unclassed but rendered.

@@ -12,7 +12,7 @@
  *
  * The complete default vocabulary, all prefixed `fx-`:
  *   structure   .fx-form  .fx-form-title  .fx-list-item  .fx-list-items
- *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-invalid
+ *   a field     .fx-form-field  .fx-field-label  .fx-required  .fx-help-text  .fx-invalid
  *   a control   .fx-control + .fx-input .fx-textarea .fx-select .fx-checkbox .fx-radio
  *   a group     .fx-group + .fx-struct .fx-variant .fx-list .fx-set  .fx-legend
  *   a set       .fx-set-items  .fx-set-item  .fx-set-adder  (+ the gallery's .fx-tags)
@@ -29,6 +29,7 @@
  * accessible name, and the error list was inside it):
  *   div.fx-form-field[.fx-invalid]
  *     label.fx-field-label      (a checkbox puts it AFTER the box)
+ *     div.fx-help-text          (`help_text:`; right after the caption)
  *     .fx-control
  *     ul.fx-field-errors
  * A radio group is a fieldset, captioned by its legend, one div per choice:
@@ -149,6 +150,14 @@ body {
 
 .fx-field-errors,
 .fx-form-errors { color: var(--fx-error); }
+
+/* A hint (`help_text:`) reads as secondary to the caption above it, and is
+   kept close to it, since the control it describes comes next. */
+.fx-help-text {
+    color: var(--fx-muted);
+    font-size: 0.875em;
+    margin: 0.125rem 0 0.375rem;
+}
 
 /* Both error lists are `ul`s: several messages really are a list, and a screen
    reader announces the structure and the count.

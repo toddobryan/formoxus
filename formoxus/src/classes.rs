@@ -424,6 +424,7 @@ impl Classes {
                 Slot::new("fx-legend fx-field-label"),
             ),
             (FixedKey::RequiredMarker, Slot::new("fx-required")),
+            (FixedKey::HelpText, Slot::new("fx-help-text")),
             (FixedKey::FieldErrors, Slot::new("fx-field-errors")),
             (FixedKey::FieldError, Slot::new("fx-field-error")),
         ];
@@ -760,6 +761,7 @@ mod tests {
             (FixedKey::Variant, "fx-group fx-variant"),
             (FixedKey::VariantLegend, "fx-legend fx-field-label"),
             (FixedKey::RequiredMarker, "fx-required"),
+            (FixedKey::HelpText, "fx-help-text"),
             (FixedKey::FieldErrors, "fx-field-errors"),
             (FixedKey::FieldError, "fx-field-error"),
         ];

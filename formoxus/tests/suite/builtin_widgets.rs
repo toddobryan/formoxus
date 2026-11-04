@@ -22,6 +22,8 @@ use std::rc::Rc;
 
 const ID: &str = "rand0123-title";
 const PATH: &str = "title";
+/// The hint every widget is handed, so "every prop" includes it.
+const HELP: &str = "As it appears on the cover.";
 
 /// Every text-like widget type, beside the `type=` it renders. Nothing here
 /// notices one added to the macro and left out of this list; that every
@@ -84,6 +86,7 @@ fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Elemen
         id: ID.into(),
         path: PATH.into(),
         label: Some("Title".into()),
+        help_text: Some(HELP.into()),
         errors: errors(),
         attrs: field_attrs(),
         extra_attrs: extra_attrs(),
@@ -110,6 +113,9 @@ fn each_text_like_renders_every_prop() {
                 contains_substring("minlength=2"),
                 contains_substring(r#"autocomplete="off""#),
                 contains_substring("fx-invalid"),
+                contains_substring(format!(
+                    r#"<div class="fx-help-text" id="{ID}-help">{HELP}</div>"#
+                )),
             ],
             "{}",
             widget.name()
@@ -129,6 +135,7 @@ fn hidden_input_renders_bare() {
             not(contains_substring("Title")),
             not(contains_substring("too short")),
             not(contains_substring("<label")),
+            not(contains_substring(HELP)),
         ]
     );
 }
@@ -147,6 +154,7 @@ fn checkbox_and_textarea_render_every_prop() {
                 contains_substring("too short"),
                 contains_substring(r#"autocomplete="off""#),
                 contains_substring("fx-invalid"),
+                contains_substring(HELP),
             ],
             "{}",
             widget.name()

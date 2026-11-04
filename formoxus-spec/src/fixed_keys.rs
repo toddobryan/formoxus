@@ -86,6 +86,9 @@ pub enum FixedKey {
     VariantLegend,
     /// The ` *` after a required field's caption: `fx-required`.
     RequiredMarker,
+    /// A field's hint (`help_text:`), a `<div>` its control is described by:
+    /// `fx-help-text`.
+    HelpText,
     /// The `<ul>` of one field's errors: `fx-field-errors`.
     FieldErrors,
     /// One `<li>` in it: `fx-field-error`.
@@ -128,6 +131,7 @@ impl FixedKey {
         Self::Variant,
         Self::VariantLegend,
         Self::RequiredMarker,
+        Self::HelpText,
         Self::FieldErrors,
         Self::FieldError,
     ];
@@ -164,6 +168,7 @@ impl FixedKey {
             Self::Variant => "variant",
             Self::VariantLegend => "variant_legend",
             Self::RequiredMarker => "required_marker",
+            Self::HelpText => "help_text",
             Self::FieldErrors => "field_errors",
             Self::FieldError => "field_error",
             Self::Button(ButtonType::Submit) => "button.submit",
@@ -229,6 +234,7 @@ mod tests {
                 | FixedKey::Variant
                 | FixedKey::VariantLegend
                 | FixedKey::RequiredMarker
+                | FixedKey::HelpText
                 | FixedKey::FieldErrors
                 | FixedKey::FieldError
                 | FixedKey::Button(
@@ -240,7 +246,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(30 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(31 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

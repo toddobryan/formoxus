@@ -651,6 +651,7 @@ fn list_node(
     Box::new(ListNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
+        help_text: spec.and_then(|s| s.help_text.clone()),
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
         items: Items::new(shape, items),
@@ -738,6 +739,7 @@ fn set_node(
     Box::new(SetNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
+        help_text: spec.and_then(|s| s.help_text.clone()),
         optional,
         // A set's own default, not a list's: a set has no use for a blank
         // item, so its Add commits the draft (`SETS_PLAN.md` 7d).
@@ -776,6 +778,7 @@ fn struct_node(
         name: name.to_string(),
         optional,
         label: spec.and_then(|s| s.label.clone()),
+        help_text: spec.and_then(|s| s.help_text.clone()),
         nodes: nodes_for(shape, peek, walk, prefix, /* optional */ false),
         errors: Vec::new(),
     })
@@ -802,6 +805,7 @@ fn enum_node(
         field_attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
+        help_text: spec.and_then(|s| s.help_text.clone()),
         enum_type,
         // `None` from `chosen_variant` is exactly `Unchosen` — the caller chose it
         choice: match variant {
