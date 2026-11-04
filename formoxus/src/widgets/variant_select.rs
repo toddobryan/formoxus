@@ -37,6 +37,11 @@ pub fn VariantSelect(
         select {
             class: props.control_class::<Select>(Tag::Select),
             id: "{props.id}",
+            // The enum's own path, where `collect_values` already sends the
+            // variant's name: so a native post would carry the choice too,
+            // and a test can find the picker by `name` like every other
+            // control (#17).
+            name: "{props.path}",
             onchange: move |e: FormEvent| {
                 let v = e.value();
                 let variant = (!v.is_empty()).then_some(v);

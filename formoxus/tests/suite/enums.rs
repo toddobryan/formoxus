@@ -197,7 +197,7 @@ fn an_unchosen_optional_enum_offers_none_as_a_real_choice() {
     expect_that!(
         html,
         contains_regex(format!(
-            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" aria-labelledby="{FORM_ID}-shape-legend">"#
+            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" name="shape" aria-labelledby="{FORM_ID}-shape-legend">"#
         ))
     );
 }
@@ -219,7 +219,7 @@ fn an_unchosen_required_enum_offers_no_way_back_to_unchosen() {
     expect_that!(
         html,
         contains_regex(format!(
-            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" required=true aria-labelledby="{FORM_ID}-shape-legend">"#
+            r#"<select class="fx-control fx-select" id="{FORM_ID}-shape" name="shape" required=true aria-labelledby="{FORM_ID}-shape-legend">"#
         ))
     );
     expect_that!(html, contains_substring("disabled=true hidden=true"));
@@ -303,9 +303,8 @@ fn UnchosenDocForm() -> Element {
 
 #[gtest]
 fn a_nested_enum_dispatches_under_its_qualified_path() {
-    // Successor to the old `name`-attribute check, which went away with the
-    // disabled placeholder: the select carries no `name`, so the path is no
-    // longer visible in the HTML and has to be proved by *use*.
+    // Proved by *use*, which the select's `name` (#17, below) cannot do: a
+    // `name` is only markup, and this is the path the edit is routed by.
     //
     // It has to be a NESTED enum to mean anything. `Sketch.shape` sits at the
     // root, where `qualify("", "shape")` and the bare name are the same string,
@@ -524,6 +523,41 @@ fn choosing_a_variant_through_a_struct_node() {
                 shape: Shape::Circle { radius: 1.0 },
             },
         }))
+    );
+}
+
+/// **The picker is named by its enum's path** (#17), as every other control
+/// is by its field's: where `collect_values` sends the variant's name, so a
+/// native post would carry the choice, and a test can find it by `name`.
+/// Nested and in a list item, where the path differs from the bare name.
+#[gtest]
+fn the_variant_picker_is_named_by_its_enums_path() {
+    let mut app = Harness::mount(UnchosenDocForm);
+    let outer = app.only_listener("change");
+    app.fire("change", outer, "First");
+    expect_that!(
+        app.html(),
+        all![
+            contains_regex(r#"<select [^>]*name="outer""#),
+            contains_regex(r#"<select [^>]*name="outer\.\$First\.inner""#),
+        ]
+    );
+
+    #[component]
+    fn ShapesForm() -> Element {
+        let gallery = Gallery {
+            shapes: vec![Shape::Circle { radius: 1.0 }, Shape::Circle { radius: 2.0 }],
+        };
+        let form = use_form(move || form_for(&gallery, FormSpec::default()));
+        form.render(using_fns! {})
+    }
+    let html = render_to_html(ShapesForm);
+    expect_that!(
+        html,
+        all![
+            contains_regex(r#"<select [^>]*name="shapes\.#0""#),
+            contains_regex(r#"<select [^>]*name="shapes\.#1""#),
+        ]
     );
 }
 
