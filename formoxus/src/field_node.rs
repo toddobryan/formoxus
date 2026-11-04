@@ -206,6 +206,17 @@ impl<F: Field> Node for FieldNode<F> {
         }
     }
 
+    /// The choice's label for a value that is one of the choices; the value
+    /// itself otherwise, which includes one that is no longer a choice, so
+    /// the user still sees what it was.
+    fn shown_text(&self) -> String {
+        let raw = self.raw_value();
+        self.field
+            .choices()
+            .and_then(|choices| choices.into_iter().find(|choice| choice.value == raw))
+            .map_or(raw, |choice| choice.display)
+    }
+
     fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
         out.push(RawValue::Leaf {
             path: qualify(prefix, &self.name),

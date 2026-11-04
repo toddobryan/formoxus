@@ -140,3 +140,8 @@ match TEST names: `just e2e reorder` matches `…reorders_the_model`, not the fi
 playwright-rs is 0.20.1 (from 0.15.1); browsers via the bundled driver
 (`~/.cache/playwright-rust/<ver>/…/node …/package/cli.js install chromium`) or
 `npx playwright@1.64.1` once system Node is ≥ 20.
+
+**Seen flaky once (2026-11-03):** `adder::a_picked_song_arrives_as_a_filled_item`
+timed out at 30 s as the LAST of 58 in a full `just e2e`, then passed alone and
+in two full reruns. Nothing in the change touched lists. If it recurs, suspect
+the run's tail (server load), not the adder.

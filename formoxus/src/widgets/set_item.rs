@@ -21,7 +21,8 @@ use crate::nodes::ValuesStore;
 /// out: a newtype's inner value, a unit enum's variant name.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct SetItemProps {
-    /// The item as the user sees it: its value, as its leaf would show it.
+    /// The item as the user sees it: its value as its leaf would show it, or
+    /// its choice's label when the item's field has choices.
     pub text: String,
     /// The item's own path (`tags.#1`), whose leaf in `values` holds `text`.
     pub path: String,

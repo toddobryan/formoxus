@@ -43,6 +43,22 @@ pub trait Node: Debug {
     /// Containers have no scalar value of their own and return `""` — the
     /// widget layer only ever asks leaves for this.
     fn raw_value(&self) -> String;
+    /// This node's value as the user reads it, for naming it where it is not
+    /// an input: a set's item, its Edit and Remove, its messages. The entries
+    /// [`collect_values`](Self::collect_values) sends, joined: a string's
+    /// text, a newtype's inner value, a unit enum's variant name, each field
+    /// of a struct. A leaf whose value is one of its choices gives the
+    /// choice's label instead, which is what its `<select>` showed.
+    fn shown_text(&self) -> String {
+        let mut values = Vec::new();
+        self.collect_values("", &mut values);
+        values
+            .into_iter()
+            .map(|value| value.into_pair().1)
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two structs in one form can each have a `street`.

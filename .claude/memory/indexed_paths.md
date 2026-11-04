@@ -1,6 +1,6 @@
 ---
 name: indexed-paths
-description: "2026-11-03 BUILT: path!(M.list[i]) names ONE Vec item for an error; FormState resolves [n] -> item key; Vec only (sets refused); Path is a Cow, no longer Copy"
+description: "2026-11-03 BUILT: path!(M.list[i]) names ONE Vec item, path!(M.set[= v]) ONE set item by value, for an error; FormState resolves to the item key; Path is a Cow, no longer Copy"
 metadata:
   type: project
 ---
@@ -32,6 +32,23 @@ metadata:
   segment (`form::respan`, `__s` included) and use the trait method
   (`Indexable::items`), or rustc reported the set error twice, once under
   the whole invocation.
+
+**A set's item by VALUE, `path!(Post.tags[= "rust"])`** (same day, Todd:
+"before we need it", for a choice that stops being legal at run time). A set
+item is unique by value, so a value names it where an index cannot.
+- The value is a REFERENCE to the item or to what it borrows as (`&str` for
+  `String`): `path::ItemOf::is_item` with `Item: Borrow<Q>`, set types only
+  (`BTreeSet`, `HashSet`; a `Vec`, even one marked `set`, uses `[i]`).
+- Matched by TEXT, not typed equality, so `WireForm` can resolve it too:
+  `path::item_value_key` writes `[=text]`, the text the item node stores
+  (newtype → inner scalar, unit enum → variant name, else facet display;
+  mirrors `build::node_for_shape`), with `%`, `.`, `[`, `]` percent-encoded.
+  The resolver looks for the key whose entry is that text, so `FormState`
+  now passes `collect_values` (leaves AND structure), not structure only.
+- Last in the path (a set item is a leaf). Its witness is a CLOSURE, never
+  called, since a `fn` item cannot capture the author's local value.
+- Static `choices:` need none of it: an item outside them is already
+  refused by the field, on that item.
 
 Not tied to [[error-model-design]]'s ErrorsStore (Step 7): resolution happens
 before errors are stored, so Step 7 just calls the resolver. Related:

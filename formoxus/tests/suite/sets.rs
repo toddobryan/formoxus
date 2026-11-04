@@ -2300,3 +2300,76 @@ fn ListPatternForm() -> Element {
     });
     form.render(using_fns! {})
 }
+
+// ── A set over choices shows their labels ────────────────────────────────
+
+const CITIES: &[(&str, &str)] = &[("BOS", "Boston"), ("ORD", "Chicago")];
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Itinerary {
+    cities: BTreeSet<String>,
+}
+
+fn itinerary(cities: &[&str]) -> Itinerary {
+    Itinerary {
+        cities: cities.iter().map(ToString::to_string).collect(),
+    }
+}
+
+fn itinerary_spec() -> FormSpec<Itinerary> {
+    form! { Itinerary { cities[] => { widget: select, choices: CITIES } } }
+}
+
+#[component]
+fn ChosenCities() -> Element {
+    let form = use_form(|| form_for(&itinerary(&["BOS", "ORD", "XXX"]), itinerary_spec()));
+    form.render(using_fns! {})
+}
+
+/// The item reads as its draft's `<select>` offered it, the label, and is
+/// named by it; the value is what the model and the wire carry.
+#[gtest]
+fn an_item_over_choices_shows_its_label() {
+    let html = super::render_to_html(ChosenCities);
+    expect_that!(
+        html,
+        all![
+            contains_substring(r#"<li class="fx-set-item">Boston<"#),
+            contains_substring(r#"<li class="fx-set-item">Chicago<"#),
+            contains_substring(r#"aria-label="Edit “Boston”""#),
+            contains_substring(r#"aria-label="Remove “Chicago”""#),
+            not(contains_substring(r#"<li class="fx-set-item">BOS<"#)),
+        ]
+    );
+}
+
+/// A value that is no longer a choice has no label, so the user sees the
+/// value, beside the field's error once validated.
+#[gtest]
+fn an_item_that_is_no_longer_a_choice_shows_its_value() {
+    let html = super::render_to_html(ChosenCities);
+    expect_that!(html, contains_substring(r#"<li class="fx-set-item">XXX<"#));
+}
+
+#[component]
+fn AddCityProbe() -> Element {
+    let form = use_form(|| form_for(&itinerary(&["BOS"]), itinerary_spec()));
+    use_hook(|| {
+        form.edit(&Edit::AddItem {
+            path: "cities".to_string(),
+            before: None,
+            value: Some(ItemValue::new("ORD".to_string())),
+        })
+        .expect("Chicago is a new city")
+    });
+    form.render(using_fns! {})
+}
+
+/// The set's messages name it by its label too.
+#[gtest]
+fn a_message_names_an_item_by_its_label() {
+    expect_that!(
+        super::render_to_html(AddCityProbe),
+        contains_substring(done("“Chicago” was added successfully."))
+    );
+}

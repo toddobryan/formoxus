@@ -608,18 +608,11 @@ fn default_message(event: NodeEvent<'_>) -> Option<String> {
     })
 }
 
-/// An item as the user sees it, for a message about it: its values joined,
-/// so a string's text, a newtype's inner value, a unit enum's variant name
-/// and each field of a struct, never a `Display` the type may not have.
+/// An item as the user sees it, shown and named in its buttons and messages:
+/// [`Node::shown_text`], so a choice's label where the item has choices,
+/// never a `Display` the type may not have.
 fn item_text(item: &dyn Node) -> String {
-    let mut values = Vec::new();
-    item.collect_values("", &mut values);
-    values
-        .into_iter()
-        .map(|value| value.into_pair().1)
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join(", ")
+    item.shown_text()
 }
 
 impl Node for SetNode {

@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-03: `sets` merged + pushed**; ORDERED_LISTS 6–7 DONE (incl. indexed `path!`), #17 fixed, all committed; next: apcsp box 8
+- [**START HERE: next session**](next_session.md) — **2026-11-03**: `sets` merged; ORDERED_LISTS 6–7 + #17 pushed; set item by value (`[= v]`) + choice labels on set items BUILT, uncommitted; next apcsp box 8
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
@@ -27,7 +27,7 @@
 ## Core design
 - [Django parallel design](django_parallel_design.md) — 2026-10-16 GOAL = FEWER CONCEPTS; DECIDED: Field + Widget traits, typed ChoiceField, field registry, async server validation: Django mapped onto formoxus; name inventory; FormDef/XForm/Context to hide FormSpec+FormState; open A–F
 - [Facet form design decisions](facet_form_design_decisions.md) — the big one: vtables not FromStr, "" IS absence, Form vs FormState, `[]` row selectors, buttons, Option peeling
-- [Indexed paths](indexed_paths.md) — BUILT 2026-11-03: `path!(M.list[i])` names one Vec item for an error; `[n]` → item key in FormState; sets refused; `Path` no longer `Copy`
+- [Indexed paths](indexed_paths.md) — BUILT 2026-11-03: `path!(M.list[i])` one Vec item, `path!(M.set[= v])` one set item by value, for an error; resolved to the item key; `Path` no longer `Copy`
 - [Structure on the wire](structure_on_the_wire.md) — #13 DESIGN: variant name + row keys cross at the container's path; state owns them, store holds leaves; `RawValue`
 - [Trim by default](trim_by_default.md) — #16 DECIDED, not built: trim at parse (raw kept), `trim: false` opts out, password defaults to no-trim; check numbers
 - [Lists and sets](lists_and_sets.md) — BUILT 2026-11-03 (decided 10-31): replaces `allow_reordering`; `Vec` = list (`<ol>` + ↑/↓), `Def::Set` = set (`<ul>`, sorted, no dups); `formoxus/SETS_PLAN.md`
