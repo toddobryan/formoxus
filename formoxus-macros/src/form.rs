@@ -579,6 +579,16 @@ impl FieldSpec {
             .help_text
             .as_ref()
             .map(|h| quote! { .with_help_text(#key, &#h) });
+        let min_items = self
+            .body
+            .min_items
+            .as_ref()
+            .map(|(_, n)| quote! { .with_min_items(#key, #n) });
+        let max_items = self
+            .body
+            .max_items
+            .as_ref()
+            .map(|(_, n)| quote! { .with_max_items(#key, #n) });
         // Through any `?`, so an `Option` field's check takes what it holds,
         // and spanned onto the check, so one over the wrong type is reported
         // there rather than across the whole `form!`.
@@ -681,7 +691,7 @@ impl FieldSpec {
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #help_text #widget #node #attrs #adder #set #sort_by #feedback #item #validator }
+        quote! { #label #help_text #widget #node #attrs #adder #set #sort_by #feedback #item #validator #min_items #max_items }
     }
 }
 

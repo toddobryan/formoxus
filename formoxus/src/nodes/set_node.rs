@@ -33,7 +33,7 @@ use crate::{
     },
     widgets::{
         AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
-        RemoveItemButton, SetItemProps, described_by, field_help,
+        RemoveItemButton, SetItemProps, described_by, field_help, field_row::required_marker,
     },
 };
 
@@ -493,6 +493,7 @@ impl SetNode {
                     path,
                     index,
                     text,
+                    disabled: self.items.at_min(),
                     on_edit: ctx.on_edit,
                     classes: ctx.classes.clone(),
                 }
@@ -885,7 +886,12 @@ impl Node for SetNode {
                 id: "{id}",
                 aria_describedby: describedby,
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { class: legend_class, "{text}" }
+                    legend { class: legend_class,
+                        "{text}"
+                        if self.items.min_items().is_some_and(|min| min > 0) {
+                            {required_marker(&ctx.classes)}
+                        }
+                    }
                 }
                 {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
                 // Right after the legend, so the list's own messages are also
@@ -919,6 +925,7 @@ impl Node for SetNode {
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),
+                            max_items: self.items.max_items(),
                             draft: Some(draft),
                             editing: self.editing.as_ref().and_then(|name| {
                                 self.items

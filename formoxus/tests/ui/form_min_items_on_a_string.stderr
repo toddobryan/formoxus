@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `min_items` applies only to list or set fields
+  --> tests/ui/form_min_items_on_a_string.rs:12:39
+   |
+12 |     let _ = form! { Post { title => { min_items: 1 } } };
+   |                                       ^^^^^^^^^ evaluation of `main::_` failed here

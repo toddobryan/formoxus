@@ -24,6 +24,14 @@ pub struct Items {
     next_key: usize,
     rejected_keys: Option<String>,
     errors: Vec<ValidationMessage>,
+    /// `min_items:` and `max_items:` (#14), the counts `validate` holds the
+    /// collection to.
+    min: Option<usize>,
+    max: Option<usize>,
+    /// How many item keys the wire listed when that was more than
+    /// `max_items`: refused before any were built, so a forged request
+    /// cannot make the server build thousands of nodes to then reject.
+    over_max: Option<usize>,
 }
 
 impl Items {
@@ -35,7 +43,31 @@ impl Items {
             next_key,
             rejected_keys: None,
             errors: Vec::new(),
+            min: None,
+            max: None,
+            over_max: None,
         }
+    }
+
+    /// This collection, held to `min` and `max` items.
+    pub(crate) fn with_limits(mut self, min: Option<usize>, max: Option<usize>) -> Self {
+        self.min = min;
+        self.max = max;
+        self
+    }
+
+    pub(crate) fn min_items(&self) -> Option<usize> {
+        self.min
+    }
+
+    pub(crate) fn max_items(&self) -> Option<usize> {
+        self.max
+    }
+
+    /// Whether one fewer item would fall below the minimum: Remove is
+    /// disabled.
+    pub(crate) fn at_min(&self) -> bool {
+        self.min.is_some_and(|min| self.len() <= min)
     }
 
     pub(crate) fn errors(&self) -> &[ValidationMessage] {
@@ -61,8 +93,14 @@ impl Items {
     ) {
         if let Some(raw) = values.get(my_path) {
             match parse_item_keys(raw) {
+                Some(keys) if self.max.is_some_and(|max| keys.len() > max) => {
+                    // Refused unbuilt: validation fails on the count anyway.
+                    self.rejected_keys = None;
+                    self.over_max = Some(keys.len());
+                }
                 Some(keys) => {
                     self.rejected_keys = None;
+                    self.over_max = None;
                     let current: Vec<String> = self.iter().map(|item| item.name()).collect();
                     let wanted: Vec<String> = keys.iter().map(|&key| item_segment(key)).collect();
                     if current != wanted {
@@ -108,6 +146,24 @@ impl Items {
         }
         for r in &mut self.collection {
             r.validate();
+        }
+        // The count, the collection's own error whatever its items say.
+        let count = self.over_max.unwrap_or(self.len());
+        if let Some(min) = self.min
+            && count < min
+        {
+            self.errors.push(ValidationMessage(format!(
+                "Add at least {}.",
+                items_word(min)
+            )));
+        }
+        if let Some(max) = self.max
+            && count > max
+        {
+            self.errors.push(ValidationMessage(format!(
+                "No more than {}.",
+                items_word(max)
+            )));
         }
     }
 
@@ -488,6 +544,15 @@ pub(crate) const ITEM_SIGIL: char = '#';
 ///
 /// The cost is that an item's *position* is no longer recoverable from its path.
 /// Order lives in `ListNode::items` and nowhere else — see [`model_path`].
+/// `1 item`, `2 items`: a count of items, for a message.
+fn items_word(count: usize) -> String {
+    if count == 1 {
+        "1 item".to_string()
+    } else {
+        format!("{count} items")
+    }
+}
+
 pub(crate) fn item_segment(key: usize) -> String {
     format!("{ITEM_SIGIL}{key}")
 }

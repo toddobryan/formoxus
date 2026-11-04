@@ -48,6 +48,10 @@ pub(crate) struct FieldBody {
     /// `validator: check`, the field's own check: a `fn` or closure from the
     /// field's value (an `Option`'s inner one) to its messages.
     pub(crate) validator: Option<Expr>,
+    /// `min_items: n` and `max_items: n`, a list's or set's fewest and most
+    /// items (#14). The keys are kept for the list check's span.
+    pub(crate) min_items: Option<(Ident, Expr)>,
+    pub(crate) max_items: Option<(Ident, Expr)>,
     /// The bare flag `no_trim`: read a text field's raw text as typed rather
     /// than trimmed (#16). A setting on the field, so a field without one,
     /// like a number's, does not compile. The key, since a flag has nothing
@@ -507,15 +511,21 @@ impl FieldBody {
 }
 
 impl FieldBody {
-    /// One `const _` assertion per key that only a list or set takes, today
-    /// just `adder`: that the field is one. Spanned on the key.
+    /// One `const _` assertion per key that only a list or set takes
+    /// (`adder`, `min_items`, `max_items`): that the field is one. Spanned on
+    /// the key.
     fn list_checks(&self, shape: &TokenStream2, key: &str) -> TokenStream2 {
         // A path ending in `[]` is every item, which is where a label for the
         // items goes, so putting the collection's key there too is the likely
         // mistake.
         // The path is known here, so only one message is ever emitted, unlike
         // `required_true`'s pair.
-        let list_keys = self.adder.iter().map(|(list_key, _)| list_key);
+        let list_keys = self.adder.as_ref().map(|(key, _)| key).into_iter().chain(
+            [&self.min_items, &self.max_items]
+                .into_iter()
+                .flatten()
+                .map(|(key, _)| key),
+        );
         let checks = list_keys.map(|list_key| {
             let message = if key.ends_with("[]") {
                 format!(
@@ -698,6 +708,15 @@ impl Parse for FieldBody {
         if fb.is_empty() && fb.nested.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
+        if let (Some((_, min)), Some((max_key, max))) = (&fb.min_items, &fb.max_items)
+            && let (Some(min), Some(max)) = (int_literal(min), int_literal(max))
+            && min > max
+        {
+            return Err(syn::Error::new(
+                max_key.span(),
+                format!("`max_items` is {max}, fewer than `min_items`, {min}"),
+            ));
+        }
         if let (Some(_), Some(key)) = (&fb.choices, &fb.no_trim) {
             return Err(syn::Error::new(
                 key.span(),
@@ -750,54 +769,7 @@ impl FieldBody {
         let name = key.to_string();
         match name.as_str() {
             "widget" | "label" | "help_text" | "validator" | "choices" | "adder" | "feedback"
-            | "item" => {
-                body.parse::<Token![:]>()?;
-                let given_twice =
-                    || syn::Error::new_spanned(&key, format!("`{name}` is given twice"));
-                if name == "widget" {
-                    if self.widget.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.widget = Some(body.parse()?);
-                } else if name == "label" {
-                    if self.label.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.label = Some(body.parse()?);
-                } else if name == "help_text" {
-                    if self.help_text.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.help_text = Some(body.parse()?);
-                } else if name == "validator" {
-                    if self.validator.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.validator = Some(body.parse()?);
-                } else if name == "adder" {
-                    if self.adder.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.adder = Some((key.clone(), body.parse()?));
-                } else if name == "item" {
-                    if self.item.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.item = Some((key.clone(), body.parse()?));
-                } else if name == "feedback" {
-                    if self.feedback.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.feedback = Some((key.clone(), body.parse()?));
-                } else {
-                    assert!(name == "choices", "did you add another name to the match?");
-                    if self.choices.is_some() {
-                        return Err(given_twice());
-                    }
-                    self.choices = Some((key.clone(), body.parse()?));
-                }
-                Ok(())
-            }
+            | "item" | "min_items" | "max_items" => self.parse_keyed(&key, body),
             "sort_by" => {
                 body.parse::<Token![:]>()?;
                 if self.sort_by.is_some() {
@@ -833,6 +805,69 @@ impl FieldBody {
         }
     }
 
+    /// A `key: value` entry whose key is formoxus's own rather than an
+    /// attribute's: `widget`, `label`, `help_text`, `validator`, `choices`,
+    /// `adder`, `feedback`, `item`, `min_items` and `max_items`. Each may be
+    /// given once.
+    fn parse_keyed(&mut self, key: &Ident, body: ParseStream<'_>) -> Result<()> {
+        let name = key.to_string();
+        body.parse::<Token![:]>()?;
+        let given_twice = || syn::Error::new_spanned(key, format!("`{name}` is given twice"));
+        if name == "widget" {
+            if self.widget.is_some() {
+                return Err(given_twice());
+            }
+            self.widget = Some(body.parse()?);
+        } else if name == "label" {
+            if self.label.is_some() {
+                return Err(given_twice());
+            }
+            self.label = Some(body.parse()?);
+        } else if name == "help_text" {
+            if self.help_text.is_some() {
+                return Err(given_twice());
+            }
+            self.help_text = Some(body.parse()?);
+        } else if name == "validator" {
+            if self.validator.is_some() {
+                return Err(given_twice());
+            }
+            self.validator = Some(body.parse()?);
+        } else if name == "min_items" || name == "max_items" {
+            let slot = if name == "min_items" {
+                &mut self.min_items
+            } else {
+                &mut self.max_items
+            };
+            if slot.is_some() {
+                return Err(given_twice());
+            }
+            *slot = Some((key.clone(), body.parse()?));
+        } else if name == "adder" {
+            if self.adder.is_some() {
+                return Err(given_twice());
+            }
+            self.adder = Some((key.clone(), body.parse()?));
+        } else if name == "item" {
+            if self.item.is_some() {
+                return Err(given_twice());
+            }
+            self.item = Some((key.clone(), body.parse()?));
+        } else if name == "feedback" {
+            if self.feedback.is_some() {
+                return Err(given_twice());
+            }
+            self.feedback = Some((key.clone(), body.parse()?));
+        } else {
+            assert!(name == "choices", "did you add another name to the match?");
+            if self.choices.is_some() {
+                return Err(given_twice());
+            }
+            self.choices = Some((key.clone(), body.parse()?));
+        }
+        Ok(())
+    }
+
     /// Whether the body has no keys of its own. Nested entries are not its
     /// own: they are about other paths.
     pub(crate) fn is_empty(&self) -> bool {
@@ -841,6 +876,8 @@ impl FieldBody {
             && self.help_text.is_none()
             && self.validator.is_none()
             && self.no_trim.is_none()
+            && self.min_items.is_none()
+            && self.max_items.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
@@ -950,6 +987,18 @@ fn parse_value(attr: Attr, key: &Ident, body: ParseStream<'_>) -> Result<AttrSou
 /// The refusal for a flag written with a value, as `required_true: true`.
 /// Shared by every flag, the table's and `set`, so each refuses a value in
 /// the same words.
+/// An integer literal's value, for a check that can be made only when both
+/// sides are written out.
+fn int_literal(expr: &Expr) -> Option<u64> {
+    match expr {
+        Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(int),
+            ..
+        }) => int.base10_parse().ok(),
+        _ => None,
+    }
+}
+
 fn flag_with_value(key: &Ident) -> syn::Error {
     syn::Error::new_spanned(
         key,
@@ -1308,6 +1357,8 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "help_text".to_string(),
         "validator".to_string(),
         "no_trim".to_string(),
+        "min_items".to_string(),
+        "max_items".to_string(),
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
@@ -1484,6 +1535,35 @@ mod tests {
         expect_that!(out, contains_substring(". validator (must_be_adult)"));
     }
 
+    #[gtest]
+    fn item_counts_expand_to_their_builders() {
+        let spec = parse(quote! { Source { tags => { min_items: 1, max_items: LIMIT } } }).unwrap();
+        let out = spec.expand().to_string();
+        expect_that!(out, contains_substring(". with_min_items (\"tags\" , 1)"));
+        expect_that!(
+            out,
+            contains_substring(". with_max_items (\"tags\" , LIMIT)")
+        );
+    }
+
+    /// Written out on both sides, a minimum above the maximum is a mistake
+    /// `form!` can see.
+    #[gtest]
+    fn crossed_item_counts_are_refused() {
+        expect_that!(
+            err_of(quote! { Source { tags => { min_items: 5, max_items: 2 } } }),
+            contains_substring("`max_items` is 2, fewer than `min_items`, 5")
+        );
+    }
+
+    #[gtest]
+    fn an_item_count_given_twice_is_refused() {
+        expect_that!(
+            err_of(quote! { Source { tags => { max_items: 2, max_items: 3 } } }),
+            contains_substring("`max_items` is given twice")
+        );
+    }
+
     /// `no_trim` is a setting on the field, so it rides `field_for`'s closure
     /// like `max_length` does.
     #[gtest]
@@ -1574,6 +1654,7 @@ mod tests {
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" | "no_trim" => quote!(#ident),
+                "min_items" | "max_items" => quote!(#ident: 2),
                 "sort_by" => quote!(#ident: String::cmp),
                 "feedback" => quote!(#ident: |_| None),
                 "item" => quote!(#ident: TagChip),

@@ -50,6 +50,9 @@ pub struct AddItemProps {
     /// How many items the list or set has now, for an adder that stops at a
     /// maximum.
     pub item_count: usize,
+    /// The most items it may have (`max_items:`), so an adder can stop
+    /// there as Add does: at `item_count == max_items`, one more is too many.
+    pub max_items: Option<usize>,
     /// A set's draft, rendered: the blank item, in the item type's own
     /// widget, that `Edit::AddItem { value: None }` makes an item. `None` for
     /// a list. An adder that sends its own value (a search-to-add) can leave
@@ -109,12 +112,19 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
         path,
         on_edit,
         classes,
+        item_count,
+        max_items,
         ..
     } = props;
+    let full = at_most(item_count, max_items);
     rsx! {
         button {
             r#type: "button",
             class: classes.fixed_class(FixedKey::AddItemButton, false),
+            // Disabled, not hidden, so the layout holds still and the reason
+            // can be given.
+            disabled: full.is_some(),
+            title: full,
             onclick: move |_| {
                 // Append. `before` exists for mid-list insertion, which needs a
                 // widget between every pair of items — a UI question that hasn't
@@ -157,6 +167,8 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         classes,
         draft,
         editing,
+        item_count,
+        max_items,
         ..
     } = props;
     let draft_id = format!("{id}-draft");
@@ -183,6 +195,9 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
     let after_cancel = focus_draft.clone();
     let replacing = editing.as_ref().map(|text| format!("Replace “{text}”"));
     let is_editing = editing.is_some();
+    // Full only for adding: a replacement leaves the count as it is.
+    let full = at_most(item_count, max_items).filter(|_| !is_editing);
+    let can_add = full.is_none();
     rsx! {
         div { class: classes.fixed_class(FixedKey::SetAdder, false),
         div {
@@ -190,7 +205,9 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
             onkeydown: move |e: KeyboardEvent| {
                 if e.key() == Key::Enter {
                     e.prevent_default();
-                    (on_key.0)();
+                    if can_add {
+                        (on_key.0)();
+                    }
                 } else if is_editing && e.key() == Key::Escape {
                     e.prevent_default();
                     (on_key.1)();
@@ -202,6 +219,8 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
             r#type: "button",
             class: classes.fixed_class(FixedKey::AddItemButton, false),
             aria_label: replacing,
+            disabled: !can_add,
+            title: full,
             onclick: move |_| {
                 add();
                 focus_draft();
@@ -280,6 +299,9 @@ pub fn RemoveItemButton(
     index: usize,
     /// The item as the user sees it, for the button's name.
     text: Option<String>,
+    /// At the list's or set's `min_items`, where one fewer is too few.
+    #[props(default)]
+    disabled: bool,
     on_edit: Callback<Edit>,
     classes: Rc<Classes>,
 ) -> Element {
@@ -294,6 +316,7 @@ pub fn RemoveItemButton(
             r#type: "button",
             class: classes.fixed_class(FixedKey::RemoveItemButton, false),
             aria_label: "{label}",
+            disabled,
             onclick: move |_| {
                 on_edit.call(Edit::RemoveItem { path: path.clone(), index });
             },
@@ -346,4 +369,17 @@ pub fn MoveItemButtons(
             }
         }
     }
+}
+
+/// Why Add is disabled, for its `title`, when `count` items already reach
+/// `max`; `None` while there is room.
+fn at_most(count: usize, max: Option<usize>) -> Option<String> {
+    let max = max?;
+    (count >= max).then(|| {
+        if max == 1 {
+            "At most 1 item".to_string()
+        } else {
+            format!("At most {max} items")
+        }
+    })
 }

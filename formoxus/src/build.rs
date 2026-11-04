@@ -641,6 +641,21 @@ fn list_node(
         .unwrap_or_default();
 
     let spec = walk.spec_for(prefix);
+    // A blank list with a minimum starts with that many blank items, as
+    // Django's `min_num` does, so the user sees the fields to fill rather
+    // than Add and an error (#14). Only a BLANK one: a list read from a
+    // model keeps what the model has, and says so if it is short.
+    let min_items = spec.and_then(|s| s.min_items);
+    let items = if peek.is_none() && walk.mode == FormMode::Blank {
+        (0..min_items.unwrap_or(0))
+            .map(|i| {
+                let item = item_segment(i);
+                node_for_shape(shape, &item, None, walk, &qualify(prefix, &item), false)
+            })
+            .collect()
+    } else {
+        items
+    };
     if let Some(spec) = spec {
         assert!(
             spec.widget.is_none(),
@@ -655,7 +670,7 @@ fn list_node(
         validator: spec.and_then(|s| s.validator.clone()),
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
-        items: Items::new(shape, items),
+        items: Items::new(shape, items).with_limits(min_items, spec.and_then(|s| s.max_items)),
     })
 }
 
@@ -735,7 +750,12 @@ fn set_node(
              write `{name}[]` to give every item a widget, or did you mean `label`?",
         );
     }
-    let mut items = Items::new(shape, items);
+    // Never pre-built from `min_items`: blank items in a set would be
+    // duplicates of each other. Its draft is the way in.
+    let mut items = Items::new(shape, items).with_limits(
+        spec.and_then(|s| s.min_items),
+        spec.and_then(|s| s.max_items),
+    );
     let draft = items.new_draft(prefix, walk.specs);
     Box::new(SetNode {
         name: name.to_string(),

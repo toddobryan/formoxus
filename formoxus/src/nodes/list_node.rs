@@ -11,6 +11,7 @@ use crate::nodes::{
     Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
+use crate::widgets::field_row::required_marker;
 use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
 use crate::widgets::{described_by, field_help};
 use dioxus::core::{DynamicNode, VComponent};
@@ -55,9 +56,10 @@ impl Node for ListNode {
         // reach assistive technology through `aria-describedby`, and CSS through
         // the fieldset's invalid class.
         //
-        // No required marker, unlike `VariantNode`: nothing enforces a minimum item
-        // count yet (#14), so marking a list required would be a promise
-        // `validate()` doesn't keep.
+        // A required marker only with a `min_items` of at least 1 (#14):
+        // that is the promise `validate()` keeps. Without one, an empty list
+        // is a complete answer, so marking it required would be a promise
+        // nothing keeps.
         let id = ctx.id(&self.name);
         // The list's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on an item.
@@ -77,7 +79,14 @@ impl Node for ListNode {
                 id: "{id}",
                 aria_describedby: describedby,
                 if let Some(text) = self.label(ctx.label_case) {
-                    legend { class: legend_class, "{text}" }
+                    legend { class: legend_class,
+                        "{text}"
+                        // Required once at least one item is: a promise
+                        // `validate` keeps through `min_items` (#14).
+                        if self.items.min_items().is_some_and(|min| min > 0) {
+                            {required_marker(&ctx.classes)}
+                        }
+                    }
                 }
                 {field_help(&id, self.help_text.as_deref(), &ctx.classes)}
                 // Right after the legend, so the list's own messages are also
@@ -102,7 +111,7 @@ impl Node for ListNode {
                             li { class: &list_item_class, key: "{item.name()}",
                                 MoveItemButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                                 { item.render(&nested) }
-                                RemoveItemButton { path: path.clone(), index, on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                RemoveItemButton { path: path.clone(), index, disabled: self.items.at_min(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                             }
                         }
                     },
@@ -117,6 +126,7 @@ impl Node for ListNode {
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),
+                            max_items: self.items.max_items(),
                             draft: None,
                             editing: None,
                         },

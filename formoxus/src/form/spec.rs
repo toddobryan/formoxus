@@ -33,6 +33,9 @@ pub struct FieldSpec {
     /// The field's own check (`validator:`), run once everything under the
     /// field is valid; its messages are the field's.
     pub validator: Option<crate::nodes::FieldValidator>,
+    /// A list's or set's fewest and most items (`min_items:`, `max_items:`).
+    pub min_items: Option<usize>,
+    pub max_items: Option<usize>,
     pub attrs: FieldAttrs,
     pub widget: Option<AnyWidget>,
     /// Builds this leaf during the shape walk, instead of the default field
@@ -173,6 +176,23 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         validator: crate::nodes::FieldValidator,
     ) -> Self {
         self.field(path).validator = Some(validator);
+        self
+    }
+
+    /// The fewest items the list or set at `path` may have (`min_items:` in
+    /// `form!`): checked in `validate`, Remove disabled at it, the legend
+    /// marked required when it is at least 1, and a blank list (`empty_form`)
+    /// built with that many blank items.
+    pub fn with_min_items(mut self, path: &str, min: usize) -> Self {
+        self.field(path).min_items = Some(min);
+        self
+    }
+
+    /// The most items the list or set at `path` may have (`max_items:` in
+    /// `form!`): checked in `validate`, Add disabled at it, and a submission
+    /// listing more refused before any of them are built.
+    pub fn with_max_items(mut self, path: &str, max: usize) -> Self {
+        self.field(path).max_items = Some(max);
         self
     }
 

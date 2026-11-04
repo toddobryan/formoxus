@@ -53,6 +53,8 @@ mod forms;
 mod help_text;
 #[path = "suite/into_slot.rs"]
 mod into_slot;
+#[path = "suite/item_counts.rs"]
+mod item_counts;
 #[path = "suite/label_case.rs"]
 mod label_case;
 #[path = "suite/newtypes.rs"]
