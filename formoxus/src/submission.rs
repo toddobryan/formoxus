@@ -112,6 +112,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// beats dropping the message on the floor.
     ///
     /// [`FormState::push_field_error`]: crate::FormState::push_field_error
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
+    )]
     pub fn reject_field(mut self, path: Path<T>, message: &str) -> WireForm<T> {
         self.state
             .push_field_error(path.as_str(), message)

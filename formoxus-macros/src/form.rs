@@ -545,7 +545,7 @@ where
 /// through another impl (`Option<Shipping>` needs `Shipping`), rustc reports
 /// at the closure, whose span then runs from the field to the call site: the
 /// whole `form!`. On the field throughout, the caret lands on the field.
-fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
+pub(crate) fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
     tokens
         .into_iter()
         .map(|mut tt| {

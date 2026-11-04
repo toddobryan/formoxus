@@ -57,7 +57,7 @@ impl Parse for PathInput {
         }
         input.parse::<Token![.]>()?;
 
-        let field: SpecPath = input.parse()?;
+        let field = SpecPath::parse_indexed(input)?;
         field.check_names_a_node()?;
         if !input.is_empty() {
             return Err(input.error("unexpected token after the field path"));
@@ -69,9 +69,23 @@ impl Parse for PathInput {
 impl PathInput {
     fn expand(self) -> TokenStream2 {
         let model = &self.model;
-        let key = self.field.key();
         let witness = probe(&self.field.segments, quote!(__s), 0);
         let options = option_checks(&self.field.segments, model);
+        let path = if self.field.has_indices() {
+            // Each index is evaluated once, where the path is written, and
+            // must be a `usize`: the `let` puts a wrong type's error on the
+            // author's expression rather than inside `format!`.
+            let (format, indices) = self.field.key_format();
+            quote! {
+                ::formoxus::path::Path::<#model>::__new_indexed(::std::format!(
+                    #format,
+                    #({ let __index: usize = #indices; __index }),*
+                ))
+            }
+        } else {
+            let key = self.field.key();
+            quote! { ::formoxus::path::Path::<#model>::__new(#key) }
+        };
 
         quote! {
             {
@@ -79,7 +93,7 @@ impl PathInput {
                 fn __formoxus_path_witness(__s: &#model) { #witness }
                 #options
 
-                ::formoxus::path::Path::<#model>::__new(#key)
+                #path
             }
         }
     }
@@ -130,6 +144,29 @@ mod tests {
         let out = expand(quote! { Quiz.data.$QuestionData::TrueFalse.text });
         expect_that!(out, contains_substring("match & __s . data"));
         expect_that!(out, contains_substring("\"data.$TrueFalse.text\""));
+    }
+
+    /// `[i]` names one item: the key is built at run time from the index, and
+    /// the witness checks the field is a `Vec` (`path::Indexable`).
+    #[gtest]
+    fn an_index_builds_the_key_at_run_time() {
+        let out = expand(quote! { Assignment.groups[i].$Group::Random.set[j + 1] });
+        expect_that!(out, contains_substring("__new_indexed"));
+        expect_that!(out, contains_substring("\"groups[{}].$Random.set[{}]\""));
+        expect_that!(out, contains_substring("let __index : usize = i ;"));
+        expect_that!(out, contains_substring("let __index : usize = j + 1 ;"));
+        expect_that!(
+            out,
+            contains_substring(":: formoxus :: path :: Indexable :: items")
+        );
+    }
+
+    /// Without an index, the key stays a literal and the path a `const`-built one.
+    #[gtest]
+    fn without_an_index_the_key_is_a_literal() {
+        let out = expand(quote! { Quiz.answers[].text });
+        expect_that!(out, not(contains_substring("__new_indexed")));
+        expect_that!(out, contains_substring("__new (\"answers[].text\")"));
     }
 
     /// A `Path` names a node, and a variant has none of its own.

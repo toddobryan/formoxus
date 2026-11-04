@@ -106,13 +106,18 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         // holds no borrow of `self.spec` while `self.errors` is extended.
         if let Some(check) = self.spec.validator {
             let mut errors_by_path = ErrorsByPath::default();
+            // Read only if an error names an item by index, and then once.
+            let mut item_keys = None;
             for ValidationError { path, message } in check(&model) {
                 match path {
                     None => self.errors.push(message),
-                    Some(p) => errors_by_path
-                        .entry(p.to_string())
-                        .or_default()
-                        .push(message),
+                    Some(p) => {
+                        let keys = item_keys.get_or_insert_with(|| self.item_keys());
+                        errors_by_path
+                            .entry(keyed_or_as_written(p.as_str(), keys))
+                            .or_default()
+                            .push(message);
+                    }
                 }
             }
             let unclaimed = self.distribute_errors(errors_by_path);
@@ -263,6 +268,19 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
+    /// Every list's and set's item keys, in the order shown, by the
+    /// container's path: what `collect_values` sends as its structure entry
+    /// (`"answers"` → `"#0,#5"`). What [`crate::path::resolve_indices`] reads.
+    fn item_keys(&self) -> HashMap<String, String> {
+        self.raw_values()
+            .into_iter()
+            .filter_map(|value| match value {
+                RawValue::Structure { path, data } => Some((path, data)),
+                RawValue::Leaf { .. } | RawValue::Draft { .. } => None,
+            })
+            .collect()
+    }
+
     pub fn distribute_errors(&mut self, mut errors: ErrorsByPath) -> ErrorsByPath {
         for m in &mut self.nodes {
             m.distribute_errors("", &mut errors);
@@ -292,9 +310,17 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.nodes[idx].edit("", edit, &self.spec.fields)
     }
 
+    /// Put `message` on the node at `path`, or say there is none.
+    ///
+    /// `path` may name an item by index, `answers[2]`, as a
+    /// [`path!`](macro@crate::path) with `[i]` spells it: the third item,
+    /// counted in the order the items are shown, which for a `Vec` is the
+    /// model's own order. It is resolved to that item's key (`answers.#5`)
+    /// here, so an index past the end is no path at all.
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
+        let keyed = keyed_or_as_written(path, &self.item_keys());
         let mut this_error = ErrorsByPath::default();
-        this_error.insert(path.to_string(), vec![ValidationMessage::from(message)]);
+        this_error.insert(keyed, vec![ValidationMessage::from(message)]);
         let unclaimed = self.distribute_errors(this_error);
         if unclaimed.is_empty() {
             Ok(())
@@ -438,4 +464,12 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         errors: Vec::new(),
         _type: PhantomData,
     }
+}
+
+/// `path` with each index resolved to its item's key, or as written when one
+/// names no item: then the error is placed by a spelling no node claims, and
+/// reaches the user the way every unclaimed path does.
+fn keyed_or_as_written(path: &str, item_keys: &HashMap<String, String>) -> String {
+    crate::path::resolve_indices(path, |list| item_keys.get(list).map(String::as_str))
+        .unwrap_or_else(|| path.to_string())
 }

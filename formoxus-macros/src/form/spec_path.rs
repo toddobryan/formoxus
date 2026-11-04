@@ -56,12 +56,18 @@ pub(crate) enum Segment {
     Variant { path: syn::Path },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub(crate) enum Suffix {
     /// `?`: what the `Option` holds.
     Some,
     /// `[]`: each item of the list.
     Each,
+    /// `[i]`: ONE item of a `Vec`, at the index the expression gives at run
+    /// time. Only [`path!`](crate::path) takes it, where an error names the
+    /// item it is about; a `form!` setting applies to every item, so
+    /// [`SpecPath`]'s own parse refuses it. See
+    /// [`parse_indexed`](SpecPath::parse_indexed).
+    At(Box<syn::Expr>),
 }
 
 impl Segment {
@@ -105,6 +111,33 @@ impl SpecPath {
     /// list and its items. The enum in front of a variant is dropped, since the
     /// runtime path never had it (`shape.$Circle.radius`).
     pub(crate) fn key(&self) -> String {
+        self.spelled(&mut |_| "[]".to_string())
+    }
+
+    /// The key as a `format!` string and the index expressions it takes, in
+    /// order: `groups[i].$Random.set[j]` is `"groups[{}].$Random.set[{}]"`
+    /// and `[i, j]`. What [`path!`](crate::path) builds a path with an index
+    /// from, at run time. No segment can hold a brace, so nothing needs
+    /// escaping.
+    pub(crate) fn key_format(&self) -> (String, Vec<syn::Expr>) {
+        let mut indices = Vec::new();
+        let format = self.spelled(&mut |index| {
+            indices.push(index.clone());
+            "[{}]".to_string()
+        });
+        (format, indices)
+    }
+
+    /// Whether any segment names one item by index.
+    pub(crate) fn has_indices(&self) -> bool {
+        self.segments.iter().any(|segment| {
+            matches!(segment, Segment::Field { suffixes, .. }
+                if suffixes.iter().any(|suffix| matches!(suffix, Suffix::At(_))))
+        })
+    }
+
+    /// The dotted spelling, with each `[i]` written by `index`.
+    fn spelled(&self, index: &mut dyn FnMut(&syn::Expr) -> String) -> String {
         self.segments
             .iter()
             .map(|s| match s {
@@ -118,8 +151,10 @@ impl SpecPath {
                         Member::Unnamed(index) => index.index.to_string(),
                     };
                     for suffix in suffixes {
-                        if *suffix == Suffix::Each {
-                            name.push_str("[]");
+                        match suffix {
+                            Suffix::Each => name.push_str("[]"),
+                            Suffix::At(at) => name.push_str(&index(at)),
+                            Suffix::Some => {}
                         }
                     }
                     name
@@ -217,8 +252,9 @@ fn segment_ident(input: ParseStream<'_>) -> Result<Ident> {
     }
 }
 
-/// The `?` and `[]` after a field segment, in the order written.
-fn suffixes(input: ParseStream<'_>) -> Result<Vec<Suffix>> {
+/// The `?`, `[]` and, with `indexed`, `[i]` after a field segment, in the
+/// order written.
+fn suffixes(input: ParseStream<'_>, indexed: bool) -> Result<Vec<Suffix>> {
     let mut suffixes = Vec::new();
     loop {
         if input.peek(Token![?]) {
@@ -227,16 +263,21 @@ fn suffixes(input: ParseStream<'_>) -> Result<Vec<Suffix>> {
         } else if input.peek(syn::token::Bracket) {
             let brackets;
             let span = syn::bracketed!(brackets in input);
-            if !brackets.is_empty() {
+            if brackets.is_empty() {
+                suffixes.push(Suffix::Each);
+            } else if indexed {
+                suffixes.push(Suffix::At(Box::new(brackets.parse()?)));
+            } else {
                 // `venues[0]` looks plausible and isn't supported: a spec
                 // describes every item, not one of them. Say so rather than
-                // letting the index be silently dropped.
+                // letting the index be silently dropped, and say where one
+                // item CAN be named.
                 return Err(syn::Error::new(
                     span.span.join(),
-                    "`[]` must be empty — a spec applies to every item, not one index",
+                    "`[]` must be empty — a spec applies to every item, not one index; \
+                     `path!(Model.list[i])` names one item, for an error about it",
                 ));
             }
-            suffixes.push(Suffix::Each);
         } else {
             return Ok(suffixes);
         }
@@ -255,7 +296,20 @@ fn index(digits: &str, span: Span) -> Result<Member> {
 }
 
 impl Parse for SpecPath {
+    /// A `form!` path: every `[]` empty.
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        Self::parse_with(input, false)
+    }
+}
+
+impl SpecPath {
+    /// A [`path!`](crate::path) path, where `[i]` may name one item of a
+    /// `Vec` by an index computed at run time.
+    pub(crate) fn parse_indexed(input: ParseStream<'_>) -> Result<Self> {
+        Self::parse_with(input, true)
+    }
+
+    fn parse_with(input: ParseStream<'_>, indexed: bool) -> Result<Self> {
         let mut segments: Vec<Segment> = Vec::new();
         loop {
             if input.peek(Token![$]) {
@@ -302,20 +356,20 @@ impl Parse for SpecPath {
                 });
                 segments.push(Segment::Field {
                     member: index(second, lit.span())?,
-                    suffixes: suffixes(input)?,
+                    suffixes: suffixes(input, indexed)?,
                 });
             } else if input.peek(LitInt) {
                 let lit: LitInt = input.parse()?;
                 let member = index(&lit.to_string(), lit.span())?;
                 segments.push(Segment::Field {
                     member,
-                    suffixes: suffixes(input)?,
+                    suffixes: suffixes(input, indexed)?,
                 });
             } else {
                 let ident = segment_ident(input)?;
                 segments.push(Segment::Field {
                     member: Member::Named(ident),
-                    suffixes: suffixes(input)?,
+                    suffixes: suffixes(input, indexed)?,
                 });
             }
             if input.peek(Token![.]) {
@@ -404,6 +458,28 @@ fn probe_suffixes(
             // invocation and suggests nonsense. Borrowing the segment's own
             // span puts the caret on the author's `field[]`.
             let iter = quote_spanned! { span=> #next.iter() };
+            quote! { for #binding in #iter { #inner } }
+        }
+        // One item is checked as every item is, by a loop, since the index
+        // is a run-time value the witness cannot evaluate. What `[i]` adds is
+        // that the field is a `Vec`: a set's iteration order need not be
+        // the order its items are shown in, so an index into one would name
+        // the wrong item. `path::Indexable` is only a `Vec`, and says so.
+        Some((Suffix::At(_), more)) => {
+            let binding = format_ident!("__item{depth}");
+            let inner = probe_suffixes(quote!(#binding), true, more, span, rest, depth + 1);
+            // Respanned whole onto the segment, `__s` included, so a set's
+            // error is under the author's `field[i]` rather than also under
+            // the whole invocation.
+            let list = crate::form::respan(
+                if is_ref {
+                    quote!(#next)
+                } else {
+                    quote!(&#next)
+                },
+                span,
+            );
+            let iter = quote_spanned! { span=> ::formoxus::path::Indexable::items(#list) };
             quote! { for #binding in #iter { #inner } }
         }
         Some((Suffix::Some, more)) => {
@@ -533,7 +609,7 @@ fn walk(
         let last_segment = segments.peek().is_none();
         for (i, suffix) in suffixes.iter().enumerate() {
             match suffix {
-                Suffix::Each => {
+                Suffix::Each | Suffix::At(_) => {
                     before_items(&place, span);
                     let iter = quote_spanned! { span=> #place.iter() };
                     place = quote! { (*::formoxus::field_kind::item(#iter)) };
@@ -597,6 +673,22 @@ mod tests {
         // silently dropping the index and applying to every item.
         let msg = err_of(quote! { Quiz { answers[0] => { label: "First" } } });
         expect_that!(msg, contains_substring("every item"));
+        // And it says where one item CAN be named.
+        expect_that!(msg, contains_substring("`path!(Model.list[i])`"));
+    }
+
+    /// `path!`'s own parse takes the index, as an expression, and keys it
+    /// as `[{}]` for `format!`; `[]` beside it stays `[]`.
+    #[gtest]
+    fn an_indexed_parse_takes_an_expression() {
+        let path =
+            syn::parse::Parser::parse2(SpecPath::parse_indexed, quote! { rows[i][].cells[n - 1] })
+                .expect("an index parses where `path!` reads a path");
+        expect_that!(path.has_indices(), eq(true));
+        let (format, indices) = path.key_format();
+        expect_that!(format, eq("rows[{}][].cells[{}]"));
+        let indices: Vec<String> = indices.iter().map(|e| quote!(#e).to_string()).collect();
+        expect_that!(indices, elements_are![eq("i"), eq("n - 1")]);
     }
 
     // ── The witness ──────────────────────────────────────────────────────

@@ -62,6 +62,10 @@ impl FormErrors {
         self.form.iter().map(|e| e.0.clone()).collect()
     }
 
+    /// The messages at `path`, or the form's own for `None`. A path is looked
+    /// up as written: these errors hold no item keys, so a path with an index
+    /// (`path!(Quiz.answers[i])`) finds nothing here. Look one up through
+    /// [`WireForm::errors_at`](crate::WireForm::errors_at), which has them.
     pub fn messages_at<T>(&self, path: Option<Path<T>>) -> Vec<String> {
         match path {
             None => self.form.iter().map(|e| e.0.clone()).collect(),
@@ -479,6 +483,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
     /// only the runtime knows, so those go through
     /// [`FormState::push_field_error`] with a string.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
+    )]
     pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
         let mut state = self.state_signal;
         state.write().push_field_error(path.as_str(), message)

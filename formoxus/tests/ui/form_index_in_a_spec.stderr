@@ -1,0 +1,5 @@
+error: `[]` must be empty — a spec applies to every item, not one index; `path!(Model.list[i])` names one item, for an error about it
+  --> tests/ui/form_index_in_a_spec.rs:12:35
+   |
+12 |     let _ = form! { Quiz { answers[0] => { label: "First" } } };
+   |                                   ^^^

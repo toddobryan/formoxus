@@ -74,13 +74,14 @@ fn a_path_is_typed_by_its_model() {
     expect_that!(format!("{p}"), eq("name"));
 }
 
-/// `Path` is `Copy` and comparable even though `Contact` is neither `Copy` nor
-/// `Eq` — the impls are hand-written precisely so no bound leaks onto `T`.
+/// `Path` is `Clone` and comparable even though `Contact` is neither `Clone`
+/// nor `Eq` — the impls are hand-written precisely so no bound leaks onto `T`.
+/// (Not `Copy` since 2026-11-03: a path with an index owns its string.)
 #[gtest]
-fn a_path_copies_without_its_model_being_copy() {
+fn a_path_clones_without_its_model_being_clone() {
     let a = path!(Contact.email);
-    let b = a;
-    expect_that!(a, eq(b));
+    let b = a.clone();
+    expect_that!(a, eq(&b));
 }
 
 // ── Form::distribute_errors ──────────────────────────────────────────────

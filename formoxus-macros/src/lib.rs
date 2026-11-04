@@ -59,6 +59,27 @@ pub fn form(input: TokenStream) -> TokenStream {
 /// through an `Option` (`Model.address?.city`, keyed `address.city`) or inside a
 /// variant (`Model.shape.$Shape::Circle.radius`, keyed
 /// `shape.$Circle.radius`), whether or not a `form!` names it.
+///
+/// **One item of a `Vec`, by index:** `Model.groups[g].$Group::Random.set[q]`,
+/// where each index is any `usize` expression, evaluated where the path is
+/// written. For an error about that one item, from a `validator:` or a
+/// server: the index counts the items as the model has them, which for a
+/// `Vec` is the order shown, and the form turns it into the item's key when
+/// it places the error, wherever moves and removals have left the item. An
+/// index past the end names no item, so the error is shown with the form's
+/// own. Only on a `Vec`: a set iterates in an order that need not be the
+/// order it is shown in, so `[i]` on one does not compile. `form!` takes
+/// only `[]`, since its settings apply to every item.
+///
+/// ```ignore
+/// fn one_group_per_question(a: &Assignment) -> Vec<ValidationError<Assignment>> {
+///     // … for the second copy of a question, at group g, position q:
+///     vec![ValidationError::at(
+///         path!(Assignment.groups[g].$Group::All.questions[q]),
+///         "Already in group 1.",
+///     )]
+/// }
+/// ```
 #[proc_macro]
 pub fn path(input: TokenStream) -> TokenStream {
     path::impl_path(input.into()).into()

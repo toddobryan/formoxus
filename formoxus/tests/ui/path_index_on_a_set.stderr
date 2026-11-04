@@ -1,0 +1,13 @@
+error[E0277]: `[i]` names one item of a `Vec`, and `BTreeSet<std::string::String>` is not one
+  --> tests/ui/path_index_on_a_set.rs:16:24
+   |
+16 |     let _ = path!(Post.tags[i]);
+   |                        ^^^^ not a `Vec`
+   |
+   = help: the trait `formoxus::path::Indexable` is not implemented for `BTreeSet<std::string::String>`
+   = note: a set iterates in an order that need not be the order its items are shown in, so an index into one could name the wrong item; put the error on the set itself
+help: the trait `formoxus::path::Indexable` is implemented for `Vec<T>`
+  --> src/path.rs
+   |
+   | impl<T> Indexable for Vec<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
