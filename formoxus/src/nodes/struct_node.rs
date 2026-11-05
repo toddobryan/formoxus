@@ -1,10 +1,11 @@
 //! A struct-typed node: its fields, nested under its own name.
 
-use crate::error::{FormAccessError, ValidationMessage};
+use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns, qualify,
+    Drafts, Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::{FieldErrors, described_by, field_help};
@@ -39,8 +40,11 @@ impl Node for StructNode {
     fn render(&self, ctx: &NodeContext) -> Element {
         let nested = ctx.nested(&self.name);
         let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
-        // `here`, not `within`: a bad field is its own error, not the struct's.
-        let invalid = self.has_errors_here();
+        let path = ctx.path(&self.name);
+
+        let own_errors = ctx.errors_at(&path);
+        let invalid = !own_errors.is_empty();
+
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::StructLegend, false);
         let id = ctx.id(&self.name);
@@ -57,7 +61,7 @@ impl Node for StructNode {
                 // readers, so reading order has to carry them too.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: self.errors.clone(),
+                    errors: own_errors.clone(),
                     classes: ctx.classes.clone(),
                 }
                 { nodes_rendered.into_iter() }
@@ -65,31 +69,26 @@ impl Node for StructNode {
         }
     }
 
-    fn validate(&mut self) {
-        self.errors.clear();
-        for m in &mut self.nodes {
-            m.validate();
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let my_path = qualify(prefix, &self.name);
+        let mut is_valid = true;
+        for m in &self.nodes {
+            is_valid = m.validate(&my_path, out) && is_valid;
         }
-        if !self.has_errors_within() {
-            let messages = self
+        if is_valid {
+            let errors = self
                 .validator
                 .as_ref()
                 .map(|validator| validator.messages_for(self))
                 .unwrap_or_default();
-            self.errors.extend(messages);
+            is_valid = errors.is_empty();
+            out.insert(my_path, errors);
         }
+        is_valid
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
-    }
-
-    fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || self.nodes.iter().any(|m| m.has_errors_within())
-    }
-
-    fn has_errors_here(&self) -> bool {
-        !self.errors.is_empty()
     }
 
     fn raw_value(&self) -> String {
@@ -104,32 +103,10 @@ impl Node for StructNode {
         }
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
-        let nested = qualify(prefix, &self.name);
-        // Its own, at its own path, as a list's are: a validator's, a
-        // server's, or a form validator's `path!(Model.address)`.
-        if !self.errors.is_empty() {
-            out.insert(nested.clone(), self.errors.clone());
-        }
-        for m in &self.nodes {
-            m.collect_errors(&nested, out);
-        }
-    }
-
     fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
         let nested = qualify(prefix, &self.name);
         for m in &mut self.nodes {
             m.distribute_values(&nested, specs, values);
-        }
-    }
-
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        let nested = qualify(prefix, &self.name);
-        if let Some(found) = errors.shift_remove(&nested) {
-            self.errors.extend(found);
-        }
-        for m in &mut self.nodes {
-            m.distribute_errors(&nested, errors);
         }
     }
 
@@ -149,6 +126,7 @@ impl Node for StructNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         let nested = qualify(prefix, &self.name);
         let path = edit.path();
@@ -159,16 +137,17 @@ impl Node for StructNode {
         // real error ("no such variant") reach the caller intact.
         for m in &mut self.nodes {
             if owns(&qualify(&nested, &m.name()), path) {
-                return m.edit(&nested, edit, specs);
+                return m.edit(&nested, edit, specs, errors);
             }
         }
         Err(no_such_path(path))
     }
 
-    fn clear_errors(&mut self) {
-        self.errors.clear();
-        for m in &mut self.nodes {
-            m.clear_errors();
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+        let nested = qualify(prefix, &self.name);
+        out.push(nested.clone());
+        for n in &self.nodes {
+            n.paths(&nested, drafts, out);
         }
     }
 }

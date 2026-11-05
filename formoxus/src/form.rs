@@ -35,11 +35,12 @@ mod state;
 pub use spec::{FieldSpec, FormSpec};
 pub use state::{FormState, empty_form, form_for};
 
-/// One path, at most, per entry — every writer (`collect_errors`'s tree walk,
-/// `distribute_errors`) visits a given path once. `IndexMap` over a plain
-/// `HashMap` for the same reason `FormSpec`'s own fields use it: insertion
-/// order is preserved, and `collect_errors` deliberately builds this in the
-/// same order `render` walks the tree.
+/// A form's field errors, one entry per path. An empty `Vec` means the path was
+/// checked and is clean, which is not the same as no entry, where nothing has
+/// checked it. `IndexMap` over a plain `HashMap` for the same reason
+/// `FormSpec`'s own fields use it: insertion order is preserved, and
+/// `collect_errors` deliberately builds this in the same order `render` walks
+/// the tree.
 pub type ErrorsByPath = IndexMap<String, Vec<ValidationMessage>>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -441,6 +442,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.on_edit,
             self.label_case(),
             self.classes(),
+            self.state_signal.read().field_errors.clone(),
         )
     }
 
@@ -493,7 +495,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         state.write().push_field_error(path.as_str(), message)
     }
 
-    /*/// Put a server's validation back onto the form — the return leg of a submit.
+    /// Put a server's validation back onto the form — the return leg of a submit.
     ///
     /// The counterpart to [`FormState::collect_errors`].
     ///
@@ -510,9 +512,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let unclaimed = {
             let mut state = state.write();
             state.errors.clone_from(&errors.form);
-            for m in &mut state.nodes {
-                m.clear_errors();
-            }
+            state.field_errors.clear();
             state.distribute_errors(errors.fields.clone())
         };
 
@@ -528,7 +528,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                 "Errors appeared for form paths that don't exist: {paths}"
             )))
         }
-    }*/
+    }
 
     /// This form as plain data, ready to cross a server-fn boundary.
     ///

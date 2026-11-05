@@ -2,10 +2,9 @@
 //! `FormErrors` that crosses a server fn.
 //!
 //! The counterpart to `roundtrip`/`forms`, which cover values going out and
-//! back. These cover *verdicts* coming out. The contract under test is stated
-//! on [`Node::collect_errors`](formoxus::nodes::Node::collect_errors):
-//! only nodes with errors appear, and a container that can be *pushed* an
-//! error at its own path must be able to hand it back from there.
+//! back. These cover *verdicts* coming out. The contract under test: only
+//! paths with errors appear, and a container that can be *pushed* an error at
+//! its own path must be able to hand it back from there.
 
 use super::across_the_wire;
 use super::models::{EventForCreate, Location, Shape};

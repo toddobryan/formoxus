@@ -6,7 +6,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
+    Drafts, Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
     qualify, variant_segment,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
@@ -83,6 +83,7 @@ impl VariantNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let Some(child_prefix) = self.child_prefix(prefix) else {
@@ -93,7 +94,7 @@ impl VariantNode {
         // error reach the caller intact.
         for m in &mut self.nodes {
             if owns(&qualify(&child_prefix, &m.name()), path) {
-                return m.edit(&child_prefix, edit, specs);
+                return m.edit(&child_prefix, edit, specs, errors);
             }
         }
         Err(no_such_path(path))
@@ -111,7 +112,6 @@ impl VariantNode {
             // whether leaving it unchosen is an error.
             self.choice = VariantChoice::Unchosen;
             self.nodes = Vec::new();
-            self.errors.clear();
             return Ok(());
         };
         let chosen = self.lookup_variant(name, my_path)?;
@@ -129,30 +129,19 @@ impl VariantNode {
             /* optional */
             false,
         );
-        self.errors.clear();
         Ok(())
     }
 
-    /// Look up a variant by name, recording the failure against this node *and*
-    /// returning it.
-    ///
-    /// Both, deliberately: a live `<select>` can send a stale name, and the useful
-    /// place for that message is beside the select — but tests and programmatic
-    /// callers still want the `Err`. Never a panic: on wasm that aborts rather than
-    /// reaching an `ErrorBoundary`. Listing the real options makes it actionable.
+    /// Look up a variant by name, returning the failure.
     fn lookup_variant(
-        &mut self,
+        &self,
         name: &str,
         my_path: &str,
     ) -> Result<&'static Variant, FormAccessError> {
-        // Copy the `&'static` out first, so the `self.errors.push` below isn't
-        // fighting a borrow of `self` held by the iterator.
-        let enum_type = self.enum_type;
-        if let Some(found) = enum_type.variants.iter().find(|v| v.name == name) {
+        if let Some(found) = self.enum_type.variants.iter().find(|v| v.name == name) {
             return Ok(found);
         }
         let message = self.unknown_variant_message(name);
-        self.errors.push(ValidationMessage(message.clone()));
         // The `Err` is read by a dev, with no select beside it, so it says where.
         Err(FormAccessError(format!("{my_path}: {message}")))
     }
@@ -207,6 +196,8 @@ impl Node for VariantNode {
     }
 
     fn render(&self, ctx: &NodeContext) -> Element {
+        let path = ctx.path(&self.name);
+        let own_errors = ctx.errors_at(&path);
         // A `fieldset` so the picker and the fields it revealed read as one
         // thing — same treatment `StructNode` gives a nested struct, and the
         // legend carries the label so the select doesn't repeat it.
@@ -246,7 +237,7 @@ impl Node for VariantNode {
             &id,
             false,
             ctx.required,
-            self.has_errors_here(),
+            !own_errors.is_empty(),
             self.help_text.as_deref(),
             &field_attrs,
         );
@@ -284,7 +275,7 @@ impl Node for VariantNode {
                         // `aria-describedby`, in `attrs`, names it.
                         help_text: None,
                         classes: ctx.classes.clone(),
-                        errors: self.errors.clone(),
+                        errors: own_errors.clone(),
                         attrs,
                         extra_attrs: Vec::new(),
                         // Read by no one: a variant choice is not a value in
@@ -298,30 +289,51 @@ impl Node for VariantNode {
         }
     }
 
-    fn validate(&mut self) {
-        self.errors.clear();
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+        let my_path = qualify(prefix, &self.name);
+        out.push(my_path);
+        if let Some(var_path) = self.child_prefix(prefix) {
+            for n in &self.nodes {
+                n.paths(&var_path, drafts, out);
+            }
+        }
+    }
+
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let my_path = qualify(prefix, &self.name);
         match &self.choice {
             VariantChoice::Unchosen => {
-                self.errors.push(ValidationMessage(
-                    "You must choose a variant for this field.".to_string(),
-                ));
+                out.insert(
+                    my_path,
+                    vec![ValidationMessage(
+                        "You must choose a variant for this field.".to_string(),
+                    )],
+                );
+                false
             }
             VariantChoice::Unknown(name) => {
                 let message = self.unknown_variant_message(name);
-                self.errors.push(ValidationMessage(message));
+                out.insert(my_path, vec![ValidationMessage(message)]);
+                false
             }
             VariantChoice::Named(_) => {
-                for m in &mut self.nodes {
-                    m.validate();
+                let mut is_valid = true;
+                for m in &self.nodes {
+                    is_valid = m.validate(
+                        self.child_prefix(prefix).expect("should be Some").as_ref(),
+                        out,
+                    ) && is_valid;
                 }
-                if !self.has_errors_within() {
-                    let messages = self
+                if is_valid {
+                    let errors = self
                         .validator
                         .as_ref()
                         .map(|validator| validator.messages_for(self))
                         .unwrap_or_default();
-                    self.errors.extend(messages);
+                    is_valid = errors.is_empty();
+                    out.insert(my_path, errors);
                 }
+                is_valid
             }
         }
     }
@@ -331,6 +343,7 @@ impl Node for VariantNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         // Two paths are in play, and they are NOT the same: this node sits at
         // `my_path`, where the `<select>` lives, but its children sit one segment
@@ -340,33 +353,29 @@ impl Node for VariantNode {
         let my_path = qualify(prefix, &self.name);
         ensure_owned(&my_path, path)?;
         if path != my_path {
-            return self.forward_to_child(prefix, edit, specs);
+            return self.forward_to_child(prefix, edit, specs, errors);
         }
         match edit {
-            Edit::ChooseVariant { variant, .. } => self
-                .set_variant(&my_path, variant.as_deref(), specs)
-                .map(|()| None),
+            Edit::ChooseVariant { variant, .. } => {
+                let chosen = self.set_variant(&my_path, variant.as_deref(), specs);
+                match (&chosen, variant) {
+                    (Ok(()), _) => {
+                        errors.shift_remove(&my_path);
+                    }
+                    (Err(_), Some(name)) => {
+                        let message = ValidationMessage(self.unknown_variant_message(name));
+                        errors.entry(my_path).or_default().push(message);
+                    }
+                    (Err(_), None) => {}
+                }
+                chosen.map(|()| None)
+            }
             _ => Err(FormAccessError(format!("{my_path} is an enum, not a list"))),
-        }
-    }
-
-    fn clear_errors(&mut self) {
-        self.errors.clear();
-        for m in &mut self.nodes {
-            m.clear_errors();
         }
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
         Box::new(self.clone())
-    }
-
-    fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || self.nodes.iter().any(|m| m.has_errors_within())
-    }
-
-    fn has_errors_here(&self) -> bool {
-        !self.errors.is_empty()
     }
 
     fn raw_value(&self) -> String {
@@ -433,54 +442,11 @@ impl Node for VariantNode {
         }
     }
 
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        if let Some(found) = errors.shift_remove(&qualify(prefix, &self.name)) {
-            self.errors.extend(found);
-        }
-        let Some(nested) = self.child_prefix(prefix) else {
-            return; // No variant was picked, so no errors to get
-        };
-        for m in &mut self.nodes {
-            m.distribute_errors(&nested, errors);
-        }
-    }
-
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
-        // The inverse of `push_field_error`, NOT of `collect_values` above —
-        // which is why this does NOT early-return when unchosen, and why it
-        // reports `my_path` rather than only recursing.
-        //
-        // `self.errors` sits at `my_path`, where the `<select>` is, one segment
-        // SHALLOWER than `child_prefix`'s `$Variant` — the same two-paths trap
-        // `edit` documents. Reporting them under `nested` would name a path no
-        // widget renders.
-        //
-        // Three writers put errors there and all three have to come back out:
-        // `validate` (unchosen), `lookup_variant` (a stale name from a live
-        // select), and `push_field_error` (a server verdict about the choice
-        // itself). The first fires PRECISELY when there are no children to
-        // recurse into, so an early return would drop the one error this
-        // node reliably produces.
-        //
-        // Emitted before recursing so the collected order matches `render`,
-        // which puts `VariantSelect` above `nodes`.
-        let my_path = qualify(prefix, &self.name);
-        if !self.errors.is_empty() {
-            out.insert(my_path, self.errors.clone());
-        }
-        let Some(nested) = self.child_prefix(prefix) else {
-            return; // unchosen: no children, and my own errors are already out
-        };
-        for m in &self.nodes {
-            m.collect_errors(&nested, out);
-        }
-    }
-
     fn is_present(&self) -> bool {
         match self.choice {
             VariantChoice::Unchosen => false,
             // `Unknown` is present so `OptionNode` validates it rather than
-            // clearing its error, which would let a bad name pass as `None`.
+            // skipping it, which would let a bad name pass as `None`.
             VariantChoice::Unknown(_) | VariantChoice::Named(_) => true,
         }
     }

@@ -960,9 +960,8 @@ fn DrawingWithABadRadius() -> Element {
 
 /// **A bad field INSIDE the chosen variant does not mark the variant
 /// `<select>` invalid.** The choice itself is fine; it is `radius` that is
-/// wrong, and it carries its own `aria-invalid`. So the select keys off the
-/// `VariantNode`'s `has_errors_here`, never `has_errors_within`, which also
-/// counts its children's.
+/// wrong, and it carries its own `aria-invalid`. So the select reads the
+/// enum's own path only, never the paths under it.
 #[gtest]
 fn a_bad_field_in_the_variant_does_not_mark_the_choice_invalid() {
     let html = render_to_html(DrawingWithABadRadius);

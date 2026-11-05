@@ -312,9 +312,9 @@ fn ScoreFormWithBadInput() -> Element {
 #[gtest]
 fn an_unparseable_value_renders_its_error() {
     // The regression that motivated this: `FieldValue::Invalid` carries the parse
-    // error INSIDE the value, `has_errors_within` reads it there, and `validate`
-    // used to leave `self.errors` empty. So the form correctly refused to submit
-    // using evidence the widget could not see, and the field rendered clean.
+    // error INSIDE the value, and `validate` used to record nothing for it. So
+    // the form correctly refused to submit using evidence the widget could not
+    // see, and the field rendered clean.
     //
     // Asserted on the wrapper class rather than the message text, because the
     // wording is deliberately still the raw shape name and is expected to change.

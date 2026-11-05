@@ -3,7 +3,7 @@ use dioxus::core::Element;
 use crate::ErrorsByPath;
 use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, qualify};
+use crate::nodes::{Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath};
 
 #[derive(Clone, Debug)]
 pub struct OptionNode {
@@ -38,23 +38,12 @@ impl Node for OptionNode {
         self.inner.distribute_values(prefix, specs, values);
     }
 
-    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
-        self.inner.paths(prefix, out)
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+        self.inner.paths(prefix, drafts, out);
     }
 
     fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
-        let mut is_valid = true;
         !self.is_present() || self.inner.validate(prefix, out)
-    }
-
-    fn has_errors_within(&self) -> bool {
-        self.inner.has_errors_within()
-    }
-
-    // Transparent, like `collect_errors` above: an absent-or-present wrapper
-    // has no errors of its own, so the inner node's are its own here.
-    fn has_errors_here(&self) -> bool {
-        self.inner.has_errors_here()
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
@@ -81,10 +70,11 @@ impl Node for OptionNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         // `name()` delegates to the inner, so the inner derives the same
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
-        self.inner.edit(prefix, edit, specs)
+        self.inner.edit(prefix, edit, specs, errors)
     }
 }

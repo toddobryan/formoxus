@@ -28,8 +28,8 @@ use crate::{
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
-        Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, ValuesByPath, default_label,
-        ensure_owned, owns, qualify,
+        Drafts, Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, ValuesByPath,
+        default_label, ensure_owned, owns, qualify,
     },
     widgets::{
         AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
@@ -202,14 +202,12 @@ struct CustomOrder<T> {
 /// value to build (an `Empty` or `Invalid` leaf). For what needs a typed item
 /// and has only the node: a custom order, and a dev's `feedback`.
 fn item_value<T: Facet<'static>>(node: &dyn Node) -> Option<T> {
-    let mut probe = node.clone_box();
-    probe.validate();
-    if probe.has_errors_within() {
+    let is_valid = node.validate("", &mut ErrorsByPath::default());
+    if !is_valid {
         return None;
     }
     let partial = Partial::alloc::<T>().expect("alloc should never fail for a concrete T");
-    probe
-        .write_value_into(partial)
+    node.write_value_into(partial)
         .expect("write_value_into should succeed once validate() found no errors")
         .build()
         .expect("build should succeed once the item was written")
@@ -455,9 +453,9 @@ impl SetNode {
         let name = item.name();
         let text = item_text(item, ctx.label_case);
         let editing = self.editing.as_deref() == Some(name.as_str());
-        let mut errors = ErrorsByPath::default();
-        item.collect_errors(&path, &mut errors);
-        let errors: Vec<ValidationMessage> = errors.into_values().flatten().collect();
+        let mut paths = Vec::new();
+        item.paths(&path, Drafts::Exclude, &mut paths);
+        let errors: Vec<ValidationMessage> = paths.iter().flat_map(|p| ctx.errors_at(p)).collect();
         rsx! {
             li { class: ctx.classes.fixed_class(FixedKey::SetItem, false), key: "{name}",
                 {
@@ -525,7 +523,9 @@ impl SetNode {
         my_path: &str,
         index: Option<usize>,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<String, FormAccessError> {
+        self.forget_draft_errors(my_path, errors);
         let draft_name = self.draft.name();
         let draft_path = qualify(my_path, &draft_name);
         let mut draft = self.items.new_named(my_path, &draft_name, specs, None);
@@ -557,6 +557,11 @@ impl SetNode {
         Ok(draft_path)
     }
 
+    fn forget_draft_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
+        let draft_path = qualify(my_path, &self.draft.name());
+        out.retain(|path, _| !owns(&draft_path, path));
+    }
+
     /// Make the draft an item, if it can be one (`SETS_PLAN.md` 7c), and
     /// return the item's path. Its values were distributed from the store
     /// just before, by `apply_edit`.
@@ -572,16 +577,18 @@ impl SetNode {
     ///    the store are already at the item's path, and a new blank draft
     ///    takes the next key. If an item was being edited (box 8), it goes in
     ///    the same edit, so the set never holds both.
-    fn commit_draft(&mut self, my_path: &str, specs: &SpecsByPath) -> Option<String> {
-        self.draft.validate();
-        if !self.draft.is_present() {
-            self.draft.clear_errors();
+    fn commit_draft(
+        &mut self,
+        my_path: &str,
+        specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
+    ) -> Option<String> {
+        self.forget_draft_errors(my_path, errors);
+        if !self.draft.is_present() || !self.draft.validate(my_path, errors) {
             return None;
         }
+
         let candidate = self.draft.clone_box();
-        if candidate.has_errors_within() {
-            return None;
-        }
         let equal = self
             .items
             .position_of(&self.comparator, &*candidate)
@@ -753,6 +760,7 @@ impl Node for SetNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let my_path = qualify(prefix, &self.name);
@@ -764,7 +772,7 @@ impl Node for SetNode {
             return match edit {
                 Edit::AddItem { value, .. } => match value {
                     // "Add what the adder holds": for a set, the draft.
-                    None => Ok(self.commit_draft(&my_path, specs)),
+                    None => Ok(self.commit_draft(&my_path, specs, errors)),
                     Some(v) => {
                         // Refused for the user, not the caller (box 6): the set is
                         // unchanged and its live region says why, so `Ok`, not an
@@ -801,7 +809,9 @@ impl Node for SetNode {
                     self.message = message;
                     Ok(None)
                 }
-                Edit::EditItem { index, .. } => self.edit_item(&my_path, *index, specs).map(Some),
+                Edit::EditItem { index, .. } => {
+                    self.edit_item(&my_path, *index, specs, errors).map(Some)
+                }
                 Edit::ChooseVariant { .. } => {
                     Err(FormAccessError(format!("{my_path} is a set, not an enum")))
                 }
@@ -813,9 +823,9 @@ impl Node for SetNode {
 
         // An edit inside the draft, such as a unit enum draft's choice.
         if owns(&qualify(&my_path, &self.draft.name()), path) {
-            return self.draft.edit(&my_path, edit, specs);
+            return self.draft.edit(&my_path, edit, specs, errors);
         }
-        self.items.edit_within(&my_path, edit, specs)
+        self.items.edit_within(&my_path, edit, specs, errors)
     }
 
     fn render(&self, ctx: &NodeContext) -> Element {
@@ -837,8 +847,8 @@ impl Node for SetNode {
         // The set's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
-        // `here`, not `within`: a bad cell is its item's error, not the set's.
-        let invalid = self.has_errors_here();
+        let own_errors = ctx.errors_at(&path);
+        let invalid = !own_errors.is_empty();
         let describedby = described_by(&id, self.help_text.is_some(), invalid);
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Set, invalid);
@@ -880,7 +890,7 @@ impl Node for SetNode {
                 // `aria-describedby` on a group varies between screen readers.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: self.items.errors().to_vec(),
+                    errors: own_errors,
                     classes: ctx.classes.clone(),
                 }
                 if !self.items.is_empty() {
@@ -930,6 +940,15 @@ impl Node for SetNode {
                     }
                 }
             }
+        }
+    }
+
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+        let my_path = qualify(prefix, &self.name);
+        out.push(my_path.clone());
+        self.items.paths(&my_path, drafts, out);
+        if drafts == Drafts::Include {
+            self.draft.paths(&my_path, drafts, out);
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
-use crate::nodes::Shown;
+use crate::nodes::{Drafts, Shown};
 use crate::nodes::{
     Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label, qualify,
 };
@@ -268,25 +268,9 @@ impl<F: Field> Node for FieldNode<F> {
         };
     }
 
-    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+    fn paths(&self, prefix: &str, _drafts: Drafts, out: &mut Vec<String>) {
         out.push(qualify(prefix, &self.name));
     }
-
-    /*fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        if let Some(found) = errors.shift_remove(&qualify(prefix, &self.name)) {
-            self.errors.extend(found);
-        }
-    }
-
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
-        // Clean fields contribute nothing — see the trait's contract. Inserting
-        // `(path, [])` here would make `FormErrors.fields` non-empty for a form
-        // that passed, so a caller could not read "did it pass?" off the shape.
-        if self.errors.is_empty() {
-            return;
-        }
-        out.insert(qualify(prefix, &self.name), self.errors.clone());
-    }*/
 
     fn render(&self, ctx: &NodeContext) -> Element {
         // The field's own attributes (`min`, `pattern`, …), so the browser
@@ -308,11 +292,12 @@ impl<F: Field> Node for FieldNode<F> {
         } else {
             own.keeping(|attr| extends.contains(attr))
         };
+        let errors = ctx.errors_at(&ctx.path(&self.name));
         let field_attrs = FieldAttrs::with_owned_attrs(
             &ctx.id(&self.name),
             self.is_checkbox(),
             ctx.required,
-            self.has_errors_here(),
+            !errors.is_empty(),
             self.help_text.as_deref(),
             &own.then(&self.attrs),
         )
@@ -330,7 +315,7 @@ impl<F: Field> Node for FieldNode<F> {
             choices: self.field.choices(),
             attrs: field_attrs,
             extra_attrs: Vec::new(),
-            errors: todo!(),
+            errors,
         })
     }
 
@@ -391,14 +376,6 @@ impl<F: Field> Node for FieldNode<F> {
         Box::new(self.clone())
     }
 
-    fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || matches!(self.value, FieldValue::Invalid { .. })
-    }
-
-    fn has_errors_here(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
         // The one place `wrapper` matters. The slot the parent opened is the
         // NEWTYPE's, so a bare `set` of the inner scalar would be a type error;
@@ -455,6 +432,7 @@ impl<F: Field> Node for FieldNode<F> {
         prefix: &str,
         edit: &Edit,
         _specs: &SpecsByPath,
+        _errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         // A leaf can only ever be the wrong answer, but which wrong answer is
         // worth saying: hitting a real field means the caller's path was right
@@ -502,9 +480,10 @@ mod tests {
         }
     }
 
-    fn validation_messages<F: Field>(mut node: FieldNode<F>) -> Vec<String> {
-        node.validate();
-        node.errors.into_iter().map(|e| e.0).collect()
+    fn validation_messages<F: Field>(node: &FieldNode<F>) -> Vec<String> {
+        let mut errors = ErrorsByPath::default();
+        node.validate("", &mut errors);
+        errors.into_values().flatten().map(|e| e.0).collect()
     }
 
     // ── Settings reach the check ─────────────────────────────────────────
@@ -521,7 +500,7 @@ mod tests {
             !node.raw_value().is_empty(),
             "an empty raw value is absence, which validate handles before the check"
         );
-        validation_messages(node)
+        validation_messages(&node)
     }
 
     #[gtest]
@@ -570,7 +549,7 @@ mod tests {
     fn an_untouched_required_true_checkbox_is_rejected() {
         let field = a_bool_field(FieldValue::Empty, CheckboxInput.into(), true);
         expect_that!(
-            validation_messages(field),
+            validation_messages(&field),
             elements_are![eq("this value must be true")]
         );
     }
@@ -582,7 +561,7 @@ mod tests {
     fn a_ticked_then_unticked_required_true_checkbox_is_rejected_the_same_way() {
         let field = a_bool_field(FieldValue::Valid(false), CheckboxInput.into(), true);
         expect_that!(
-            validation_messages(field),
+            validation_messages(&field),
             elements_are![eq("this value must be true")]
         );
     }
@@ -590,7 +569,7 @@ mod tests {
     #[gtest]
     fn a_ticked_required_true_checkbox_passes() {
         let field = a_bool_field(FieldValue::Valid(true), CheckboxInput.into(), true);
-        expect_that!(validation_messages(field), is_empty());
+        expect_that!(validation_messages(&field), is_empty());
     }
 
     /// Without the rule, an unticked box is a complete answer: no "required"
@@ -598,7 +577,7 @@ mod tests {
     #[gtest]
     fn an_untouched_plain_checkbox_passes() {
         let field = a_bool_field(FieldValue::Empty, CheckboxInput.into(), false);
-        expect_that!(validation_messages(field), is_empty());
+        expect_that!(validation_messages(&field), is_empty());
     }
 
     /// On a `select` an empty bool really is missing, so it gets the presence
@@ -607,7 +586,7 @@ mod tests {
     fn an_empty_required_true_select_gets_only_the_required_error() {
         let field = a_bool_field(FieldValue::Empty, Select.into(), true);
         expect_that!(
-            validation_messages(field),
+            validation_messages(&field),
             elements_are![eq("This field is required.")]
         );
     }
@@ -616,7 +595,7 @@ mod tests {
     fn a_required_true_select_rejects_false() {
         let field = a_bool_field(FieldValue::Valid(false), Select.into(), true);
         expect_that!(
-            validation_messages(field),
+            validation_messages(&field),
             elements_are![eq("this value must be true")]
         );
     }

@@ -8,7 +8,7 @@ use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
+    Drafts, Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::field_row::required_marker;
@@ -64,8 +64,9 @@ impl Node for ListNode {
         // The list's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
-        // `here`, not `within`: a bad cell is its item's error, not the list's.
-        let invalid = self.has_errors_here();
+
+        let own_errors = ctx.errors_at(&path);
+        let invalid = !own_errors.is_empty();
         let describedby = described_by(&id, self.help_text.is_some(), invalid);
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::List, invalid);
@@ -94,7 +95,7 @@ impl Node for ListNode {
                 // `aria-describedby` on a group varies between screen readers.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: self.items.errors().to_vec(),
+                    errors: own_errors,
                     classes: ctx.classes.clone(),
                 }
                 if !self.items.is_empty() {
@@ -150,10 +151,10 @@ impl Node for ListNode {
             .distribute_values(&qualify(prefix, &self.name), specs, values);
     }
 
-    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
         let path = qualify(prefix, &self.name);
         out.push(path.clone());
-        self.items.paths(&path, out);
+        self.items.paths(&path, drafts, out);
     }
 
     fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
@@ -169,14 +170,6 @@ impl Node for ListNode {
             out.insert(my_path, errors);
         }
         is_valid
-    }
-
-    fn has_errors_within(&self) -> bool {
-        self.items.has_errors_within()
-    }
-
-    fn has_errors_here(&self) -> bool {
-        self.items.has_errors_here()
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
@@ -202,6 +195,7 @@ impl Node for ListNode {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         let path = edit.path();
         let my_path = qualify(prefix, &self.name);
@@ -227,6 +221,6 @@ impl Node for ListNode {
             };
         }
 
-        self.items.edit_within(&my_path, edit, specs)
+        self.items.edit_within(&my_path, edit, specs, errors)
     }
 }

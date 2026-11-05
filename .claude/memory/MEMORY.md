@@ -69,3 +69,5 @@
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
 - [Dioxus Signal is not Sync](dioxus_signal_not_sync.md) — a spec-held hook is `Send + Sync`: capture `use_signal_sync`, not `use_signal`; `let _ = s;` captures nothing
 - [E2E harness](e2e_harness.md) — `just e2e`; use `get_by_role` with a name, not exact `get_by_label` (aria-hidden marker)
+- [Scratch copies need their own target](scratch_copies_need_their_own_target.md) — a `git archive` copy on the repo's `target` reads stale builds as fresh, both ways
+- [Plans spell out the why](feedback_plans_spell_out_the_why.md) — steps Todd implements get full plain sentences, not telegraphic shorthand

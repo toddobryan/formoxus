@@ -3,7 +3,7 @@
 //! reactivity — testable on its own. [`super::Form`] is the live wrapper a
 //! page actually holds.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{fmt::Debug, marker::PhantomData};
 
 use dioxus::prelude::*;
@@ -15,7 +15,7 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, Node, ValuesByPath, no_such_path, owns};
+use crate::nodes::{Drafts, Edit, Node, ValuesByPath, no_such_path, owns};
 use crate::nodes::{NodeContext, RawValue};
 use crate::{classes::Classes, error::ValidationError};
 
@@ -33,7 +33,8 @@ pub struct FormState<T: Clone + Debug + Facet<'static>> {
 
 impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty() || self.nodes.iter().any(|m| m.has_errors_within())
+        let errors = self.collect_errors();
+        !errors.form.is_empty() || !errors.fields.is_empty()
     }
 
     /// What this form *stated* about label casing, if anything.
@@ -84,10 +85,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// point of this check is that it sees across them.
     pub fn validate(&mut self) -> Option<T> {
         self.errors.clear();
-        for m in &mut self.nodes {
-            m.validate();
+        self.field_errors.clear();
+        let mut is_valid = true;
+        for n in &self.nodes {
+            is_valid = n.validate("", &mut self.field_errors) && is_valid;
         }
-        if self.has_errors() {
+        if !is_valid {
             return None;
         }
 
@@ -277,11 +280,20 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.collect_values().into_iter().collect()
     }
 
-    pub fn distribute_errors(&mut self, mut errors: ErrorsByPath) -> ErrorsByPath {
-        for m in &mut self.nodes {
-            m.distribute_errors("", &mut errors);
+    /// Add `errors` to the paths this form has, and return the ones it has no
+    /// path for. A draft's path is not one: a draft is no part of what was
+    /// submitted, so an error aimed at it comes back unclaimed.
+    pub fn distribute_errors(&mut self, errors: ErrorsByPath) -> ErrorsByPath {
+        let paths: HashSet<String> = self.paths(Drafts::Exclude).into_iter().collect();
+        let mut unclaimed = ErrorsByPath::default();
+        for (path, messages) in errors {
+            if paths.contains(&path) {
+                self.field_errors.entry(path).or_default().extend(messages);
+            } else {
+                unclaimed.insert(path, messages);
+            }
         }
-        errors
+        unclaimed
     }
 
     /// Take values straight off a submitted `<form>`. Dioxus's
@@ -303,7 +315,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         // choosing a variant reveals that variant's fields. Handing the edit the
         // spec is what builds them the way the walk built their siblings, so a
         // item added after mount carries the spec's labels and widgets too.
-        self.nodes[idx].edit("", edit, &self.spec.fields)
+        let result = self.nodes[idx].edit("", edit, &self.spec.fields, &mut self.field_errors);
+        // An error on a path the edit took away goes with it: a removed item's,
+        // or the fields of a variant no longer chosen. This runs on `Err` too,
+        // which is why the line above has no `?`: a refused edit records its
+        // message before it returns. Drafts count here, so a refusal on one
+        // stays until the draft is judged again.
+        let paths: HashSet<String> = self.paths(Drafts::Include).into_iter().collect();
+        self.field_errors.retain(|path, _| paths.contains(path));
+        result
     }
 
     /// Put `message` on the node at `path`, or say there is none.
@@ -402,13 +422,26 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub fn collect_errors(&self) -> FormErrors {
         let mut field_errors = ErrorsByPath::default();
-        for m in &self.nodes {
-            m.collect_errors("", &mut field_errors);
+        // Walking the tree, not reading the map, gives render order and leaves
+        // a refused draft out. An empty entry is "checked and clean", which a
+        // caller reading "did it pass?" off `fields` must not see.
+        for path in self.paths(Drafts::Exclude) {
+            if let Some(messages) = self.field_errors.get(&path).filter(|m| !m.is_empty()) {
+                field_errors.insert(path, messages.clone());
+            }
         }
         FormErrors {
             form: self.errors.clone(),
             fields: field_errors,
         }
+    }
+
+    fn paths(&self, drafts: Drafts) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for n in &self.nodes {
+            n.paths("", drafts, &mut out);
+        }
+        out
     }
 }
 
@@ -458,6 +491,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         spec,
         nodes,
         errors: Vec::new(),
+        field_errors: ErrorsByPath::default(),
         _type: PhantomData,
     }
 }

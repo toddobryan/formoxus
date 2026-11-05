@@ -43,6 +43,8 @@ mod empty_strings;
 mod enums;
 #[path = "suite/errors.rs"]
 mod errors;
+#[path = "suite/errors_by_path.rs"]
+mod errors_by_path;
 #[path = "suite/field_validators.rs"]
 mod field_validators;
 #[path = "suite/form_macro.rs"]

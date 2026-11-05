@@ -27,13 +27,19 @@ pub use struct_node::StructNode;
 pub use variant_node::{VariantChoice, VariantNode};
 
 use crate::classes::Classes;
-use crate::error::FormAccessError;
+use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
 use dioxus::stores::Store;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Drafts {
+    Include,
+    Exclude,
+}
 
 pub trait Node: Debug {
     fn name(&self) -> String;
@@ -72,22 +78,7 @@ pub trait Node: Debug {
     fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool;
 
     /// All paths on this node (that can hold an error).
-    fn paths(&self, prefix: &str, out: &mut Vec<String>);
-
-    /// Whether anything is wrong at this node OR anywhere under it: what
-    /// `FormState::validate` asks before building a model.
-    ///
-    /// Not the question a widget asks; see [`has_errors_here`](Self::has_errors_here).
-    /// A `VariantNode` whose chosen variant has a bad `radius` has errors
-    /// within, but its `<select>` is fine and must not render `aria-invalid`.
-    /// A leaf counts an unvalidated `Invalid` value too, which `validate` has
-    /// not yet turned into an error message.
-    fn has_errors_within(&self) -> bool;
-
-    /// Whether this node has errors of its OWN, ignoring any under it: the
-    /// messages it renders, and what decides its `aria-invalid`. Always implies
-    /// [`has_errors_within`](Self::has_errors_within), never the reverse.
-    fn has_errors_here(&self) -> bool;
+    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>);
 
     fn clone_box(&self) -> Box<dyn Node>;
 
@@ -130,6 +121,7 @@ pub trait Node: Debug {
         prefix: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError>;
 }
 
@@ -449,6 +441,7 @@ pub struct NodeContext {
     /// validates the draft. Dropped by [`nested`](Self::nested) and
     /// [`optional`](Self::optional), like `label_if_unnamed`.
     pub in_draft: bool,
+    pub errors: Rc<ErrorsByPath>,
 }
 
 impl NodeContext {
@@ -460,6 +453,7 @@ impl NodeContext {
         on_edit: Callback<Edit>,
         label_case: LabelCase,
         classes: Classes,
+        errors: ErrorsByPath,
     ) -> Self {
         Self {
             form_id,
@@ -471,6 +465,7 @@ impl NodeContext {
             classes: Rc::new(classes),
             label_if_unnamed: None,
             in_draft: false,
+            errors: Rc::new(errors),
         }
     }
 
@@ -486,6 +481,7 @@ impl NodeContext {
             classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
+            errors: self.errors.clone(),
         }
     }
 
@@ -503,6 +499,7 @@ impl NodeContext {
             classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
+            errors: self.errors.clone(),
         }
     }
 
@@ -521,6 +518,10 @@ impl NodeContext {
     /// can contain `--`, since a path is identifiers joined by `.`.
     pub fn title_id(&self) -> String {
         format!("{}--title", self.form_id)
+    }
+
+    pub fn errors_at(&self, path: &str) -> Vec<ValidationMessage> {
+        self.errors.get(path).cloned().unwrap_or_default()
     }
 }
 

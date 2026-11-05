@@ -13,7 +13,8 @@ use crate::{
     error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
     nodes::{
-        Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path, owns, qualify,
+        Drafts, Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path, owns,
+        qualify,
     },
 };
 
@@ -68,10 +69,6 @@ impl Items {
         self.min.is_some_and(|min| self.len() <= min)
     }
 
-    pub(crate) fn errors(&self) -> &[ValidationMessage] {
-        &self.errors
-    }
-
     pub(crate) fn collect_values(&self, my_path: &str, out: &mut Vec<RawValue>) {
         let keys: Vec<String> = self.iter().map(|item| item.name()).collect();
         out.push(RawValue::Structure {
@@ -113,31 +110,9 @@ impl Items {
         }
     }
 
-    /*pub(crate) fn collect_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
-        // The list's own errors at its own path, before its items', as
-        // `VariantNode` does. Before #13 nothing ever put one there, so this
-        // only recursed, and a rejected item-key entry came back as an `Err`
-        // with no message anywhere.
-        if !self.errors.is_empty() {
-            out.insert(my_path.to_string(), self.errors.clone());
-        }
+    pub(crate) fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
         for r in &self.collection {
-            r.collect_errors(my_path, out);
-        }
-    }*/
-
-    /*pub(crate) fn distribute_errors(&mut self, my_path: &str, errors: &mut ErrorsByPath) {
-        if let Some(found) = errors.shift_remove(my_path) {
-            self.errors.extend(found);
-        }
-        for r in &mut self.collection {
-            r.distribute_errors(my_path, errors);
-        }
-    }*/
-
-    pub(crate) fn paths(&self, prefix: &str, out: &mut Vec<String>) {
-        for r in &self.collection {
-            r.paths(prefix, out);
+            r.paths(prefix, drafts, out);
         }
     }
 
@@ -176,28 +151,8 @@ impl Items {
         is_valid
     }
 
-    pub(crate) fn has_errors_within(&self) -> bool {
-        self.has_errors_here() || self.iter().any(|r| r.has_errors_within())
-    }
-
-    /// The container's own messages, from its `validator:`, after `validate`.
-    pub(crate) fn add_errors(&mut self, messages: Vec<ValidationMessage>) {
-        self.errors.extend(messages);
-    }
-
-    pub(crate) fn has_errors_here(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     pub(crate) fn is_present(&self) -> bool {
         !self.is_empty() && self.iter().any(|fm| fm.is_present())
-    }
-
-    pub(crate) fn clear_errors(&mut self) {
-        self.errors.clear();
-        for r in &mut self.collection {
-            r.clear_errors();
-        }
     }
 
     /// Build one item under the next key, from `value` if there is one and
@@ -286,7 +241,7 @@ impl Items {
     }
 
     /// Make `items` exactly `keys`, in that order: an item already here keeps its
-    /// node (and so its values and errors), and a key not here gets a blank item.
+    /// node (and so its values), and a key not here gets a blank item.
     ///
     /// This is how a server, which starts from a collection with no items, gets the
     /// client's items back. `next_key` only ever grows, so a key the wire named
@@ -426,11 +381,12 @@ impl Items {
         my_path: &str,
         edit: &Edit,
         specs: &SpecsByPath,
+        errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError> {
         let edit_path = edit.path();
         for m in &mut self.collection {
             if owns(&qualify(my_path, &m.name()), edit_path) {
-                return m.edit(my_path, edit, specs);
+                return m.edit(my_path, edit, specs, errors);
             }
         }
 

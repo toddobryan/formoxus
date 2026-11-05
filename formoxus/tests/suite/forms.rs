@@ -35,7 +35,6 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         widget: TextInput.into(),
         wrapper: None,
         value,
-        errors: Vec::new(),
         field: StringField::default(),
     })
 }
@@ -64,7 +63,6 @@ fn location_struct_node(
         help_text: None,
         validator: None,
         nodes: location_nodes(street, city, zip),
-        errors: Vec::new(),
     })
 }
 
@@ -194,16 +192,11 @@ fn option_fields_are_not_required() {
 
     // `note: Option<String>` is optional, so an empty form only complains
     // about `name` and `guests`.
-    for m in &mut form.nodes {
-        m.validate();
-    }
-    let complaining: Vec<String> = form
-        .nodes
-        .iter()
-        .filter(|m| m.has_errors_within())
-        .map(|m| m.name())
-        .collect();
-    expect_that!(complaining, elements_are![eq("name"), eq("guests")]);
+    form.validate();
+    expect_that!(
+        form.collect_errors().paths(),
+        elements_are![eq("name"), eq("guests")]
+    );
 }
 
 #[gtest]
@@ -312,13 +305,7 @@ fn blanking_a_field_makes_it_empty_again() {
     form.distribute_values(&values(&[("note", ""), ("name", "")]));
 
     expect_that!(form.validate(), none());
-    let complaining: Vec<String> = form
-        .nodes
-        .iter()
-        .filter(|m| m.has_errors_within())
-        .map(|m| m.name())
-        .collect();
-    expect_that!(complaining, elements_are![eq("name")]);
+    expect_that!(form.collect_errors().paths(), elements_are![eq("name")]);
 }
 
 #[gtest]
@@ -351,6 +338,7 @@ fn empty_event_form_is_invalid() {
             location_struct_node(FieldValue::Empty, FieldValue::Empty, FieldValue::Empty),
         ],
         errors: Vec::new(),
+        field_errors: ErrorsByPath::default(),
         _type: PhantomData,
     };
 
@@ -371,6 +359,7 @@ fn location_form_round_trips_to_model() {
             FieldValue::Valid("12345".to_string()),
         ),
         errors: Vec::new(),
+        field_errors: ErrorsByPath::default(),
         _type: PhantomData,
     };
 
@@ -398,6 +387,7 @@ fn event_for_create_form_round_trips_to_model() {
             ),
         ],
         errors: Vec::new(),
+        field_errors: ErrorsByPath::default(),
         _type: PhantomData,
     };
 

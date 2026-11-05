@@ -85,7 +85,7 @@ the component calling `use_form`, but a dev never calls `use_store` for it. It i
    clean.
 2. **A `Store` cannot hold an `IndexMap`,** so the store's order is lost, and
    `collect_errors` promises render order. `Form::to_wire` orders the store's
-   entries by the walker in 2c.
+   entries by `Node::paths`.
 3. **`Widget::render` is a plain method,** in the form's scope. The read has to
    happen in a component to be per-field: the built-ins have one (`TextareaView`,
    `SelectView`, `RadioGroupView`, the input's), and so does `FieldErrors`. A
@@ -132,49 +132,188 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 - [x] **1.** Branch `errors`, and this plan.
 
-- [ ] **2.** (Todd) Errors off the nodes. Plain data only, no store yet.
+- [x] **2.** (Todd) Errors off the nodes. Plain data only, no store yet.
+
+  Rewritten 2026-11-05 as a work order, after Claude built all of it in a throwaway
+  copy to prove the order. Line numbers are c48402f's. The library first compiles
+  after 2h and the tests after 2i, so a red build before then is expected.
+
+  **The rules, for every node:**
+
+  1. `validate(&self, prefix, out) -> bool` returns whether this node and everything
+     under it is clean, and writes an entry for every path it checks, an empty `Vec`
+     when clean (#7). A gated validator did not run, so it writes no entry.
+  2. Loops run every child: `is_valid = child.validate(…) && is_valid`, in that order.
+  3. A node adds its OWN name, so a container passes its own path down as the prefix.
+     `OptionNode` adds nothing. `VariantNode` has two paths: its own errors sit at
+     `my_path`, its children under `child_prefix(prefix)`, which takes the PREFIX.
+  4. `paths` pushes a node's own path first, then its children: render order.
+  5. A `FieldValue::Invalid` stays on its node: it is a value, not a message.
+  6. `paths` walks an absent option's inner fields, and must: a form validator, a
+     `push_field_error` and a server's reply can all name one, as an absent option's
+     inputs are on screen. So 2g's rule does not cover blanking an `Option<struct>` or
+     a leaf, which is typing, not an edit: box 5 handles that.
 
   - [x] **2a.** `FormState.field_errors: ErrorsByPath`, beside `errors`. Delete the
     `errors` fields of `FieldNode`, `StructNode`, `VariantNode` and `Items`.
 
-  - [ ] **2b.** `Node::validate(&self, prefix, out: &mut ErrorsByPath) -> bool`, the
-    prefix threading as `collect_errors`' does today. `clear_errors`,
-    `collect_errors` and `distribute_errors` go from `Node`;
-    `validate` writes an entry for every path it checks, an empty `Vec` when
-    clean, so the map already tells checked from never checked (#7).
-    `FormState::collect_errors` becomes a read of the map that leaves the empty ones
-    out, so `FormErrors.fields` is still empty for a form that passed, and
-    `has_errors` asks whether any entry is non-empty. A `FieldValue::Invalid`
-    stays on its node: it is a value, not a message.
+  - [x] **2b.** `nodes.rs`: the trait in its final shape, in one edit, so the compiler
+    lists everything left.
 
-  - [ ] **2c.** A walker, `Node::paths(&self, prefix, out)`: every path that can
-    hold an error, containers included, in render order. It replaces what
-    `distribute_errors`' unclaimed map did, for `push_field_error`, for a form
-    validator's error at no path (its "At path: …" message) and for
-    `Form::distribute_errors`' `Err`. `to_wire` orders by it (trap 2).
+    - [x] `paths(&self, prefix, drafts: Drafts, out)`, with `Drafts::{Include, Exclude}`.
+      It needs `#[derive(Clone, Copy, PartialEq, Eq, Debug)]`, or the first loop over
+      children moves it.
+    - [x] `edit(…, specs, errors: &mut ErrorsByPath)`.
+    - [x] Delete `has_errors_within` and `has_errors_here`, with their docs. Nothing
+      needs them once `validate` returns a `bool` and render reads the map, so
+      `SetNode` was right not to have them: do not add them back.
+    - [x] The render stopgap: `NodeContext.errors: Rc<ErrorsByPath>`, a `root`
+      parameter, cloned in `nested` and `optional`, and `errors_at(&self, path) ->
+      Vec<ValidationMessage>`. It is what lets the suite go green here instead of
+      after box 4, where 29 tests would otherwise stay red (Todd agreed 2026-11-05):
+      `WidgetProps.errors` stays a `Vec`, and 4a swaps this field for the store. `Rc` is
+      allowed here, as `NodeContext` never reaches the server.
 
-  - [ ] **2d.** The gates. A struct's, enum's or list's validator runs only over
-    clean children (`struct_node.rs:74`, `list_node.rs:164`, `set_node.rs:710`,
-    `variant_node.rs:318`), and `has_errors_within`/`has_errors_here` read a node's
-    own field. Decided: `validate` returns whether it was clean, and takes `&self`,
-    since it only ever wrote errors. Its loops must run every child, so
-    `is_valid = child.validate(…) && is_valid`, in that order. A probe
-    (`set_node.rs:206`, `:576`) validates into a scratch map.
+  - [x] **2c.** Finish what is nearly done.
 
-  - [ ] **2e.** `Node::edit` gains `errors: &mut ErrorsByPath`, for what an edit
-    records: `VariantNode`'s unknown-variant message (`variant_node.rs:156`), and
-    a set draft refused on Add. Then `FormState::edit` drops every error whose path
-    the tree no longer has, using 2c: one rule for a removed item, a variant
-    changed, and an option emptied, in place of a `retain` per edit.
+    - [x] `field_node.rs`: `paths`' new parameter. Delete the commented-out block at
+      `:275`. `render`: `let errors = ctx.errors_at(&ctx.path(&self.name))`, then
+      `!errors.is_empty()` at `:315` and `errors` at `:333`, replacing the `todo!()`.
+      Delete `has_errors_within`, `has_errors_here`. `edit` takes `_errors`.
+      `validation_messages` (`:505`) validates into a map; take the node by reference,
+      or clippy objects.
+    - [x] `option_node.rs`: delete `let mut is_valid` (`:46`), `has_errors_within`,
+      `has_errors_here` and its stale comment; drop the `qualify` import. Pass
+      `drafts` and `errors` through.
+    - [x] `items.rs`: `paths` takes `drafts`; `edit_within` takes and passes `errors`.
+      Delete `errors()`, both commented-out blocks, `has_errors_within`, `add_errors`,
+      `has_errors_here` and `clear_errors`.
+    - [x] `list_node.rs`: `paths` and `edit` pass the new parameters. Delete
+      `has_errors_within` and `has_errors_here`. `render`: `let own_errors =
+      ctx.errors_at(&path)`, then `!own_errors.is_empty()` at `:68` and `own_errors`
+      at `:97`.
 
-    **OPEN, for Todd at `SetNode::paths` and 2e: a draft's errors.** Claude to remind
-    him there. A refusal at a draft's path is dropped by this rule if `paths` skips
-    drafts, and reaches `to_wire`, `collect_errors` and `has_errors` if it does not.
-    Either way a stale refusal outlives a successful Add, since the item keeps the
-    draft's key, and so does one on an emptied draft or an Edit rebuild. Claude's
-    proposal: one parameter on `paths` saying whether to include drafts (this rule
-    includes them; `to_wire`, unclaimed errors and `collect_errors` do not), and
-    `commit_draft` and the Edit rebuild first remove what the draft's path owns.
+  - [x] **2d.** `struct_node.rs`.
+
+    - [x] `validate`, shaped like `ListNode`'s: children under `nested`, and only if
+      clean, its validator, inserted at `nested`.
+    - [x] `paths`: `nested`, then each child with `nested` as prefix.
+    - [x] `render` (`:44`, `:62`): `own_errors` from `ctx.errors_at`.
+    - [x] `edit` takes and passes `errors`.
+    - [x] Delete `has_errors_within`, `has_errors_here`, `collect_errors`,
+      `distribute_errors`, `clear_errors`, and the `ValidationMessage` import.
+
+  - [x] **2e.** `variant_node.rs`.
+
+    - [x] `validate`: `Unchosen` and `Unknown` write their one message at `my_path` and
+      return false. `Named`: children under `child_prefix(prefix)`, then the validator
+      at `my_path` only if they were clean.
+    - [x] `paths`: `qualify(prefix, &self.name)`, then, if `child_prefix(prefix)` gives
+      one, the children. Both `paths` and `validate` receive the PREFIX. This is
+      what makes a changed or unchosen variant's old fields drop out.
+    - [x] `set_variant`: delete both `self.errors.clear()` lines. `distribute_values`
+      calls it too, and has no map to write to.
+    - [x] `lookup_variant`: takes `&self`, records nothing, still returns the `Err`.
+    - [x] `edit`'s `ChooseVariant` arm updates the map, since `set_variant` and
+      `lookup_variant` no longer can. After a good choice, remove the enum's entry:
+      `errors.shift_remove(&my_path)`. 2g's rule cannot do this, because the enum's path
+      still exists, so "You must choose a variant" would stay on screen. After a stale
+      name, record it: `errors.entry(my_path).or_default().push(…)`, with
+      `unknown_variant_message(name)`, and still return the `Err`.
+    - [x] `forward_to_child` takes and passes `errors`.
+    - [x] `render`: `own_errors` from `ctx.errors_at` at `:256` and `:292`.
+    - [x] Delete `has_errors_within`, `has_errors_here`, `collect_errors`,
+      `distribute_errors`, `clear_errors`.
+
+  - [x] **2f.** `set_node.rs`.
+
+    **Decided (Todd, 2026-11-05): a draft's errors.** `paths` says whether to include
+    drafts. `FormState::edit`'s rule includes them, so a refusal at a draft's path
+    survives it. `collect_errors`, and so `has_errors` and `to_wire`, and unclaimed
+    errors do not, so a refusal reaches none of them.
+
+    - [x] `paths`: the parameter is the PREFIX, so `let my_path = qualify(prefix,
+      &self.name)`. Then `my_path`, the items under it, and the draft under it (after
+      the items, as on the page) only for `Drafts::Include`.
+    - [x] `item_value` (`:206`): `node.validate("", &mut ErrorsByPath::default())`. It
+      no longer needs the clone, as `validate` takes `&self`.
+    - [x] A private `forget_draft_errors(&self, my_path, errors)`:
+      `errors.retain(|path, _| !owns(&draft_path, path))`.
+    - [x] `commit_draft` (`:575`) takes `errors`. Forget first, then if not present
+      return `None`, then if `!self.draft.validate(my_path, errors)` return `None`.
+      NOT a scratch map: its refusal shows on the draft's own widget. The forget
+      replaces `:578`'s `clear_errors`, and is what clears a refusal on a draft since
+      emptied: `validate` is never reached there. Keep `let candidate =
+      self.draft.clone_box();` after those checks: `refuse_duplicate` takes `&mut self`,
+      so it cannot be handed `&*self.draft`.
+    - [x] `edit_item` (`:523`) takes `errors` and forgets first: it rebuilds the draft.
+    - [x] `edit` passes `errors` to both, to `self.draft.edit` and to `edit_within`.
+    - [x] `render_item` (`:458`): `item.paths(&path, Drafts::Exclude, &mut paths)`, then each
+      one's `ctx.errors_at`. An item has no widgets of its own, so its `<li>` shows
+      everything under it, as `collect_errors` did.
+    - [x] `render`: `own_errors` from `ctx.errors_at` at `:841` and `:883`.
+
+  - [x] **2g.** `form/state.rs`.
+
+    - [x] A private `paths(&self, drafts: Drafts) -> Vec<String>`, over `self.nodes`.
+    - [x] `form_for_impl` (`:457`): `field_errors: ErrorsByPath::default()`.
+    - [x] `validate`: clear `errors` AND `field_errors`, run the loop (rule 2), and
+      return `None` if it was not clean. `field_errors` and `nodes` are separate
+      fields, so the borrows are fine.
+    - [x] `collect_errors`: walk `self.paths(Drafts::Exclude)` and keep the non-empty entries.
+      Walking rather than reading the map gives render order and leaves drafts out, in
+      one place.
+    - [x] `has_errors`: whether `collect_errors` has anything, form or fields. NOT a
+      read of the map, or a refused draft would count.
+    - [x] `distribute_errors(&mut self, errors) -> ErrorsByPath`: the same signature.
+      A path in `self.paths(Drafts::Exclude)` extends its `field_errors` entry, and anything else
+      goes in the map it returns. Its two callers then need no change.
+    - [x] `edit` (`:306`): `let result = …edit("", edit, specs, &mut
+      self.field_errors);`, then retain only what `self.paths(Drafts::Include)` holds, then
+      `result`. Prune on `Err` too, which is why it is not `?`: a refused edit records
+      its message before returning.
+
+    **Two behaviours change here, both accepted (Todd, 2026-11-05):**
+
+    1. A submit clears a draft's refusal, as `validate` empties the whole map, and Add
+       judges the draft again. Today it stays, since `SetNode::validate` never touches
+       the draft. 2j pins this.
+    2. `has_errors` before any `validate` no longer sees a value that failed to parse.
+       It reports only what `validate` has found, and no caller asks any sooner.
+
+  - [x] **2h.** `form.rs`. The library compiles after this.
+
+    - [x] `distribute_errors`: uncomment it, and replace the `clear_errors` loop with
+      `state.field_errors.clear()`.
+    - [x] `root_ctx` (`:437`): pass `self.state_signal.read().field_errors.clone()`.
+      Render reads the state already, so this subscribes nothing new.
+
+  - [x] **2i.** Green checkpoint. `just ci`, then `just e2e`.
+
+    - [x] `tests/suite/forms.rs`: `:38` and `:66` lose `errors`; the three `FormState {
+      … }` literals gain `field_errors: ErrorsByPath::default()`; `:197` and `:316`
+      read `form.collect_errors().paths()` in place of `has_errors_within`.
+    - [x] Stale comments: `ErrorsByPath`'s doc (`form.rs:38`), the `set_items` doc
+      ("and errors"), `VariantNode::is_present`'s, and in tests `enums.rs:964`,
+      `widgets.rs:315` and the header of `errors.rs`.
+    - [x] `cargo fmt`. Claude's copy passed all 864 tests, all 58 e2e tests, clippy and
+      `cargo doc` with only these changes. `msrv` was not run.
+
+  - [x] **2j.** (Claude) Tests for what the suite cannot see. Each of these lines was
+    broken on purpose in the copy, and **all 864 tests still passed**, so a green 2i
+    proves less than it looks. Written once 2i is green, each mutation-checked:
+
+    - [x] Choosing a variant clears "You must choose a variant" (2e).
+    - [x] A stale variant name reports at the enum's path as well as in the `Err` (2e).
+    - [x] Two bad fields in one variant both report (rule 2 in `VariantNode`).
+    - [x] A refused draft stays out of `collect_errors`, `has_errors` and `to_wire`.
+    - [x] A removed item's errors go, and a changed variant's fields' (2g's rule).
+    - [x] Refused, then emptied, then Add: the refusal goes (`commit_draft`).
+    - [x] Refused, then Edit on an item: the refusal goes (`edit_item`).
+    - [x] A pushed error on an absent option's field is gone after the next `validate`.
+    - [x] A refused draft's error is gone after a submit, and back on the next Add.
+    - [x] Also the ones owed from review: a count error still reports its items' errors,
+      and item paths pinned exactly (`tags.#0`, not `tags.#0.#0`).
 
 - [ ] **3.** (Todd) The store.
 
@@ -185,14 +324,17 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
   - [ ] **3b.** The private method above, with `Form::validate`, `edit`,
     `push_field_error`, `distribute_errors` and `absorb` going through it, and
-    `apply_edit` taking the store. Trap 1 applies to the drain.
+    `apply_edit` taking the store. Trap 1 applies to the drain, which also writes an
+    empty `Vec` for any store key missing from `field_errors`: `validate` writes
+    nothing for an absent option's fields, and 2g's rule drops paths, so a stale error
+    leaves the map without leaving the store unless the drain looks for it.
 
   - [ ] **3c.** `Form::reset` restores the initial snapshot's errors, writing an
     empty `Vec` over everything else. `Form::to_wire` reads the store (trap 2).
 
 - [ ] **4.** (Todd) Widgets read the store.
 
-  - [ ] **4a.** `NodeContext.errors: ErrorsStore`, and `WidgetProps.errors` becomes
+  - [ ] **4a.** `NodeContext.errors: ErrorsStore`, replacing 2b's stopgap, and `WidgetProps.errors` becomes
     that store. A helper beside `get_current`, `pub fn get_errors(path, errors) ->
     Vec<ValidationMessage>`, for custom widgets.
 
@@ -211,8 +353,26 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   &ValuesByPath) -> Vec<ValidationMessage>`: clone the top-level node that owns
   `path`, `distribute_values` into the clone, `validate` it into a scratch map, and
   return `path`'s entry. Nothing written, so `Form` reads with `peek` and writes
-  one store entry: no form re-render. Running the same `validate` is what
+  `path`'s store entry: no form re-render. Running the same `validate` is what
   guarantees that a live check and a submit agree (trap 5).
+
+  **It also clears siblings (Todd, 2026-11-05).** Blanking the last filled field of
+  an `Option<struct>` makes it absent, and the form valid, while its siblings still
+  show the "required" a submit gave them. So `check_live` also says which OTHER paths
+  under that top-level node show an error the scratch map no longer reports, and
+  `Form` writes each an empty `Vec`. It only ever clears, never adds, so B stands: a
+  sibling the user has not reached is not scolded.
+
+  This has to leave alone what `validate` cannot re-derive, or a live check wipes
+  it: a server's "that username is taken" (E), a pushed error, a form validator's at
+  a path, and a container's own error, which waits for submit (B). **OPEN, for Todd
+  at box 5:** how to tell them apart. Claude's proposal: clear siblings only under an
+  option that owns `path` and is absent in the clone, since every error beneath an
+  absent option stops applying, whatever wrote it. Asked of the clone alone, because
+  the state's nodes are stale (trap 5), so there is no "before" to compare with. A
+  form validator's error there can go early, and comes back on submit if it still
+  holds. It takes a new way to ask: `Node` has no walk that finds the option owning
+  a path.
 
   A draft's leaves are off the walk, so `check_live` finds nothing and writes an
   empty `Vec`: typing into a draft clears the refusal Add left there, and Add
@@ -238,12 +398,14 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
   - [ ] **8b.** New `tests/suite/errors_store.rs`: one field's error does not
     re-render a sibling (a render counter in a custom widget); an error cleared
-    wakes its widget (trap 1); a removed item's, changed variant's and emptied
-    option's errors go; `reset` restores; `to_wire` keeps render order; a seeded
+    wakes its widget (trap 1); a removed item's and changed variant's errors go;
+    a submit clears an absent option's stale error from the store (3b); `reset` restores; `to_wire` keeps render order; a seeded
     state's errors show; a submit's errors arrive where a live check's would.
 
   - [ ] **8c.** `check_live`: every kind of leaf check; a blank field in a present
-    and in an absent `Option<struct>` (trap 5); an item's path; a draft's; that
+    and in an absent `Option<struct>` (trap 5); blanking the last filled field clears
+    its siblings' errors, and a sibling's error survives while the option stays
+    present; an item's path; a draft's; that
     `min_items` and a form validator never answer it (B).
 
   - [ ] **8d.** e2e, in pairs with `/t/live-*` forms: nothing shown while typing a
@@ -267,7 +429,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 1. **`aria-invalid="false"` (#7).** Trap 1 makes it possible; nothing here uses it.
    **OPEN at 3a:** an empty `Vec` is also how an error is CLEARED (trap 1), so
-   `reset`, 2e's rule and box 5's draft all leave "checked and clean" on a field
+   `reset`, 2g's rule and box 5's draft all leave "checked and clean" on a field
    nobody checked. `Option<Vec<…>>` as the store's value would tell them apart.
 2. **Validating on load.** Silent, as it is today.
 3. **Async or server-side live checks** ("that username is taken" as the user
