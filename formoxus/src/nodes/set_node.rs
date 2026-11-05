@@ -696,33 +696,19 @@ impl Node for SetNode {
         self.items.dedup(&self.comparator);
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
-        self.items.collect_errors(&qualify(prefix, &self.name), out);
-    }
-
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        self.items
-            .distribute_errors(&qualify(prefix, &self.name), errors);
-    }
-
-    fn validate(&mut self) {
-        self.items.validate();
-        if !self.items.has_errors_within() {
-            let messages = self
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let my_path = qualify(prefix, &self.name);
+        let mut is_valid = self.items.validate(&my_path, out);
+        if is_valid {
+            let errors = self
                 .validator
                 .as_ref()
                 .map(|validator| validator.messages_for(self))
                 .unwrap_or_default();
-            self.items.add_errors(messages);
+            is_valid = errors.is_empty();
+            out.insert(my_path, errors);
         }
-    }
-
-    fn has_errors_within(&self) -> bool {
-        self.items.has_errors_within()
-    }
-
-    fn has_errors_here(&self) -> bool {
-        self.items.has_errors_here()
+        is_valid
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
@@ -760,11 +746,6 @@ impl Node for SetNode {
 
     fn is_present(&self) -> bool {
         self.items.is_present()
-    }
-
-    fn clear_errors(&mut self) {
-        self.items.clear_errors();
-        self.draft.clear_errors();
     }
 
     fn edit(

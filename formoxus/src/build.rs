@@ -803,7 +803,6 @@ fn struct_node(
         help_text: spec.and_then(|s| s.help_text.clone()),
         validator: spec.and_then(|s| s.validator.clone()),
         nodes: nodes_for(shape, peek, walk, prefix, /* optional */ false),
-        errors: Vec::new(),
     })
 }
 
@@ -851,6 +850,5 @@ fn enum_node(
                 )
             })
             .unwrap_or_default(),
-        errors: Vec::new(),
     })
 }

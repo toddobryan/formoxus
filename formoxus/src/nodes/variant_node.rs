@@ -59,7 +59,6 @@ pub struct VariantNode {
     pub enum_type: &'static EnumType,
     pub choice: VariantChoice,
     pub nodes: Vec<Box<dyn Node>>,
-    pub errors: Vec<ValidationMessage>,
 }
 
 impl VariantNode {

@@ -3,8 +3,7 @@ use dioxus::core::Element;
 use crate::ErrorsByPath;
 use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, RawValue, SpecsByPath, ValuesByPath};
-use crate::nodes::{Node, NodeContext};
+use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, qualify};
 
 #[derive(Clone, Debug)]
 pub struct OptionNode {
@@ -35,24 +34,17 @@ impl Node for OptionNode {
         self.inner.collect_values(prefix, out);
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut crate::form::ErrorsByPath) {
-        self.inner.collect_errors(prefix, out);
-    }
-
     fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
         self.inner.distribute_values(prefix, specs, values);
     }
 
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        self.inner.distribute_errors(prefix, errors);
+    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+        self.inner.paths(prefix, out)
     }
 
-    fn validate(&mut self) {
-        if self.is_present() {
-            self.inner.validate();
-        } else {
-            self.inner.clear_errors();
-        }
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let mut is_valid = true;
+        !self.is_present() || self.inner.validate(prefix, out)
     }
 
     fn has_errors_within(&self) -> bool {
@@ -94,9 +86,5 @@ impl Node for OptionNode {
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
         self.inner.edit(prefix, edit, specs)
-    }
-
-    fn clear_errors(&mut self) {
-        self.inner.clear_errors();
     }
 }

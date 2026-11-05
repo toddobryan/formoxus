@@ -23,7 +23,6 @@ pub struct StructNode {
     /// is valid.
     pub validator: Option<crate::nodes::FieldValidator>,
     pub nodes: Vec<Box<dyn Node>>,
-    pub errors: Vec<ValidationMessage>,
 }
 
 impl Node for StructNode {

@@ -26,6 +26,7 @@ pub struct FormState<T: Clone + Debug + Facet<'static>> {
     pub spec: FormSpec<T>,
     pub nodes: Vec<Box<dyn Node>>,
     pub errors: Vec<ValidationMessage>,
+    pub field_errors: ErrorsByPath,
 
     pub _type: PhantomData<T>,
 }

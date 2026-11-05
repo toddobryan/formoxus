@@ -150,25 +150,25 @@ impl Node for ListNode {
             .distribute_values(&qualify(prefix, &self.name), specs, values);
     }
 
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath) {
-        self.items.collect_errors(&qualify(prefix, &self.name), out);
+    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+        let path = qualify(prefix, &self.name);
+        out.push(path.clone());
+        self.items.paths(&path, out);
     }
 
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
-        self.items
-            .distribute_errors(&qualify(prefix, &self.name), errors);
-    }
-
-    fn validate(&mut self) {
-        self.items.validate();
-        if !self.items.has_errors_within() {
-            let messages = self
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let my_path = qualify(prefix, &self.name);
+        let mut is_valid = self.items.validate(&my_path, out);
+        if is_valid {
+            let errors = self
                 .validator
                 .as_ref()
                 .map(|validator| validator.messages_for(self))
                 .unwrap_or_default();
-            self.items.add_errors(messages);
+            is_valid = errors.is_empty();
+            out.insert(my_path, errors);
         }
+        is_valid
     }
 
     fn has_errors_within(&self) -> bool {
@@ -228,9 +228,5 @@ impl Node for ListNode {
         }
 
         self.items.edit_within(&my_path, edit, specs)
-    }
-
-    fn clear_errors(&mut self) {
-        self.items.clear_errors();
     }
 }

@@ -37,12 +37,16 @@ pub type SpecsByPath = IndexMap<String, FieldSpec>;
 
 pub trait Node: Debug {
     fn name(&self) -> String;
+
     fn label(&self, case: LabelCase) -> Option<String>;
+
     fn render(&self, ctx: &NodeContext) -> Element;
+
     /// This node's current value as the string an `<input>` would show.
     /// Containers have no scalar value of their own and return `""` — the
     /// widget layer only ever asks leaves for this.
     fn raw_value(&self) -> String;
+
     /// This node's value as the user reads it, for naming it where it is not
     /// an input: a set's item, its Edit and Remove, its messages. The entries
     /// [`collect_values`](Self::collect_values) sends: a string's text, a
@@ -52,15 +56,24 @@ pub trait Node: Debug {
     fn shown(&self) -> Shown {
         Shown::of_values(self)
     }
+
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two structs in one form can each have a `street`.
     fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>);
+
     /// The reverse of [`collect_values`](Self::collect_values): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
     fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath);
-    fn validate(&mut self);
+
+    /// Validate this node and its children, adding any errors to out, by path
+    /// returns true if no errors were added, false if some were
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool;
+
+    /// All paths on this node (that can hold an error).
+    fn paths(&self, prefix: &str, out: &mut Vec<String>);
+
     /// Whether anything is wrong at this node OR anywhere under it: what
     /// `FormState::validate` asks before building a model.
     ///
@@ -70,11 +83,14 @@ pub trait Node: Debug {
     /// A leaf counts an unvalidated `Invalid` value too, which `validate` has
     /// not yet turned into an error message.
     fn has_errors_within(&self) -> bool;
+
     /// Whether this node has errors of its OWN, ignoring any under it: the
     /// messages it renders, and what decides its `aria-invalid`. Always implies
     /// [`has_errors_within`](Self::has_errors_within), never the reverse.
     fn has_errors_here(&self) -> bool;
+
     fn clone_box(&self) -> Box<dyn Node>;
+
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError>;
 
     /// The value this node holds, readable by reflection, or `None` if it has
@@ -95,38 +111,6 @@ pub trait Node: Debug {
     }
 
     fn is_present(&self) -> bool;
-    fn clear_errors(&mut self);
-
-    /// Flatten this node's errors into `(qualified_path, errors)` pairs — the
-    /// read counterpart to [`distribute_errors`](Self::distribute_errors), and
-    /// what turns a validated tree into something that crosses a server fn.
-    ///
-    /// **Only nodes that actually have errors appear.** A clean node pushes
-    /// nothing, so an empty result means the subtree passed — which is what
-    /// lets a caller branch on `fields.is_empty()` instead of scanning for a
-    /// non-empty `Vec`. Every impl has to honour this or the shape stops
-    /// meaning that.
-    ///
-    /// **A container reports its OWN path too, when it has errors of its own.**
-    /// The rule is `distribute_errors`'s, mirrored: whatever can be delivered
-    /// to a path has to be collectable from it. `VariantNode` is the one node where
-    /// that bites today — its `errors` render beside the `<select>` at its own
-    /// path, not under a child.
-    ///
-    /// `StructNode` and `ListNode` also hold a `Vec<ValidationMessage>` of their
-    /// own, and do NOT report it. Not for want of somewhere to put it — since
-    /// the error types merged it is exactly what `ErrorsByPath` holds — but
-    /// because nothing writes one yet: `validate` only clears them, and neither
-    /// container renders them. The first writer (a `ListNode` min/max-items
-    /// check, say) needs three things at once: report them here at the
-    /// container's own path, as `VariantNode` does; claim them in
-    /// `distribute_errors`; and render them.
-    fn collect_errors(&self, prefix: &str, out: &mut ErrorsByPath);
-
-    /// Take this node's own errors out of `errors`, by its qualified path, and
-    /// pass the rest down. Whatever no node claims is left in the map and will
-    /// surface as a form error.
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath);
 
     /// Apply a structural edit — choose a variant, add or remove an item.
     ///

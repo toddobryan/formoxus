@@ -59,8 +59,8 @@ FormState.field_errors: ErrorsByPath     ErrorsStore (in use_form)
 second copy: it is empty except during an operation. `Form` has one private
 method that every operation goes through:
 
-1. Take `state.write()`, and copy the store's non-empty entries into
-   `field_errors`.
+1. Take `state.write()`, and copy the store's entries into `field_errors`, empty
+   ones too, since an empty one means checked and clean (#7).
 2. Run the operation on the plain `FormState`: `validate`, `edit`,
    `push_field_error`, `distribute_errors`.
 3. Drain `field_errors` back into the store, writing only the paths that
@@ -134,13 +134,17 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 - [ ] **2.** (Todd) Errors off the nodes. Plain data only, no store yet.
 
-  - [ ] **2a.** `FormState.field_errors: ErrorsByPath`, beside `errors`. Delete the
+  - [x] **2a.** `FormState.field_errors: ErrorsByPath`, beside `errors`. Delete the
     `errors` fields of `FieldNode`, `StructNode`, `VariantNode` and `Items`.
 
-  - [ ] **2b.** `Node::validate(&mut self, prefix, out: &mut ErrorsByPath)`, the
+  - [ ] **2b.** `Node::validate(&self, prefix, out: &mut ErrorsByPath) -> bool`, the
     prefix threading as `collect_errors`' does today. `clear_errors`,
     `collect_errors` and `distribute_errors` go from `Node`;
-    `FormState::collect_errors` becomes a read of the map. A `FieldValue::Invalid`
+    `validate` writes an entry for every path it checks, an empty `Vec` when
+    clean, so the map already tells checked from never checked (#7).
+    `FormState::collect_errors` becomes a read of the map that leaves the empty ones
+    out, so `FormErrors.fields` is still empty for a form that passed, and
+    `has_errors` asks whether any entry is non-empty. A `FieldValue::Invalid`
     stays on its node: it is a value, not a message.
 
   - [ ] **2c.** A walker, `Node::paths(&self, prefix, out)`: every path that can
@@ -152,8 +156,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   - [ ] **2d.** The gates. A struct's, enum's or list's validator runs only over
     clean children (`struct_node.rs:74`, `list_node.rs:164`, `set_node.rs:710`,
     `variant_node.rs:318`), and `has_errors_within`/`has_errors_here` read a node's
-    own field. Either `validate` returns whether it was clean, or they become a
-    scan of `out` with `nodes::owns`. Returning a `bool` is less code. A probe
+    own field. Decided: `validate` returns whether it was clean, and takes `&self`,
+    since it only ever wrote errors. Its loops must run every child, so
+    `is_valid = child.validate(…) && is_valid`, in that order. A probe
     (`set_node.rs:206`, `:576`) validates into a scratch map.
 
   - [ ] **2e.** `Node::edit` gains `errors: &mut ErrorsByPath`, for what an edit
@@ -161,6 +166,15 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     a set draft refused on Add. Then `FormState::edit` drops every error whose path
     the tree no longer has, using 2c: one rule for a removed item, a variant
     changed, and an option emptied, in place of a `retain` per edit.
+
+    **OPEN, for Todd at `SetNode::paths` and 2e: a draft's errors.** Claude to remind
+    him there. A refusal at a draft's path is dropped by this rule if `paths` skips
+    drafts, and reaches `to_wire`, `collect_errors` and `has_errors` if it does not.
+    Either way a stale refusal outlives a successful Add, since the item keeps the
+    draft's key, and so does one on an emptied draft or an Edit rebuild. Claude's
+    proposal: one parameter on `paths` saying whether to include drafts (this rule
+    includes them; `to_wire`, unclaimed errors and `collect_errors` do not), and
+    `commit_draft` and the Edit rebuild first remove what the draft's path owns.
 
 - [ ] **3.** (Todd) The store.
 
@@ -252,6 +266,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 ## Not in this plan
 
 1. **`aria-invalid="false"` (#7).** Trap 1 makes it possible; nothing here uses it.
+   **OPEN at 3a:** an empty `Vec` is also how an error is CLEARED (trap 1), so
+   `reset`, 2e's rule and box 5's draft all leave "checked and clean" on a field
+   nobody checked. `Option<Vec<…>>` as the store's value would tell them apart.
 2. **Validating on load.** Silent, as it is today.
 3. **Async or server-side live checks** ("that username is taken" as the user
    types). `check_on_server` is `FIELDS_PLAN.md` Step 8.

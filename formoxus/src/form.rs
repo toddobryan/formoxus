@@ -493,7 +493,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         state.write().push_field_error(path.as_str(), message)
     }
 
-    /// Put a server's validation back onto the form — the return leg of a submit.
+    /*/// Put a server's validation back onto the form — the return leg of a submit.
     ///
     /// The counterpart to [`FormState::collect_errors`].
     ///
@@ -528,7 +528,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                 "Errors appeared for form paths that don't exist: {paths}"
             )))
         }
-    }
+    }*/
 
     /// This form as plain data, ready to cross a server-fn boundary.
     ///

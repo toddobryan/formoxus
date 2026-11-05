@@ -56,7 +56,6 @@ impl LeafArgs<'_> {
                 .unwrap_or_else(|| field.default_widget(self.optional)),
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
-            errors: Vec::new(),
             field,
         }
     }
@@ -123,7 +122,6 @@ pub struct FieldNode<F: Field> {
     /// Only [`write_value_into`](Node::write_value_into) consults it.
     pub wrapper: Option<&'static Shape>,
     pub value: FieldValue<F::Value>,
-    pub errors: Vec<ValidationMessage>,
     pub field: F,
 }
 
@@ -270,7 +268,11 @@ impl<F: Field> Node for FieldNode<F> {
         };
     }
 
-    fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
+    fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+        out.push(qualify(prefix, &self.name));
+    }
+
+    /*fn distribute_errors(&mut self, prefix: &str, errors: &mut ErrorsByPath) {
         if let Some(found) = errors.shift_remove(&qualify(prefix, &self.name)) {
             self.errors.extend(found);
         }
@@ -284,7 +286,7 @@ impl<F: Field> Node for FieldNode<F> {
             return;
         }
         out.insert(qualify(prefix, &self.name), self.errors.clone());
-    }
+    }*/
 
     fn render(&self, ctx: &NodeContext) -> Element {
         // The field's own attributes (`min`, `pattern`, …), so the browser
@@ -323,17 +325,18 @@ impl<F: Field> Node for FieldNode<F> {
                 .label(ctx.label_case)
                 .or_else(|| ctx.label_if_unnamed.clone()),
             help_text: self.help_text.clone(),
-            errors: self.errors.clone(),
             classes: ctx.classes.clone(),
             values: ctx.values,
             choices: self.field.choices(),
             attrs: field_attrs,
             extra_attrs: Vec::new(),
+            errors: todo!(),
         })
     }
 
-    fn validate(&mut self) {
-        self.errors.clear();
+    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+        let mut errors: Vec<ValidationMessage> = Vec::new();
+
         // An `Invalid` value carries its own parse error, and this is the only
         // route that error has to the screen: the widget boundary is
         // `(path, label, required, errors)`, so a widget cannot reach into
@@ -352,32 +355,36 @@ impl<F: Field> Node for FieldNode<F> {
         // An invalid value or a missing one stops here: it gets exactly one
         // error, and an empty field cannot fail a constraint.
         if let Some(error) = error {
-            self.errors.push(error);
-            return;
-        }
-        // What is left is a `Valid` value or an unticked checkbox, the only
-        // `Empty` the match above lets through. An unticked checkbox means
-        // `false`, so the field checks it as `false`, parsed the field's way.
-        let raw = self.raw_value_to_validate();
-        if let FieldValue::Valid(value) = &self.value {
-            self.errors.extend(self.field.check(value));
+            errors.push(error);
         } else {
-            let value = self
-                .field
-                .parse(&raw)
-                .expect("`Boolean` input kind is only ever derived from a `bool` shape");
-            self.errors.extend(self.field.check(&value));
+            // What is left is a `Valid` value or an unticked checkbox, the only
+            // `Empty` the match above lets through. An unticked checkbox means
+            // `false`, so the field checks it as `false`, parsed the field's way.
+            let raw = self.raw_value_to_validate();
+            if let FieldValue::Valid(value) = &self.value {
+                errors.extend(self.field.check(value));
+            } else {
+                let value = self
+                    .field
+                    .parse(&raw)
+                    .expect("`Boolean` input kind is only ever derived from a `bool` shape");
+                errors.extend(self.field.check(&value));
+            }
+            // The dev's own check, last, and only on a value the field's own
+            // checks passed: Django's validators run after `clean`, the same way.
+            if errors.is_empty() {
+                let messages = self
+                    .validator
+                    .as_ref()
+                    .map(|validator| validator.messages_for(self))
+                    .unwrap_or_default();
+                errors.extend(messages);
+            }
         }
-        // The dev's own check, last, and only on a value the field's own
-        // checks passed: Django's validators run after `clean`, the same way.
-        if self.errors.is_empty() {
-            let messages = self
-                .validator
-                .as_ref()
-                .map(|validator| validator.messages_for(self))
-                .unwrap_or_default();
-            self.errors.extend(messages);
-        }
+        let path: String = qualify(prefix, &self.name);
+        let is_valid = errors.is_empty();
+        out.insert(path, errors);
+        is_valid
     }
 
     fn clone_box(&self) -> Box<dyn Node> {
@@ -443,10 +450,6 @@ impl<F: Field> Node for FieldNode<F> {
         self.value != FieldValue::Empty
     }
 
-    fn clear_errors(&mut self) {
-        self.errors.clear();
-    }
-
     fn edit(
         &mut self,
         prefix: &str,
@@ -495,7 +498,6 @@ mod tests {
             widget: field.default_widget(false),
             wrapper: None,
             value,
-            errors: Vec::new(),
             field,
         }
     }

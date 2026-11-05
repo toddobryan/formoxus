@@ -23,7 +23,6 @@ pub struct Items {
     collection: Vec<Box<dyn Node>>,
     next_key: usize,
     rejected_keys: Option<String>,
-    errors: Vec<ValidationMessage>,
     /// `min_items:` and `max_items:` (#14), the counts `validate` holds the
     /// collection to.
     min: Option<usize>,
@@ -42,7 +41,6 @@ impl Items {
             collection,
             next_key,
             rejected_keys: None,
-            errors: Vec::new(),
             min: None,
             max: None,
             over_max: None,
@@ -115,7 +113,7 @@ impl Items {
         }
     }
 
-    pub(crate) fn collect_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
+    /*pub(crate) fn collect_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
         // The list's own errors at its own path, before its items', as
         // `VariantNode` does. Before #13 nothing ever put one there, so this
         // only recursed, and a rejected item-key entry came back as an `Err`
@@ -126,33 +124,37 @@ impl Items {
         for r in &self.collection {
             r.collect_errors(my_path, out);
         }
-    }
+    }*/
 
-    pub(crate) fn distribute_errors(&mut self, my_path: &str, errors: &mut ErrorsByPath) {
+    /*pub(crate) fn distribute_errors(&mut self, my_path: &str, errors: &mut ErrorsByPath) {
         if let Some(found) = errors.shift_remove(my_path) {
             self.errors.extend(found);
         }
         for r in &mut self.collection {
             r.distribute_errors(my_path, errors);
         }
+    }*/
+
+    pub(crate) fn paths(&self, prefix: &str, out: &mut Vec<String>) {
+        for r in &self.collection {
+            r.paths(prefix, out);
+        }
     }
 
-    pub(crate) fn validate(&mut self) {
-        self.errors.clear();
+    pub(crate) fn validate(&self, my_path: &str, out: &mut ErrorsByPath) -> bool {
+        let mut errors: Vec<ValidationMessage> = Vec::new();
+
         if let Some(raw) = &self.rejected_keys {
-            self.errors.push(ValidationMessage(format!(
+            errors.push(ValidationMessage(format!(
                 "{raw:?} is not a list of item keys (expected e.g. \"#0,#1\")"
             )));
-        }
-        for r in &mut self.collection {
-            r.validate();
         }
         // The count, the collection's own error whatever its items say.
         let count = self.over_max.unwrap_or(self.len());
         if let Some(min) = self.min
             && count < min
         {
-            self.errors.push(ValidationMessage(format!(
+            errors.push(ValidationMessage(format!(
                 "Add at least {}.",
                 items_word(min)
             )));
@@ -160,11 +162,18 @@ impl Items {
         if let Some(max) = self.max
             && count > max
         {
-            self.errors.push(ValidationMessage(format!(
+            errors.push(ValidationMessage(format!(
                 "No more than {}.",
                 items_word(max)
             )));
         }
+        let mut is_valid = errors.is_empty();
+        out.insert(my_path.to_string(), errors);
+        for r in &self.collection {
+            // `validate` first, otherwise &&'s short circuit stops on error
+            is_valid = r.validate(my_path, out) && is_valid;
+        }
+        is_valid
     }
 
     pub(crate) fn has_errors_within(&self) -> bool {
