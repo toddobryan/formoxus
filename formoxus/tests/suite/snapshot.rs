@@ -159,7 +159,7 @@ fn the_whole_form_is_wrong(_: &Everything) -> Vec<ValidationError<Everything>> {
 #[component]
 fn Clean() -> Element {
     let form = use_form(|| form_for(&seeded(), spec()));
-    render_with_buttons(form)
+    render_with_buttons(&form)
 }
 
 #[component]
@@ -168,7 +168,7 @@ fn FieldErrors() -> Element {
     // Validating BEFORE mounting renders the errors without an interaction.
     let _ = state.validate();
     let form = use_form(|| state);
-    render_with_buttons(form)
+    render_with_buttons(&form)
 }
 
 #[component]
@@ -176,10 +176,10 @@ fn FormError() -> Element {
     let mut state = form_for(&seeded(), spec().with_validator(the_whole_form_is_wrong));
     let _ = state.validate();
     let form = use_form(|| state);
-    render_with_a_problem(form)
+    render_with_a_problem(&form)
 }
 
-fn render_with_a_problem(form: formoxus::Form<Everything>) -> Element {
+fn render_with_a_problem(form: &formoxus::Form<Everything>) -> Element {
     // `action` validates by default, so its fn must take the model. This one
     // does not, ON PURPOSE: it is what renders the button-problems list.
     form.render(using_fns! {
@@ -191,7 +191,7 @@ fn render_with_a_problem(form: formoxus::Form<Everything>) -> Element {
     })
 }
 
-fn render_with_buttons(form: formoxus::Form<Everything>) -> Element {
+fn render_with_buttons(form: &formoxus::Form<Everything>) -> Element {
     form.render(using_fns! {
         save: |_m| async move {},
         undo: || async move {},
@@ -230,7 +230,7 @@ fn bare_spec() -> FormSpec<Everything> {
 #[component]
 fn BareClean() -> Element {
     let form = use_form(|| form_for(&seeded(), bare_spec()));
-    render_with_buttons(form)
+    render_with_buttons(&form)
 }
 
 #[component]
@@ -238,7 +238,7 @@ fn BareFieldErrors() -> Element {
     let mut state = empty_form(bare_spec());
     let _ = state.validate();
     let form = use_form(|| state);
-    render_with_buttons(form)
+    render_with_buttons(&form)
 }
 
 #[component]
@@ -249,7 +249,7 @@ fn BareFormError() -> Element {
     );
     let _ = state.validate();
     let form = use_form(|| state);
-    render_with_a_problem(form)
+    render_with_a_problem(&form)
 }
 
 #[gtest]

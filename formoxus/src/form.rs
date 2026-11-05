@@ -17,7 +17,7 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, NodeContext};
+use crate::nodes::{Edit, ErrorsStore, NodeContext};
 use crate::path::Path;
 use crate::widgets::ValuesStore;
 use crate::wire::WireForm;
@@ -241,6 +241,8 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// Live raw values by qualified path. Changes on every keystroke, and
     /// survives a schema rebuild because paths are stable under one.
     values_store: ValuesStore,
+    /// Field errors by qualified path. See [`ErrorsStore`].
+    errors_store: ErrorsStore,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
     /// widget layer stay ignorant of `T` — [`NodeContext`] can't be generic
     /// without making every node type generic too.
@@ -315,6 +317,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         self.values_store
     }
 
+    pub fn errors(&self) -> ErrorsStore {
+        self.errors_store
+    }
+
     /// The state as it currently stands. Reading this subscribes the caller to
     /// *structural* changes.
     pub fn state(&self) -> ReadSignal<FormState<T>> {
@@ -374,7 +380,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                         let on_submit = on_submit.clone();
                         async move {
                             if let Some(f) = on_submit {
-                                run_button(handle, f).await;
+                                run_button(&handle, f).await;
                             }
                         }
                     },
@@ -417,7 +423,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                                 if let Some(f) = f
                                     && !is_submit
                                 {
-                                    run_button(handle, f).await;
+                                    run_button(&handle, f).await;
                                 }
                             }
                         },
@@ -442,7 +448,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.on_edit,
             self.label_case(),
             self.classes(),
-            self.state_signal.read().field_errors.clone(),
+            self.errors_store
+                .read()
+                .iter()
+                .filter_map(|(path, messages)| Some((path.clone(), messages.clone()?)))
+                .collect(),
         )
     }
 
@@ -491,8 +501,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
     )]
     pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
-        let mut state = self.state_signal;
-        state.write().push_field_error(path.as_str(), message)
+        with_errors(self.state_signal, self.errors_store, |state| {
+            state.push_field_error(path.as_str(), message)
+        })
     }
 
     /// Put a server's validation back onto the form — the return leg of a submit.
@@ -508,13 +519,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// **Cleared by the next [`validate`](Self::validate)**, like every other
     /// pushed error.
     pub fn distribute_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
-        let mut state = self.state_signal;
-        let unclaimed = {
-            let mut state = state.write();
+        let unclaimed = with_errors(self.state_signal, self.errors_store, |state| {
             state.errors.clone_from(&errors.form);
             state.field_errors.clear();
             state.distribute_errors(errors.fields.clone())
-        };
+        });
 
         if unclaimed.is_empty() {
             Ok(())
@@ -589,7 +598,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// `Ok(Some(path))` is an item it created (`answers.#3`), so a caller can find
     /// it; `Ok(None)` is every other edit.
     pub fn edit(&self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
-        apply_edit(self.state_signal, self.values_store, edit)
+        apply_edit(
+            self.state_signal,
+            self.values_store,
+            self.errors_store,
+            edit,
+        )
     }
 
     /// Put the form back the way [`use_form`] built it.
@@ -606,33 +620,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// is the thing that has to change.
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
-        let leaves = fresh.leaf_values();
-        let mut state = self.state_signal;
-        *state.write() = fresh;
-        // Written per path rather than by replacing the map, so each input's
-        // own subscription fires. Paths that only existed because of an edit
-        // being undone are left behind as stale keys; nothing reads them, since
-        // the restored schema is what decides which paths get rendered, and
-        // `distribute_values` treats an absent path as empty either way.
-        for (path, raw) in leaves {
-            crate::widgets::write_value(&path, self.values_store, raw);
-        }
+        with_errors(self.state_signal, self.errors_store, |state| *state = fresh);
     }
 
     pub fn validate(&self) -> Option<T> {
-        // `Signal` is a `Copy` handle to shared reactive state, so copy it for a
-        // mutable binding and write through the copy. Keeps `&self` here, which
-        // is what lets `Form` stay `Copy` and drop into event handlers.
-        let mut state = self.state_signal;
-        let mut state = state.write();
-        // The argument comes from the STORE. `state.collect_values()` would be the
-        // state applied to itself — a no-op that discards every keystroke, and
-        // then validates the stale values it kept.
-        // Two statements: the argument borrows `state` immutably and `apply`
-        // takes it mutably.
-        let values = state.ordered_values(&self.values_store.read());
-        state.distribute_values(&values);
-        state.validate()
+        with_errors(self.state_signal, self.errors_store, |state| {
+            let values = state.ordered_values(&self.values_store.read());
+            state.distribute_values(&values);
+            state.validate()
+        })
     }
 }
 
@@ -644,7 +640,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 /// declared intent conjures the right arity at runtime. A spec that disagrees
 /// with the closure it was given is reported by [`Fns::reconcile`] instead, so
 /// the disagreement is visible rather than silently resolved.
-async fn run_button<T>(form: Form<T>, f: ButtonFn<T>)
+async fn run_button<T>(form: &Form<T>, f: ButtonFn<T>)
 where
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
@@ -709,7 +705,12 @@ fn render_problems(ctx: &NodeContext, problems: &[String]) -> Element {
 pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: impl FnOnce() -> FormState<T>,
 ) -> Form<T> {
-    let state = use_signal(state);
+    let initial = use_signal(state);
+    let state = use_signal(move || {
+        let mut working = initial.peek().clone();
+        working.field_errors.clear();
+        working
+    });
     // A snapshot, taken once. `FormState` is plain data and `Clone`, so this is
     // a real copy rather than another handle to the same thing — which is the
     // point, since `state` is about to be edited.
@@ -727,8 +728,16 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .into_iter()
             .collect::<HashMap<_, _>>()
     });
+    let errors = use_store(move || {
+        state
+            .peek()
+            .field_errors
+            .iter()
+            .map(|(path, messages)| (path.clone(), Some(messages.clone())))
+            .collect::<HashMap<_, _>>()
+    });
     let on_edit = use_callback(move |edit: Edit| {
-        match apply_edit(state, values, &edit) {
+        match apply_edit(state, values, errors, &edit) {
             // Not in a set: its Add made an item from the draft, and focus
             // stays in the draft for the next one (`DraftAdder`).
             Ok(Some(item))
@@ -767,6 +776,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Form {
         state_signal: state,
         values_store: values,
+        errors_store: errors,
         on_edit,
         initial_signal: initial,
         id: use_signal(|| form_id),
@@ -780,6 +790,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
     mut values: ValuesStore,
+    errors: ErrorsStore,
     edit: &Edit,
 ) -> Result<Option<String>, FormAccessError> {
     // Found before the edit, while the item is still there to look up.
@@ -799,7 +810,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     }
     // Its own statement, so the write guard is dropped before `peek` below.
-    let created = state.write().edit(edit)?;
+    let created = with_errors(state, errors, |state| state.edit(edit))?;
     // A removed item's leaves would otherwise outlive it in the store. Nothing
     // reads them back by path, since a key is never reused and `to_wire` reads
     // only the items the state still has. But a widget reading the store WHOLE
@@ -826,6 +837,42 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     }
     Ok(created)
+}
+
+fn with_errors<T, R>(
+    mut state: Signal<FormState<T>>,
+    mut errors: ErrorsStore,
+    operation: impl FnOnce(&mut FormState<T>) -> R,
+) -> R
+where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    let mut state = state.write();
+    state.field_errors = errors
+        .peek()
+        .iter()
+        .filter_map(|(path, messages)| Some((path.clone(), messages.clone()?)))
+        .collect();
+    let result = operation(&mut state);
+    let after = std::mem::take(&mut state.field_errors);
+    // A key is never removed (trap 1): what left the map becomes `None`.
+    let gone: Vec<String> = errors
+        .peek()
+        .iter()
+        .filter(|(path, messages)| messages.is_some() && !after.contains_key(*path))
+        .map(|(path, _)| path.clone())
+        .collect();
+    for path in gone {
+        errors.insert(path, None);
+    }
+    for (path, messages) in after {
+        let messages = Some(messages);
+        let changed = errors.peek().get(&path) != Some(&messages);
+        if changed {
+            errors.insert(path, messages);
+        }
+    }
+    result
 }
 
 /// The full path of item `index` of the list at `path`: the KEY the item has

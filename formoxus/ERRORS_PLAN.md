@@ -50,17 +50,18 @@ D. **Form-level errors stay on `FormState`.** They have no path and render once
 ```text
               server                              client
 FormState.field_errors: ErrorsByPath     ErrorsStore (in use_form)
-  plain data; validate fills it,           Store<HashMap<String, Vec<…>>>
+  plain data; validate fills it,           Store<HashMap<String, Option<Vec<…>>>>
   collect_errors reads it                  seeded from the state, then the one
                                            home; widgets read it by path
 ```
 
 **One home at rest.** On the client `FormState.field_errors` is a hand-off, not a
-second copy: it is empty except during an operation. `Form` has one private
-method that every operation goes through:
+second copy: it is empty except during an operation. One private function,
+`with_errors`, is what every operation goes through:
 
-1. Take `state.write()`, and copy the store's entries into `field_errors`, empty
-   ones too, since an empty one means checked and clean (#7).
+1. Take `state.write()`, and copy the store's `Some` entries into `field_errors`,
+   empty ones too, since an empty one means checked and clean (#7). A `None` gets
+   no entry, so the map says exactly what the store says.
 2. Run the operation on the plain `FormState`: `validate`, `edit`,
    `push_field_error`, `distribute_errors`.
 3. Drain `field_errors` back into the store, writing only the paths that
@@ -76,13 +77,16 @@ the component calling `use_form`, but a dev never calls `use_store` for it. It i
 
 ## Traps, checked against the source
 
-1. **Clear an error by writing an empty `Vec`, never by removing the key.**
-   dioxus-stores 0.7.10's `HashMap` `remove` and `retain` mark only the map
-   shallowly dirty (`impls/hashmap.rs:167`, `:217`), so a widget reading that key
-   through `get_unchecked` does NOT wake. `insert` does mark the key, which is
-   why an absent key can be read and still wake on its first error. This also
-   gives #7 what it needs: no entry is never checked, an empty one is checked and
-   clean.
+1. **Clear an error by writing `None`, never by removing the key.** dioxus-stores
+   0.7.10's `HashMap` `remove` and `retain` mark only the map shallowly dirty
+   (`impls/hashmap.rs:174`, `:221`), so a widget reading that key through
+   `get_unchecked` does NOT wake. `insert` does mark the key, which is why an absent
+   key can be read and still wake on its first error.
+
+   So a key, once written, stays, and the store's value is an `Option` (decided by
+   Todd, 2026-11-05). No key or `None` means not checked, `Some` of an empty `Vec`
+   means checked and clean (#7), and `Some` of messages means it has errors. Plain
+   `Vec` would have made "cleared" look the same as "checked and clean".
 2. **A `Store` cannot hold an `IndexMap`,** so the store's order is lost, and
    `collect_errors` promises render order. `Form::to_wire` orders the store's
    entries by `Node::paths`.
@@ -317,26 +321,214 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 - [ ] **3.** (Todd) The store.
 
-  - [ ] **3a.** `pub type ErrorsStore = Store<HashMap<String,
-    Vec<ValidationMessage>>>` in `nodes.rs`, beside `ValuesStore`. `use_form`
-    creates it, seeded from the state and leaving `field_errors` empty, and `Form`
-    holds it. `Form::errors()`, `Form::has_errors()`.
+  - [x] **3a.** Create the store and fill it from the state. Nothing reads it yet, so
+    no behaviour changes and every test still passes at the end of this step.
+    `field_errors` keeps its contents here. Emptying it now would blank the render
+    stopgap: 10 suite tests failed when that was tried in a copy, while this version
+    passed all 715.
 
-  - [ ] **3b.** The private method above, with `Form::validate`, `edit`,
-    `push_field_error`, `distribute_errors` and `absorb` going through it, and
-    `apply_edit` taking the store. Trap 1 applies to the drain, which also writes an
-    empty `Vec` for any store key missing from `field_errors`: `validate` writes
-    nothing for an absent option's fields, and 2g's rule drops paths, so a stale error
-    leaves the map without leaving the store unless the drain looks for it.
+    - [x] Decide what the store's value is: `Option<Vec<…>>` (trap 1).
+    - [x] `nodes.rs`, beside `ValuesStore`: `pub type ErrorsStore =
+      Store<HashMap<String, Option<Vec<ValidationMessage>>>>;`, with a doc comment
+      saying it is the client's home for field errors and what `None` means.
+    - [x] `widgets.rs:99`: add `ErrorsStore` to the `pub use`, as `ValuesStore` is
+      there. A custom widget needs the name in 4a.
+    - [x] `Form`: a new field `errors_store: ErrorsStore`, beside `values_store`. A
+      `Store` is `Copy`, so `Form` stays `Copy`.
+    - [x] `use_form`: create it right after `values`, the same way. `peek`, not `read`,
+      for the reason the comment there gives. The `collect` is needed because
+      `field_errors` is an `IndexMap` and a store cannot hold one (trap 2).
 
-  - [ ] **3c.** `Form::reset` restores the initial snapshot's errors, writing an
-    empty `Vec` over everything else. `Form::to_wire` reads the store (trap 2).
+      ```rust
+      let errors = use_store(move || {
+          state
+              .peek()
+              .field_errors
+              .iter()
+              .map(|(path, messages)| (path.clone(), Some(messages.clone())))
+              .collect::<HashMap<_, _>>()
+      });
+      ```
+
+    - [x] The `Form { … }` at the end of `use_form`: `errors_store: errors,`.
+    - [x] `Form::errors(&self) -> ErrorsStore`, beside `Form::values`, returning the
+      field.
+
+  - [ ] **3b.** Move the errors into the store. This was two steps, 3b and 3c, but it
+    has to be one: nothing is right until all of it is in. Written in a copy, it passed
+    all 1195 tests and clippy.
+
+    **Where this stands (end of 2026-11-05).** Pushed with 13 suite tests failing, and
+    three small fixes turn those green; all three were tried in a copy, which then passed
+    all 715 suite tests:
+
+    1. `use_form`: delete the old `let initial = use_signal(move || state.peek().clone());`
+       and the comment above it. It is still there, below the new one, and it shadows the
+       new `initial` with a copy that has no errors.
+    2. `use_form`: the `errors` seed still reads `state.peek()`. Make it `initial.peek()`.
+    3. `reset`: put `leaves` and its `for` loop back, as the bullet below shows. They were
+       deleted, because this plan's wording made `reset` sound like one line.
+
+    Also restore the comment in `validate` beginning "The argument comes from the STORE".
+    Its code snippet below left that out, and the reason is worth keeping. Then the
+    unticked boxes below, from `ordered_errors` on.
+
+    **What changes.** Today `validate` and the rest write `field_errors`, and it stays
+    full. After this, `field_errors` is empty between operations and the store holds
+    the errors. For the length of one operation they are copied into `field_errors`,
+    because every operation is written against the plain `FormState`, which is what lets
+    the same code run on the server, where there is no store. So `FormState` does not
+    change at all, except for one new reader in the last step.
+
+    - [x] **`with_errors`, a private function in `form.rs`, beside `apply_edit`.** A
+      function, not a method, because `apply_edit` has no `Form` either: `use_form`'s
+      `on_edit` calls it before a `Form` exists. It copies the store's errors in, runs
+      the operation, and writes back what changed:
+
+      ```rust
+      fn with_errors<T, R>(
+          mut state: Signal<FormState<T>>,
+          mut errors: ErrorsStore,
+          operation: impl FnOnce(&mut FormState<T>) -> R,
+      ) -> R
+      where
+          T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+      {
+          let mut state = state.write();
+          state.field_errors = errors
+              .peek()
+              .iter()
+              .filter_map(|(path, messages)| Some((path.clone(), messages.clone()?)))
+              .collect();
+          let result = operation(&mut state);
+          let after = std::mem::take(&mut state.field_errors);
+          // A key is never removed (trap 1): what left the map becomes `None`.
+          let gone: Vec<String> = errors
+              .peek()
+              .iter()
+              .filter(|(path, messages)| messages.is_some() && !after.contains_key(*path))
+              .map(|(path, _)| path.clone())
+              .collect();
+          for path in gone {
+              errors.insert(path, None);
+          }
+          for (path, messages) in after {
+              let messages = Some(messages);
+              let changed = errors.peek().get(&path) != Some(&messages);
+              if changed {
+                  errors.insert(path, messages);
+              }
+          }
+          result
+      }
+      ```
+
+      The `gone` loop is what stops a stale error staying on screen: `validate` writes
+      nothing for an absent option's fields, and `edit` drops paths, so an error can
+      leave the map without anything writing to its key. The `changed` check is what
+      keeps a field that did not change from re-rendering.
+
+    - [ ] **Each operation goes through it.** The body of each moves inside the closure,
+      and the `let mut state = self.state_signal;` lines go.
+
+      `validate`:
+
+      ```rust
+      with_errors(self.state_signal, self.errors_store, |state| {
+          let values = state.ordered_values(&self.values_store.read());
+          state.distribute_values(&values);
+          state.validate()
+      })
+      ```
+
+      `push_field_error`:
+
+      ```rust
+      with_errors(self.state_signal, self.errors_store, |state| {
+          state.push_field_error(path.as_str(), message)
+      })
+      ```
+
+      `distribute_errors`: its `let unclaimed = { … };` block becomes `let unclaimed =
+      with_errors(self.state_signal, self.errors_store, |state| { … });`, with the same
+      three lines inside. `absorb` calls it, so `absorb` needs no change.
+
+      `reset`: only the `*state.write() = fresh;` line changes, to the `with_errors` line
+      below. `fresh` is a copy of `initial`, which holds the errors the form started
+      with, so the write-back puts those in the store and `None` over everything else.
+      **The rest of `reset` stays:** `let leaves` before that line, and after it the
+      `for` loop with its comment, which is what puts the VALUES back. Taking `leaves`
+      first matters, because `fresh` moves into the closure.
+
+      ```rust
+      let leaves = fresh.leaf_values();
+      with_errors(self.state_signal, self.errors_store, |state| *state = fresh);
+      for (path, raw) in leaves {
+          crate::widgets::write_value(&path, self.values_store, raw);
+      }
+      ```
+
+      `push_error` stays as it is: a form-level error is not a field's (decision D).
+
+    - [x] **`apply_edit` takes the store.** Add `errors: ErrorsStore` after `values`, and
+      pass `errors` from `on_edit` and `self.errors_store` from `Form::edit`. Its one line
+      that edits becomes this. The `?` is outside on purpose: a refused edit has recorded
+      its message by then, and the write-back has to happen before it returns.
+
+      ```rust
+      let created = with_errors(state, errors, |state| state.edit(edit))?;
+      ```
+
+    - [ ] **`use_form` builds its two signals the other way round.** The state a dev hands
+      in can already hold errors, because a test or a page may validate before calling
+      `use_form`. Those errors have to reach the store, and `reset` has to get them back,
+      but the working state must start with an empty `field_errors`. Building `initial`
+      first does that without writing to a signal during render. Then seed `errors` from
+      `initial.peek()` in place of `state.peek()`.
+
+      ```rust
+      let initial = use_signal(state);
+      let state = use_signal(move || {
+          let mut working = initial.peek().clone();
+          working.field_errors.clear();
+          working
+      });
+      ```
+
+    - [x] **`root_ctx` reads the store,** since `field_errors` is now empty when rendering
+      happens. 4a replaces this stopgap.
+
+      ```rust
+      self.errors_store
+          .read()
+          .iter()
+          .filter_map(|(path, messages)| Some((path.clone(), messages.clone()?)))
+          .collect(),
+      ```
+
+    - [ ] **`FormState::ordered_errors`, in `state.rs`, beside `ordered_values`.** It is
+      `collect_errors` for a live form: the same walk over `self.paths(Drafts::Exclude)`,
+      so it keeps render order (trap 2) and leaves out a refused draft, but it reads the
+      store. It takes `&HashMap<String, Option<Vec<ValidationMessage>>>`, and keeps a
+      path only when its value is `Some` of a non-empty `Vec`. Returns a `FormErrors`
+      with `form: self.errors.clone()`.
+    - [ ] **`Form::to_wire` calls it,** in place of `state.collect_errors()`, passing
+      `&self.errors_store.read()`. **No test notices if this is forgotten:** the errors
+      would just stop reaching the server, because `field_errors` is empty by then.
+      Claude adds a test for it once this step lands.
+    - [ ] **`Form::has_errors(&self) -> bool`, beside `Form::errors`** (trap 6). Call
+      `ordered_errors` the same way, and return whether its `form` or `fields` has
+      anything.
+    - [ ] The comment in `on_edit` about an unknown variant name being "recorded against
+      the `VariantNode`" now means the store: reword it.
+    - [ ] Checkpoint: `just ci`, then `just e2e`.
 
 - [ ] **4.** (Todd) Widgets read the store.
 
   - [ ] **4a.** `NodeContext.errors: ErrorsStore`, replacing 2b's stopgap, and `WidgetProps.errors` becomes
     that store. A helper beside `get_current`, `pub fn get_errors(path, errors) ->
-    Vec<ValidationMessage>`, for custom widgets.
+    Vec<ValidationMessage>`, for custom widgets. `None`, no key and an empty `Vec` all
+    read as an empty `Vec` there, so a widget never sees the `Option`.
 
   - [ ] **4b.** `FieldErrors` takes `path` and the store and reads for itself.
     `is_invalid` reads the store, and `control_class`, `part_class` and
@@ -350,7 +542,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     scope, which is fine under B: their errors change only on submit.
 
 - [ ] **5.** (Todd) The live check. `FormState::check_live(&self, path, values:
-  &ValuesByPath) -> Vec<ValidationMessage>`: clone the top-level node that owns
+  &ValuesByPath) -> Option<Vec<ValidationMessage>>`: clone the top-level node that owns
   `path`, `distribute_values` into the clone, `validate` it into a scratch map, and
   return `path`'s entry. Nothing written, so `Form` reads with `peek` and writes
   `path`'s store entry: no form re-render. Running the same `validate` is what
@@ -360,7 +552,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   an `Option<struct>` makes it absent, and the form valid, while its siblings still
   show the "required" a submit gave them. So `check_live` also says which OTHER paths
   under that top-level node show an error the scratch map no longer reports, and
-  `Form` writes each an empty `Vec`. It only ever clears, never adds, so B stands: a
+  `Form` writes each `None`. It only ever clears, never adds, so B stands: a
   sibling the user has not reached is not scolded.
 
   This has to leave alone what `validate` cannot re-derive, or a live check wipes
@@ -374,8 +566,8 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   holds. It takes a new way to ask: `Node` has no walk that finds the option owning
   a path.
 
-  A draft's leaves are off the walk, so `check_live` finds nothing and writes an
-  empty `Vec`: typing into a draft clears the refusal Add left there, and Add
+  A draft's leaves are off the walk, so `check_live` finds nothing and `Form` writes
+  `None`: typing into a draft clears the refusal Add left there, and Add
   judges it again.
 
 - [ ] **6.** (Todd) The triggers, per A and E, on each control per G. `WidgetProps`
@@ -427,10 +619,8 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 ## Not in this plan
 
-1. **`aria-invalid="false"` (#7).** Trap 1 makes it possible; nothing here uses it.
-   **OPEN at 3a:** an empty `Vec` is also how an error is CLEARED (trap 1), so
-   `reset`, 2g's rule and box 5's draft all leave "checked and clean" on a field
-   nobody checked. `Option<Vec<…>>` as the store's value would tell them apart.
+1. **`aria-invalid="false"` (#7).** Trap 1's `Option` makes it possible; nothing here
+   uses it.
 2. **Validating on load.** Silent, as it is today.
 3. **Async or server-side live checks** ("that username is taken" as the user
    types). `check_on_server` is `FIELDS_PLAN.md` Step 8.

@@ -1,11 +1,46 @@
 ---
 name: next-session
-description: "HANDOFF. 2026-11-05 NEWEST: box 2 IN PROGRESS on `errors`, pushed NOT COMPILING on purpose (55 errors); box 2 REWRITTEN 2026-11-05 as a work order 2b-2j in ERRORS_PLAN.md, proved in a throwaway copy (864 tests, 58 e2e, clippy, docs). Before that, 2026-11-04: branch `errors`, formoxus/ERRORS_PLAN.md written (uncommitted), errors LEAVE the nodes into one flat map + ErrorsStore; Todd builds the runtime (boxes 2-6), E/F/G decided; then range/checkbox_multiple/select_multiple/file, then docs. #14 committed 2db98c1. Before that: 2026-11-03 #16 a73bec3, #4 ef1c5df (both closed); #14 min_items/max_items BUILT; next ERRORS_PLAN.md (ErrorsStore + live validation), then docs. Before that: #16 trim BUILT (text trims where raw is READ; `no_trim` FLAG, password never trims, numbers always). Plan after: #4, #14 (min_items/max_items?), then ErrorsStore + live validation (Todd wants BOTH before publish; ERRORS_PLAN.md to write), then docs; facet 0.50 waits for stable. Before that: C4 per-field validators BUILT (validator: on any field, Vec<ValidationMessage>, structs now show their own errors), UNCOMMITTED, ci 1146 + e2e 58 green; check params `&str`/`&[T]`/by value; next MVP A3 facet version. Before that: C5 help_text committed 5ec7cdd. Before that: path!(M.set[= v]) + choice labels on set items COMMITTED (1cfd158, beea08a); unit-enum items now label-cased (Node::shown -> Shown, SetMessage::text(case)), UNCOMMITTED, ci 1108 + e2e 58 green. Before that: ORDERED_LISTS box 6 DONE (no code), box 7 DONE incl. path!(…[i]) so a validator names one item (indexed_paths.md), #17 FIXED (variant select name); COMMITTED, ci 1086 + e2e 58 + apcsp green; next apcsp box 8. Before that: `sets` MERGED into main and pushed (42e4de3), all other branches deleted; apcsp renames + list-item layout fix COMMITTED there (4141a4d, not pushed); next ORDERED_LISTS 6-8. Before that: box 12 (merge prep) DONE. Before that: box 13 (4 gallery examples) + the seeded-textarea fix COMMITTED; next box 12 (merge prep), then apcsp after the merge. Before that: box 14 (draft constraints off its input, checked on Add) built, UNCOMMITTED, ci 1054 + e2e 53 green; next box 13 (galleries), then 12. Before that: box 11 (rows -> items) built by Claude and committed, just ci 1051 + e2e 52 green; list labels now Remove item N / Move item N (Todd). Before that: box 10 (e2e /t/tags, 11 tests, suite 52/52) built by Claude and committed; the set's Save became Replace (aria-label: Replace plus the item's text); gallery DEFERRED to box 13 (set + list together); pattern gap CONFIRMED, box 14. Next: box 11 (rows -> items). Before that: box 9 (display + `item:` item views) built by Claude and committed, just ci green 1050; next box 10. Before that: box 8 (Edit through the draft) built by Claude, decisions accepted, committed; just ci green 1036. Before that: box 6 committed d3d4852; box 7 (set draft adder) built by Claude, committed 213f67b, just ci green 1017; next box 8. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
+description: "HANDOFF. 2026-11-05 END OF DAY: box 2 DONE (5c09320), 3a done, 3b half done and pushed with 13 tests failing; see the top of ERRORS_PLAN box 3b for the three fixes. Earlier 2026-11-05: box 2 IN PROGRESS on `errors`, pushed NOT COMPILING on purpose (55 errors); box 2 REWRITTEN 2026-11-05 as a work order 2b-2j in ERRORS_PLAN.md, proved in a throwaway copy (864 tests, 58 e2e, clippy, docs). Before that, 2026-11-04: branch `errors`, formoxus/ERRORS_PLAN.md written (uncommitted), errors LEAVE the nodes into one flat map + ErrorsStore; Todd builds the runtime (boxes 2-6), E/F/G decided; then range/checkbox_multiple/select_multiple/file, then docs. #14 committed 2db98c1. Before that: 2026-11-03 #16 a73bec3, #4 ef1c5df (both closed); #14 min_items/max_items BUILT; next ERRORS_PLAN.md (ErrorsStore + live validation), then docs. Before that: #16 trim BUILT (text trims where raw is READ; `no_trim` FLAG, password never trims, numbers always). Plan after: #4, #14 (min_items/max_items?), then ErrorsStore + live validation (Todd wants BOTH before publish; ERRORS_PLAN.md to write), then docs; facet 0.50 waits for stable. Before that: C4 per-field validators BUILT (validator: on any field, Vec<ValidationMessage>, structs now show their own errors), UNCOMMITTED, ci 1146 + e2e 58 green; check params `&str`/`&[T]`/by value; next MVP A3 facet version. Before that: C5 help_text committed 5ec7cdd. Before that: path!(M.set[= v]) + choice labels on set items COMMITTED (1cfd158, beea08a); unit-enum items now label-cased (Node::shown -> Shown, SetMessage::text(case)), UNCOMMITTED, ci 1108 + e2e 58 green. Before that: ORDERED_LISTS box 6 DONE (no code), box 7 DONE incl. path!(…[i]) so a validator names one item (indexed_paths.md), #17 FIXED (variant select name); COMMITTED, ci 1086 + e2e 58 + apcsp green; next apcsp box 8. Before that: `sets` MERGED into main and pushed (42e4de3), all other branches deleted; apcsp renames + list-item layout fix COMMITTED there (4141a4d, not pushed); next ORDERED_LISTS 6-8. Before that: box 12 (merge prep) DONE. Before that: box 13 (4 gallery examples) + the seeded-textarea fix COMMITTED; next box 12 (merge prep), then apcsp after the merge. Before that: box 14 (draft constraints off its input, checked on Add) built, UNCOMMITTED, ci 1054 + e2e 53 green; next box 13 (galleries), then 12. Before that: box 11 (rows -> items) built by Claude and committed, just ci 1051 + e2e 52 green; list labels now Remove item N / Move item N (Todd). Before that: box 10 (e2e /t/tags, 11 tests, suite 52/52) built by Claude and committed; the set's Save became Replace (aria-label: Replace plus the item's text); gallery DEFERRED to box 13 (set + list together); pattern gap CONFIRMED, box 14. Next: box 11 (rows -> items). Before that: box 9 (display + `item:` item views) built by Claude and committed, just ci green 1050; next box 10. Before that: box 8 (Edit through the draft) built by Claude, decisions accepted, committed; just ci green 1036. Before that: box 6 committed d3d4852; box 7 (set draft adder) built by Claude, committed 213f67b, just ci green 1017; next box 8. Earlier 2026-11-03: box 4 committed 7a31548; box 5 expanded + decided (ItemHandler, call with_set first, J open pending 5p timings); Todd on 5a-5e. Earlier 2026-11-03: with_sort_by + order tests A/B DONE. 2026-11-01 LATER: 2d/2e (SetNode, Todd) + 2g (tests/suite/sets.rs) + 2f1–2f3 DONE, uncommitted; next box 4 sorting; 2f4 waits on box 5 with_set. Earlier 2026-11-01: on `sets`, 2c (Items, nodes/items.rs) + 3a/3c DONE, every list <ol>+↑/↓, all green incl. e2e; NEXT Todd 2d (SetNode), edit_within deferred to it. 2026-10-31 LATER: allow_reordering REPLACED by lists vs sets, on branch `sets`, plan formoxus/SETS_PLAN.md; box 2 is now renames (ListSet->ListNode, VariantSet->VariantNode, FixedKey/class renames) + nodes/rows.rs + SetNode; box 3 is every-list-ordered, 3b (macro side) done, 10 vecs tests red until Todd's 3a. Earlier 2026-10-31: ORDERED_LISTS box 5 (adder) committed 314bcd4. 2026-10-31: box 4 (filled rows, Form::edit) ALL DONE, uncommitted, awaiting go. 2026-10-30: ORDERED_LISTS box 2 DONE (ec05880); box 3 DONE ebe4437 (↑/↓ MoveRowButtons, Lucide SVG icons, e2e 37/37, just ci green); box 4 (Todd, add-with-value) next. 2026-10-29: formoxus/ORDERED_LISTS_PLAN.md for apcsp's assignment form; decisions A–G made, box 1 (MoveRow) DONE, box 2 (allow_reordering through form!) next, Todd to pick his steps 2a–2g. 2026-10-25: #15 ($Enum::Variant paths in form!/path!, nested blocks, runtime path check) BUILT, uncommitted, awaiting Todd's review. 2026-10-24: issue #13 fixed (4dcf0fb), #14 queued. Rewritten 2026-10-23 when Todd paused formoxus to go back to apcsp-dioxus: where the repo is, what is deferred and why, the first thing to do when using it, and how Todd likes to work. Read this first; older dated entries below are history"
 metadata:
   type: project
 ---
 
-## ▶ 2026-11-05, newest: box 2 in progress, pushed as work in progress
+## ▶ 2026-11-05, end of day: 3b half done, pushed as work in progress
+
+On branch `errors`. Box 2 is finished and committed (5c09320, ci and e2e green, 1194
+tests). 3a is finished. **3b is half done: it compiles, clippy passes, 13 suite tests
+fail.** The first thing to do is the three fixes listed at the top of 3b in
+`formoxus/ERRORS_PLAN.md`; proved in a copy, they make all 715 suite tests pass. Then the
+unticked 3b boxes: `ordered_errors`, `to_wire`, `has_errors`.
+
+**Claude owes, once 3b lands:** a test that a live form's errors reach `to_wire` and
+`has_errors`. Nothing covers `to_wire` today, so forgetting that box fails no test.
+Written and mutation-checked 2026-11-05, in a scratch copy that is now gone:
+
+```rust
+#[component]
+fn LiveErrors() -> Element {
+    let form = use_form(|| empty_form::<Drawing>(FormSpec::default()));
+    use_hook(|| form.validate());
+    let paths = form.to_wire().errors().paths().join(" ");
+    let has_errors = form.has_errors();
+    rsx! { pre { id: "wire-errors", "[{paths}] {has_errors}" } }
+}
+// in errors_by_path.rs; render_to_html, expect contains_substring(">[name shape] true</pre>")
+```
+
+**Decided 2026-11-05:** the store's value is `Option<Vec<ValidationMessage>>` (trap 1).
+3b and 3c merged into one step. `Form` is now 336 bytes, so helpers take `&Form<T>` for
+clippy's `large_types_passed_by_value` (Todd chose that over raising the limit).
+
+**A test trap worth keeping:** `collect_errors` walks live paths, so it HIDES a stale
+entry in `field_errors`. A test of pruning has to bring the path back (Circle, Rectangle,
+Circle) or read `field_errors` itself. The store has no such filter.
+
+Plan steps Todd carries out get full sentences: [[feedback-plans-spell-out-the-why]].
+Saying `reset` was "one line" cost its values loop.
+
+## 2026-11-05, earlier: box 2 in progress, pushed as work in progress
 
 On branch `errors`. **It does not compile, on purpose** (55 errors, mid-refactor).
 Todd writes this code; I review each function when he asks.
@@ -28,8 +63,9 @@ for eight lines the suite does not cover (each was broken on purpose and all 864
    its OWN name, so a container passes its own path down as the prefix, and
    `OptionNode` adds nothing (`?` is `form!` syntax only, gone at runtime).
 4. **An empty `Vec` in the map is deliberate:** checked and clean, for #7. I called
-   it a bug and was wrong. Readers filter. **Open at 3a:** `Option<Vec<…>>` as the
-   store's value, because an empty `Vec` also means "cleared".
+   it a bug and was wrong. Readers filter. The STORE's value is `Option<Vec<…>>`
+   (Todd, 2026-11-05): `None` is cleared or never checked, so "cleared" and "checked
+   and clean" stay different.
 5. **`paths` MUST walk an absent option's fields** (settled 2026-11-05, proved by
    tests at ce4d154): a form validator (`path!(M.phone?)`), `push_field_error` and a
    server's reply all land there. "An option emptied" is out of the plan. Decided
@@ -56,7 +92,7 @@ projection as [[error-model-design]] had it. Todd's question "does it matter tha
 they get out of sync?" is what changed it. Two corrections Claude had to make: a
 live check clones the top-level node, not "asks the field through `&self`"
 (`OptionNode`'s required depends on siblings), and a store's `remove` does not wake
-a reader of that key, so errors clear by writing an empty `Vec`.
+a reader of that key, so errors clear by writing `None`.
 
 **#19 filed:** a GOV.UK preset (Todd: "a single setting that follows gov.uk
 standards"), written as a preset over individual settings. AFTER the MVP: Todd

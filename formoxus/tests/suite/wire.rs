@@ -393,7 +393,9 @@ fn a_wire_form_round_trips_through_json() {
 
 /// What `to_wire` would send for `title` right now, and a button that runs
 /// `validate`, so a `Harness` can read both after an event.
-fn title_probe(form: Form<Contact>) -> Element {
+fn title_probe(form: &Form<Contact>) -> Element {
+    // Its own copy, for the button's handler to own.
+    let form = *form;
     let mut validated = use_signal(String::new);
     let sent = form
         .to_wire()
@@ -415,14 +417,14 @@ fn title_probe(form: Form<Contact>) -> Element {
 #[component]
 fn EmptyContactProbe() -> Element {
     let form = use_form(|| empty_form(form! { Contact {} }));
-    title_probe(form)
+    title_probe(&form)
 }
 
 #[component]
 fn SeededContactProbe() -> Element {
     let contact = seeded();
     let form = use_form(move || form_for(&contact, form! { Contact {} }));
-    title_probe(form)
+    title_probe(&form)
 }
 
 fn sent(title: &str) -> String {
@@ -513,7 +515,7 @@ fn absorbing_a_reply_with_another_title_leaves_the_choice_alone() {
         };
         form.absorb(WireForm::from_model(&reply, form! { Contact {} }))
             .expect("the reply names only this form's paths");
-        title_probe(form)
+        title_probe(&form)
     }
     let html = render(App);
     expect_that!(html, contains_substring(sent("Dr")));

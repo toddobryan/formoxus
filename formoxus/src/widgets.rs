@@ -96,7 +96,7 @@ pub use values::{get_current, write_value};
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with
 // an `ItemValue`.
-pub use crate::nodes::{Edit, ItemValue, ValuesStore};
+pub use crate::nodes::{Edit, ErrorsStore, ItemValue, ValuesStore};
 pub use variant_select::VariantSelect;
 pub use widget::{AnyWidget, Widget};
 pub use widget_props::WidgetProps;

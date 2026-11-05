@@ -1508,7 +1508,7 @@ fn an_item_value_of_the_wrong_type_is_refused() {
 // reads the store, so a value reaching `#accepted` is the proof the copy ran.
 
 /// The form, then `<pre id="accepted">` holding the server's model.
-fn with_accepted<T>(form: Form<T>, spec: FormSpec<T>) -> Element
+fn with_accepted<T>(form: &Form<T>, spec: FormSpec<T>) -> Element
 where
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
@@ -1532,7 +1532,7 @@ fn accepted(html: &str) -> String {
 }
 
 fn add_filled(
-    form: Form<impl Clone + Debug + PartialEq + Facet<'static> + 'static>,
+    form: &Form<impl Clone + Debug + PartialEq + Facet<'static> + 'static>,
     path: &str,
     value: formoxus::nodes::ItemValue,
 ) {
@@ -1545,12 +1545,12 @@ fn FilledLeafRowProbe() -> Element {
     let form = use_form(|| form_for(&quiz(), FormSpec::default()));
     use_hook(|| {
         add_filled(
-            form,
+            &form,
             "answers",
             formoxus::nodes::ItemValue::new("gamma".to_string()),
         );
     });
-    with_accepted(form, FormSpec::default())
+    with_accepted(&form, FormSpec::default())
 }
 
 #[gtest]
@@ -1583,8 +1583,8 @@ fn lyon() -> Location {
 #[component]
 fn FilledStructRowProbe() -> Element {
     let form = use_form(|| form_for(&venues(), FormSpec::default()));
-    use_hook(|| add_filled(form, "places", formoxus::nodes::ItemValue::new(lyon())));
-    with_accepted(form, FormSpec::default())
+    use_hook(|| add_filled(&form, "places", formoxus::nodes::ItemValue::new(lyon())));
+    with_accepted(&form, FormSpec::default())
 }
 
 /// Every leaf of a struct item, not just the first: the copy takes all of
@@ -1616,7 +1616,7 @@ fn FilledEnumRowProbe() -> Element {
     });
     use_hook(|| {
         add_filled(
-            form,
+            &form,
             "shapes",
             formoxus::nodes::ItemValue::new(Shape::Rectangle {
                 width: 2.0,
@@ -1624,7 +1624,7 @@ fn FilledEnumRowProbe() -> Element {
             }),
         );
     });
-    with_accepted(form, FormSpec::default())
+    with_accepted(&form, FormSpec::default())
 }
 
 /// The value picks the item's variant, as `form_for` would: built in
@@ -1670,17 +1670,17 @@ fn FilledOptionRowsProbe() -> Element {
     });
     use_hook(|| {
         add_filled(
-            form,
+            &form,
             "names",
             formoxus::nodes::ItemValue::new(Some("Bo".to_string())),
         );
         add_filled(
-            form,
+            &form,
             "names",
             formoxus::nodes::ItemValue::new(None::<String>),
         );
     });
-    with_accepted(form, FormSpec::default())
+    with_accepted(&form, FormSpec::default())
 }
 
 /// A `Vec<Option<T>>`'s item type is `Option<T>`, so that is what its value
@@ -1780,7 +1780,7 @@ fn an_adder_is_handed_the_lists_own_id() {
 #[component]
 fn BlankProbeAdderForm() -> Element {
     let form = use_form(|| empty_form::<Quiz>(form! { Quiz { answers => { adder: ProbeAdder } } }));
-    with_accepted(form, FormSpec::default())
+    with_accepted(&form, FormSpec::default())
 }
 
 /// The adder's own `AddItem` takes the same road as Add's: the item arrives

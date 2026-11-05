@@ -1385,7 +1385,7 @@ struct Sizes {
 
 /// The form, then what its `to_wire` would send, as `path=raw` pairs.
 fn with_wire<T: Clone + std::fmt::Debug + PartialEq + Facet<'static> + 'static>(
-    form: Form<T>,
+    form: &Form<T>,
     extra: Element,
 ) -> Element {
     let wire = form
@@ -1409,13 +1409,13 @@ fn wire(pairs: &str) -> String {
 #[component]
 fn EmptyTaggedForm() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Tagged>::default()));
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 #[component]
 fn EmptySizesForm() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Sizes>::default()));
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 #[component]
@@ -1424,7 +1424,7 @@ fn ResettableTaggedForm() -> Element {
     // Formatted, so the label crosses as a mutation `Harness::labelled` sees.
     let label = "Reset";
     with_wire(
-        form,
+        &form,
         rsx! {
             button { aria_label: "{label}", onclick: move |_| form.reset(), "Reset" }
         },
@@ -1677,7 +1677,7 @@ fn a_unit_enum_draft_takes_a_choice_and_adds_it() {
 fn EmptyTriageWireForm() -> Element {
     let form =
         use_form(|| empty_form(form! { Triage { levels => { sort_by: most_urgent_first } } }));
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 /// The same through `use_form`: the choice stays in the state, where no
@@ -1710,7 +1710,7 @@ fn tagged() -> Tagged {
 #[component]
 fn TaggedWireForm() -> Element {
     let form = use_form(|| form_for(&tagged(), FormSpec::default()));
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 /// Mounted with `dioxus` as item `#0`, `rust` `#1`, and the draft `#2`.
@@ -2164,7 +2164,7 @@ fn a_dev_item_view_shows_each_item() {
 #[component]
 fn ChipWireForm() -> Element {
     let form = use_form(|| form_for(&tagged(), form! { Tagged { tags => { item: TagChip } } }));
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 /// Told when its item is the one being edited.
@@ -2238,7 +2238,7 @@ fn PatternDraftForm() -> Element {
     let form = use_form(|| {
         empty_form(form! { Tagged { tags[] => { pattern: "[a-z]+", max_length: 6 } } })
     });
-    with_wire(form, rsx! {})
+    with_wire(&form, rsx! {})
 }
 
 /// The draft's input is inside the `<form>`, so a constraint on it would let

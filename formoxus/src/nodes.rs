@@ -388,6 +388,15 @@ pub type ValuesByPath = IndexMap<String, String>;
 /// [`std::collections::HashMap`] and a few others.
 pub type ValuesStore = Store<HashMap<String, String>>;
 
+/// Client home for field errors. Held in a store so that an error on one
+/// field only redraws that field, not the whole page. This is a three-way
+/// distinction, for each path:
+///
+/// - `None`, or a missing key, means that path was never checked or was cleared.
+/// - `Some(vec![])` means that path was valid.
+/// - `Some(vec![...])` means that path did not validate.
+pub type ErrorsStore = Store<HashMap<String, Option<Vec<ValidationMessage>>>>;
+
 /// What a node needs in order to render: where it sits in the path tree,
 /// where the live values are, and whether the browser should treat its leaves
 /// as required.
