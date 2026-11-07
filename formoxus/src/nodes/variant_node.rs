@@ -275,7 +275,7 @@ impl Node for VariantNode {
                         // `aria-describedby`, in `attrs`, names it.
                         help_text: None,
                         classes: ctx.classes.clone(),
-                        errors: own_errors.clone(),
+                        errors: ctx.errors,
                         attrs,
                         extra_attrs: Vec::new(),
                         // Read by no one: a variant choice is not a value in

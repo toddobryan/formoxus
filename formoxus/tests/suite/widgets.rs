@@ -182,7 +182,7 @@ fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetPr
         path: path.to_string(),
         label: label.map(str::to_string),
         help_text: None,
-        errors: Vec::new(),
+        errors: use_store(HashMap::new),
         attrs: FieldAttrs::default(),
         extra_attrs: Vec::new(),
         values,

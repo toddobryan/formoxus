@@ -91,7 +91,7 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
-pub use values::{get_current, write_value};
+pub use values::{get_current, get_errors, write_value};
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with

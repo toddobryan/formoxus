@@ -457,11 +457,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.on_edit,
             self.label_case(),
             self.classes(),
-            self.errors_store
-                .read()
-                .iter()
-                .filter_map(|(path, messages)| Some((path.clone(), messages.clone()?)))
-                .collect(),
+            self.errors_store,
         )
     }
 

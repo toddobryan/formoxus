@@ -24,7 +24,7 @@ use unicase::{Ascii, UniCase};
 
 use crate::{
     build::retain_first,
-    error::{FormAccessError, ValidationMessage},
+    error::FormAccessError,
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
@@ -455,7 +455,6 @@ impl SetNode {
         let editing = self.editing.as_deref() == Some(name.as_str());
         let mut paths = Vec::new();
         item.paths(&path, Drafts::Exclude, &mut paths);
-        let errors: Vec<ValidationMessage> = paths.iter().flat_map(|p| ctx.errors_at(p)).collect();
         rsx! {
             li { class: ctx.classes.fixed_class(FixedKey::SetItem, false), key: "{name}",
                 {
@@ -474,7 +473,8 @@ impl SetNode {
                 }
                 FieldErrors {
                     field_id: ctx.nested(&self.name).id(&name),
-                    errors,
+                    paths,
+                    errors: ctx.errors,
                     classes: ctx.classes.clone(),
                 }
                 if editable {
@@ -890,7 +890,8 @@ impl Node for SetNode {
                 // `aria-describedby` on a group varies between screen readers.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: own_errors,
+                    paths: vec![path.clone()],
+                    errors: ctx.errors,
                     classes: ctx.classes.clone(),
                 }
                 if !self.items.is_empty() {

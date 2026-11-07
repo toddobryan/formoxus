@@ -315,7 +315,7 @@ impl<F: Field> Node for FieldNode<F> {
             choices: self.field.choices(),
             attrs: field_attrs,
             extra_attrs: Vec::new(),
-            errors,
+            errors: ctx.errors,
         })
     }
 

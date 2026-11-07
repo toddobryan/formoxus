@@ -31,6 +31,7 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
+use crate::widgets::get_errors;
 use dioxus::stores::Store;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
@@ -450,7 +451,7 @@ pub struct NodeContext {
     /// validates the draft. Dropped by [`nested`](Self::nested) and
     /// [`optional`](Self::optional), like `label_if_unnamed`.
     pub in_draft: bool,
-    pub errors: Rc<ErrorsByPath>,
+    pub errors: ErrorsStore,
 }
 
 impl NodeContext {
@@ -462,7 +463,7 @@ impl NodeContext {
         on_edit: Callback<Edit>,
         label_case: LabelCase,
         classes: Classes,
-        errors: ErrorsByPath,
+        errors: ErrorsStore,
     ) -> Self {
         Self {
             form_id,
@@ -474,7 +475,7 @@ impl NodeContext {
             classes: Rc::new(classes),
             label_if_unnamed: None,
             in_draft: false,
-            errors: Rc::new(errors),
+            errors,
         }
     }
 
@@ -490,7 +491,7 @@ impl NodeContext {
             classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
-            errors: self.errors.clone(),
+            errors: self.errors,
         }
     }
 
@@ -508,7 +509,7 @@ impl NodeContext {
             classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
-            errors: self.errors.clone(),
+            errors: self.errors,
         }
     }
 
@@ -530,7 +531,7 @@ impl NodeContext {
     }
 
     pub fn errors_at(&self, path: &str) -> Vec<ValidationMessage> {
-        self.errors.get(path).cloned().unwrap_or_default()
+        get_errors(path, self.errors)
     }
 }
 

@@ -65,7 +65,8 @@ pub fn field_row<W: Widget>(
             {after}
             FieldErrors {
                 field_id: &props.id,
-                errors: props.errors.clone(),
+                paths: vec![props.path.clone()],
+                errors: props.errors,
                 classes: props.classes.clone(),
             }
         }

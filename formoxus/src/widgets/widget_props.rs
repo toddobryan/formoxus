@@ -4,10 +4,10 @@ use dioxus::core::Attribute;
 use formoxus_spec::Tag;
 
 use crate::{
-    Classes, ValidationMessage,
+    Classes,
     field_attrs::FieldAttrs,
-    nodes::ValuesStore,
-    widgets::{Choice, Widget},
+    nodes::{ErrorsStore, ValuesStore},
+    widgets::{Choice, Widget, get_errors},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -27,7 +27,7 @@ pub struct WidgetProps {
     /// `attrs` already names. A widget not using `field_row` renders it with
     /// [`field_help`](super::field_help).
     pub help_text: Option<String>,
-    pub errors: Vec<ValidationMessage>,
+    pub errors: ErrorsStore,
     pub attrs: FieldAttrs,
     pub extra_attrs: Vec<Attribute>,
     pub values: ValuesStore,
@@ -44,7 +44,7 @@ pub struct WidgetProps {
 
 impl WidgetProps {
     pub fn is_invalid(&self) -> bool {
-        !self.errors.is_empty()
+        !get_errors(&self.path, self.errors).is_empty()
     }
 
     /// `part`'s classes from the form's `Classes`, with its invalid addition

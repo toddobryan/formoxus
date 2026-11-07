@@ -82,12 +82,13 @@ fn values() -> HashMap<String, String> {
 
 fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
     let values = use_store(values);
+    let errors = use_store(|| HashMap::from([(PATH.to_string(), Some(errors()))]));
     widget.render(WidgetProps {
         id: ID.into(),
         path: PATH.into(),
         label: Some("Title".into()),
         help_text: Some(HELP.into()),
-        errors: errors(),
+        errors,
         attrs: field_attrs(),
         extra_attrs: extra_attrs(),
         values,

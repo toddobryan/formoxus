@@ -174,7 +174,12 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
             // fieldset's `aria-describedby`, in `attrs`, names it.
             {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
             { radios.into_iter() }
-            FieldErrors { field_id: &props.id, errors: props.errors, classes: props.classes.clone() }
+            FieldErrors {
+                field_id: &props.id,
+                paths: vec![props.path.clone()],
+                errors: props.errors,
+                classes: props.classes.clone(),
+            }
         }
     }
 }

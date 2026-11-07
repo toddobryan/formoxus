@@ -510,14 +510,42 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
 
 - [ ] **4.** (Todd) Widgets read the store.
 
-  - [ ] **4a.** `NodeContext.errors: ErrorsStore`, replacing 2b's stopgap, and `WidgetProps.errors` becomes
+  - [x] **4a.** `NodeContext.errors: ErrorsStore`, replacing 2b's stopgap, and `WidgetProps.errors` becomes
     that store. A helper beside `get_current`, `pub fn get_errors(path, errors) ->
     Vec<ValidationMessage>`, for custom widgets. `None`, no key and an empty `Vec` all
     read as an empty `Vec` there, so a widget never sees the `Option`.
 
-  - [ ] **4b.** `FieldErrors` takes `path` and the store and reads for itself.
-    `is_invalid` reads the store, and `control_class`, `part_class` and
-    `field_label`'s `invalid` follow.
+  - [x] **4b.** `FieldErrors` takes `paths: Vec<String>` and the store in place of
+    `errors: Vec<ValidationMessage>`, and reads for itself with `get_errors`, one path
+    after another. It is a component, so the read subscribes it, not the form. A list
+    of paths, not one (Todd, 2026-11-07), because a set item has no single path:
+    `render_item` shows every error under the item in one list, so it passes the
+    `paths` it already walks, and every other caller passes its own path alone. That
+    also ends 4a's stopgap in `field_row`, `radio_group` and `assignment_shape.rs`,
+    which call `get_errors` to hand `FieldErrors` a `Vec`.
+
+    `is_invalid` has read the store since 4a, and a read subscribes whoever is running
+    when it happens. So what matters is where each call runs: a component wakes alone,
+    while `Widget::render` and `Node::render` are the form's scope (trap 3).
+    `control_class`, `part_class` and `field_row` (which calls `field_label`) all reach
+    `is_invalid`.
+
+    **Checked 2026-11-07: every built-in already calls them from a component, so this
+    paragraph needs no code.** For each widget, `render` only hands over to the component:
+
+    1. Text-like inputs and the checkbox: `render_input` to `InputView`, whose
+       `text_like` and `checkbox` are plain functions, but run inside it.
+    2. `Textarea` and `Select`: `TextareaView` and `SelectView`.
+    3. `RadioGroup`: `RadioGroupView`, which calls `is_invalid` itself.
+    4. `VariantSelect` is a component already.
+    5. A hidden input shows no errors, so it never asks.
+
+    A custom widget that calls these from its plain `render`, like `Notes` in
+    `tests/suite/classes.rs`, subscribes the form. It still works, which trap 3 accepts.
+
+    **The form is still woken by every error after this.** That is
+    `ctx.errors_at` in `FieldNode::render` (`field_node.rs:295`), which 4c moves, and
+    the containers' reads, which 4d keeps on purpose.
 
   - [ ] **4c.** `aria-invalid` and `aria-describedby` move from
     `FieldAttrs::with_owned_attrs` into the components (traps 3 and 4).

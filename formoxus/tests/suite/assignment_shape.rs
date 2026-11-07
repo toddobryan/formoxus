@@ -80,7 +80,12 @@ impl Widget for QuestionItem {
         rsx! {
             input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
             span { class: "question", "{current}" }
-            FieldErrors { field_id: props.id.clone(), errors: props.errors.clone(), classes: props.classes.clone() }
+            FieldErrors {
+                field_id: props.id.clone(),
+                paths: vec![props.path.clone()],
+                errors: props.errors,
+                classes: props.classes.clone()
+            }
         }
     }
 }

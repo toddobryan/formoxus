@@ -61,7 +61,8 @@ impl Node for StructNode {
                 // readers, so reading order has to carry them too.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: own_errors.clone(),
+                    paths: vec![path],
+                    errors: ctx.errors,
                     classes: ctx.classes.clone(),
                 }
                 { nodes_rendered.into_iter() }

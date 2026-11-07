@@ -125,3 +125,5 @@ child (`"{current}"`) is wrong too: `pre_render` wraps dynamic text in
 value and set it as `dangerous_inner_html`. Keep `value`: Dioxus sets it as the
 property on change, and content can't move a typed-in textarea. A plain
 `dioxus_ssr::render` shows none of the markers; test with `pre_render`.
+
+**`dx fmt --check --file X` WRITES the file** (dx 0.7.10, found 2026-11-07): `--file` wins and `--check` is ignored. To preview, run it in a scratch copy. The repo is not `dx fmt`-clean, and nothing enforces it: a full run changes 29 files.

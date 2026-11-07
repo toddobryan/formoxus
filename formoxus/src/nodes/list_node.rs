@@ -95,7 +95,8 @@ impl Node for ListNode {
                 // `aria-describedby` on a group varies between screen readers.
                 FieldErrors {
                     field_id: id.clone(),
-                    errors: own_errors,
+                    paths: vec![path.clone()],
+                    errors: ctx.errors,
                     classes: ctx.classes.clone(),
                 }
                 if !self.items.is_empty() {
