@@ -235,6 +235,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             .collect()
     }
 
+    pub(crate) fn ordered_errors(
+        &self,
+        store: &HashMap<String, Option<Vec<ValidationMessage>>>,
+    ) -> FormErrors {
+        self.errors_from(|path| store.get(path)?.as_ref())
+    }
+
     /// The leaves of every set draft under `path`, read from the store: what
     /// committing a draft distributes first (`SETS_PLAN.md` 7c), since the
     /// state never sees a keystroke.
@@ -421,18 +428,29 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     pub fn collect_errors(&self) -> FormErrors {
-        let mut field_errors = ErrorsByPath::default();
-        // Walking the tree, not reading the map, gives render order and leaves
-        // a refused draft out. An empty entry is "checked and clean", which a
-        // caller reading "did it pass?" off `fields` must not see.
-        for path in self.paths(Drafts::Exclude) {
-            if let Some(messages) = self.field_errors.get(&path).filter(|m| !m.is_empty()) {
-                field_errors.insert(path, messages.clone());
-            }
-        }
+        self.errors_from(|path| self.field_errors.get(path))
+    }
+
+    /// The errors `read` gives for each path, as a [`FormErrors`].
+    ///
+    /// Walking the tree, not the map, gives render order and leaves a refused
+    /// draft out. An empty entry is "checked and clean", which a caller reading
+    /// "did it pass?" off `fields` must not see.
+    fn errors_from<'a>(
+        &self,
+        read: impl Fn(&str) -> Option<&'a Vec<ValidationMessage>>,
+    ) -> FormErrors {
+        let fields = self
+            .paths(Drafts::Exclude)
+            .into_iter()
+            .filter_map(|path| {
+                let messages = read(&path).filter(|m| !m.is_empty())?.clone();
+                Some((path, messages))
+            })
+            .collect();
         FormErrors {
             form: self.errors.clone(),
-            fields: field_errors,
+            fields,
         }
     }
 

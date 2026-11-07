@@ -145,3 +145,15 @@ playwright-rs is 0.20.1 (from 0.15.1); browsers via the bundled driver
 timed out at 30 s as the LAST of 58 in a full `just e2e`, then passed alone and
 in two full reruns. Nothing in the change touched lists. If it recurs, suspect
 the run's tail (server load), not the adder.
+
+**Seen again (2026-11-07), and now diagnosed:** `required_text::novalidate_lets_formoxus_report_the_empty_field`
+and `the_field_is_still_marked_required_under_novalidate` both failed at 30.76 s in
+a full `just e2e`, then passed in two reruns by Todd and six more of mine (17-19 s
+each; the failed run took 40 s). A hang, not a result: `expect` fails as
+`AssertionTimeout` at 5 s, and these were a plain `Timeout` at 30 s. One of them does
+nothing but open the page, and the server had logged `[200]` for it, so `goto` is what
+timed out: the HTML arrived and `load` never fired. They are adjacent in the file, so
+they probably started together. Which subresource stalls is NOT known (the 102 MB
+debug wasm is the suspect). Tell them apart with the error's type: a 30 s `Timeout`
+points at the harness, an `AssertionTimeout` at the code. The `dx-e2e.*.log` a run
+leaves in `/tmp` logs each page's `[200]` with a time, which is how to place a hang.

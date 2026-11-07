@@ -397,3 +397,22 @@ fn an_items_error_is_at_its_exact_path() {
         elements_are![eq("answers.#0"), eq("tags.#0"), eq("rooms.#0.name")]
     );
 }
+
+#[component]
+fn LiveErrors() -> Element {
+    let form = use_form(|| empty_form::<Drawing>(FormSpec::default()));
+    use_hook(|| form.validate());
+    let paths = form.to_wire().errors().paths().join(" ");
+    let has_errors = form.has_errors();
+    rsx! { pre { id: "wire-errors", "[{paths}] {has_errors}" } }
+}
+
+/// `field_errors` is empty between operations on a live form, so reading it
+/// here would lose every error without failing anything else.
+#[gtest]
+fn a_live_forms_errors_reach_the_wire_and_has_errors() {
+    expect_that!(
+        render_to_html(LiveErrors),
+        contains_substring(">[name shape] true</pre>")
+    );
+}

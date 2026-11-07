@@ -319,7 +319,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     - [x] Also the ones owed from review: a count error still reports its items' errors,
       and item paths pinned exactly (`tags.#0`, not `tags.#0.#0`).
 
-- [ ] **3.** (Todd) The store.
+- [x] **3.** (Todd) The store.
 
   - [x] **3a.** Create the store and fill it from the state. Nothing reads it yet, so
     no behaviour changes and every test still passes at the end of this step.
@@ -354,24 +354,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     - [x] `Form::errors(&self) -> ErrorsStore`, beside `Form::values`, returning the
       field.
 
-  - [ ] **3b.** Move the errors into the store. This was two steps, 3b and 3c, but it
+  - [x] **3b.** Move the errors into the store. This was two steps, 3b and 3c, but it
     has to be one: nothing is right until all of it is in. Written in a copy, it passed
     all 1195 tests and clippy.
-
-    **Where this stands (end of 2026-11-05).** Pushed with 13 suite tests failing, and
-    three small fixes turn those green; all three were tried in a copy, which then passed
-    all 715 suite tests:
-
-    1. `use_form`: delete the old `let initial = use_signal(move || state.peek().clone());`
-       and the comment above it. It is still there, below the new one, and it shadows the
-       new `initial` with a copy that has no errors.
-    2. `use_form`: the `errors` seed still reads `state.peek()`. Make it `initial.peek()`.
-    3. `reset`: put `leaves` and its `for` loop back, as the bullet below shows. They were
-       deleted, because this plan's wording made `reset` sound like one line.
-
-    Also restore the comment in `validate` beginning "The argument comes from the STORE".
-    Its code snippet below left that out, and the reason is worth keeping. Then the
-    unticked boxes below, from `ordered_errors` on.
 
     **What changes.** Today `validate` and the rest write `field_errors`, and it stays
     full. After this, `field_errors` is empty between operations and the store holds
@@ -428,7 +413,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
       leave the map without anything writing to its key. The `changed` check is what
       keeps a field that did not change from re-rendering.
 
-    - [ ] **Each operation goes through it.** The body of each moves inside the closure,
+    - [x] **Each operation goes through it.** The body of each moves inside the closure,
       and the `let mut state = self.state_signal;` lines go.
 
       `validate`:
@@ -479,7 +464,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
       let created = with_errors(state, errors, |state| state.edit(edit))?;
       ```
 
-    - [ ] **`use_form` builds its two signals the other way round.** The state a dev hands
+    - [x] **`use_form` builds its two signals the other way round.** The state a dev hands
       in can already hold errors, because a test or a page may validate before calling
       `use_form`. Those errors have to reach the store, and `reset` has to get them back,
       but the working state must start with an empty `field_errors`. Building `initial`
@@ -506,22 +491,22 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
           .collect(),
       ```
 
-    - [ ] **`FormState::ordered_errors`, in `state.rs`, beside `ordered_values`.** It is
-      `collect_errors` for a live form: the same walk over `self.paths(Drafts::Exclude)`,
-      so it keeps render order (trap 2) and leaves out a refused draft, but it reads the
-      store. It takes `&HashMap<String, Option<Vec<ValidationMessage>>>`, and keeps a
-      path only when its value is `Some` of a non-empty `Vec`. Returns a `FormErrors`
-      with `form: self.errors.clone()`.
-    - [ ] **`Form::to_wire` calls it,** in place of `state.collect_errors()`, passing
-      `&self.errors_store.read()`. **No test notices if this is forgotten:** the errors
-      would just stop reaching the server, because `field_errors` is empty by then.
-      Claude adds a test for it once this step lands.
-    - [ ] **`Form::has_errors(&self) -> bool`, beside `Form::errors`** (trap 6). Call
-      `ordered_errors` the same way, and return whether its `form` or `fields` has
+    - [x] **`FormState::ordered_errors`, in `state.rs`, beside `ordered_values`.** It is
+      `collect_errors` for a live form: it takes
+      `&HashMap<String, Option<Vec<ValidationMessage>>>`, and keeps a path only when its
+      value is `Some` of a non-empty `Vec`. The two share a private `errors_from`, which
+      does the walk over `self.paths(Drafts::Exclude)`, so both keep render order (trap 2)
+      and leave out a refused draft; each only says where to look a path up.
+    - [x] **`Form::to_wire` calls it,** in place of `state.collect_errors()`, passing
+      `&self.errors_store.read()`. `field_errors` is empty by then, so forgetting this
+      would silently stop errors reaching the server.
+      `a_live_forms_errors_reach_the_wire_and_has_errors` pins it.
+    - [x] **`Form::has_errors(&self) -> bool`, beside `Form::errors`** (trap 6). Calls
+      `ordered_errors` the same way, and returns whether its `form` or `fields` has
       anything.
-    - [ ] The comment in `on_edit` about an unknown variant name being "recorded against
+    - [x] The comment in `on_edit` about an unknown variant name being "recorded against
       the `VariantNode`" now means the store: reword it.
-    - [ ] Checkpoint: `just ci`, then `just e2e`.
+    - [x] Checkpoint: `just ci`, then `just e2e`.
 
 - [ ] **4.** (Todd) Widgets read the store.
 

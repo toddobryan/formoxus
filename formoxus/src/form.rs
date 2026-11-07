@@ -19,7 +19,7 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, ErrorsStore, NodeContext};
 use crate::path::Path;
-use crate::widgets::ValuesStore;
+use crate::widgets::{ValuesStore, write_value};
 use crate::wire::WireForm;
 use dioxus::prelude::*;
 use facet::Facet;
@@ -321,6 +321,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         self.errors_store
     }
 
+    /// Whether this form shows any error, form-level or on a field.
+    pub fn has_errors(&self) -> bool {
+        let errors = self
+            .state_signal
+            .read()
+            .ordered_errors(&self.errors_store.read());
+        !errors.form.is_empty() || !errors.fields.is_empty()
+    }
+
     /// The state as it currently stands. Reading this subscribes the caller to
     /// *structural* changes.
     pub fn state(&self) -> ReadSignal<FormState<T>> {
@@ -468,9 +477,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// outlive the next submit. It also means a pushed error never blocks
     /// `validate`, since the clear happens first.
     ///
-    /// Writing through a copy of the `Signal` for the same reason `validate`
-    /// does: it keeps `&self` here, which is what lets `Form` stay `Copy` and
-    /// drop into an event handler.
+    /// Writing through a copy of the `Signal` keeps `&self` here, which is what
+    /// lets `Form` stay `Copy` and drop into an event handler.
     pub fn push_error(&self, error: ValidationMessage) {
         let mut state = self.state_signal;
         state.write().errors.push(error);
@@ -488,9 +496,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// **Cleared by the next [`validate`](Self::validate)**, same lifetime as
     /// `push_error` and for the same reason — inherited for free, not
-    /// special-cased here: `Field::validate` already clears and rebuilds
-    /// every leaf's own `errors` on each call, so a stale server-pushed error
-    /// cannot outlive the next submit.
+    /// special-cased here: [`FormState::validate`] empties `field_errors` before
+    /// it checks anything, so a stale server-pushed error cannot outlive the
+    /// next submit.
+    ///
     /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile
     /// error rather than this `Err`. The `Err` remains for the paths a
     /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
@@ -551,7 +560,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let state = self.state_signal.read();
         WireForm::new(
             state.ordered_values(&self.values_store.read()),
-            state.collect_errors(),
+            state.ordered_errors(&self.errors_store.read()),
         )
     }
 
@@ -620,10 +629,22 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// is the thing that has to change.
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
+        let leaves = fresh.leaf_values();
         with_errors(self.state_signal, self.errors_store, |state| *state = fresh);
+        // Written per path rather than by replacing the map, so each input's
+        // own subscription fires. Paths that only existed because of an edit
+        // being undone are left behind as stale keys; nothing reads them, since
+        // the restored schema is what decides which paths get rendered, and
+        // `distribute_values` treats an absent path as empty either way.
+        for (path, raw) in leaves {
+            write_value(&path, self.values_store, raw);
+        }
     }
 
     pub fn validate(&self) -> Option<T> {
+        // The argument comes from the STORE. `state.collect_values()` would be the
+        // state applied to itself — a no-op that discards every keystroke, and
+        // then validates the stale values it kept.
         with_errors(self.state_signal, self.errors_store, |state| {
             let values = state.ordered_values(&self.values_store.read());
             state.distribute_values(&values);
@@ -705,16 +726,16 @@ fn render_problems(ctx: &NodeContext, problems: &[String]) -> Element {
 pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: impl FnOnce() -> FormState<T>,
 ) -> Form<T> {
+    // A snapshot, taken once, for `reset`. It comes first because the state
+    // handed in can already hold errors: those belong in the snapshot and the
+    // store, while the working state starts with `field_errors` empty, and
+    // clearing a copy here avoids writing to a signal during render.
     let initial = use_signal(state);
     let state = use_signal(move || {
         let mut working = initial.peek().clone();
         working.field_errors.clear();
         working
     });
-    // A snapshot, taken once. `FormState` is plain data and `Clone`, so this is
-    // a real copy rather than another handle to the same thing — which is the
-    // point, since `state` is about to be edited.
-    let initial = use_signal(move || state.peek().clone());
     let mut new_blank_item = use_signal(|| None::<String>);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
@@ -729,7 +750,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .collect::<HashMap<_, _>>()
     });
     let errors = use_store(move || {
-        state
+        initial
             .peek()
             .field_errors
             .iter()
@@ -753,10 +774,10 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             }
             Ok(_) => {}
             Err(e) => {
-                // An unknown variant name has already been recorded against the
-                // `VariantNode`, so it renders beside the select. Anything else is a
-                // bug or a forged event — log rather than panic, since on wasm a
-                // panic aborts instead of reaching an `ErrorBoundary`.
+                // An unknown variant name has already been recorded at the enum's path, in
+                // the store, so it renders beside the select. Anything else is a bug or a
+                // forged event — log rather than panic, since on wasm a panic aborts instead
+                // of reaching an `ErrorBoundary`.
                 warn!("rejected form edit: {e}");
             }
         }
