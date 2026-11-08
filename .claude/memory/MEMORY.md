@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-08**: `formoxus/ERRORS_PLAN.md` box 6 expanded into 6a–6g, incl. `aria-invalid="false"` (uncommitted); Todd builds it, then Claude's 7, 8b–8e
+- [**START HERE: next session**](next_session.md) — **2026-11-08**: `formoxus/ERRORS_PLAN.md` box 6 (6a–6g) planned; 6a+6b committed, Todd on 6c; then Claude's 6g tests, 7, 8b–8e
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait

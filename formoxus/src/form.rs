@@ -26,6 +26,7 @@ use facet::Facet;
 use formoxus_spec::FixedKey;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::hash::{BuildHasher, Hasher, RandomState};
 use std::{collections::HashMap, fmt::Debug, future::Future, pin::Pin, rc::Rc};
 
@@ -243,6 +244,16 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     values_store: ValuesStore,
     /// Field errors by qualified path. See [`ErrorsStore`].
     errors_store: ErrorsStore,
+    /// The paths typed into since they were last checked (`ERRORS_PLAN.md`
+    /// decision E). A blur checks only these, so tabbing through an empty
+    /// field says nothing, and clicking in and out of one leaves a server's
+    /// error standing.
+    ///
+    /// **Only event handlers touch it,** with `peek` and `write`. Nothing
+    /// subscribes, so a write on every keystroke wakes nothing. Never `read()`
+    /// it while rendering: whatever made that read would then re-render on
+    /// every keystroke, and no test would fail.
+    changed_paths: Signal<HashSet<String>>,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
     /// widget layer stay ignorant of `T` — [`NodeContext`] can't be generic
     /// without making every node type generic too.
@@ -510,9 +521,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         path: ModelPath<T>,
         message: &str,
     ) -> Result<(), FormAccessError> {
-        with_errors(self.state_signal, self.errors_store, |state| {
-            state.push_field_error(path.as_str(), message)
-        })
+        with_errors(
+            self.state_signal,
+            self.errors_store,
+            self.changed_paths,
+            |state| state.push_field_error(path.as_str(), message),
+        )
     }
 
     /// Put a server's validation back onto the form — the return leg of a submit.
@@ -528,11 +542,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// **Cleared by the next [`validate`](Self::validate)**, like every other
     /// pushed error.
     pub fn distribute_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
-        let unclaimed = with_errors(self.state_signal, self.errors_store, |state| {
-            state.errors.clone_from(&errors.form);
-            state.field_errors.clear();
-            state.distribute_errors(errors.fields.clone())
-        });
+        let unclaimed = with_errors(
+            self.state_signal,
+            self.errors_store,
+            self.changed_paths,
+            |state| {
+                state.errors.clone_from(&errors.form);
+                state.field_errors.clear();
+                state.distribute_errors(errors.fields.clone())
+            },
+        );
 
         if unclaimed.is_empty() {
             Ok(())
@@ -545,45 +564,6 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             Err(FormAccessError(format!(
                 "Errors appeared for form paths that don't exist: {paths}"
             )))
-        }
-    }
-
-    /// Check one field as the user edits it, writing only the error store, so
-    /// only the widgets whose errors changed re-render, never the form.
-    /// [`FormState::check_live`] does the checking, on a clone of the node that
-    /// owns `path`; this writes what it found: `path`'s own result, and `None`
-    /// to each path under an option the edit left absent.
-    ///
-    /// Not through `with_errors`, and never `state.write()`: either re-renders
-    /// the whole form, which is what this exists to avoid. Everything is read
-    /// with `peek`, so even a call from a render would subscribe nothing.
-    ///
-    /// Each write is skipped when it would change nothing, so a field whose
-    /// result is the same on this keystroke as the last does not wake.
-    #[expect(
-        dead_code,
-        reason = "box 6's handle calls it from the controls (ERRORS_PLAN.md); remove this then"
-    )]
-    pub(crate) fn check_live(&self, path: &str) {
-        let check = {
-            let state = self.state_signal.peek();
-            let values = state.ordered_values(&self.values_store.peek());
-            state.check_live(path, &values)
-        };
-        let mut errors = self.errors_store;
-        // No key reads as `None`, as `get_errors` reads it, so writing `None`
-        // to a path never checked is skipped too.
-        let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
-        if !unchanged {
-            errors.insert(path.to_string(), check.errors_at_path);
-        }
-        for cleared in check.paths_to_clear {
-            // `Some` of an empty `Vec` too: "checked and clean" stops applying
-            // under an absent option as well.
-            let shows_something = errors.peek().get(&cleared).is_some_and(Option::is_some);
-            if shows_something {
-                errors.insert(cleared, None);
-            }
         }
     }
 
@@ -650,6 +630,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.state_signal,
             self.values_store,
             self.errors_store,
+            self.changed_paths,
             edit,
         )
     }
@@ -669,7 +650,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
         let leaves = fresh.leaf_values();
-        with_errors(self.state_signal, self.errors_store, |state| *state = fresh);
+        with_errors(
+            self.state_signal,
+            self.errors_store,
+            self.changed_paths,
+            |state| *state = fresh,
+        );
         // Written per path rather than by replacing the map, so each input's
         // own subscription fires. Paths that only existed because of an edit
         // being undone are left behind as stale keys; nothing reads them, since
@@ -684,11 +670,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // The argument comes from the STORE. `state.collect_values()` would be the
         // state applied to itself — a no-op that discards every keystroke, and
         // then validates the stale values it kept.
-        with_errors(self.state_signal, self.errors_store, |state| {
-            let values = state.ordered_values(&self.values_store.read());
-            state.distribute_values(&values);
-            state.validate()
-        })
+        with_errors(
+            self.state_signal,
+            self.errors_store,
+            self.changed_paths,
+            |state| {
+                let values = state.ordered_values(&self.values_store.read());
+                state.distribute_values(&values);
+                state.validate()
+            },
+        )
     }
 }
 
@@ -776,6 +767,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         working
     });
     let mut new_blank_item = use_signal(|| None::<String>);
+    let changed_paths = use_signal(HashSet::new);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
     // for nothing.
@@ -797,7 +789,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .collect::<HashMap<_, _>>()
     });
     let on_edit = use_callback(move |edit: Edit| {
-        match apply_edit(state, values, errors, &edit) {
+        match apply_edit(state, values, errors, changed_paths, &edit) {
             // Not in a set: its Add made an item from the draft, and focus
             // stays in the draft for the next one (`DraftAdder`).
             Ok(Some(item))
@@ -837,6 +829,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         state_signal: state,
         values_store: values,
         errors_store: errors,
+        changed_paths,
         on_edit,
         initial_signal: initial,
         id: use_signal(|| form_id),
@@ -851,6 +844,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
     mut values: ValuesStore,
     errors: ErrorsStore,
+    changed_paths: Signal<HashSet<String>>,
     edit: &Edit,
 ) -> Result<Option<String>, FormAccessError> {
     // Found before the edit, while the item is still there to look up.
@@ -870,7 +864,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     }
     // Its own statement, so the write guard is dropped before `peek` below.
-    let created = with_errors(state, errors, |state| state.edit(edit))?;
+    let created = with_errors(state, errors, changed_paths, |state| state.edit(edit))?;
     // A removed item's leaves would otherwise outlive it in the store. Nothing
     // reads them back by path, since a key is never reused and `to_wire` reads
     // only the items the state still has. But a widget reading the store WHOLE
@@ -899,9 +893,140 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Ok(created)
 }
 
+/// What a widget tells the form happened to one field, for
+/// [`apply_field_event`].
+///
+/// Named for what happened, not for what the form does about it, which the
+/// form decides from the field's errors and whether it was typed into. A
+/// chooser (a select, a checkbox, a radio) sends both, `Written` then
+/// `Blurred`: it has no typing, so its change counts as the blur, and that
+/// is what makes it check at once.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[expect(dead_code, reason = "they will get created")]
+enum FieldEvent {
+    /// The field's new value is already in the value store. The widget
+    /// writes first and sends this second, so a check reads the new value
+    /// and not the one before this keystroke.
+    Written,
+    /// The field lost focus.
+    Blurred,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum AtPath {
+    ShowsErrors, // get(path) is Some(Some(non_empty_list))
+    Clean,       // get(path) is Some(Some(empty_list))
+    Nothing,     // get(path) is Some(None) or None
+}
+
+/// Apply one [`FieldEvent`] to the live form, deciding whether `path` is
+/// checked now (`ERRORS_PLAN.md` decisions A and E: reward early, punish
+/// late).
+///
+/// 1. **Written**, to a field showing errors: check it at once, so an error
+///    goes on the keystroke that fixes it, and take it out of
+///    `changed_paths`, since it has just been checked.
+/// 2. **Written**, to a field checked and clean: write `None` over that
+///    result, because it judged the value before this keystroke and would
+///    otherwise render as `aria-invalid="false"`, a claim that the new value
+///    passed. Then mark the field typed into.
+/// 3. **Written**, to a field never checked or cleared: mark it typed into,
+///    and nothing else, so nobody is scolded mid-word.
+/// 4. **Blurred**: check the field only if it was typed into since its last
+///    check. Tabbing through an empty required field then says nothing, and
+///    clicking in and out of a field leaves a server's error standing.
+///
+/// **A free function, not a `Form` method,** for the reason `apply_edit` is
+/// one: the `Callback` that calls it is made in `use_form` before the `Form`
+/// exists, so it closes over the signals and stores instead.
+///
+/// Writes only the error store and `changed_paths`, never the state, so the
+/// form does not re-render; see [`check_live`].
+#[expect(dead_code, reason = "it will be called")]
+fn apply_field_event<T>(
+    state: Signal<FormState<T>>,
+    values: ValuesStore,
+    mut errors: ErrorsStore,
+    mut changed_paths: Signal<HashSet<String>>,
+    path: &str,
+    event: FieldEvent,
+) where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    match event {
+        FieldEvent::Written => {
+            let at_path = match errors.peek().get(path) {
+                Some(Some(v)) if !v.is_empty() => AtPath::ShowsErrors,
+                Some(Some(_)) => AtPath::Clean,
+                _ => AtPath::Nothing,
+            };
+            match at_path {
+                AtPath::ShowsErrors => {
+                    check_live(state, values, errors, path);
+                    changed_paths.write().remove(path);
+                }
+                AtPath::Clean => {
+                    errors.insert(path.to_string(), None);
+                    changed_paths.write().insert(path.to_string());
+                }
+                AtPath::Nothing => {
+                    changed_paths.write().insert(path.to_string());
+                }
+            }
+        }
+        FieldEvent::Blurred => {
+            if changed_paths.write().remove(path) {
+                check_live(state, values, errors, path);
+            }
+        }
+    }
+}
+
+/// Check one field as the user edits it, writing only the error store, so
+/// only the widgets whose errors changed re-render, never the form.
+/// [`FormState::check_live`] does the checking, on a clone of the node that
+/// owns `path`; this writes what it found: `path`'s own result, and `None`
+/// to each path under an option the edit left absent.
+///
+/// Not through `with_errors`, and never `state.write()`: either re-renders
+/// the whole form, which is what this exists to avoid. Everything is read
+/// with `peek`, so even a call from a render would subscribe nothing.
+///
+/// Each write is skipped when it would change nothing, so a field whose
+/// result is the same on this keystroke as the last does not wake.
+fn check_live<T>(
+    state: Signal<FormState<T>>,
+    values: ValuesStore,
+    mut errors: ErrorsStore,
+    path: &str,
+) where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    let check = {
+        let state = state.peek();
+        let values = state.ordered_values(&values.peek());
+        state.check_live(path, &values)
+    };
+    // No key reads as `None`, as `get_errors` reads it, so writing `None`
+    // to a path never checked is skipped too.
+    let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
+    if !unchanged {
+        errors.insert(path.to_string(), check.errors_at_path);
+    }
+    for cleared in check.paths_to_clear {
+        // `Some` of an empty `Vec` too: "checked and clean" stops applying
+        // under an absent option as well.
+        let shows_something = errors.peek().get(&cleared).is_some_and(Option::is_some);
+        if shows_something {
+            errors.insert(cleared, None);
+        }
+    }
+}
+
 fn with_errors<T, R>(
     mut state: Signal<FormState<T>>,
     mut errors: ErrorsStore,
+    mut changed_paths: Signal<HashSet<String>>,
     operation: impl FnOnce(&mut FormState<T>) -> R,
 ) -> R
 where
@@ -932,6 +1057,14 @@ where
             errors.insert(path, messages);
         }
     }
+    // Every operation here decides errors for the whole form, so "typed into
+    // since its last check" starts over. Two cases need it. Enter submits
+    // without a blur, so a field typed into before it would otherwise still be
+    // here, and clicking in and out of it later would check it and wipe the
+    // server's reply ("that username is taken"). And `reset` restores
+    // `Items::next_key`, so a key used before it (`tags.#2`) comes back as a
+    // different item, which nobody has typed into.
+    changed_paths.write().clear();
     result
 }
 

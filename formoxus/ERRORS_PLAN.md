@@ -835,7 +835,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   Expanded 2026-11-08 by Claude into 6a–6g; 6f, `aria-invalid="false"` (#7), joined
   it the same day. The names are placeholders; choosing them is yours.
 
-  - [ ] **6a. The typed-into set: a `Signal<HashSet<String>>`, made in `use_form` and
+  - [x] **6a. The typed-into set: a `Signal<HashSet<String>>`, made in `use_form` and
     kept on `Form`.** A path goes in when a value is written to a field that is not
     showing an error, and comes out when that path is checked. That is all E needs.
 
@@ -865,7 +865,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     submit. The alternative, removing only the paths `with_errors` writes, is also
     correct, but you have to think harder to see why.
 
-  - [ ] **6b. The trigger, a free function beside `apply_edit`.** It takes the state
+  - [x] **6b. The trigger, a free function beside `apply_edit`.** It takes the state
     signal, both stores, the set, a path, and which event happened. It has to be a
     free function because the handle's `Callback` is made in `use_form` before the
     `Form` exists, so the callback cannot call a `Form` method. `on_edit` and
