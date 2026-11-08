@@ -3,7 +3,9 @@ use dioxus::core::Element;
 use crate::ErrorsByPath;
 use crate::error::FormAccessError;
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath};
+use crate::nodes::{
+    Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, owns, qualify,
+};
 
 #[derive(Clone, Debug)]
 pub struct OptionNode {
@@ -76,5 +78,16 @@ impl Node for OptionNode {
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
         self.inner.edit(prefix, edit, specs, errors)
+    }
+
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
+        let my_path = qualify(prefix, &self.name());
+        if !owns(&my_path, path) {
+            None
+        } else if !self.is_present() {
+            Some(my_path)
+        } else {
+            self.inner.absent_owner(prefix, path)
+        }
     }
 }

@@ -307,6 +307,19 @@ impl Node for VariantNode {
         }
     }
 
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
+        let nested = qualify(prefix, &self.name);
+        if owns(&nested, path) {
+            self.child_prefix(prefix).and_then(|var_path| {
+                self.nodes
+                    .iter()
+                    .find_map(|n| n.absent_owner(&var_path, path))
+            })
+        } else {
+            None
+        }
+    }
+
     fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
         let my_path = qualify(prefix, &self.name);
         match &self.choice {

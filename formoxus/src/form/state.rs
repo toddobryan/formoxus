@@ -144,6 +144,37 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         if self.has_errors() { None } else { Some(model) }
     }
 
+    pub(crate) fn check_live(&self, path: &str, values: &ValuesByPath) -> LiveCheck {
+        let owning_node = self.nodes.iter().find(|n| owns(&n.name(), path));
+        match owning_node {
+            None => LiveCheck {
+                errors_at_path: None,
+                paths_to_clear: Vec::new(),
+            },
+            Some(n) => {
+                let mut owning_node = n.clone();
+                owning_node.distribute_values("", &self.spec.fields, values);
+                let mut scratch_errors: ErrorsByPath = ErrorsByPath::default();
+                owning_node.validate("", &mut scratch_errors);
+                let paths_to_clear = match owning_node.absent_owner("", path) {
+                    None => Vec::new(),
+                    Some(owner) => {
+                        let mut all_paths = Vec::new();
+                        owning_node.paths("", Drafts::Exclude, &mut all_paths);
+                        all_paths
+                            .into_iter()
+                            .filter(|p| p != path && owns(&owner, p))
+                            .collect()
+                    }
+                };
+                LiveCheck {
+                    errors_at_path: scratch_errors.shift_remove(path),
+                    paths_to_clear,
+                }
+            }
+        }
+    }
+
     fn raw_values(&self) -> Vec<RawValue> {
         let mut out = Vec::new();
         for m in &self.nodes {
@@ -520,4 +551,196 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
 fn keyed_or_as_written(path: &str, item_keys: &HashMap<String, String>) -> String {
     crate::path::resolve_indices(path, |list| item_keys.get(list).map(String::as_str))
         .unwrap_or_else(|| path.to_string())
+}
+
+/// What a live check of one path found: what `FormState::check_live` returns
+/// and `Form::check_live` writes to the store. Plain data, so the check itself
+/// writes nothing and runs without a Dioxus runtime.
+///
+/// No `path` field: the caller passed it in, and a copy could only disagree.
+#[derive(Debug, PartialEq)]
+pub(crate) struct LiveCheck {
+    /// The path's own result. `Some` when it was validated, an empty `Vec`
+    /// meaning checked and clean (#7). `None` when nothing validates it now,
+    /// because it is under an absent option or in a draft, which clears it.
+    pub errors_at_path: Option<Vec<ValidationMessage>>,
+    /// Other paths whose errors no longer apply, because they are under the
+    /// option this check found absent. Each is written `None`. Bare paths, not
+    /// pairs with an `Option`, so a live check can only ever CLEAR a sibling,
+    /// never add an error to one: a field the user has not reached yet is not
+    /// scolded.
+    pub paths_to_clear: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    //! `check_live` on plain state: no runtime, no store. What `Form::check_live`
+    //! then writes is tested through the controls, once box 6 calls it.
+
+    use facet::Facet;
+    use googletest::prelude::*;
+
+    use super::{FormState, LiveCheck, empty_form};
+    use crate::error::ValidationMessage;
+    use crate::form::spec::FormSpec;
+    use crate::nodes::ValuesByPath;
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Phone {
+        number: String,
+        ext: String,
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Alt {
+        label: String,
+        phone: Option<Phone>,
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Reach {
+        email: String,
+        phone: Option<Phone>,
+        fax: Option<Phone>,
+        alt: Option<Alt>,
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Person {
+        name: String,
+        reach: Reach,
+    }
+
+    fn state() -> FormState<Person> {
+        empty_form::<Person>(FormSpec::default())
+    }
+
+    /// Every value blank, then `filled` typed in: what the store would hold.
+    fn values(state: &FormState<Person>, filled: &[(&str, &str)]) -> ValuesByPath {
+        let mut values = state.collect_values();
+        for (path, text) in filled {
+            values.insert((*path).to_string(), (*text).to_string());
+        }
+        values
+    }
+
+    fn required() -> Vec<ValidationMessage> {
+        vec![ValidationMessage("This field is required.".to_string())]
+    }
+
+    /// **A plain leaf gets its own checks,** and nothing else is cleared: no
+    /// option is around it.
+    #[gtest]
+    fn a_blank_required_field_is_required() {
+        let state = state();
+        let check = state.check_live("name", &values(&state, &[]));
+        expect_that!(
+            check,
+            eq(&LiveCheck {
+                errors_at_path: Some(required()),
+                paths_to_clear: Vec::new(),
+            })
+        );
+    }
+
+    /// **Checked and clean is an empty `Vec`, not `None`** (#7).
+    #[gtest]
+    fn a_filled_field_is_checked_and_clean() {
+        let state = state();
+        let check = state.check_live("name", &values(&state, &[("name", "Ada")]));
+        expect_that!(check.errors_at_path, some(is_empty()));
+    }
+
+    /// **Blanking the last filled field of an `Option<struct>` clears its
+    /// siblings,** and the option's own path: the option is absent now, so
+    /// nothing under it applies. The edited path is `None`, not in the list.
+    #[gtest]
+    fn blanking_the_last_field_clears_the_option() {
+        let state = state();
+        let check = state.check_live("reach.phone.number", &values(&state, &[]));
+        expect_that!(check.errors_at_path, none());
+        expect_that!(
+            check.paths_to_clear,
+            unordered_elements_are![eq("reach.phone"), eq("reach.phone.ext")]
+        );
+    }
+
+    /// **While the option stays present, its siblings are left alone,** even
+    /// though a submit would now say `ext` is required: a live check never adds
+    /// an error to a field the user has not reached.
+    #[gtest]
+    fn a_present_option_clears_nothing() {
+        let state = state();
+        let check = state.check_live(
+            "reach.phone.number",
+            &values(&state, &[("reach.phone.number", "555")]),
+        );
+        expect_that!(
+            check,
+            eq(&LiveCheck {
+                errors_at_path: Some(Vec::new()),
+                paths_to_clear: Vec::new(),
+            })
+        );
+    }
+
+    /// **Only the option around `path` is cleared, not another absent one in
+    /// the same top-level node.** `reach.fax` is absent too, but nothing about it
+    /// changed, and an error there may be a form validator's or a server's,
+    /// which nothing brings back before submit.
+    #[gtest]
+    fn another_absent_option_is_left_alone() {
+        let state = state();
+        let phone = state.check_live("reach.phone.number", &values(&state, &[]));
+        expect_that!(phone.paths_to_clear, each(not(starts_with("reach.fax"))));
+        let email = state.check_live("reach.email", &values(&state, &[]));
+        expect_that!(email.paths_to_clear, is_empty());
+    }
+
+    /// **The outermost absent option wins:** with all of `reach.alt` blank, a
+    /// check inside its inner `phone` clears the whole of `alt`, not only the
+    /// inner option.
+    #[gtest]
+    fn the_outermost_absent_option_is_cleared() {
+        let state = state();
+        let check = state.check_live("reach.alt.phone.number", &values(&state, &[]));
+        expect_that!(
+            check.paths_to_clear,
+            unordered_elements_are![
+                eq("reach.alt"),
+                eq("reach.alt.label"),
+                eq("reach.alt.phone"),
+                eq("reach.alt.phone.ext"),
+            ]
+        );
+    }
+
+    /// **An inner absent option inside a present outer one clears only
+    /// itself:** `alt.label` is filled, so `alt` is present, and its error stays.
+    #[gtest]
+    fn an_inner_absent_option_clears_only_itself() {
+        let state = state();
+        let check = state.check_live(
+            "reach.alt.phone.number",
+            &values(&state, &[("reach.alt.label", "Work")]),
+        );
+        expect_that!(
+            check.paths_to_clear,
+            unordered_elements_are![eq("reach.alt.phone"), eq("reach.alt.phone.ext")]
+        );
+    }
+
+    /// **A path the form does not have** checks nothing and clears nothing.
+    #[gtest]
+    fn an_unknown_path_finds_nothing() {
+        let state = state();
+        let check = state.check_live("nope", &values(&state, &[]));
+        expect_that!(
+            check,
+            eq(&LiveCheck {
+                errors_at_path: None,
+                paths_to_clear: Vec::new(),
+            })
+        );
+    }
 }

@@ -508,7 +508,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
       the `VariantNode`" now means the store: reword it.
     - [x] Checkpoint: `just ci`, then `just e2e`.
 
-- [ ] **4.** (Todd) Widgets read the store.
+- [x] **4.** (Todd) Widgets read the store.
 
   - [x] **4a.** `NodeContext.errors: ErrorsStore`, replacing 2b's stopgap, and `WidgetProps.errors` becomes
     that store. A helper beside `get_current`, `pub fn get_errors(path, errors) ->
@@ -693,19 +693,118 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     key, which costs nothing, as only a submit or `validate` writes it, and those
     re-render the form anyway. Box 5 needs that subscription to stay (see there).
 
-- [ ] **5.** (Todd) The live check. `FormState::check_live(&self, path, values:
-  &ValuesByPath) -> Option<Vec<ValidationMessage>>`: clone the top-level node that owns
-  `path`, `distribute_values` into the clone, `validate` it into a scratch map, and
-  return `path`'s entry. Nothing written, so `Form` reads with `peek` and writes
-  `path`'s store entry: no form re-render. Running the same `validate` is what
-  guarantees that a live check and a submit agree (trap 5).
+- [ ] **5.** (Todd) The live check. Validate one field as the user edits it, and
+  write only the store, so the form does not re-render. Box 6 calls it from the
+  controls' event handlers; this box only provides it.
+
+  **How it works.** Clone the top-level node that owns `path`, `distribute_values`
+  the store's current values into the clone, `validate` the clone into a scratch map,
+  and write `path`'s result to the store. Running the same `validate` a submit runs is
+  what guarantees the two agree (trap 5). The clone is needed because a leaf cannot be
+  judged alone, and the state's own nodes are stale until the next
+  `distribute_values` (trap 5 again).
 
   **It also clears siblings (Todd, 2026-11-05).** Blanking the last filled field of
   an `Option<struct>` makes it absent, and the form valid, while its siblings still
-  show the "required" a submit gave them. So `check_live` also says which OTHER paths
-  under that top-level node show an error the scratch map no longer reports, and
-  `Form` writes each `None`. It only ever clears, never adds, so B stands: a
-  sibling the user has not reached is not scolded.
+  show the "required" a submit gave them. It only ever clears, never adds, so B
+  stands: a sibling the user has not reached is not scolded.
+
+  **Which siblings: only those under the option this check found absent (Todd,
+  2026-11-07, "Option 2").** A live check must leave alone what `validate` cannot
+  re-derive, or it wipes it: a server's "that username is taken" (E), a pushed
+  error, a form validator's at a path, and a container's own error, which waits for
+  submit (B). But every error beneath an absent option stops applying, whoever wrote
+  it, so those, and only those, go. Asked of the clone alone, since the state's nodes
+  are stale and there is no "before" to compare with. A form validator's error under
+  that option can go early, and comes back on submit if it still holds.
+
+  Rejected: a second parameter on `paths`, with "under an absent option" as the
+  difference of two walks. It is mechanical, but it clears under EVERY absent option
+  in the top-level node, so typing in `contact.email` would wipe a form validator's
+  "phone needed" on an absent `contact.phone`, which nothing brings back before
+  submit.
+
+  - [x] **5a. `LiveCheck`, in `form/state.rs`** (Todd, 2026-11-07), what
+    `FormState::check_live` returns:
+
+    ```rust
+    pub(crate) struct LiveCheck {
+        pub errors_at_path: Option<Vec<ValidationMessage>>,
+        pub paths_to_clear: Vec<String>,
+    }
+    ```
+
+    `errors_at_path` is `Some` when `path` was validated, an empty `Vec` meaning
+    checked and clean (#7), and `None` when nothing validates it now: under an absent
+    option, or in a draft. `paths_to_clear` are bare paths, not pairs with an
+    `Option`, so the type itself says a sibling is only ever cleared. There is no
+    `path` field: the caller passed it in, and a copy could only disagree with it.
+
+  - [x] **5b. A new `Node` method that names the absent option around a path.**
+    Something like `fn absent_owner(&self, prefix: &str, path: &str) ->
+    Option<String>` (the name is yours): the path of the OUTERMOST option that owns
+    `path` and is absent, or `None`. Outermost, because everything under it goes,
+    an inner absent option's paths included.
+
+    1. **A default of `None` in the trait**, which is right for `FieldNode`: a leaf
+       contains nothing.
+    2. **`OptionNode`** checks itself BEFORE asking its inner node, which is what
+       makes the answer the outermost. Its own path is `qualify(prefix,
+       &self.name())`, since `name()` delegates to the inner node and an option adds
+       no segment (see its `edit`). If that path does not `owns` `path`, `None`. If
+       it does and `!self.is_present()`, `Some` of that path. Otherwise ask the inner
+       node with the same `prefix`.
+    3. **The containers recurse only into the child that owns `path`,** with the
+       prefix their own `paths` uses: `StructNode` its fields, `VariantNode` the
+       chosen variant's nodes through `child_prefix` (an unchosen one has none),
+       and `ListNode` and `SetNode` their items through `Items`, which needs a
+       matching method beside `Items::paths`. Check `owns` on the container's own
+       path first, so a walk never descends into a node that cannot hold `path`.
+    4. **`SetNode` asks its items, not its draft.** A draft is never validated
+       (`Drafts::Exclude`), so nothing beneath it needs clearing; a draft's path
+       gets `errors_at_path: None` anyway (see below).
+
+    The `owns` helper (`nodes.rs:141`) is the one to use throughout: it already
+    refuses a mere string prefix (`address2` is not under `address`).
+
+  - [x] **5c. `FormState::check_live(&self, path: &str, values: &ValuesByPath) ->
+    LiveCheck`,** in `form/state.rs` beside `validate`.
+
+    1. **Find the top-level node** whose name `owns` `path`. If none does, return a
+       `LiveCheck` with `None` and nothing to clear: the caller passed a path the form
+       does not have, and writing `None` there is harmless.
+    2. **Clone it** (`Box<dyn Node>` is `Clone`, `nodes.rs:129`) and call
+       `distribute_values("", &self.spec.fields, values)` on the clone. ALL of
+       `values`, not only `path`'s: whether an option is present depends on its
+       other leaves (trap 5).
+    3. **`validate("", &mut scratch)` on the clone,** into a fresh `ErrorsByPath`.
+       Its return value is not needed. `errors_at_path` is `scratch`'s entry for
+       `path`, cloned or removed. A container's entry in `scratch` (a struct's
+       validator) is ignored: B says those wait for submit.
+    4. **`paths_to_clear`:** if the clone's `absent_owner("", path)` is `Some(owner)`,
+       the clone's `paths("", Drafts::Exclude, …)` that `owner` `owns`, minus `path`
+       itself, which `errors_at_path` already covers. Otherwise empty. `paths` walks
+       an absent option's fields (settled 2026-11-05), which is what makes this find
+       them.
+
+    **Nothing here writes,** which is the point: `&self`, and the clone is dropped.
+    So it runs on the server too, though nothing calls it there.
+
+  - [x] **5d. `Form::check_live(&self, path: &str)`, `pub(crate)`,** in `form.rs`,
+    which box 6's handle calls.
+
+    1. **Read with `peek`**, never `read`: the state, and the value store for
+       `state.ordered_values(&…)`. It runs in an event handler, where `read`
+       subscribes nothing anyway, but `peek` says what is meant, and a later caller
+       in a render would otherwise subscribe the form.
+    2. **Write `errors_at_path` only if it differs** from the store's current value,
+       compared as `with_errors` does (`form.rs:887`), so an unchanged field's
+       widget does not wake on every keystroke.
+    3. **Write `None` to each of `paths_to_clear` whose store value is `Some`,**
+       empty or not: "checked and clean" stops applying under an absent option too.
+       Skip the rest, which are already clear.
+    4. **Never through `with_errors`, and never `state.write()`.** Either re-renders
+       the whole form, which is what this box exists to avoid.
 
   **Trap: the containers' reads (4d) must stay subscribing reads, never `peek`.** A
   cleared sibling can be a container's own key, such as a struct validator's error
@@ -714,20 +813,17 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   and the error stays on screen after the live check cleared it, with no test failing
   unless one covers exactly that case.
 
-  This has to leave alone what `validate` cannot re-derive, or a live check wipes
-  it: a server's "that username is taken" (E), a pushed error, a form validator's at
-  a path, and a container's own error, which waits for submit (B). **OPEN, for Todd
-  at box 5:** how to tell them apart. Claude's proposal: clear siblings only under an
-  option that owns `path` and is absent in the clone, since every error beneath an
-  absent option stops applying, whatever wrote it. Asked of the clone alone, because
-  the state's nodes are stale (trap 5), so there is no "before" to compare with. A
-  form validator's error there can go early, and comes back on submit if it still
-  holds. It takes a new way to ask: `Node` has no walk that finds the option owning
-  a path.
+  **A draft.** A draft's leaves are off the walk, so `scratch` has no entry and
+  `errors_at_path` is `None`: typing into a draft clears the refusal Add left there,
+  and Add judges it again. `ordered_values` leaves drafts out of `values`, which is
+  fine, since the clone never validates one.
 
-  A draft's leaves are off the walk, so `check_live` finds nothing and `Form` writes
-  `None`: typing into a draft clears the refusal Add left there, and Add
-  judges it again.
+  - [x] Checkpoint: `just ci`. Claude's tests are 8c, against 5c and 5d.
+    Done 2026-11-08: `just ci` 1206. Eight inline tests of `FormState::check_live` in
+    `form/state.rs` (the 8c cases that need no store), each mutation-checked: an
+    option returning the edited path, an option asking its inner node first, and a
+    struct asking only its first field all fail them. `Form::check_live` carries an
+    `#[expect(dead_code)]` until box 6 calls it; its store writes are tested then.
 
 - [ ] **6.** (Todd) The triggers, per A and E, on each control per G. `WidgetProps`
   gains a `Copy` handle, public so that a custom widget can use it as the built-ins
@@ -756,7 +852,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   - [ ] **8c.** `check_live`: every kind of leaf check; a blank field in a present
     and in an absent `Option<struct>` (trap 5); blanking the last filled field clears
     its siblings' errors, and a sibling's error survives while the option stays
-    present; an item's path; a draft's; that
+    present; an error under a DIFFERENT absent option in the same top-level node
+    survives (Option 2's reason); the outermost absent option wins over an inner one;
+    an unchanged result writes nothing; an item's path; a draft's; that
     `min_items` and a form validator never answer it (B).
 
   - [ ] **8d.** e2e, in pairs with `/t/live-*` forms: nothing shown while typing a

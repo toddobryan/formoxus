@@ -8,7 +8,8 @@ use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, qualify,
+    Drafts, Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, owns,
+    qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::field_row::required_marker;
@@ -223,5 +224,16 @@ impl Node for ListNode {
         }
 
         self.items.edit_within(&my_path, edit, specs, errors)
+    }
+
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
+        let nested = qualify(prefix, &self.name);
+        if owns(&nested, path) {
+            self.items
+                .iter()
+                .find_map(|i| i.absent_owner(&nested, path))
+        } else {
+            None
+        }
     }
 }

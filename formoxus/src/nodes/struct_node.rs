@@ -151,4 +151,15 @@ impl Node for StructNode {
             n.paths(&nested, drafts, out);
         }
     }
+
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
+        let nested = qualify(prefix, &self.name);
+        if owns(&nested, path) {
+            self.nodes
+                .iter()
+                .find_map(|n| n.absent_owner(&nested, path))
+        } else {
+            None
+        }
+    }
 }

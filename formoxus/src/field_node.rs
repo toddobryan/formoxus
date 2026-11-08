@@ -272,6 +272,10 @@ impl<F: Field> Node for FieldNode<F> {
         out.push(qualify(prefix, &self.name));
     }
 
+    fn absent_owner(&self, _prefix: &str, _path: &str) -> Option<String> {
+        None
+    }
+
     fn render(&self, ctx: &NodeContext) -> Element {
         // The field's own attributes (`min`, `pattern`, …), so the browser
         // checks what `check` does, then the author's, which only render.

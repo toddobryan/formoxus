@@ -124,6 +124,22 @@ pub trait Node: Debug {
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
     ) -> Result<Option<String>, FormAccessError>;
+
+    /// The path of the OUTERMOST absent option that owns `path`, or `None` if
+    /// no option around it is absent. `prefix` is this node's parent's path, as
+    /// in every other method here, and `path` is a full one.
+    ///
+    /// "Absent" means `!is_present()`, not that a `None` is stored anywhere: an
+    /// `Option<struct>` whose fields are all blank is absent. Outermost, because
+    /// everything under an absent option has stopped applying, an inner absent
+    /// option's paths included; so an `OptionNode` answers for itself BEFORE it
+    /// asks its inner node.
+    ///
+    /// What a live check clears: errors under this option, whoever wrote them,
+    /// and nothing outside it (`FormState::check_live`). A node that does not own
+    /// `path` answers `None`, so a container can ask each child in turn and take
+    /// the first `Some`.
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String>;
 }
 
 impl Clone for Box<dyn Node> {

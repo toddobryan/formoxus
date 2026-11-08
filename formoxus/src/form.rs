@@ -544,6 +544,45 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         }
     }
 
+    /// Check one field as the user edits it, writing only the error store, so
+    /// only the widgets whose errors changed re-render, never the form.
+    /// [`FormState::check_live`] does the checking, on a clone of the node that
+    /// owns `path`; this writes what it found: `path`'s own result, and `None`
+    /// to each path under an option the edit left absent.
+    ///
+    /// Not through `with_errors`, and never `state.write()`: either re-renders
+    /// the whole form, which is what this exists to avoid. Everything is read
+    /// with `peek`, so even a call from a render would subscribe nothing.
+    ///
+    /// Each write is skipped when it would change nothing, so a field whose
+    /// result is the same on this keystroke as the last does not wake.
+    #[expect(
+        dead_code,
+        reason = "box 6's handle calls it from the controls (ERRORS_PLAN.md); remove this then"
+    )]
+    pub(crate) fn check_live(&self, path: &str) {
+        let check = {
+            let state = self.state_signal.peek();
+            let values = state.ordered_values(&self.values_store.peek());
+            state.check_live(path, &values)
+        };
+        let mut errors = self.errors_store;
+        // No key reads as `None`, as `get_errors` reads it, so writing `None`
+        // to a path never checked is skipped too.
+        let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
+        if !unchanged {
+            errors.insert(path.to_string(), check.errors_at_path);
+        }
+        for cleared in check.paths_to_clear {
+            // `Some` of an empty `Vec` too: "checked and clean" stops applying
+            // under an absent option as well.
+            let shows_something = errors.peek().get(&cleared).is_some_and(Option::is_some);
+            if shows_something {
+                errors.insert(cleared, None);
+            }
+        }
+    }
+
     /// This form as plain data, ready to cross a server-fn boundary.
     ///
     /// Carries the live values and whatever errors currently stand. Neither

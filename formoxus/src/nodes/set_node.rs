@@ -952,6 +952,17 @@ impl Node for SetNode {
             self.draft.paths(&my_path, drafts, out);
         }
     }
+
+    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
+        let nested = qualify(prefix, &self.name);
+        if owns(&nested, path) {
+            self.items
+                .iter()
+                .find_map(|n| n.absent_owner(&nested, path))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
