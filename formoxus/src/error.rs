@@ -2,7 +2,7 @@ use std::fmt::{self, Debug, Display};
 
 use serde::{Deserialize, Serialize};
 
-use crate::path::Path;
+use crate::path::ModelPath;
 
 /// One message telling the user what to fix, written for display as is.
 ///
@@ -43,7 +43,7 @@ impl From<String> for ValidationMessage {
 /// "at least one answer is correct". An empty `Vec` means the model passed.
 ///
 /// `T` is the form's **model type**, the same `T` as in `FormSpec<T>`. It
-/// appears only in the [`Path<T>`], which is what stops a validator from
+/// appears only in the [`ModelPath<T>`], which is what stops a validator from
 /// pointing at a field of some other form.
 ///
 /// Where the message shows up:
@@ -65,13 +65,13 @@ impl From<String> for ValidationMessage {
 pub struct ValidationError<T> {
     /// `None` for a form-level error. Turned into its string form and dropped
     /// as soon as `validate` routes the error, so it is never stored.
-    pub(crate) path: Option<Path<T>>,
+    pub(crate) path: Option<ModelPath<T>>,
     pub(crate) message: ValidationMessage,
 }
 
-// Hand-written rather than derived, for the reason `Path`'s are: a derive would
+// Hand-written rather than derived, for the reason `ModelPath`'s are: a derive would
 // demand `T: Clone`/`T: Debug`/`T: PartialEq`, because it cannot see that `T`
-// appears only inside `Path<T>` — which holds no `T` either. Every real model
+// appears only inside `ModelPath<T>` — which holds no `T` either. Every real model
 // happens to satisfy those bounds, so the derive compiled; it would only bite
 // generic code that needs a `ValidationError<T>` without the same bounds on `T`.
 impl<T> Clone for ValidationError<T> {
@@ -108,7 +108,7 @@ impl<T> ValidationError<T> {
     /// item of a set by its value, `path!(Model.tags[= "rust"])`; the error
     /// goes beside that item. An index past the end, or a value no item
     /// holds, puts it with the form's own errors instead.
-    pub fn at(path: Path<T>, message: impl Into<ValidationMessage>) -> Self {
+    pub fn at(path: ModelPath<T>, message: impl Into<ValidationMessage>) -> Self {
         ValidationError {
             path: Some(path),
             message: message.into(),

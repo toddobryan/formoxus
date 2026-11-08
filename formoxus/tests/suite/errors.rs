@@ -362,7 +362,7 @@ fn a_validator_error_with_a_path_lands_on_that_field() {
 }
 
 /// `ValidationError<T>` asks nothing of `T`. Its `T` lives only inside
-/// `Path<T>`, which holds no `T` either, so cloning, printing or comparing an
+/// `ModelPath<T>`, which holds no `T` either, so cloning, printing or comparing an
 /// error must not depend on whether the MODEL can be cloned, printed or
 /// compared. A `#[derive]` would quietly demand all three, which is why the
 /// impls are hand-written — and this is what stops a derive coming back.

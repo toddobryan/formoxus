@@ -18,7 +18,7 @@ use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
 use crate::nodes::{Edit, ErrorsStore, NodeContext};
-use crate::path::Path;
+use crate::path::ModelPath;
 use crate::widgets::{ValuesStore, write_value};
 use crate::wire::WireForm;
 use dioxus::prelude::*;
@@ -68,7 +68,7 @@ impl FormErrors {
     /// item (`path!(Quiz.answers[i])`, `path!(Post.tags[= "rust"])`) finds
     /// nothing here. Look one up through
     /// [`WireForm::errors_at`](crate::WireForm::errors_at), which has them.
-    pub fn messages_at<T>(&self, path: Option<Path<T>>) -> Vec<String> {
+    pub fn messages_at<T>(&self, path: Option<ModelPath<T>>) -> Vec<String> {
         match path {
             None => self.form.iter().map(|e| e.0.clone()).collect(),
             Some(p) => self
@@ -496,7 +496,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// it checks anything, so a stale server-pushed error cannot outlive the
     /// next submit.
     ///
-    /// **Takes a [`Path`], not a `&str`**, so a misspelled field is a compile
+    /// **Takes a [`ModelPath`], not a `&str`**, so a misspelled field is a compile
     /// error rather than this `Err`. The `Err` remains for the paths a
     /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
     /// only the runtime knows, so those go through
@@ -505,7 +505,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         clippy::needless_pass_by_value,
         reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
     )]
-    pub fn push_field_error(&self, path: Path<T>, message: &str) -> Result<(), FormAccessError> {
+    pub fn push_field_error(
+        &self,
+        path: ModelPath<T>,
+        message: &str,
+    ) -> Result<(), FormAccessError> {
         with_errors(self.state_signal, self.errors_store, |state| {
             state.push_field_error(path.as_str(), message)
         })
@@ -516,7 +520,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// The counterpart to [`FormState::collect_errors`].
     ///
     /// Paths arrive as strings because they came off the wire, so this is the
-    /// one error path that a `Path<T>` cannot protect — an `Err` here means the
+    /// one error path that a `ModelPath<T>` cannot protect — an `Err` here means the
     /// server (or a malicious user) named a field this form does not have,
     /// which is a mismatch between the two sides' specs rather than anything
     /// a normal user did.

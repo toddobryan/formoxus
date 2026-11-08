@@ -28,7 +28,7 @@ use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::ValuesByPath;
-use formoxus::nodes::{Edit, model_path};
+use formoxus::nodes::{Edit, path_without_variants};
 use formoxus::prelude::*;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
@@ -730,20 +730,29 @@ fn switching_variants_keeps_each_ones_values_apart() {
 fn model_path_strips_variant_descriptors() {
     // The rule that keeps namespacing from costing us path/model mirroring:
     // drop every `$` segment and what's left is the path through the model.
-    expect_that!(model_path("footprint.$Circle.size"), eq("footprint.size"));
-    expect_that!(model_path("outer.$First.inner.$A.x"), eq("outer.inner.x"));
+    expect_that!(
+        path_without_variants("footprint.$Circle.size"),
+        eq("footprint.size")
+    );
+    expect_that!(
+        path_without_variants("outer.$First.inner.$A.x"),
+        eq("outer.inner.x")
+    );
 
     // An item KEY survives: it names a real element of the model. Which element
     // is a question the string can't answer — a key is an identity, not a
     // position, and only `ListNode::items` knows the order.
     expect_that!(
-        model_path("shapes.#0.$Circle.radius"),
+        path_without_variants("shapes.#0.$Circle.radius"),
         eq("shapes.#0.radius")
     );
 
     // Nothing to strip.
-    expect_that!(model_path("location.street"), eq("location.street"));
-    expect_that!(model_path("title"), eq("title"));
+    expect_that!(
+        path_without_variants("location.street"),
+        eq("location.street")
+    );
+    expect_that!(path_without_variants("title"), eq("title"));
 }
 
 #[gtest]
@@ -759,7 +768,7 @@ fn every_leaf_path_maps_back_onto_the_model() {
     let model: Vec<String> = form
         .collect_values()
         .into_iter()
-        .map(|(p, _)| model_path(&p))
+        .map(|(p, _)| path_without_variants(&p))
         .collect();
 
     expect_that!(model, each(not(contains_substring("$"))));

@@ -208,7 +208,7 @@ fn from_model_regenerates_every_leaf() {
 }
 
 // A path the model does not have can no longer be WRITTEN: `reject_field` takes
-// `Path<T>`, and `path!(Credentials.nope)` fails to compile. That guarantee is
+// `ModelPath<T>`, and `path!(Credentials.nope)` fails to compile. That guarantee is
 // pinned by `tests/ui/path_unknown_field.rs` rather than here.
 //
 // The runtime panic it replaces is still reachable, but only for a path that

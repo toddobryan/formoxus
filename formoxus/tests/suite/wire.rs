@@ -1,7 +1,7 @@
 //! The return leg: `path!`, `Form::apply_errors`, `to_wire` and `absorb`.
 //!
 //! These are written from a consumer's position for a reason beyond the usual
-//! one: `path!` expands to an absolute `::formoxus::path::Path` and a witness
+//! one: `path!` expands to an absolute `::formoxus::path::ModelPath` and a witness
 //! borrow, and neither resolves inside the library itself. A test here is the
 //! only place the expansion is exercised as a caller meets it.
 
@@ -70,11 +70,11 @@ fn a_path_carries_its_wire_spelling() {
 /// property, and this test exists to pin the spelling that carries it.
 #[gtest]
 fn a_path_is_typed_by_its_model() {
-    let p: formoxus::Path<Contact> = path!(Contact.name);
+    let p: formoxus::ModelPath<Contact> = path!(Contact.name);
     expect_that!(format!("{p}"), eq("name"));
 }
 
-/// `Path` is `Clone` and comparable even though `Contact` is neither `Clone`
+/// `ModelPath` is `Clone` and comparable even though `Contact` is neither `Clone`
 /// nor `Eq` — the impls are hand-written precisely so no bound leaks onto `T`.
 /// (Not `Copy` since 2026-11-03: a path with an index owns its string.)
 #[gtest]

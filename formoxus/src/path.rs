@@ -1,7 +1,7 @@
 //! Compile-checked paths into a model.
 //!
 //! A leaf path (`email`, `venue.city`, `answers[].text`) is the wire format, so
-//! it has to be a string at the boundary. [`Path`] is what keeps it from being a
+//! it has to be a string at the boundary. [`ModelPath`] is what keeps it from being a
 //! string in *your* code: it wraps the same string, but the only way to obtain
 //! one is [`path!`](macro@crate::path), which emits a witness borrow of the
 //! field beside it.
@@ -30,26 +30,26 @@ use std::marker::PhantomData;
 
 /// One leaf path into `T`, proven to exist at compile time.
 ///
-/// **`PhantomData<fn() -> T>`, not `PhantomData<T>`.** A `Path` holds no `T`
-/// and never will, and the `fn` form says so: it leaves `Path<T>` `Send`,
+/// **`PhantomData<fn() -> T>`, not `PhantomData<T>`.** A `ModelPath` holds no `T`
+/// and never will, and the `fn` form says so: it leaves `ModelPath<T>` `Send`,
 /// `Sync` and `Copy` no matter what `T` is, where `PhantomData<T>` would make a
 /// path inherit auto-traits from a model it doesn't contain.
 ///
 /// **A `Cow`, so `Clone` but not `Copy`.** A path with an index is built at
 /// run time (`answers[2]`) and owns its string; every other path borrows its
 /// literal and costs nothing to clone.
-pub struct Path<T> {
+pub struct ModelPath<T> {
     raw: Cow<'static, str>,
     model: PhantomData<fn() -> T>,
 }
 
-impl<T> Path<T> {
+impl<T> ModelPath<T> {
     /// Called only by [`path!`](macro@crate::path).
     ///
     /// **Deliberately hidden, and that is the whole design.** The guarantee is
-    /// not that a `Path<T>` wraps a plausible string — it is that every
-    /// `Path<T>` came from an invocation rustc type-checked against `T`. A
-    /// public constructor would let `Path::new("emial")` back through the hole
+    /// not that a `ModelPath<T>` wraps a plausible string — it is that every
+    /// `ModelPath<T>` came from an invocation rustc type-checked against `T`. A
+    /// public constructor would let `ModelPath::new("emial")` back through the hole
     /// the type exists to close.
     #[doc(hidden)]
     pub const fn __new(raw: &'static str) -> Self {
@@ -145,9 +145,9 @@ impl<T, S> ItemOf for HashSet<T, S> {
 
 // Every impl below is hand-written for one reason: `#[derive]` would add a
 // `T: Clone`/`T: Debug`/… bound that is never satisfied by anything real here.
-// A `Path<T>` contains no `T`, so none of these depend on `T` at all — the same
+// A `ModelPath<T>` contains no `T`, so none of these depend on `T` at all — the same
 // trap `crate::form::Form` documents for its own `Clone`.
-impl<T> Clone for Path<T> {
+impl<T> Clone for ModelPath<T> {
     fn clone(&self) -> Self {
         Self {
             raw: self.raw.clone(),
@@ -156,33 +156,33 @@ impl<T> Clone for Path<T> {
     }
 }
 
-impl<T> Debug for Path<T> {
+impl<T> Debug for ModelPath<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Path({:?})", self.raw)
+        write!(f, "ModelPath({:?})", self.raw)
     }
 }
 
-impl<T> Display for Path<T> {
+impl<T> Display for ModelPath<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.raw)
     }
 }
 
-impl<T> PartialEq for Path<T> {
+impl<T> PartialEq for ModelPath<T> {
     fn eq(&self, other: &Self) -> bool {
         self.raw == other.raw
     }
 }
 
-impl<T> Eq for Path<T> {}
+impl<T> Eq for ModelPath<T> {}
 
-impl<T> Hash for Path<T> {
+impl<T> Hash for ModelPath<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.raw.hash(state);
     }
 }
 
-impl<T> AsRef<str> for Path<T> {
+impl<T> AsRef<str> for ModelPath<T> {
     fn as_ref(&self) -> &str {
         &self.raw
     }
@@ -333,14 +333,14 @@ mod tests {
 
     #[derive(Debug)]
     struct Model;
-    /// Deliberately NOT `Clone`/`Eq`/`Hash`, to prove none of `Path`'s impls
+    /// Deliberately NOT `Clone`/`Eq`/`Hash`, to prove none of `ModelPath`'s impls
     /// leak a bound onto the model.
     #[derive(Debug)]
     struct Bare;
 
     #[gtest]
     fn a_path_is_clone_and_eq_for_a_model_that_is_neither() {
-        let a: Path<Bare> = Path::__new("venue.city");
+        let a: ModelPath<Bare> = ModelPath::__new("venue.city");
         let b = a.clone();
         expect_that!(a, eq(&b));
         expect_that!(a.as_str(), eq("venue.city"));
@@ -348,16 +348,16 @@ mod tests {
 
     #[gtest]
     fn display_is_the_wire_spelling_and_debug_is_not() {
-        let p: Path<Model> = Path::__new("answers[].text");
+        let p: ModelPath<Model> = ModelPath::__new("answers[].text");
         expect_that!(format!("{p}"), eq("answers[].text"));
-        expect_that!(format!("{p:?}"), eq("Path(\"answers[].text\")"));
+        expect_that!(format!("{p:?}"), eq("ModelPath(\"answers[].text\")"));
     }
 
     #[gtest]
     fn two_paths_with_the_same_spelling_are_the_same_path() {
-        let a: Path<Model> = Path::__new("email");
-        let b: Path<Model> = Path::__new("email");
-        let c: Path<Model> = Path::__new("bio");
+        let a: ModelPath<Model> = ModelPath::__new("email");
+        let b: ModelPath<Model> = ModelPath::__new("email");
+        let c: ModelPath<Model> = ModelPath::__new("bio");
         expect_that!(a, eq(&b));
         expect_that!(a, not(eq(&c)));
     }

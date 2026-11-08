@@ -114,7 +114,7 @@ pub use formoxus_macros::form;
 /// not at compile time — there is no per-form type to hang a struct literal on.
 pub use formoxus_macros::using_fns;
 
-/// `path!(Model.field)` — one compile-checked [`Path`] into `Model`.
+/// `path!(Model.field)` — one compile-checked [`ModelPath`] into `Model`.
 ///
 /// The witness trick `form!` uses on its own field entries, available for any
 /// field: it emits a borrow of the field beside the path's string form, so a
@@ -153,7 +153,7 @@ pub mod prelude {
     // What a dev writes after `sort_by:` for a set of strings, and matches on
     // in `feedback:`.
     pub use crate::nodes::{SetEvent, ascii_case_insensitive, unicode_case_insensitive};
-    pub use crate::path::Path;
+    pub use crate::path::ModelPath;
     pub use crate::submission::Submission;
     pub use crate::wire::WireForm;
     // Straight from the macro crate, not `crate::{form, …}`: `crate::form` names

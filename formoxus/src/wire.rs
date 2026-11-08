@@ -70,10 +70,10 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Path,
     error::ValidationMessage,
     form::{FormErrors, FormSpec, form_for},
     nodes::ValuesByPath,
+    path::ModelPath,
 };
 
 /// A form's mutable state, as plain data: raw values by path, both each leaf's
@@ -148,7 +148,7 @@ impl<T> WireForm<T> {
         clippy::needless_pass_by_value,
         reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
     )]
-    pub fn errors_at(&self, path: Path<T>) -> &[ValidationMessage] {
+    pub fn errors_at(&self, path: ModelPath<T>) -> &[ValidationMessage] {
         let keyed = crate::path::resolve_indices(path.as_str(), |list| {
             self.values.get(list).map(String::as_str)
         });
@@ -157,7 +157,7 @@ impl<T> WireForm<T> {
             .map_or(&[], Vec::as_slice)
     }
 
-    pub fn error_messages_at(&self, path: Path<T>) -> Vec<String> {
+    pub fn error_messages_at(&self, path: ModelPath<T>) -> Vec<String> {
         self.errors_at(path).iter().map(|fe| fe.0.clone()).collect()
     }
 
@@ -184,7 +184,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> WireForm<T> {
     }
 }
 
-// Hand-written for the reason `crate::path::Path` documents: a derive would
+// Hand-written for the reason `crate::path::ModelPath` documents: a derive would
 // demand `T: Clone`/`T: Debug` for a `PhantomData` that holds no `T`.
 impl<T> Clone for WireForm<T> {
     fn clone(&self) -> Self {

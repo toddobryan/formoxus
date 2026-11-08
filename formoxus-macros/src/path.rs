@@ -10,7 +10,7 @@
 //! // {
 //! //     #[allow(unused)]
 //! //     fn __formoxus_path_witness(__s: &Signup) { let _ = &__s.venue.city; }
-//! //     ::formoxus::path::Path::<Signup>::__new("venue.city")
+//! //     ::formoxus::path::ModelPath::<Signup>::__new("venue.city")
 //! // }
 //! ```
 //!
@@ -18,10 +18,10 @@
 //! `E0609: no field 'pasword' on type '&Signup'` at the call site rather than a
 //! `no_such_path` panic on a server somewhere.
 //!
-//! **This is why `Path::__new` is hidden.** The guarantee is not that a
-//! `Path<T>` wraps a plausible string — it is that every `Path<T>` in existence
+//! **This is why `ModelPath::__new` is hidden.** The guarantee is not that a
+//! `ModelPath<T>` wraps a plausible string — it is that every `ModelPath<T>` in existence
 //! came from an invocation that type-checked. A public constructor would let
-//! `Path::new("pasword")` walk straight back through the hole.
+//! `ModelPath::new("pasword")` walk straight back through the hole.
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -76,14 +76,14 @@ impl PathInput {
             // written.
             let (format, arguments) = self.field.key_format();
             quote! {
-                ::formoxus::path::Path::<#model>::__new_indexed(::std::format!(
+                ::formoxus::path::ModelPath::<#model>::__new_indexed(::std::format!(
                     #format,
                     #(#arguments),*
                 ))
             }
         } else {
             let key = self.field.key();
-            quote! { ::formoxus::path::Path::<#model>::__new(#key) }
+            quote! { ::formoxus::path::ModelPath::<#model>::__new(#key) }
         };
         // A closure, never called, where the witness has to see a value the
         // author wrote (`tags[= &t]`): a `fn` item cannot capture `t`.
@@ -121,7 +121,7 @@ mod tests {
         let out = expand(quote! { Signup.password });
         expect_that!(out, contains_substring("__s . password"));
         expect_that!(out, contains_substring("\"password\""));
-        expect_that!(out, contains_substring("Path :: < Signup >"));
+        expect_that!(out, contains_substring("ModelPath :: < Signup >"));
     }
 
     #[gtest]
@@ -196,7 +196,7 @@ mod tests {
         expect_that!(out, contains_substring("__new (\"answers[].text\")"));
     }
 
-    /// A `Path` names a node, and a variant has none of its own.
+    /// A `ModelPath` names a node, and a variant has none of its own.
     #[gtest]
     fn a_path_ending_at_a_variant_is_rejected() {
         expect_that!(

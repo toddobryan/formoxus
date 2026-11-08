@@ -6,7 +6,7 @@ use facet::Facet;
 
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
 use crate::nodes::ValuesByPath;
-use crate::path::Path;
+use crate::path::ModelPath;
 use crate::wire::WireForm;
 
 /// A submitted form that passed its own validation, holding both the model the
@@ -99,12 +99,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// 500. Failing loudly beats returning a `Result` that every call site has
     /// to `?` for a bug that should never ship, and beats dropping the message
     /// on the floor.
-    /// **Takes a [`Path`], not a `&str`.** A typo is a compile error at the
+    /// **Takes a [`ModelPath`], not a `&str`.** A typo is a compile error at the
     /// call site, so the panic below is now reachable only by a path
     /// `path!` cannot spell — a specific item, whose index only the runtime
     /// knows. Those go through [`FormState::push_field_error`] with a string.
     ///
-    /// **Still panics on a path this form does not have.** A `Path<T>` proves
+    /// **Still panics on a path this form does not have.** A `ModelPath<T>` proves
     /// the field exists on `T`; it does not prove this form renders it, since a
     /// form may cover part of a model, and an unchosen variant's fields are not
     /// in the tree. That remains a caller bug rather than anything a user's
@@ -116,7 +116,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
         clippy::needless_pass_by_value,
         reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
     )]
-    pub fn reject_field(mut self, path: Path<T>, message: &str) -> WireForm<T> {
+    pub fn reject_field(mut self, path: ModelPath<T>, message: &str) -> WireForm<T> {
         self.state
             .push_field_error(path.as_str(), message)
             .unwrap_or_else(|e| panic!("cannot reject `{path}`: {e}"));

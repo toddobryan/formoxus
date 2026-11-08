@@ -508,7 +508,7 @@ pub(crate) const ITEM_SIGIL: char = '#';
 /// switch.
 ///
 /// The cost is that an item's *position* is no longer recoverable from its path.
-/// Order lives in `ListNode::items` and nowhere else — see [`model_path`].
+/// Order lives in `ListNode::items` and nowhere else — see [`path_without_variants`].
 /// `1 item`, `2 items`: a count of items, for a message.
 fn items_word(count: usize) -> String {
     if count == 1 {

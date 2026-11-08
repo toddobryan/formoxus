@@ -17,7 +17,7 @@
 //!   checked against the model's real shape at compile time, by emitting a
 //!   witness expression per path — a typo is a compile error, not a runtime
 //!   `no_such_path`.
-//! - [`macro@path`] builds one compile-checked `Path<Model>`, by the same
+//! - [`macro@path`] builds one compile-checked `ModelPath<Model>`, by the same
 //!   witness trick, for any field — whether or not a form mentions it. It is
 //!   what keeps `reject_field` and friends from taking a bare `&str`.
 //! - [`macro@using_fns`] supplies the handlers for one `render`, keyed by button
@@ -50,7 +50,7 @@ pub fn form(input: TokenStream) -> TokenStream {
     form::impl_form(input.into()).into()
 }
 
-/// `path!(Model.field)` — a compile-checked [`Path`](../formoxus/path/struct.Path.html)
+/// `path!(Model.field)` — a compile-checked [`ModelPath`](../formoxus/path/struct.ModelPath.html)
 /// into `Model`.
 ///
 /// Emits a witness borrow of the field beside the path's string form, so a

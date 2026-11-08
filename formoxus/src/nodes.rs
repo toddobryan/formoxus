@@ -195,7 +195,7 @@ pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
 ///
 /// `$` cannot begin a Rust identifier, so a descriptor can never collide with a
 /// field name. That's what lets two variants of the same enum each have a
-/// `size` without both claiming `footprint.size` — see [`model_path`].
+/// `size` without both claiming `footprint.size` — see [`path_without_variants`].
 pub(crate) fn variant_segment(variant: &str) -> String {
     format!("${variant}")
 }
@@ -213,7 +213,7 @@ pub(crate) fn variant_segment(variant: &str) -> String {
 /// it is cannot be read off the string —
 /// only `ListNode::items` knows that — so the result names the item without
 /// placing it.
-pub fn model_path(path: &str) -> String {
+pub fn path_without_variants(path: &str) -> String {
     path.split('.')
         .filter(|segment| !segment.starts_with('$'))
         .collect::<Vec<_>>()
