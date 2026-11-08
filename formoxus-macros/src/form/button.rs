@@ -148,7 +148,8 @@ fn button_type_names() -> Vec<&'static str> {
 }
 
 /// The message for a button type that is not in the table — the same three
-/// cases, in the same order, as [`unknown_widget`].
+/// cases, in the same order, as
+/// [`unknown_widget`](crate::form::widget::unknown_widget).
 pub(crate) fn unknown_button_type(name: &Ident) -> String {
     let written = name.to_string();
     let lowered = to_snake(&written);

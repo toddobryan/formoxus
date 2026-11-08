@@ -94,7 +94,7 @@ pub fn path(input: TokenStream) -> TokenStream {
 }
 
 /// The handlers for one `render`, keyed by button name — see
-/// [`using_fns`] for why this is a map and not a struct.
+/// [`using_fns`](macro@using_fns) for why this is a map and not a struct.
 #[proc_macro]
 pub fn using_fns(input: TokenStream) -> TokenStream {
     using_fns::impl_using_fns(input.into()).into()

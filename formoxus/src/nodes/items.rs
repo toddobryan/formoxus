@@ -396,7 +396,7 @@ impl Items {
     /// Sort the items by `order`. Only their order on screen changes: every
     /// key stays, since a key is an identity, not a position. How items are
     /// compared, and where an item with nothing to compare goes, is
-    /// [`ItemOrder::sort_nodes`](crate::nodes::set_node::ItemOrder::sort_nodes)'s
+    /// [`ItemHandler::sort_nodes`](crate::nodes::set_node::ItemHandler::sort_nodes)'s
     /// business.
     pub(crate) fn sort_by(&mut self, order: &SetOrder) {
         order.item_order.sort_nodes(&mut self.collection);
@@ -423,7 +423,7 @@ impl<'a> IntoIterator for &'a mut Items {
     }
 }
 
-/// The value a new item arrives filled in with: [`Edit::AddItem`][crate::nodes::Edit::AddItem]'s `value`.
+/// The value a new item arrives filled in with: [`Edit::AddItem`]'s `value`.
 ///
 /// **Type-erased** because `Edit` is not generic and cannot be. It crosses
 /// the widget boundary as a `Callback<Edit>`, and one `Edit` type serves
@@ -497,18 +497,6 @@ impl PartialEq for ItemValue {
 /// for a field name.
 pub(crate) const ITEM_SIGIL: char = '#';
 
-/// An item key segment: `3` -> `#3`.
-///
-/// An item's name is its *identity*, not its position — which is what lets an item
-/// be inserted in the middle, removed, or reordered without renaming its
-/// neighbours. Renaming them would move every leaf beneath them to a different
-/// key in the value store, and the values would have to be shuffled to match:
-/// the same silent-corruption hazard [`variant_segment`] exists to prevent,
-/// except recurring on every insert and remove rather than only on a variant
-/// switch.
-///
-/// The cost is that an item's *position* is no longer recoverable from its path.
-/// Order lives in `ListNode::items` and nowhere else — see [`path_without_variants`].
 /// `1 item`, `2 items`: a count of items, for a message.
 fn items_word(count: usize) -> String {
     if count == 1 {
@@ -518,6 +506,19 @@ fn items_word(count: usize) -> String {
     }
 }
 
+/// An item key segment: `3` -> `#3`.
+///
+/// An item's name is its *identity*, not its position — which is what lets an item
+/// be inserted in the middle, removed, or reordered without renaming its
+/// neighbours. Renaming them would move every leaf beneath them to a different
+/// key in the value store, and the values would have to be shuffled to match:
+/// the same silent-corruption hazard
+/// [`variant_segment`](crate::nodes::variant_segment) exists to prevent, except
+/// recurring on every insert and remove rather than only on a variant switch.
+///
+/// The cost is that an item's *position* is no longer recoverable from its path.
+/// Order lives in `ListNode::items` and nowhere else — see
+/// [`path_without_variants`](crate::nodes::path_without_variants).
 pub(crate) fn item_segment(key: usize) -> String {
     format!("{ITEM_SIGIL}{key}")
 }

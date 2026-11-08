@@ -63,13 +63,13 @@ pub(crate) enum Suffix {
     /// `[]`: each item of the list.
     Each,
     /// `[i]`: ONE item of a `Vec`, at the index the expression gives at run
-    /// time. Only [`path!`](crate::path) takes it, where an error names the
+    /// time. Only [`path!`](macro@crate::path) takes it, where an error names the
     /// item it is about; a `form!` setting applies to every item, so
     /// [`SpecPath`]'s own parse refuses it. See
     /// [`parse_indexed`](SpecPath::parse_indexed).
     At(Box<syn::Expr>),
     /// `[= value]`: ONE item of a set, the one equal to the value the
-    /// expression refers to at run time. [`path!`](crate::path) only, and
+    /// expression refers to at run time. [`path!`](macro@crate::path) only, and
     /// only last: a set's item is a leaf, so nothing follows it.
     Value(Box<syn::Expr>),
 }
@@ -122,7 +122,7 @@ impl SpecPath {
     /// `groups[i].$Random.set[j]` is `"groups[{}].$Random.set[{}]"` with `i`
     /// and `j`, each checked as a `usize`; `tags[= &t]` is `"tags{}"` with
     /// `item_value_key(&t)`, which writes its own brackets. What
-    /// [`path!`](crate::path) builds a path from at run time. No segment
+    /// [`path!`](macro@crate::path) builds a path from at run time. No segment
     /// can hold a brace, so nothing needs escaping.
     pub(crate) fn key_format(&self) -> (String, Vec<TokenStream2>) {
         let mut arguments = Vec::new();
@@ -347,7 +347,7 @@ impl Parse for SpecPath {
 }
 
 impl SpecPath {
-    /// A [`path!`](crate::path) path, where `[i]` may name one item of a
+    /// A [`path!`](macro@crate::path) path, where `[i]` may name one item of a
     /// `Vec` by an index computed at run time.
     pub(crate) fn parse_indexed(input: ParseStream<'_>) -> Result<Self> {
         Self::parse_with(input, true)
