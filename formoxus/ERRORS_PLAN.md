@@ -682,9 +682,16 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     that must not, which is why box 5 writes only the store. So a test of this has to
     write to the store directly, as box 8b's will.
 
-  - [ ] **4d.** Containers (`StructNode`, `ListNode`, `SetNode`, `VariantNode`,
+  - [x] **4d.** Containers (`StructNode`, `ListNode`, `SetNode`, `VariantNode`,
     legends and `fx-invalid`) read their own key in `render`. That is the form's
     scope, which is fine under B: their errors change only on submit.
+
+    **Checked 2026-11-07: no change needed.** Each already reads its own key through
+    `ctx.errors_at`, which has called `get_errors` on the store since 4a
+    (`struct_node.rs:45`, `list_node.rs:68`, `set_node.rs:850`, `variant_node.rs:200`),
+    and no `render` reads `field_errors` any more. The read subscribes the form to that
+    key, which costs nothing, as only a submit or `validate` writes it, and those
+    re-render the form anyway. Box 5 needs that subscription to stay (see there).
 
 - [ ] **5.** (Todd) The live check. `FormState::check_live(&self, path, values:
   &ValuesByPath) -> Option<Vec<ValidationMessage>>`: clone the top-level node that owns
@@ -699,6 +706,13 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   under that top-level node show an error the scratch map no longer reports, and
   `Form` writes each `None`. It only ever clears, never adds, so B stands: a
   sibling the user has not reached is not scolded.
+
+  **Trap: the containers' reads (4d) must stay subscribing reads, never `peek`.** A
+  cleared sibling can be a container's own key, such as a struct validator's error
+  under an `Option<struct>` that has just become absent. The form re-renders only
+  because its `render` read that key, so the stale error goes. Read it with `peek`
+  and the error stays on screen after the live check cleared it, with no test failing
+  unless one covers exactly that case.
 
   This has to leave alone what `validate` cannot re-derive, or a live check wipes
   it: a server's "that username is taken" (E), a pushed error, a form validator's at

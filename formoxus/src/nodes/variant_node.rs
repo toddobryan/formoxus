@@ -243,6 +243,12 @@ impl Node for VariantNode {
         let base_attrs = FieldAttrs::with_owned_attrs(false, ctx.required, &field_attrs)
             .with_error_attrs(&id, self.help_text.as_deref(), !own_errors.is_empty());
 
+        // Never invalid, unlike a struct's, a list's or a set's fieldset. The
+        // enum's own errors ("required" while unchosen, an unknown variant name)
+        // belong to its select, which marks them through `base_attrs` above and
+        // lists them, so marking the fieldset too would say it twice. A bad field
+        // inside the variant marks only that field, as in a struct. The preset
+        // agrees: `FixedKey::Variant`'s slot has no invalid class (`classes.rs`).
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Variant, false);
         let legend_class = ctx.classes.fixed_class(FixedKey::VariantLegend, false);
         rsx! {
