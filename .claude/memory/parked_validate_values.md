@@ -50,4 +50,5 @@ Context: the 2026-09-30 rename to `collect_X` / `distribute_X` pairs
    can be error-checked, converting to and from `String` only at the wire
    boundary. Relates to [[error-model-design]] (storage positional, path erased
    at routing) and to `Path<T>`, whose `&'static str` is exactly why it cannot
-   cross the wire today.
+   cross the wire today. **Issue #21 (2026-11-08)** is the first step: a string newtype for
+   live paths, with `qualify`/`owns`/… as methods.

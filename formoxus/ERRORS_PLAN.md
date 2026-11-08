@@ -693,7 +693,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     key, which costs nothing, as only a submit or `validate` writes it, and those
     re-render the form anyway. Box 5 needs that subscription to stay (see there).
 
-- [ ] **5.** (Todd) The live check. Validate one field as the user edits it, and
+- [x] **5.** (Todd) The live check. Validate one field as the user edits it, and
   write only the store, so the form does not re-render. Box 6 calls it from the
   controls' event handlers; this box only provides it.
 
@@ -832,9 +832,262 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   one on blur (check if it was typed into). `Form` keeps which paths were typed into
   since their last check (E) in a plain `Signal`, which no render reads.
 
+  Expanded 2026-11-08 by Claude into 6a–6g; 6f, `aria-invalid="false"` (#7), joined
+  it the same day. The names are placeholders; choosing them is yours.
+
+  - [ ] **6a. The typed-into set: a `Signal<HashSet<String>>`, made in `use_form` and
+    kept on `Form`.** A path goes in when a value is written to a field that is not
+    showing an error, and comes out when that path is checked. That is all E needs.
+
+    **Nothing may read it while rendering.** Only the event handlers touch it, with
+    `peek` and `write`. Since nothing subscribes, a write on every keystroke wakes
+    nothing. One `read()` in `Form::render`, or in a widget, and every keystroke
+    re-renders whatever made that read. No test would fail; it would just be slow.
+
+    **`with_errors` empties it,** on every call. Each operation that goes through
+    `with_errors` decides errors for the whole form, so "since its last check" starts
+    over. Two cases show it has to happen:
+
+    1. **Enter to submit.** Pressing Enter in a field submits without a blur. Say the
+       user types into `username`, presses Enter, and the server answers "taken".
+       `username` is still in the set, so when the user clicks in and out of it, the
+       blur checks it, and the clean live result wipes the server's error. That is
+       exactly what E forbids. `validate` goes through `with_errors`, so emptying the
+       set there fixes it.
+    2. **`reset`.** `Items::next_key` is restored with the rest of the initial state,
+       so a key used before the reset (`tags.#2`) comes back as a different item. If
+       the set still held it, blurring the new item would check a field nobody had
+       typed into since the reset. `reset` goes through `with_errors` too.
+
+    So `with_errors` takes the set as a third parameter, and so does `apply_edit`,
+    which calls it. Emptying on an edit or a push costs at most one blur check, on a
+    field the user was in the middle of typing in, and its errors still come on
+    submit. The alternative, removing only the paths `with_errors` writes, is also
+    correct, but you have to think harder to see why.
+
+  - [ ] **6b. The trigger, a free function beside `apply_edit`.** It takes the state
+    signal, both stores, the set, a path, and which event happened. It has to be a
+    free function because the handle's `Callback` is made in `use_form` before the
+    `Form` exists, so the callback cannot call a `Form` method. `on_edit` and
+    `apply_edit` are set up the same way, for the same reason. `Form::check_live`'s
+    body moves into this function, or into a helper beside it, and
+    `Form::check_live` goes, along with its `#[expect(dead_code)]`.
+
+    1. **After a write:** if the store shows errors at `path`, check it now and take
+       `path` out of the set. Otherwise put `path` in the set and stop. "Shows errors"
+       means `Some` of a NON-empty `Vec`, read with `peek`. `Some` of an empty `Vec`
+       means checked and clean, and a clean field waits for blur ("punish late").
+    2. **Also after a write, and whether live checks are on or off: a clean verdict
+       goes stale.** If the store holds `Some` of an empty `Vec` at `path`, write
+       `None`. "Checked and clean" was about the value before this keystroke, and 6f
+       turns it into `aria-invalid="false"`, which tells a screen reader the field
+       passed. Left in place, that is a lie about the new value until the next check.
+       This is what #7's plan meant by "a stale 'passed' cannot survive an edit". It
+       writes only on the first keystroke after a check, because after that the store
+       holds `None` and there is nothing to write, so the widget wakes once, not on
+       every keystroke. It leaves errors alone. With checks on, step 1 re-checks a
+       field that has them. With checks off they stay until submit, as they do today.
+    3. **On blur:** take `path` out of the set, and check it if it was there.
+       `HashSet::remove` returns whether it was, so this is one call.
+    4. **The check itself** is box 5's code, unchanged.
+
+    **The handle's `input` and `change` (6c) write first and trigger second.** The
+    check reads the value from the store. Do them the other way round and every check
+    validates the value from one keystroke earlier. Only the e2e test for "gone on the
+    keystroke that fixes it" would notice. Since the handle does both, no widget can
+    get the order wrong.
+
+  - [ ] **6c. Two handles: a crate-private form-wide trigger, and a public per-field
+    handle that is the ONLY way a widget writes a value** (Todd, 2026-11-08: "make the
+    API more ergonomic, so devs would have to work hard to do it wrong"). The first
+    draft had a widget call `write_value` and then the trigger, in that order, with
+    the same path, and wire `onblur` itself. Each of those is a way to get it wrong
+    that still compiles. The worst is calling `write_value` alone: live checks never
+    happen, and a stale `aria-invalid="false"` stays up (6f). Instead, the write and
+    the trigger become one call, and nothing else can write.
+
+    **The form-wide trigger, crate-private.** A `Copy` struct holding an
+    `Option<Callback<(String, Trigger)>>`, where `Trigger` is a crate-private enum
+    with two variants, written and blurred, plus a `bool` for whether live checks are
+    on. One callback means one closure in `use_form`, so E's logic lives in one
+    place. This is what 6d threads through `NodeContext` and `WidgetProps`, where it
+    is a `pub(crate)` field.
+
+    1. **`None` means "no form"**, as in props built by `WidgetProps::new`, which
+       defaults it to `None` and stays at six arguments. The two tests that build
+       props by hand (`builtin_widgets.rs:86`, `widgets.rs:180`) then need no form,
+       and the suite tests that fire a real `oninput` through those props still write
+       the value, with nothing to trigger.
+    2. **The `bool` is box 7's off switch, not `None`.** With the knob off, a write
+       still has a job: making a clean verdict stale (6b step 2). So when the `bool`
+       is `false`, the trigger does step 2 and nothing else, and a blur does nothing.
+       `root_ctx` sets it, always `true` until box 7. Turning the knob off then needs
+       no `bool` in `NodeContext` and no check in any widget.
+
+    **The per-field handle, public, in `widgets`** (not the prelude, since only
+    someone writing a widget uses it). Something like `props.field()` returns it.
+    The name is yours; `FieldHandle` is the placeholder. It holds the field's path,
+    the value store, and the form-wide trigger. It is `Clone`, not `Copy`, because
+    it owns the path, a `String`; derive `Debug` and `PartialEq` too, so a widget can
+    pass it to a child component as a prop. Its methods are named after the DOM
+    event the widget is handling, so picking the right one is the obvious choice:
+
+    1. **`current()`**: the field's raw value, replacing `get_current`. It reads the
+       store, so call it from a component, the same rule as `current_attrs`.
+    2. **`input(raw)`**: write, then the after-write trigger. For typing.
+    3. **`change(raw)`**: write, then the after-write trigger, then the blur trigger,
+       because a chooser has no typing, so its change counts as the blur (E). It
+       always comes to exactly one check. For a select, a checkbox, a radio, and a
+       custom widget whose value comes from a click (a star rating).
+    4. **`blur()`**: the blur trigger.
+    5. **`on_input()`, `on_change()`, `on_blur()`**: each returns a ready-made event
+       handler that calls the matching method with `e.value()`. They are the methods
+       above wrapped up, so a widget writes `oninput: field.on_input()` and never
+       clones a path or writes a closure. Checked against `dioxus-html` 0.7.10
+       (`events/mod.rs:25`): an event attribute takes any `impl SuperInto<
+       ListenerCallback<…>>`, which a closure returned from a method satisfies.
+       `on_blur`'s event is a `FocusEvent`, not a `FormEvent`. Kept (Todd,
+       2026-11-08): they are what makes the right way the easy way.
+
+    **Then remove the other ways to write:**
+
+    1. **`WidgetProps.values` becomes `pub(crate)`**, as `base_attrs` did in 4c, for
+       the same reason: a public field lets a widget skip the step that keeps the
+       field correct. `errors` stays `pub`, since `FieldErrors` takes the store and
+       reading it can't do any harm.
+    2. **`write_value` and `get_current` leave `formoxus::widgets`** and become
+       `pub(crate)`. The handle replaces both inside a widget.
+    3. **A write from outside a widget** (the "Overwrite" button,
+       `examples/src/test_forms.rs:491`, and five suite tests in
+       `browser_validation.rs` and `wire.rs`) goes through a new `Form` method that
+       writes and makes a clean verdict stale (6b step 2), but never live-checks,
+       since the user did not do it. It takes a `ModelPath<T>` (Todd, 2026-11-08), like
+       `push_field_error`, and resolves an indexed one to its item key the same way.
+       Bare-string paths everywhere else are issue #21. `Form::values()` still
+       returns the store, so a dev who wants to write raw can, but they have to go
+       looking for it.
+
+    What a dev can still get wrong: forgetting `onblur` on a text box, which loses
+    only the first check on blur (it still validates on submit, and `"false"` stays
+    honest), or using `on_input` on a chooser, which only changes when the check
+    happens. Box 9's docs cover both.
+
+    **Not `Callback::default()` as the empty value.** It calls `Callback::new`, which
+    needs a runtime and allocates in the current scope, so one made on each render
+    stays allocated until the form's scope drops. It also compares unequal on every
+    render (next box).
+
+    Derive `Clone`, `Copy`, `Debug` and `PartialEq`. `WidgetProps` derives all four,
+    and `#[component]` needs `PartialEq`. `Callback`'s `PartialEq` compares the
+    pointer and the scope the callback came from (`dioxus-core` 0.7.10,
+    `events.rs:472`).
+
+  - [ ] **6d. Through `NodeContext` and `WidgetProps`, the way `errors` goes.**
+    `use_form` makes the `Callback` with `use_callback`. `Form` stores it. `root_ctx`
+    wraps it in the form-wide trigger (always `Some`, and live checks on, until box
+    7). `NodeContext` gets a field for
+    it, filled by `root` (its seventh parameter: clippy's `too_many_arguments` only
+    fires above seven) and copied by `nested` and `optional`. `WidgetProps` gets a
+    `pub(crate)` field for it, filled by `FieldNode::render` (`field_node.rs:303`)
+    and by `VariantNode` (`variant_node.rs:275`). `VariantSelect` never calls it,
+    since a variant choice is an edit, not a value.
+
+    **Trap: make the `Callback` with `use_callback` in `use_form`, never in
+    `root_ctx` or anywhere else that runs on a render.** `root_ctx` runs on every
+    render of the form. A `Callback` made there is a new one each time, and it
+    compares unequal to the last, so every widget's component sees new props and
+    re-renders on every form render. That undoes the per-field rendering boxes 3–4
+    paid for. No test fails, and each of those allocations lives until the form's
+    scope drops. `use_callback` returns the same `Callback` on every render.
+
+  - [ ] **6e. The five controls (G), through the per-field handle.** Every
+    `get_current(&path, values)` becomes `field.current()`.
+
+    1. **Text-like inputs** (`input.rs:181`) **and the textarea** (`textarea.rs:69`):
+       `oninput: field.on_input()`, plus a new `onblur: field.on_blur()`.
+    2. **The select** (`select.rs:78`), **the checkbox** (`input.rs:249`) **and each
+       radio** (`radio_group.rs:140`): `onchange: field.on_change()`. None of these
+       gets an `onblur`, so tabbing through a required select says nothing.
+    3. **The hidden input** (`input.rs:222`) uses `on_input()` too, since
+       `write_value` is no longer public. That puts its path in the typed-into set,
+       which does no harm: nothing blurs a hidden input, so it is never checked
+       early.
+    4. **Untouched:** `VariantSelect`, which makes an edit.
+
+  - [ ] **6f. `aria-invalid="false"` (#7), added 2026-11-08.** The store already has
+    the three states (trap 1), so this box is only about rendering them. `None`
+    renders no `aria-invalid`, as an unchecked field does today. `Some` of an empty
+    `Vec` renders `"false"`. `Some` of messages renders `"true"`. ARIA treats an
+    absent `aria-invalid` as the neutral value, and `"false"` as a claim that the
+    field was checked and passed, which is why 6b step 2 has to keep it honest.
+
+    1. **A three-state enum, not `Option<bool>`**, as #7's second comment suggests:
+       something like `Validity { Unchecked, Valid, Invalid }`. `Some(false)` passed
+       to an argument named `is_invalid` reads backwards, and #8 (warnings) may want
+       a fourth state later.
+    2. **`FieldAttrs::with_error_attrs`** (`field_attrs.rs:195`) takes it in place of
+       `is_invalid: bool`. Only `Invalid` adds the errors id to `aria-describedby`,
+       which is what the `bool` does today. A clean field has no error list to point
+       at.
+    3. **A `WidgetProps` method that reads one key and returns it,** for
+       `current_attrs` to pass on. Like `get_errors`, it reads only `path`'s key with
+       `get_unchecked`, never the whole map. `is_invalid` stays as it is: classes and
+       `field_row`'s label only ask about invalid. A class for valid fields is not
+       part of this; CSS can select on `[aria-invalid="false"]`.
+    4. **`VariantNode`** (`variant_node.rs:244`) applies the error attributes itself
+       (the 4c exception), so it computes the same enum from its own key. Choosing a
+       variant already removes that key (`variant_node.rs:384`), and the drain then
+       writes `None`, so an enum's select cannot keep a stale `"false"`.
+    5. **The radio group** gets it through `current_attrs`, on the fieldset whose
+       role is `radiogroup`, where ARIA defines `aria-invalid`. Nothing changes there.
+
+    **Validating on load stays off** (#7's policy question, and "Not in this plan"
+    below). A seeded edit form has `None` everywhere, so no field claims anything
+    until something checks it. The one exception is a state seeded from a server's
+    `validate`: its empty entries do render `"false"`, which is correct, because the
+    server did check them.
+
+    **It reaches custom widgets for free:** the attribute through `current_attrs`,
+    and keeping it honest through the handle, the only way they can write (6c).
+
+  - [ ] **6g. Checkpoint: `just ci`, then `just e2e`.** Expect to change three
+    kinds of suite test: the five that call `formoxus::widgets::write_value` (to the
+    new `Form` method), `assignment_shape.rs:79`'s custom widget, which reads
+    `props.values` (to the handle), and any test that pins exact markup after a
+    clean `validate`, which now has `aria-invalid="false"` (6f). **Claude updates
+    these** (Todd, 2026-11-08), unless one turns up a decision, which Claude then
+    brings to you. **The e2e run can also fail, and that may be
+    correct:** a test that types a bad value and moves focus before submitting now
+    sees an error appear. Read each failure before changing the test. Then tell
+    Claude, who owes 8b–8d, starting with `Form::check_live`'s store writes, which
+    nothing tests yet.
+
+  **Traps to know about, which box 6 does not fix:**
+
+  1. **An error shown on blur moves whatever is below it, and a click can miss.**
+     Focus moves, and the blur fires, on `mousedown`. The error renders before the
+     `mouseup`, so a Submit or Remove button below the field can move out from under
+     the pointer, and the click never happens. The user clicks again. Every form with
+     inline validation has this, and it will be the most likely issue filed after
+     publishing. 8d should pin down what happens: type a bad value into the field just
+     above Submit, click Submit once. If it bites, decide then (one fix is reserving
+     space for the error line).
+  2. **A blur also fires when the window loses focus.** Switching to another app
+     halfway through a word checks the field. Every library has this, and we accept
+     it.
+  3. **`type="number"` reads a half-typed number as `""`** (`NumberInput`'s doc). A
+     number field already showing "must be at least 5" re-checks while the user types
+     `-`, and briefly shows "required" instead. It only happens to a field already
+     showing an error, so A still holds; the message just changes.
+  4. **A blur on a field that is being removed** (if the browser sends one) checks a
+     path the form no longer has. Box 5 handles that already: no top-level node owns
+     it, so the result is `None`, and writing `None` is harmless.
+
 - [ ] **7.** (Claude) `live_validation:` (F): `form!`'s key, its near-miss and
-  given-twice tests, `FormSpec::with_live_validation`, `Formoxus`, and
-  `NodeContext.live`.
+  given-twice tests, `FormSpec::with_live_validation`, `Formoxus`, and what
+  `root_ctx` passes: the handle's `bool`, `false` when the knob is off (6c), which
+  replaces the `NodeContext.live` this box first named. With the knob off, a clean
+  verdict still goes stale on a write (6b step 2).
 
 - [ ] **8.** (Claude) Tests. Written against 2–6 as each lands.
 
@@ -861,25 +1114,38 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     first time; shown on blur; gone on the keystroke that fixes it; tab through an
     empty required field says nothing (E); a server's error survives a click in and
     out (E); a select's `onchange`; focus and caret not lost when an error appears,
-    which only a browser shows; the knob off; a custom widget calling the two
-    helpers, and one calling neither still validating on submit. Mutation-check
-    each.
+    which only a browser shows; the knob off; a custom widget using the per-field
+    handle, and one with no `onblur` still checking on input once it shows an error
+    and validating on submit. Mutation-check each.
+
+  - [ ] **8e.** `aria-invalid="false"` (6f), in the suite unless a browser is
+    needed: a seeded edit form claims nothing on load; a clean field after a submit
+    says `"false"`, and a bad one `"true"`; the first keystroke after that drops
+    `"false"`, with the knob on AND off (6b step 2), and a blur brings it back; a
+    sibling cleared under an absent option drops it; choosing a variant drops the
+    enum select's; `aria-describedby` does not name an error list for `"false"`;
+    the `Validity` mapping as inline tests beside `with_error_attrs`.
 
 - [ ] **9.** (Claude) Docs and memory: `README.md` ("No live/as-you-type
-  validation" goes), a custom widget's errors in `widgets.rs`'s docs, a gallery
+  validation" goes), a custom widget's errors and its per-field handle (6c) in
+  `widgets.rs`'s docs, including which of `on_input` and `on_change` to use and
+  that a text box wants `on_blur` too, a gallery
   example, `FIELDS_PLAN.md` Step 7 pointing here, `error_model_design.md` rewritten
-  to match, and #7 updated with what this leaves it.
+  to match, and #7 closed by 6f, with a comment saying where it landed and noting
+  #8's warnings as the next user of the third state.
 
 - [ ] **10.** (Claude) `just ci` and `just e2e` green, then Todd merges to `main`.
   apcsp follows after, since it builds formoxus by path: anything of its own
-  reading `WidgetProps.errors` changes then.
+  reading `WidgetProps.errors` changes then, and its markdown widget
+  (`crates/ui/src/markdown.rs:69`, `:86`) moves from `get_current` and
+  `write_value` to the per-field handle. `crates/web/src/server.rs:672` names
+  `formoxus::Path`, renamed `ModelPath` on 2026-11-08.
 
 ## Not in this plan
 
-1. **`aria-invalid="false"` (#7).** Trap 1's `Option` makes it possible; nothing here
-   uses it.
-2. **Validating on load.** Silent, as it is today.
-3. **Async or server-side live checks** ("that username is taken" as the user
+1. **Validating on load.** Silent, as it is today. (`aria-invalid="false"` was listed
+   here until 2026-11-08; it is now 6f.)
+2. **Async or server-side live checks** ("that username is taken" as the user
    types). `check_on_server` is `FIELDS_PLAN.md` Step 8.
-4. **`range`, `checkbox_multiple`, `select_multiple`, `file`.** Next, against the
+3. **`range`, `checkbox_multiple`, `select_multiple`, `file`.** Next, against the
    `WidgetProps` this leaves.
