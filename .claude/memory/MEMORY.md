@@ -3,8 +3,9 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-07**: 3b of `formoxus/ERRORS_PLAN.md` done on `errors`, uncommitted; next box 4, Todd on the runtime
+- [**START HERE: next session**](next_session.md) — **2026-11-07**: `formoxus/ERRORS_PLAN.md` through 4c committed on `errors`; next 4d (Todd), then box 5
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
+- [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
 - [Plan task-list format](feedback_plan_task_list_format.md) — plans render in VS Code preview: `- [ ] **N.** …` + blank line before lists; `N. [ ]` hides numbers

@@ -177,18 +177,16 @@ const ID: &str = "rand0123-name";
 /// because nothing upstream computes it, which is the point: these pin the
 /// widget boundary independently of how the nodes wire it up.
 fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetProps {
-    WidgetProps {
-        id: ID.into(),
-        path: path.to_string(),
-        label: label.map(str::to_string),
-        help_text: None,
-        errors: use_store(HashMap::new),
-        attrs: FieldAttrs::default(),
-        extra_attrs: Vec::new(),
+    let mut props = WidgetProps::new(
+        ID,
+        path,
+        FieldAttrs::default(),
         values,
-        classes: Rc::new(Classes::default()),
-        choices: None,
-    }
+        use_store(HashMap::new),
+        Rc::new(Classes::default()),
+    );
+    props.label = label.map(str::to_string);
+    props
 }
 
 #[component]

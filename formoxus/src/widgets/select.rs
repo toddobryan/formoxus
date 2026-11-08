@@ -60,8 +60,10 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     let path = props.path.clone();
     let choices = props.choices.clone().unwrap_or_else(bool_choices);
     let current = get_current(&path, values);
-    let required = props.attrs.contains(Attr::Required);
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
+    let required = props.base_attrs.contains(Attr::Required);
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         select {

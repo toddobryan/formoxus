@@ -46,7 +46,9 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     let values = props.values;
     let path = props.path.clone();
     let current = get_current(&path, values);
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         textarea {
@@ -72,7 +74,7 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
             ..attrs,
         }
     };
-    let marked = props.attrs.contains(Attr::Required);
+    let marked = props.base_attrs.contains(Attr::Required);
     field_row::<Textarea>(&props, marked, LabelSide::Before, control)
 }
 

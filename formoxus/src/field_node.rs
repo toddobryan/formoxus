@@ -292,16 +292,9 @@ impl<F: Field> Node for FieldNode<F> {
         } else {
             own.keeping(|attr| extends.contains(attr))
         };
-        let errors = ctx.errors_at(&ctx.path(&self.name));
-        let field_attrs = FieldAttrs::with_owned_attrs(
-            &ctx.id(&self.name),
-            self.is_checkbox(),
-            ctx.required,
-            !errors.is_empty(),
-            self.help_text.as_deref(),
-            &own.then(&self.attrs),
-        )
-        .resolve_bounds(self.field_type());
+        let base_attrs =
+            FieldAttrs::with_owned_attrs(self.is_checkbox(), ctx.required, &own.then(&self.attrs))
+                .resolve_bounds(self.field_type());
 
         self.widget.render(WidgetProps {
             id: ctx.id(&self.name),
@@ -313,7 +306,7 @@ impl<F: Field> Node for FieldNode<F> {
             classes: ctx.classes.clone(),
             values: ctx.values,
             choices: self.field.choices(),
-            attrs: field_attrs,
+            base_attrs,
             extra_attrs: Vec::new(),
             errors: ctx.errors,
         })

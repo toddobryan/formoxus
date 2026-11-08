@@ -154,46 +154,65 @@ impl FieldAttrs {
         .value(invalid)
     }
 
-    /// The map a widget actually gets: formoxus's own attributes, which only
-    /// exist at render, FIRST, then the field's.
+    /// The attributes that depend on where the field sits, not on its errors:
+    /// formoxus's own, FIRST, then the field's. A node calls this while rendering,
+    /// which is in the form's scope, so it must not read the errors. They are
+    /// [`with_error_attrs`](Self::with_error_attrs)'s job, in the widget.
     ///
     /// - `Required` (a flag) when `required`, except on a `Checkbox`.
     ///   formoxus's `required` means PRESENCE, and an unticked box is a
     ///   complete `false`; HTML `required` on a checkbox means "must be
     ///   ticked", which is `required_true`'s job.
-    /// - `AriaInvalid` = `"true"` when `invalid`, and otherwise ABSENT, never
-    ///   `"false"`: per ARIA, `"false"` asserts "checked, and passed", so an
-    ///   untouched form would claim every field had been validated, a screen
-    ///   reader would say so, and a stylesheet painting a validated-and-clean
-    ///   state would paint it. Telling those apart is issue #7.
-    /// - `AriaDescribedby` naming the field's hint when it has `help_text`, then its
-    ///   error list when `invalid` ([`described_by`]), and ABSENT with
-    ///   neither: naming an element that is not rendered is itself a defect.
     ///
     /// First, so `required` keeps the position the suite's exact-markup tests
     /// expect.
-    pub fn with_owned_attrs(
-        field_id: &str,
-        is_checkbox: bool,
-        required: bool,
-        invalid: bool,
-        help_text: Option<&str>,
-        attrs: &FieldAttrs,
-    ) -> FieldAttrs {
+    pub fn with_owned_attrs(is_checkbox: bool, required: bool, attrs: &FieldAttrs) -> FieldAttrs {
         let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
         if required && !is_checkbox {
             map.insert(AttrKey::Std(Attr::Required), AttrValue::Flag);
         }
-        if invalid {
+        map.extend(attrs.0.clone());
+        FieldAttrs(map)
+    }
+
+    /// This map with the attributes that change as the field's errors do. Split
+    /// from [`with_owned_attrs`](Self::with_owned_attrs) because of WHO has to
+    /// read the errors: knowing `is_invalid` subscribes the caller, so a component
+    /// that owns one field has to ask, or every error wakes the whole form.
+    ///
+    /// - `AriaInvalid` = `"true"` when `is_invalid`, and otherwise ABSENT, never
+    ///   `"false"`: per ARIA, `"false"` asserts "checked, and passed", so an
+    ///   untouched form would claim every field had been validated, a screen
+    ///   reader would say so, and a stylesheet painting a validated-and-clean
+    ///   state would paint it. Telling those apart is issue #7.
+    /// - `AriaDescribedby` naming the field's hint when there is a `help_text`,
+    ///   then its error list when `is_invalid` ([`described_by`]), and ABSENT with
+    ///   neither: naming an element that is not rendered is itself a defect.
+    ///
+    /// After `Required` and before everything else, which is the order the
+    /// suite's exact-markup tests expect. This map's own entries go in last, so
+    /// a dev's `aria_describedby` replaces the one built here.
+    pub fn with_error_attrs(
+        &self,
+        field_id: &str,
+        help_text: Option<&str>,
+        is_invalid: bool,
+    ) -> FieldAttrs {
+        let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
+        let required = AttrKey::Std(Attr::Required);
+        if let Some(value) = self.0.get(&required) {
+            map.insert(required, value.clone());
+        }
+        if is_invalid {
             map.insert(
                 AttrKey::Std(Attr::AriaInvalid),
                 AttrValue::String("true".to_string()),
             );
         }
-        if let Some(ids) = described_by(field_id, help_text.is_some(), invalid) {
+        if let Some(ids) = described_by(field_id, help_text.is_some(), is_invalid) {
             map.insert(AttrKey::Std(Attr::AriaDescribedby), AttrValue::String(ids));
         }
-        map.extend(attrs.0.clone());
+        map.extend(self.0.clone());
         FieldAttrs(map)
     }
 
@@ -587,8 +606,8 @@ mod tests {
     //
     // `required`, `aria-invalid` and `aria-describedby` depend on
     // `ctx.required` and the field's errors, which only exist at render, so
-    // `form!`'s map never holds them. `with_owned_attrs` builds the map a
-    // widget actually gets.
+    // `form!`'s map never holds them. `with_owned_attrs` adds the first in the
+    // node, and `with_error_attrs` the other two in the widget.
 
     /// A field's element id, as `NodeContext::id` builds it. `.into()` at each
     /// call, so these read the same whether the parameter is `String` or `&str`.
@@ -607,7 +626,8 @@ mod tests {
     /// keeps `required` where the suite's exact-markup tests already expect it.
     #[gtest]
     fn owned_attributes_come_first_then_the_fields_own() {
-        let attrs = FieldAttrs::with_owned_attrs(ID, false, true, true, None, &just_max_length());
+        let attrs = FieldAttrs::with_owned_attrs(false, true, &just_max_length())
+            .with_error_attrs(ID, None, true);
         expect_that!(
             keys(&attrs),
             elements_are![
@@ -630,8 +650,7 @@ mod tests {
     /// this test too, on purpose.
     #[gtest]
     fn aria_describedby_names_the_error_list() {
-        let attrs =
-            FieldAttrs::with_owned_attrs(ID, false, false, true, None, &FieldAttrs::default());
+        let attrs = FieldAttrs::default().with_error_attrs(ID, None, true);
         expect_that!(
             attrs.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("aB3xY9kq-name-errors".to_string())))
@@ -643,27 +662,13 @@ mod tests {
     /// on an error.
     #[gtest]
     fn aria_describedby_names_the_hint_then_the_error_list() {
-        let clean = FieldAttrs::with_owned_attrs(
-            ID,
-            false,
-            false,
-            false,
-            Some("A hint."),
-            &FieldAttrs::default(),
-        );
+        let clean = FieldAttrs::default().with_error_attrs(ID, Some("A hint."), false);
         expect_that!(
             clean.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("aB3xY9kq-name-help".to_string())))
         );
         expect_that!(clean.get(Attr::AriaInvalid), none());
-        let invalid = FieldAttrs::with_owned_attrs(
-            ID,
-            false,
-            false,
-            true,
-            Some("A hint."),
-            &FieldAttrs::default(),
-        );
+        let invalid = FieldAttrs::default().with_error_attrs(ID, Some("A hint."), true);
         expect_that!(
             invalid.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String(
@@ -679,8 +684,8 @@ mod tests {
     #[gtest]
     fn required_and_invalid_are_independent() {
         let is_checkbox = false;
-        let only_required =
-            FieldAttrs::with_owned_attrs(ID, is_checkbox, true, false, None, &just_max_length());
+        let only_required = FieldAttrs::with_owned_attrs(is_checkbox, true, &just_max_length())
+            .with_error_attrs(ID, None, false);
         expect_that!(
             keys(&only_required),
             elements_are![
@@ -688,8 +693,8 @@ mod tests {
                 eq(&AttrKey::Std(Attr::MaxLength)),
             ]
         );
-        let only_invalid =
-            FieldAttrs::with_owned_attrs(ID, is_checkbox, false, true, None, &just_max_length());
+        let only_invalid = FieldAttrs::with_owned_attrs(is_checkbox, false, &just_max_length())
+            .with_error_attrs(ID, None, true);
         expect_that!(
             keys(&only_invalid),
             elements_are![
@@ -703,8 +708,22 @@ mod tests {
     /// Neither applying leaves the field's own attributes exactly as they were.
     #[gtest]
     fn without_either_the_fields_attributes_pass_through_unchanged() {
-        let attrs = FieldAttrs::with_owned_attrs(ID, false, false, false, None, &just_max_length());
+        let attrs = FieldAttrs::with_owned_attrs(false, false, &just_max_length())
+            .with_error_attrs(ID, None, false);
         expect_that!(attrs, eq(&just_max_length()));
+    }
+
+    /// **A dev's own `aria_describedby` beats the one built here:** the field's
+    /// entries go in last, so theirs replaces ours.
+    #[gtest]
+    fn a_devs_own_aria_describedby_replaces_the_built_one() {
+        let attrs = all(&[(Attr::AriaDescribedby, AttrValue::String("mine".to_string()))]);
+        expect_that!(
+            attrs
+                .with_error_attrs(ID, Some("A hint."), true)
+                .get(Attr::AriaDescribedby),
+            some(eq(&AttrValue::String("mine".to_string())))
+        );
     }
 
     /// `without` drops exactly the one attribute and keeps the rest in order,
@@ -755,8 +774,8 @@ mod tests {
     /// `false`. `aria-invalid` and `aria-describedby` are unaffected.
     #[gtest]
     fn a_checkbox_never_gets_required() {
-        let attrs =
-            FieldAttrs::with_owned_attrs(ID, true, true, true, None, &FieldAttrs::default());
+        let attrs = FieldAttrs::with_owned_attrs(true, true, &FieldAttrs::default())
+            .with_error_attrs(ID, None, true);
         expect_that!(
             keys(&attrs),
             elements_are![

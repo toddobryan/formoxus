@@ -29,9 +29,9 @@ pub fn VariantSelect(
     label_case: LabelCase,
     props: WidgetProps,
 ) -> Element {
-    let required = props.attrs.contains(Attr::Required);
+    let required = props.base_attrs.contains(Attr::Required);
     let path = props.path.clone();
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
+    let attrs: Vec<Attribute> = props.base_attrs.merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         select {

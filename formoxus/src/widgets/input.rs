@@ -208,7 +208,9 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
     let values = props.values;
     let path = props.path.clone();
     let current = get_current(&path, values);
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         input {
@@ -226,14 +228,16 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
             ..attrs,
         }
     };
-    let marked = props.attrs.contains(Attr::Required);
+    let marked = props.base_attrs.contains(Attr::Required);
     field_row::<W>(props, marked, LabelSide::Before, control)
 }
 
 fn checkbox(props: &WidgetProps) -> Element {
     let values = props.values;
     let path = props.path.clone();
-    let attrs: Vec<Attribute> = props.attrs.merge_with_attrs(props.extra_attrs.clone());
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         input {
@@ -252,6 +256,6 @@ fn checkbox(props: &WidgetProps) -> Element {
     // wrapped an unclassed `<label>` only when it had text, so
     // `.fx-form-field` and `.fx-field-label` both silently missed every
     // checkbox on the page; `field_row` is what keeps it in step now.
-    let marked = props.attrs.contains(Attr::RequiredTrue);
+    let marked = props.base_attrs.contains(Attr::RequiredTrue);
     field_row::<CheckboxInput>(props, marked, LabelSide::After, control)
 }

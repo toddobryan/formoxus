@@ -204,6 +204,27 @@ fn an_invalid_field_is_described_by_its_hint_then_its_errors() {
     expect_that!(help < errors, eq(true));
 }
 
+/// **An unchosen required enum marks its select invalid, and describes it by
+/// the hint, then the errors.** The enum's hint renders under the legend, not
+/// through the select's props, so `VariantNode` is the one place that knows the
+/// select has one: it applies the error attributes itself, and the select only
+/// spreads them. Lose that and the select still renders and its errors still
+/// list, but a screen reader never hears either.
+#[gtest]
+fn an_invalid_enums_select_is_marked_and_described_by_its_hint_then_its_errors() {
+    let html = without_form_id(&render_to_html(Invalid));
+    expect_that!(
+        html,
+        contains_regex(r#"<select [^>]*id="FORMID-contact"[^>]*aria-invalid="true""#)
+    );
+    expect_that!(
+        html,
+        contains_regex(
+            r#"<select [^>]*id="FORMID-contact"[^>]*aria-describedby="FORMID-contact-help FORMID-contact-errors""#
+        )
+    );
+}
+
 #[component]
 fn Unhelped() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Account>::default()));

@@ -83,18 +83,19 @@ fn values() -> HashMap<String, String> {
 fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
     let values = use_store(values);
     let errors = use_store(|| HashMap::from([(PATH.to_string(), Some(errors()))]));
-    widget.render(WidgetProps {
-        id: ID.into(),
-        path: PATH.into(),
-        label: Some("Title".into()),
-        help_text: Some(HELP.into()),
-        errors,
-        attrs: field_attrs(),
-        extra_attrs: extra_attrs(),
+    let mut props = WidgetProps::new(
+        ID,
+        PATH,
+        field_attrs(),
         values,
-        classes: Rc::new(Classes::fx()),
-        choices,
-    })
+        errors,
+        Rc::new(Classes::fx()),
+    );
+    props.label = Some("Title".into());
+    props.help_text = Some(HELP.into());
+    props.extra_attrs = extra_attrs();
+    props.choices = choices;
+    widget.render(props)
 }
 
 // ── The text-like inputs ─────────────────────────────────────────────────

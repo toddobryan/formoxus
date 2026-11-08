@@ -547,8 +547,140 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     `ctx.errors_at` in `FieldNode::render` (`field_node.rs:295`), which 4c moves, and
     the containers' reads, which 4d keeps on purpose.
 
-  - [ ] **4c.** `aria-invalid` and `aria-describedby` move from
-    `FieldAttrs::with_owned_attrs` into the components (traps 3 and 4).
+  - [x] **4c.** `aria-invalid` and `aria-describedby` move from
+    `FieldAttrs::with_owned_attrs` into the components (traps 3 and 4). This is the step
+    that stops an error waking the form. Today `FieldNode::render` reads the field's
+    errors to work out those two attributes, and that read happens in the form's scope.
+
+    Line numbers are 96100d2's. Built in a copy: all 716 suite tests and clippy passed,
+    and an error written straight to one field's key went from re-rendering the form
+    every time to not at all, with `aria-invalid`, `aria-describedby` and the error list
+    still appearing and clearing, and the sibling untouched.
+
+    - [x] **Split `with_owned_attrs` (`field_attrs.rs:175`) in two.** It keeps
+      `required`, which comes from the `NodeContext` and never changes with errors, so
+      it loses `field_id`, `invalid` and `help_text`:
+
+      ```rust
+      pub fn with_owned_attrs(is_checkbox: bool, required: bool, attrs: &FieldAttrs) -> FieldAttrs
+      ```
+
+      The two aria attributes go in a new method, which their doc bullets move to:
+
+      ```rust
+      pub fn with_error_attrs(&self, field_id: &str, help_text: Option<&str>, is_invalid: bool) -> FieldAttrs {
+          let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
+          let required = AttrKey::Std(Attr::Required);
+          if let Some(value) = self.0.get(&required) {
+              map.insert(required, value.clone());
+          }
+          if is_invalid {
+              map.insert(
+                  AttrKey::Std(Attr::AriaInvalid),
+                  AttrValue::String("true".to_string()),
+              );
+          }
+          if let Some(ids) = described_by(field_id, help_text.is_some(), is_invalid) {
+              map.insert(AttrKey::Std(Attr::AriaDescribedby), AttrValue::String(ids));
+          }
+          map.extend(self.0.clone());
+          FieldAttrs(map)
+      }
+      ```
+
+      Two things in it are deliberate. `required` is copied first so the attributes keep
+      their order, which the exact-markup tests pin. And `self`'s entries go in LAST, so a
+      dev's own `aria_describedby` still replaces ours, as it does today.
+
+    - [x] **`WidgetProps::current_attrs(&self) -> FieldAttrs`, beside `is_invalid`.** It
+      is `self.attrs` with the field's error state (`self.base_attrs`, after the rename
+      below), and it reads the store, so a component has to be what calls it. Its doc should
+      say that, and that it is how a custom widget reaches a field's attributes:
+
+      ```rust
+      self.attrs
+          .with_error_attrs(&self.id, self.help_text.as_deref(), self.is_invalid())
+      ```
+
+    - [x] **`FieldNode::render` (`field_node.rs:295`) stops reading errors.** Delete `let
+      errors`, and pass only what is left. This is the line that matters most:
+
+      ```rust
+      let field_attrs =
+          FieldAttrs::with_owned_attrs(self.is_checkbox(), ctx.required, &own.then(&self.attrs))
+              .resolve_bounds(self.field_type());
+      ```
+
+    - [x] **The widgets spread `current_attrs` in place of `attrs`.** In `input.rs:211`
+      and `:236`, `textarea.rs:49` and `select.rs:64`, `props.attrs.merge_with_attrs(…)`
+      becomes `props.current_attrs().merge_with_attrs(…)`.
+
+    - [x] **`RadioGroupView` (`radio_group.rs:82`):** `let field_attrs =
+      props.current_attrs();`, in place of the reference to `props.attrs`. It has to stay
+      above `let choices`, which moves a field out of `props` and so stops any method
+      being called on it. The rest of the function needs no change, except for the `&`
+      this drops.
+
+    - [x] **`VariantNode::render` (`variant_node.rs:236`) applies both itself:**
+
+      ```rust
+      let attrs = FieldAttrs::with_owned_attrs(false, ctx.required, &field_attrs)
+          .with_error_attrs(&id, self.help_text.as_deref(), !own_errors.is_empty());
+      ```
+
+      `VariantSelect` does NOT change to `current_attrs`, because the node passes it
+      `help_text: None` (the hint renders under the legend), so `current_attrs` would
+      lose the hint from `aria-describedby`. The enum's own errors wait for submit (B),
+      so reading them in the form's scope is fine. That read stays, for 4d.
+
+    - [x] **`WidgetProps::attrs` becomes `pub(crate) base_attrs`** (Todd, 2026-11-07). Left
+      public, it is a trap: a custom widget spreading `props.attrs` compiles, and silently
+      loses `aria-invalid` and `aria-describedby`, which is an accessibility defect nothing
+      reports. No test noticed in the copy. So the two changes do different jobs:
+
+      1. `pub(crate)` protects a dev. `props.attrs` outside the crate is a compile error,
+         and `current_attrs` is the only way to the attributes.
+      2. The rename protects the crate, where `pub(crate)` alone changes nothing. Every
+         `props.attrs` stops compiling, so the compiler lists the sites, and it says what
+         the value is: the attributes before the errors are applied.
+
+      Sort each site the compiler lists into one of three. A spread onto an element
+      becomes `current_attrs`, which is the step above: forget one there and that widget
+      loses its aria attributes with no error. `VariantSelect`'s spread keeps
+      `base_attrs`, as the node has already applied the error attributes. A `contains`
+      check, `control_class` and `reject_if_not_required` keep `base_attrs`, as none of
+      them looks at the aria attributes, and a read of the store would be wasted.
+
+      `FieldNode::render` and `VariantNode::render` set the new name, and the docs on
+      `help_text` and elsewhere that say "`attrs`" follow.
+
+    - [x] **A public constructor for `WidgetProps`.** Code outside the crate can no longer
+      write a struct literal, since one private field forbids it and `..` does not get
+      around that. Only two tests do (see below), and neither `examples/` nor apcsp, but
+      those tests deliberately build props by hand, to pin the widget boundary apart from
+      the nodes, and they are integration tests, so they see only the public surface.
+
+      Take the fields that have no sensible empty value, `attrs` among them, and leave
+      `label`, `help_text`, `choices` and `extra_attrs` empty: they stay `pub`, so a caller
+      sets them afterwards. Six arguments or fewer stays inside clippy's limit of seven.
+      Its doc should say that a widget is handed its props, so this is for a test or a
+      widget that renders another, not something a dev normally needs.
+
+    - [x] (Claude) The inline tests in `field_attrs.rs`. Once the constructor is in,
+      `builtin_widgets.rs:86` and `plain_props` in `widgets.rs:180` move to it, and
+      `Spreading` in `author_attrs.rs:178` moves to `current_attrs`. Add a test that a
+      custom widget spreading `current_attrs` gets `aria-invalid` and `aria-describedby`:
+      the compiler now stops a dev reading `attrs`, but only a test proves the attributes
+      arrive.
+
+    **What this breaks, on purpose.** A custom widget reading `props.attrs` stops
+    compiling, and has to call `current_attrs`. Box 9's docs say so, and apcsp's
+    `crates/ui/src/markdown.rs` (`:70` and `:93`) follows at box 10.
+
+    **What this does not change.** `with_errors` writes the state, so a submit, an edit
+    and a pushed error all still re-render the form once, by design. It is a live check
+    that must not, which is why box 5 writes only the store. So a test of this has to
+    write to the store directly, as box 8b's will.
 
   - [ ] **4d.** Containers (`StructNode`, `ListNode`, `SetNode`, `VariantNode`,
     legends and `fx-invalid`) read their own key in `render`. That is the form's

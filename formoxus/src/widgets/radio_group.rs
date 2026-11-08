@@ -41,7 +41,7 @@ impl Widget for RadioGroup {
     const TAKES_CHOICES: bool = true;
 
     fn render(&self, props: WidgetProps) -> Element {
-        reject_if_not_required(&props.attrs, &props.path);
+        reject_if_not_required(&props.base_attrs, &props.path);
         rsx! {
             RadioGroupView { widget_props: props }
         }
@@ -79,7 +79,8 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
     let is_invalid = props.is_invalid();
-    let field_attrs = &props.attrs;
+    let base_attrs = &props.base_attrs;
+    let current_attrs = props.current_attrs();
     let values = props.values;
     let choices = props.choices.unwrap_or_else(bool_choices);
 
@@ -89,13 +90,12 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // group required; so it goes on each radio and out of the spread. WAI-ARIA
     // 1.2 defines `aria-invalid` on role `radiogroup` and NOT on `radio`; so it
     // stays in the spread, which lands on the fieldset given that role below.
-    let required = field_attrs.contains(Attr::Required);
-    let attrs: Vec<Attribute> = field_attrs
+    let required = base_attrs.contains(Attr::Required);
+    let attrs: Vec<Attribute> = current_attrs
         .without(Attr::Required)
         .merge_with_attrs(props.extra_attrs);
 
-    let field_class =
-        field_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
+    let field_class = base_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
 
     let current = get_current(&props.path, values);
 
@@ -165,13 +165,13 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                 // what a screen reader announces.
                 if let Some(text) = props.label {
                     "{text}"
-                    if field_attrs.contains(Attr::Required) {
+                    if required {
                         {required_marker(&props.classes)}
                     }
                 }
             }
             // After the legend, as `field_row` puts it after a caption; the
-            // fieldset's `aria-describedby`, in `attrs`, names it.
+            // fieldset's `aria-describedby`, from `current_attrs`, names it.
             {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
             { radios.into_iter() }
             FieldErrors {

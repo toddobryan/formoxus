@@ -28,3 +28,5 @@ exists, and `git diff` cannot show it.
 original text back instead of moving the copy), and after any mutation session
 `touch` the touched files before the run that will be reported. See also
 [[e2e-harness]].
+
+**A second way to keep the wrong build (2026-11-07):** two scratch copies sharing one `CARGO_TARGET_DIR` get the same hashes, as cargo hashes workspace paths relative to the root, and `git archive` stamps files with the commit time. So a fresh copy with no edits looks up to date and runs the OTHER copy's build. It made `HEAD` look identical to a prototype. Check for `Compiling formoxus`, or `touch` the sources.

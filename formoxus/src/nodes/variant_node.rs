@@ -233,14 +233,15 @@ impl Node for VariantNode {
                 .with_default(Attr::AriaLabelledby, AttrValue::String(legend_id(&id))),
             None => self.field_attrs.clone(),
         };
-        let attrs = FieldAttrs::with_owned_attrs(
-            &id,
-            false,
-            ctx.required,
-            !own_errors.is_empty(),
-            self.help_text.as_deref(),
-            &field_attrs,
-        );
+        // The error attributes go on HERE, not in `VariantSelect` through
+        // `current_attrs`, which is the one exception to that rule. The hint
+        // renders under the legend, so the select's props carry `help_text:
+        // None`, and `current_attrs` would leave the hint out of
+        // `aria-describedby`. So the name is not quite true: `VariantSelect`
+        // spreads this as is. Reading the errors in the form's scope is fine,
+        // as the enum's own errors only change on a submit.
+        let base_attrs = FieldAttrs::with_owned_attrs(false, ctx.required, &field_attrs)
+            .with_error_attrs(&id, self.help_text.as_deref(), !own_errors.is_empty());
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Variant, false);
         let legend_class = ctx.classes.fixed_class(FixedKey::VariantLegend, false);
@@ -272,11 +273,12 @@ impl Node for VariantNode {
                         // beside the select would just be the same word twice.
                         label: None,
                         // Rendered above, under the legend; the select's
-                        // `aria-describedby`, in `attrs`, names it.
+                        // `aria-describedby`, applied to `base_attrs` above,
+                        // names it.
                         help_text: None,
                         classes: ctx.classes.clone(),
                         errors: ctx.errors,
-                        attrs,
+                        base_attrs,
                         extra_attrs: Vec::new(),
                         // Read by no one: a variant choice is not a value in
                         // the store, and its variants arrive as `variants`.

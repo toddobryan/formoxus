@@ -175,7 +175,7 @@ impl Widget for Spreading {
     const PARTS: &'static [Tag] = &[];
 
     fn render(&self, props: WidgetProps) -> Element {
-        let attrs = props.attrs.merge_with_attrs(props.extra_attrs);
+        let attrs = props.current_attrs().merge_with_attrs(props.extra_attrs);
         rsx! { input { class: "spreading", ..attrs } }
     }
 }
@@ -206,6 +206,29 @@ fn a_custom_widget_receives_the_fields_attributes() {
     expect_that!(input, contains_substring(r#"class="spreading""#));
     expect_that!(input, contains_substring("maxlength=10"));
     expect_that!(input, contains_substring(r#"data-x="1""#));
+}
+
+#[component]
+fn InvalidSpreading() -> Element {
+    let form = use_form(|| empty_form(FormSpec::<Person>::new().with_widget("name", Spreading)));
+    use_hook(|| form.validate());
+    form.render(using_fns! {})
+}
+
+/// **A custom widget spreading `current_attrs` gets the field's error
+/// attributes too.** Since `WidgetProps`'s attributes went crate-private, the
+/// compiler stops a custom widget from spreading them without the errors. Only
+/// this proves that what it spreads instead really carries them. A blank
+/// `name` is required, so `validate` gives it an error.
+#[gtest]
+fn a_custom_widget_spreading_current_attrs_gets_the_error_attributes() {
+    let html = super::render_to_html(InvalidSpreading);
+    let input = tag(&html, "input");
+    expect_that!(input, contains_substring(r#"aria-invalid="true""#));
+    expect_that!(
+        input,
+        contains_regex(r#"aria-describedby="[^" ]+-name-errors""#)
+    );
 }
 
 // ── class and class_plus ─────────────────────────────────────────────────
