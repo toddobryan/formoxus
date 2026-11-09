@@ -1124,7 +1124,8 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
      inline validation has this, and it will be the most likely issue filed after
      publishing. 8d should pin down what happens: type a bad value into the field just
      above Submit, click Submit once. If it bites, decide then (one fix is reserving
-     space for the error line).
+     space for the error line). **It bites (2026-11-09, 8d):** the click is lost;
+     measured and pinned there.
   2. **A blur also fires when the window loses focus.** Switching to another app
      halfway through a word checks the field. Every library has this, and we accept
      it.
@@ -1167,20 +1168,33 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   `Harness::blur`. Mutation-checked: `is_live: true` fails the two "off" tests,
   `is_live: false` the three "on" ones.
 
-- [ ] **8.** (Claude) Tests. Written against 2–6 as each lands.
+- [x] **8.** (Claude) Tests. Written against 2–6 as each lands.
 
-  - [ ] **8a.** The existing suite: `has_errors` and `collect_errors` stay on
+  - [x] **8a.** The existing suite: `has_errors` and `collect_errors` stay on
     `FormState`, so most of its 86 uses should pass as they are. Those reading
     through `Form` move to `Form::has_errors`. `builtin_widgets.rs:90` and
     `assignment_shape.rs:83` build or read `WidgetProps.errors` by hand.
 
-  - [ ] **8b.** New `tests/suite/errors_store.rs`: one field's error does not
+    Done as each box landed: the suite has been green at every checkpoint since box 2.
+
+  - [x] **8b.** New `tests/suite/errors_store.rs`: one field's error does not
     re-render a sibling (a render counter in a custom widget); an error cleared
     wakes its widget (trap 1); a removed item's and changed variant's errors go;
     a submit clears an absent option's stale error from the store (3b); `reset` restores; `to_wire` keeps render order; a seeded
     state's errors show; a submit's errors arrive where a live check's would.
 
-  - [ ] **8c.** `check_live`: every kind of leaf check; a blank field in a present
+    Done 2026-11-09, in `tests/suite/live_checks.rs` rather than a new
+    `errors_store.rs`, since every case is driven through a widget's events. Already
+    covered before this box, so not repeated: a removed item's and a changed variant's
+    errors (`errors_by_path.rs`), an absent option's pushed error after a submit
+    (`a_pushed_error_on_an_absent_option_is_gone_after_validate`), `reset`
+    (`browser_validation.rs`). New: one field's error wakes neither a sibling nor the
+    form (render counters in a custom widget's component and the app); an unchanged
+    result does not wake the field; a submit and a live check render the same markup;
+    `to_wire` in render order; a live check's error reaches the wire; a seeded state's
+    errors show. `Harness::blur` added for these.
+
+  - [x] **8c.** `check_live`: every kind of leaf check; a blank field in a present
     and in an absent `Option<struct>` (trap 5); blanking the last filled field clears
     its siblings' errors, and a sibling's error survives while the option stays
     present; an error under a DIFFERENT absent option in the same top-level node
@@ -1188,7 +1202,17 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     an unchanged result writes nothing; an item's path; a draft's; that
     `min_items` and a form validator never answer it (B).
 
-  - [ ] **8d.** e2e, in pairs with `/t/live-*` forms: nothing shown while typing a
+    Done 2026-11-09. What it FINDS: the eight inline tests in `form/state.rs` (box 5).
+    What it WRITES, through events, in `live_checks.rs`: nothing while first typing;
+    an error on leaving; tab-through says nothing; the fixing keystroke removes it; a
+    wrong keystroke keeps it; after a fix the next error waits for a blur; a server's
+    error survives a click in and out, and typing rechecks it; a checkbox checks on
+    change; blanking the last filled field of an `Option<struct>` clears a sibling's
+    error and its `"false"`; a sibling's error survives while the option stays present.
+    Mutation-checked against eight breakages of `apply_field_event`, `check_live`,
+    `FieldHandle::change` and `ErrorsStoreExt::errors_at`; each is caught.
+
+  - [x] **8d.** e2e, in pairs with `/t/live-*` forms: nothing shown while typing a
     first time; shown on blur; gone on the keystroke that fixes it; tab through an
     empty required field says nothing (E); a server's error survives a click in and
     out (E); a select's `onchange`; focus and caret not lost when an error appears,
@@ -1196,13 +1220,33 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     handle, and one with no `onblur` still checking on input once it shows an error
     and validating on submit. Mutation-check each.
 
-  - [ ] **8e.** `aria-invalid="false"` (6f), in the suite unless a browser is
+    Done 2026-11-09: `e2e/tests/live.rs`, 12 tests, on `/t/live-text`, `live-click`,
+    `live-server-error`, `live-select`, `live-off`, `live-custom`. Mutation-checked
+    against six breakages (a first keystroke checking, a blur checking untyped
+    fields, a shown error not rechecked, a change not counting as a blur, the knob
+    ignored, a blur never sent); each is caught. The select case needs a field
+    validator, since a required select's placeholder cannot be chosen again.
+
+    **Trap 1 (box 6) BITES, measured.** With a bad value in the field just above
+    Submit, a click on Submit is lost: the press blurs the field, its error renders
+    above the button, and the button (the same element, not a replaced one) moves
+    down 29.6 px, more than half its 38.8 px height, before the release.
+    Playwright's instant click misses too: its press and release are separate round
+    trips. Pinned as `a_click_on_submit_misses_while_an_error_appears_above_it_yet`
+    (`#submits` stays `0`), beside a control where nothing moves (`1`). **A decision
+    for Todd**, not made here; options in box 6's trap 1, chiefly reserving the error
+    line's space. When fixed, that test fails: drop `_yet` and assert `"1"`.
+
+  - [x] **8e.** `aria-invalid="false"` (6f), in the suite unless a browser is
     needed: a seeded edit form claims nothing on load; a clean field after a submit
     says `"false"`, and a bad one `"true"`; the first keystroke after that drops
     `"false"`, with the knob on AND off (6b step 2), and a blur brings it back; a
     sibling cleared under an absent option drops it; choosing a variant drops the
     enum select's; `aria-describedby` does not name an error list for `"false"`;
     the `Validity` mapping as inline tests beside `with_error_attrs`.
+
+    Done 2026-11-09: the mapping inline in `field_attrs.rs` (6f); the rest in
+    `live_checks.rs` and `live_validation.rs` (knob off: a write still drops it).
 
 - [ ] **9.** (Claude) Docs and memory: `README.md` ("No live/as-you-type
   validation" goes), a custom widget's errors and its per-field handle (6c) in

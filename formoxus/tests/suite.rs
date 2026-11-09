@@ -59,6 +59,8 @@ mod into_slot;
 mod item_counts;
 #[path = "suite/label_case.rs"]
 mod label_case;
+#[path = "suite/live_checks.rs"]
+mod live_checks;
 #[path = "suite/live_validation.rs"]
 mod live_validation;
 #[path = "suite/newtypes.rs"]

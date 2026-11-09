@@ -52,6 +52,12 @@ pub fn TestForm(slug: String) -> Element {
         "adder" => rsx! { Adder {} },
         "tags" => rsx! { Tags {} },
         "tags-pattern" => rsx! { TagsPattern {} },
+        "live-text" => rsx! { LiveText {} },
+        "live-click" => rsx! { LiveClick {} },
+        "live-server-error" => rsx! { LiveServerError {} },
+        "live-select" => rsx! { LiveSelect {} },
+        "live-off" => rsx! { LiveOff {} },
+        "live-custom" => rsx! { LiveCustom {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -757,6 +763,226 @@ fn TagsPattern() -> Element {
             Tagged {
                 browser_validation: on,
                 tags[] => { pattern: "[a-z]+" },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── live validation (`ERRORS_PLAN.md` 8d) ────────────────────────────────
+//
+// Each with browser validation OFF, so a submit reaches formoxus and what the
+// tests see is formoxus's own error list, never a browser tooltip.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct LiveSignup {
+    name: String,
+    city: String,
+}
+
+/// Two fields, so there is somewhere to Tab to. Live validation is on, by
+/// default.
+#[component]
+fn LiveText() -> Element {
+    harness(
+        "live-text",
+        "Name needs at least 3 characters. Typing shows nothing; leaving the field shows its error; once shown, it goes on the keystroke that fixes it. Tabbing through without typing says nothing.",
+        form! {
+            LiveSignup {
+                browser_validation: off,
+                name => { min_length: 3 },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct LiveLast {
+    name: String,
+}
+
+/// One field, directly above Submit, inside a wrapper that counts every
+/// `submit` reaching it. Trap 1: clicking Submit with a bad value in the field
+/// blurs it on mousedown, so its error appears and pushes Submit down before
+/// the mouseup. `#submits` says whether the click still landed.
+#[component]
+fn LiveClick() -> Element {
+    let mut submits = use_signal(|| 0_u32);
+    let form = use_form(|| {
+        empty_form(form! {
+            LiveLast {
+                browser_validation: off,
+                name => { min_length: 3 },
+                buttons: { save: { type: submit } }
+            }
+        })
+    });
+    rsx! {
+        Harness {
+            title: "live-click",
+            note: "Type one letter into Name, then click Submit once. Its error appears as the field loses focus, above the button.",
+            submitted: String::new(),
+            div { onsubmit: move |_| submits += 1,
+                {form.render(using_fns! { save: move |_: LiveLast| async move {} })}
+            }
+            p { "Submits: " span { id: "submits", "{submits}" } }
+        }
+    }
+}
+
+/// A server's verdict on a seeded value, as a rejected submit would leave it.
+#[component]
+fn LiveServerError() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &LiveSignup {
+                name: "Ada".to_string(),
+                city: String::new(),
+            },
+            form! { LiveSignup { browser_validation: off } },
+        )
+    });
+    use_hook(|| {
+        form.push_field_error(&path!(LiveSignup.name), "That name is taken.")
+            .expect("name is a field of this form");
+    });
+    rsx! {
+        Harness {
+            title: "live-server-error",
+            note: "Name carries a server's error. Clicking in and out of it, without typing, must leave the error alone: nothing local can say the name is free.",
+            submitted: String::new(),
+            {form.render(using_fns! {})}
+        }
+    }
+}
+
+/// A chooser has no typing, so its change is checked at once, with no blur.
+#[component]
+fn LiveSelect() -> Element {
+    harness(
+        "live-select",
+        "We do not ship to Alaska. Choosing it says so at once.",
+        form! {
+            Pick {
+                browser_validation: off,
+                state => {
+                    choices: STATES,
+                    validator: |s| if s == "AK" { vec!["We do not ship to Alaska.".into()] } else { Vec::new() },
+                },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+/// The same two fields with `live_validation: off`: nothing is checked until
+/// a submit.
+#[component]
+fn LiveOff() -> Element {
+    harness(
+        "live-off",
+        "Live validation OFF. Leaving a bad Name shows nothing; Submit shows its error.",
+        form! {
+            LiveSignup {
+                browser_validation: off,
+                live_validation: off,
+                name => { min_length: 3 },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct LiveCustomModel {
+    handled: String,
+    input_only: String,
+}
+
+/// A dev's text widget through its `FieldHandle`, with both handlers a text
+/// box wants.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct HandledText;
+
+impl formoxus::widgets::Widget for HandledText {
+    const NAME: &'static str = "handled_text";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [formoxus::attrs::Tag] = &[];
+
+    fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
+        rsx! { DevText { field: props, with_blur: true } }
+    }
+}
+
+/// The same widget missing `onblur`, the mistake the handle's docs warn of.
+/// It is never checked on leaving, but it still validates on submit, and once
+/// it shows an error each keystroke checks it.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct InputOnlyText;
+
+impl formoxus::widgets::Widget for InputOnlyText {
+    const NAME: &'static str = "input_only_text";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [formoxus::attrs::Tag] = &[];
+
+    fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
+        rsx! { DevText { field: props, with_blur: false } }
+    }
+}
+
+/// Both dev widgets' body, in a component of its own, as a widget reading the
+/// store must be.
+#[component]
+fn DevText(field: formoxus::widgets::WidgetProps, with_blur: bool) -> Element {
+    let handle = field.field_handle();
+    let label = field.label.clone().unwrap_or_default();
+    let invalid = field.validity() == formoxus::widgets::Validity::Invalid;
+    rsx! {
+        div {
+            label { r#for: "{field.id}", "{label}" }
+            if with_blur {
+                input {
+                    id: "{field.id}",
+                    value: handle.current(),
+                    aria_invalid: invalid.then_some("true"),
+                    oninput: handle.on_input(),
+                    onblur: handle.on_blur(),
+                }
+            } else {
+                input {
+                    id: "{field.id}",
+                    value: handle.current(),
+                    aria_invalid: invalid.then_some("true"),
+                    oninput: handle.on_input(),
+                }
+            }
+            formoxus::widgets::FieldErrors {
+                field_id: field.id.clone(),
+                paths: vec![field.path.clone()],
+                errors: field.errors,
+                classes: field.classes.clone(),
+            }
+        }
+    }
+}
+
+#[component]
+fn LiveCustom() -> Element {
+    harness(
+        "live-custom",
+        "Two dev widgets, each needing 3 characters. Handled has onblur, so leaving it checks it. Input only has none: leaving it says nothing, but Submit does, and then each keystroke rechecks it.",
+        form! {
+            LiveCustomModel {
+                browser_validation: off,
+                handled => {
+                    widget: HandledText,
+                    validator: |v| if v.len() < 3 { vec!["Too short.".into()] } else { Vec::new() },
+                },
+                input_only => {
+                    widget: InputOnlyText,
+                    validator: |v| if v.len() < 3 { vec!["Too short.".into()] } else { Vec::new() },
+                },
                 buttons: { save: { type: submit } }
             }
         },
