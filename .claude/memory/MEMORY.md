@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-09**: ERRORS_PLAN boxes 7–9 committed per box (not pushed); trap 1 left alone (#24); box 10 = merge, apcsp; then #22
+- [**START HERE: next session**](next_session.md) — **2026-11-09**: `errors` MERGED to main (ca0e731); trap 1 left alone (#24); next apcsp, post+close #7 (ask), then #22
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
@@ -23,6 +23,7 @@
 - [Parked: validate_values](parked_validate_values.md) — Todd wants these back: `validate_values`, `collect_values`→`ValuesByPath`, typed path keys (BREAKING, so pre-publish)
 - [Formoxus feature parity](formoxus_feature_parity.md) — vs Django + leptos_form; **#6 DONE 2026-10-01: `required: true` on a non-optional bool = must be ticked**
 - [Lint config](lint_config.md) — RAISE PERIODICALLY: why `unused_qualifications` is off (rsx! false positives) and how to sweep for real ones
+- [Open: private_intra_doc_links](private_intra_doc_links_question.md) — LOOK WITH TODD: the `docs` recipe says the lint is silenced under --document-private-items; apcsp hit it anyway
 - [Formoxus roadmap](formoxus_roadmap.md) — STALE, superseded by mvp_scope; kept for derive-path history
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical
 

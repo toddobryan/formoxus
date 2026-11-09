@@ -118,3 +118,16 @@ hooks:
 # Format in place — what the pre-commit hook tells you to run.
 fmt-fix:
     cargo fmt --all
+
+# cargo never removes stale artifacts itself, so target/ grows without bound
+# (74 GB here by 2026-10-24, when apcsp's next door filled the disk). Unlike
+# `cargo clean`, this keeps the CURRENT builds, the suite's and dx's for the
+# gallery, so nothing has to be rebuilt from scratch afterwards. Don't run it
+# during a build: it deletes from the same directory the build is writing to.
+# Needs `cargo install cargo-sweep` once per machine.
+#
+# Delete build artifacts unused for `days` days (default 14)
+sweep days="14":
+    @command -v cargo-sweep >/dev/null || { echo "cargo-sweep isn't installed: cargo install cargo-sweep"; exit 1; }
+    cargo sweep --time {{days}}
+    @du -sh target

@@ -76,7 +76,11 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
 
 /// `text` escaped for a textarea's content, where `&` would start a
 /// character reference and `</textarea` would end the element.
-fn escape_text(text: &str) -> String {
+///
+/// Public for a custom widget that renders its own `<textarea>`: it needs the
+/// same `dangerous_inner_html: escape_text(&current)` beside `value:` as
+/// `TextareaView`, or a seeded value is blank after hydration (see there).
+pub fn escape_text(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
