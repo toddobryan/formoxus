@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::{Formoxus, empty_form, form, form_for, provide_defaults, use_form, using_fns};
+use formoxus::{Formoxus, empty_form, form, form_for, path, provide_defaults, use_form, using_fns};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -90,7 +90,8 @@ fn reset_restores_the_seeded_values() {
         let form = use_form(move || form_for(&contact, form! { Contact {} }));
 
         // Type over the seeded value, then put it back.
-        formoxus::widgets::write_value("name", form.values(), "Grace".to_string());
+        form.write(&path!(Contact.name), "Grace")
+            .expect("name is a field of this form");
         form.reset();
 
         form.render(using_fns! {})
@@ -106,7 +107,8 @@ fn reset_of_an_empty_form_clears_it() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        formoxus::widgets::write_value("name", form.values(), "typed".to_string());
+        form.write(&path!(Contact.name), "typed")
+            .expect("name is a field of this form");
         form.reset();
         form.render(using_fns! {})
     }

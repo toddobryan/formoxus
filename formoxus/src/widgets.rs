@@ -58,6 +58,7 @@
 //! - [`errors`] — the error list rendered under every widget.
 
 pub mod errors;
+pub(crate) mod field_handle;
 pub mod field_row;
 pub mod help;
 pub(crate) mod icons;
@@ -76,6 +77,7 @@ pub(crate) mod widget_props;
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
 pub use errors::FieldErrors;
+pub use field_handle::FieldHandle;
 pub use field_row::{LabelSide, field_label, field_row, required_marker};
 pub use help::{described_by, field_help, help_id};
 pub use input::{
@@ -91,7 +93,7 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
-pub use values::{get_current, get_errors, write_value};
+pub use values::get_errors;
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with

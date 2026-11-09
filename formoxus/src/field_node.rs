@@ -313,6 +313,7 @@ impl<F: Field> Node for FieldNode<F> {
             base_attrs,
             extra_attrs: Vec::new(),
             errors: ctx.errors,
+            on_field_event: ctx.on_field_event,
         })
     }
 

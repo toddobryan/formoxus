@@ -8,7 +8,7 @@ use facet::Facet;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::prelude::*;
-use formoxus::widgets::{AddItemButton, AddItemProps, ItemAdder, get_current};
+use formoxus::widgets::{AddItemButton, AddItemProps, ItemAdder};
 use googletest::prelude::*;
 use indexmap::IndexMap;
 use std::fmt::Debug;
@@ -1719,7 +1719,13 @@ fn ProbeAdder(props: AddItemProps) -> Element {
         item_count,
         ..
     } = props;
-    let first = get_current(&format!("{path}.#0"), values);
+    // Read straight from the store, as a dev's adder has to: `get_current` is
+    // crate-private, and nothing public reads one key yet (issue #22).
+    let first = values
+        .read()
+        .get(&format!("{path}.#0"))
+        .cloned()
+        .unwrap_or_default();
     let under = format!("{path}.");
     let stored = values
         .read()
@@ -1954,7 +1960,7 @@ impl formoxus::widgets::Widget for Shown {
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
 
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
-        let current = get_current(&props.path, props.values);
+        let current = props.field_handle().current();
         rsx! {
             input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
             span { class: "shown", "{current}" }

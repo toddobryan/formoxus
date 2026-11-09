@@ -17,9 +17,11 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, NodeContext};
+use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path};
 use crate::path::ModelPath;
-use crate::widgets::{ValuesStore, write_value};
+use crate::widgets::ValuesStore;
+use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
+use crate::widgets::values::write_value;
 use crate::wire::WireForm;
 use dioxus::prelude::*;
 use facet::Facet;
@@ -258,6 +260,12 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// widget layer stay ignorant of `T` — [`NodeContext`] can't be generic
     /// without making every node type generic too.
     on_edit: Callback<Edit>,
+    /// Where a widget reports a write or a blur, for the live check; see
+    /// [`apply_field_event`]. Made once, by `use_callback` in [`use_form`],
+    /// never by [`root_ctx`](Self::root_ctx): a `Callback` compares by
+    /// identity, so a new one each render would make every widget's props
+    /// unequal and re-render every field on every render.
+    on_field_event: Callback<FieldEvent>,
     /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
     /// it, before any edit.
     ///
@@ -466,6 +474,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.id.peek().clone(),
             self.values_store,
             self.on_edit,
+            OnFieldEvent {
+                callback: Some(self.on_field_event),
+                is_live: true,
+            },
             self.label_case(),
             self.classes(),
             self.errors_store,
@@ -512,13 +524,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
     /// only the runtime knows, so those go through
     /// [`FormState::push_field_error`] with a string.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
-    )]
     pub fn push_field_error(
         &self,
-        path: ModelPath<T>,
+        path: &ModelPath<T>,
         message: &str,
     ) -> Result<(), FormAccessError> {
         with_errors(
@@ -612,7 +620,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            crate::widgets::write_value(path, self.values_store, raw.clone());
+            write_value(path, self.values_store, raw.clone());
         }
         self.distribute_errors(wire.errors())
     }
@@ -680,6 +688,60 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
                 state.validate()
             },
         )
+    }
+
+    /// Put `raw` in the field at `path`, as if the user had typed it: a value
+    /// set from code, such as a button that fills in a default, or a test.
+    ///
+    /// ```ignore
+    /// form.write(&path!(Signup.name), "Grace")?;
+    /// ```
+    ///
+    /// **Raw, not typed.** The store holds what a user would type, and a
+    /// `ModelPath` knows its model but not its leaf's type, so there is
+    /// nothing to convert a typed value with. `raw` goes through the field's
+    /// own parsing when the form is next validated, as a keystroke would.
+    ///
+    /// **Never runs a live check.** A clean result goes stale, so the field
+    /// stops claiming `aria-invalid="false"` about a value it has not checked.
+    /// Errors the field is showing stay until the next
+    /// [`validate`](Self::validate), and the field does not count as typed
+    /// into, so leaving it later checks nothing. For a structural change (an
+    /// item added, a variant chosen), use [`edit`](Self::edit).
+    ///
+    /// A path with an index (`path!(Quiz.answers[i])`) is resolved to that
+    /// item's key, as [`push_field_error`](Self::push_field_error) does.
+    ///
+    /// # Errors
+    ///
+    /// When no field renders `path` now: an index past the end, a path ending
+    /// at a struct or list rather than a value, or a field of a variant that
+    /// is not the chosen one. Nothing is written then.
+    pub fn write(
+        &self,
+        path: &ModelPath<T>,
+        raw: impl Into<String>,
+    ) -> Result<(), FormAccessError> {
+        let path = path.as_str();
+        // Two `peek()`s, not one guard bound to a `let`: the guard would still
+        // be held below, and `apply_field_event` is free to write the state.
+        let key = self.state_signal.peek().key_for(path);
+        if !self.state_signal.peek().leaf_values().contains_key(&key) {
+            return Err(no_such_path(path));
+        }
+        write_value(&key, self.values_store, raw.into());
+        apply_field_event(
+            self.state_signal,
+            self.values_store,
+            self.errors_store,
+            self.changed_paths,
+            &FieldEvent {
+                path: key,
+                kind: FieldEventKind::Written,
+                is_live: false,
+            },
+        );
+        Ok(())
     }
 }
 
@@ -814,6 +876,10 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         }
     });
 
+    let on_field_event = use_callback(move |event: FieldEvent| {
+        apply_field_event(state, values, errors, changed_paths, &event);
+    });
+
     let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
     let id = form_id.clone();
     use_effect(move || {
@@ -831,6 +897,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         errors_store: errors,
         changed_paths,
         on_edit,
+        on_field_event,
         initial_signal: initial,
         id: use_signal(|| form_id),
     }
@@ -893,25 +960,6 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Ok(created)
 }
 
-/// What a widget tells the form happened to one field, for
-/// [`apply_field_event`].
-///
-/// Named for what happened, not for what the form does about it, which the
-/// form decides from the field's errors and whether it was typed into. A
-/// chooser (a select, a checkbox, a radio) sends both, `Written` then
-/// `Blurred`: it has no typing, so its change counts as the blur, and that
-/// is what makes it check at once.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[expect(dead_code, reason = "they will get created")]
-enum FieldEvent {
-    /// The field's new value is already in the value store. The widget
-    /// writes first and sends this second, so a check reads the new value
-    /// and not the one before this keystroke.
-    Written,
-    /// The field lost focus.
-    Blurred,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum AtPath {
     ShowsErrors, // get(path) is Some(Some(non_empty_list))
@@ -942,39 +990,48 @@ enum AtPath {
 ///
 /// Writes only the error store and `changed_paths`, never the state, so the
 /// form does not re-render; see [`check_live`].
-#[expect(dead_code, reason = "it will be called")]
 fn apply_field_event<T>(
     state: Signal<FormState<T>>,
     values: ValuesStore,
     mut errors: ErrorsStore,
     mut changed_paths: Signal<HashSet<String>>,
-    path: &str,
-    event: FieldEvent,
+    event: &FieldEvent,
 ) where
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
-    match event {
-        FieldEvent::Written => {
-            let at_path = match errors.peek().get(path) {
-                Some(Some(v)) if !v.is_empty() => AtPath::ShowsErrors,
-                Some(Some(_)) => AtPath::Clean,
-                _ => AtPath::Nothing,
-            };
-            match at_path {
-                AtPath::ShowsErrors => {
-                    check_live(state, values, errors, path);
-                    changed_paths.write().remove(path);
-                }
-                AtPath::Clean => {
-                    errors.insert(path.to_string(), None);
-                    changed_paths.write().insert(path.to_string());
-                }
-                AtPath::Nothing => {
-                    changed_paths.write().insert(path.to_string());
-                }
-            }
+    let path: &str = &event.path;
+    let at_path = match errors.peek().get(path) {
+        Some(Some(v)) if !v.is_empty() => AtPath::ShowsErrors,
+        Some(Some(_)) => AtPath::Clean,
+        _ => AtPath::Nothing,
+    };
+
+    // Not live (`live_validation: false`): nothing is checked until submit,
+    // and the typed-into set is not kept, since nothing would read it. A
+    // keystroke still makes a clean result stale, though: `aria-invalid="false"`
+    // is a claim about the value, and the value just changed.
+    if !event.is_live {
+        if at_path == AtPath::Clean {
+            errors.insert(path.to_string(), None);
         }
-        FieldEvent::Blurred => {
+        return;
+    }
+
+    match event.kind {
+        FieldEventKind::Written => match at_path {
+            AtPath::ShowsErrors => {
+                check_live(state, values, errors, path);
+                changed_paths.write().remove(path);
+            }
+            AtPath::Clean => {
+                errors.insert(path.to_string(), None);
+                changed_paths.write().insert(path.to_string());
+            }
+            AtPath::Nothing => {
+                changed_paths.write().insert(path.to_string());
+            }
+        },
+        FieldEventKind::Blurred => {
             if changed_paths.write().remove(path) {
                 check_live(state, values, errors, path);
             }

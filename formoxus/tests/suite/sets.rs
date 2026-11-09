@@ -2117,7 +2117,13 @@ fn the_tags_preset_is_one_class_on_the_set() {
 /// A view that shows everything it was handed.
 #[component]
 fn TagChip(props: formoxus::widgets::SetItemProps) -> Element {
-    let stored = formoxus::widgets::get_current(&props.path, props.values);
+    // Straight from the store, as a dev's view has to read it (issue #22).
+    let stored = props
+        .values
+        .read()
+        .get(&props.path)
+        .cloned()
+        .unwrap_or_default();
     let says = format!(
         "{} at {} #{} editing={} stored={stored}",
         props.text, props.path, props.index, props.editing

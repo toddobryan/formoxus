@@ -897,8 +897,8 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     keystroke that fixes it" would notice. Since the handle does both, no widget can
     get the order wrong.
 
-  - [ ] **6c. Two handles: a crate-private form-wide trigger, and a public per-field
-    handle that is the ONLY way a widget writes a value** (Todd, 2026-11-08: "make the
+  - [x] **6c. Two handles: a crate-private form-wide `OnFieldEvent`, and a public
+    per-field `FieldHandle` that is the ONLY way a widget writes a value** (Todd, 2026-11-08: "make the
     API more ergonomic, so devs would have to work hard to do it wrong"). The first
     draft had a widget call `write_value` and then the trigger, in that order, with
     the same path, and wire `onblur` itself. Each of those is a way to get it wrong
@@ -906,12 +906,57 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     happen, and a stale `aria-invalid="false"` stays up (6f). Instead, the write and
     the trigger become one call, and nothing else can write.
 
-    **The form-wide trigger, crate-private.** A `Copy` struct holding an
-    `Option<Callback<(String, Trigger)>>`, where `Trigger` is a crate-private enum
-    with two variants, written and blurred, plus a `bool` for whether live checks are
-    on. One callback means one closure in `use_form`, so E's logic lives in one
-    place. This is what 6d threads through `NodeContext` and `WidgetProps`, where it
-    is a `pub(crate)` field.
+    **The four pieces, with Todd's names (2026-11-08).** A name starting `On` is a
+    handler, as `on_edit: Callback<Edit>` is; the data a handler takes is named for
+    the thing itself, as `Edit` is.
+
+    | Name | What it is | Visibility |
+    |---|---|---|
+    | `FieldEventKind` | `Written` or `Blurred`: what happened. Was `FieldEvent` in 6b. | `pub(crate)` |
+    | `FieldEvent` | The message: `{ path: String, kind: FieldEventKind, is_live: bool }`. Built and consumed in one call, so not `Copy`; `Debug` only. | `pub(crate)` |
+    | `OnFieldEvent` | The form-wide handler: `{ callback: Option<Callback<FieldEvent>>, is_live: bool }`. `Clone`, `Copy`, `Debug`, `PartialEq`. | `pub(crate)` |
+    | `FieldHandle` | One field's handle: its path, the value store, and an `OnFieldEvent`. The only way a widget writes. | `pub` |
+
+    **They live in a new `widgets/field_handle.rs`.** `NodeContext` (in `nodes.rs`),
+    `WidgetProps` and `form.rs` all have to see them; `Edit` is set up the same way,
+    defined on the widget side and imported by `form.rs`. `FieldEventKind` moves there
+    from `form.rs`; `apply_field_event` and `check_live` stay in `form.rs`. Their
+    fields on `NodeContext` and `WidgetProps` are `pub(crate)`, though those structs'
+    other fields are `pub`: a `pub` field of a `pub(crate)` type trips the
+    `private_interfaces` lint, and crate-private is the point anyway.
+
+    **`is_live` is in two of them, and it is one value at two stages.**
+    `OnFieldEvent.is_live` is where it is kept: `root_ctx` sets it from the knob, and
+    it travels with the handler to every widget. `FieldEvent.is_live` is how it
+    reaches `apply_field_event`: the `Callback` was made in `use_form`, before the knob
+    was resolved, and sees only its argument. `send` (below) copies it into each
+    message, as it copies the path. It cannot live only in `OnFieldEvent`, with `send`
+    dropping events when it is off: a `Written` still has to make a clean result
+    stale, which needs the error store on the other side.
+
+    **Start to finish:**
+
+    1. **`use_form`:** a `use_callback` that takes a `FieldEvent` and calls
+       `apply_field_event` with the `state`, `values`, `errors` and `changed_paths` it
+       captures, plus the event's three fields. `Form` stores the `Callback`, beside
+       `on_edit`. `apply_field_event` gains an `is_live` parameter: when it is
+       `false`, a `Written` does only the `Clean` arm's `None` write, and a `Blurred`
+       does nothing.
+    2. **`root_ctx`:** wraps it as `OnFieldEvent { callback: Some(…), is_live: true }`
+       (`true` until box 7) and passes it to `NodeContext::root`. `nested` and
+       `optional` copy it (6d).
+    3. **`FieldNode::render` and `VariantNode`** put the context's copy into
+       `WidgetProps`. `WidgetProps::new` puts in `callback: None`.
+    4. **`OnFieldEvent::send(&self, path: &str, kind: FieldEventKind)`,**
+       crate-private: nothing when `callback` is `None`, otherwise a call with a
+       `FieldEvent` built from `path`, `kind` and `self.is_live`. The only place the
+       sending side reads the bool.
+    5. **`WidgetProps::field()`** builds a `FieldHandle` from the props: the path
+       (cloned), the value store, the `OnFieldEvent`. Its methods are listed below.
+    6. **Remove both `#[expect(dead_code)]`s**, since `apply_field_event` is now
+       called.
+
+    **The `OnFieldEvent` itself:**
 
     1. **`None` means "no form"**, as in props built by `WidgetProps::new`, which
        defaults it to `None` and stays at six arguments. The two tests that build
@@ -920,26 +965,27 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
        the value, with nothing to trigger.
     2. **The `bool` is box 7's off switch, not `None`.** With the knob off, a write
        still has a job: making a clean verdict stale (6b step 2). So when the `bool`
-       is `false`, the trigger does step 2 and nothing else, and a blur does nothing.
+       is `false`, `apply_field_event` does step 2 and nothing else, and a blur does
+       nothing.
        `root_ctx` sets it, always `true` until box 7. Turning the knob off then needs
        no `bool` in `NodeContext` and no check in any widget.
 
     **The per-field handle, public, in `widgets`** (not the prelude, since only
     someone writing a widget uses it). Something like `props.field()` returns it.
-    The name is yours; `FieldHandle` is the placeholder. It holds the field's path,
-    the value store, and the form-wide trigger. It is `Clone`, not `Copy`, because
+    It holds the field's path, the value store, and an `OnFieldEvent`. It is
+    `Clone`, not `Copy`, because
     it owns the path, a `String`; derive `Debug` and `PartialEq` too, so a widget can
     pass it to a child component as a prop. Its methods are named after the DOM
     event the widget is handling, so picking the right one is the obvious choice:
 
     1. **`current()`**: the field's raw value, replacing `get_current`. It reads the
        store, so call it from a component, the same rule as `current_attrs`.
-    2. **`input(raw)`**: write, then the after-write trigger. For typing.
-    3. **`change(raw)`**: write, then the after-write trigger, then the blur trigger,
+    2. **`input(raw)`**: `write_value`, then `send(Written)`. For typing.
+    3. **`change(raw)`**: `write_value`, then `send(Written)`, then `send(Blurred)`,
        because a chooser has no typing, so its change counts as the blur (E). It
        always comes to exactly one check. For a select, a checkbox, a radio, and a
        custom widget whose value comes from a click (a star rating).
-    4. **`blur()`**: the blur trigger.
+    4. **`blur()`**: `send(Blurred)`.
     5. **`on_input()`, `on_change()`, `on_blur()`**: each returns a ready-made event
        handler that calls the matching method with `e.value()`. They are the methods
        above wrapped up, so a widget writes `oninput: field.on_input()` and never
@@ -982,11 +1028,10 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     pointer and the scope the callback came from (`dioxus-core` 0.7.10,
     `events.rs:472`).
 
-  - [ ] **6d. Through `NodeContext` and `WidgetProps`, the way `errors` goes.**
+  - [x] **6d. Through `NodeContext` and `WidgetProps`, the way `errors` goes.**
     `use_form` makes the `Callback` with `use_callback`. `Form` stores it. `root_ctx`
-    wraps it in the form-wide trigger (always `Some`, and live checks on, until box
-    7). `NodeContext` gets a field for
-    it, filled by `root` (its seventh parameter: clippy's `too_many_arguments` only
+    wraps it in an `OnFieldEvent` (always `Some`, and live checks on, until box 7).
+    `NodeContext` gets a field for it, filled by `root` (its seventh parameter: clippy's `too_many_arguments` only
     fires above seven) and copied by `nested` and `optional`. `WidgetProps` gets a
     `pub(crate)` field for it, filled by `FieldNode::render` (`field_node.rs:303`)
     and by `VariantNode` (`variant_node.rs:275`). `VariantSelect` never calls it,
@@ -1139,7 +1184,12 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   reading `WidgetProps.errors` changes then, and its markdown widget
   (`crates/ui/src/markdown.rs:69`, `:86`) moves from `get_current` and
   `write_value` to the per-field handle. `crates/web/src/server.rs:672` names
-  `formoxus::Path`, renamed `ModelPath` on 2026-11-08.
+  `formoxus::Path`, renamed `ModelPath` on 2026-11-08. The same day, `reject_field`,
+  `errors_at`, `error_messages_at`, `Form::push_field_error` and the new
+  `Form::write` started taking `&ModelPath<T>`, so each `path!(…)` passed to one
+  gains a `&`: `server.rs` (six `error_messages_at`) and
+  `fixtures/tests/change_password.rs` (four), plus four more `reject_field`,
+  `errors_at` and `push_field_error` calls.
 
 ## Not in this plan
 

@@ -144,11 +144,7 @@ impl<T> WireForm<T> {
     /// (`path!(Quiz.answers[i])`) or by value (`path!(Post.tags[= "rust"])`),
     /// is resolved to that item's key through the entries these values
     /// carry, as the form placed it; one naming no item has none.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a path is written inline as `path!(…)`, so by value is what reads well at the call site; only `Copy` kept clippy quiet before 2026-11-03"
-    )]
-    pub fn errors_at(&self, path: ModelPath<T>) -> &[ValidationMessage] {
+    pub fn errors_at(&self, path: &ModelPath<T>) -> &[ValidationMessage] {
         let keyed = crate::path::resolve_indices(path.as_str(), |list| {
             self.values.get(list).map(String::as_str)
         });
@@ -157,7 +153,7 @@ impl<T> WireForm<T> {
             .map_or(&[], Vec::as_slice)
     }
 
-    pub fn error_messages_at(&self, path: ModelPath<T>) -> Vec<String> {
+    pub fn error_messages_at(&self, path: &ModelPath<T>) -> Vec<String> {
         self.errors_at(path).iter().map(|fe| fe.0.clone()).collect()
     }
 

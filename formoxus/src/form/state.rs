@@ -372,7 +372,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// that text. It is resolved to that item's key (`answers.#5`) here, so
     /// an index past the end or a value no item holds is no path at all.
     pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
-        let keyed = keyed_or_as_written(path, &self.item_keys());
+        let keyed = self.key_for(path);
         let mut this_error = ErrorsByPath::default();
         this_error.insert(keyed, vec![ValidationMessage::from(message)]);
         let unclaimed = self.distribute_errors(this_error);
@@ -381,6 +381,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         } else {
             Err(no_such_path(path))
         }
+    }
+
+    pub(crate) fn key_for(&self, path: &str) -> String {
+        keyed_or_as_written(path, &self.item_keys())
     }
 
     /// Answer the enum at `path`, rebuilding that subtree from the chosen

@@ -131,7 +131,7 @@ fn a_cross_field_failure_arrives_with_no_field_errors_at_all() {
 #[gtest]
 fn a_server_verdict_lands_on_the_named_field() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let wire = submission.reject_field(path!(Credentials.username), "That username is taken.");
+    let wire = submission.reject_field(&path!(Credentials.username), "That username is taken.");
     let errors = wire.errors();
 
     expect_that!(errors.paths(), elements_are![eq("username")]);
@@ -162,7 +162,7 @@ fn rejecting_reports_only_the_rejected_field() {
     // now-clean state of every sibling.
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
     let wire = submission.reject_field(
-        path!(Credentials.password),
+        &path!(Credentials.password),
         "That password was found in a breach.",
     );
 
@@ -174,7 +174,7 @@ fn rejecting_reports_only_the_rejected_field() {
 #[gtest]
 fn a_rejection_carries_the_values_back_too() {
     let submission = Submission::accept(credentials_spec(), &filled()).expect("valid");
-    let wire = submission.reject_field(path!(Credentials.username), "Taken.");
+    let wire = submission.reject_field(&path!(Credentials.username), "Taken.");
 
     expect_that!(wire.values().get("username"), some(eq("ada")));
     expect_that!(wire.is_clean(), eq(false));

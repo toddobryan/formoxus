@@ -488,7 +488,8 @@ fn TextareaSeeded() -> Element {
             {
                 form.render(using_fns! {
                     overwrite: move || async move {
-                        formoxus::widgets::write_value("about", form.values(), "overwritten".to_string());
+                        form.write(&path!(Bio.about), "overwritten")
+                            .expect("about is a field of this form");
                     },
                     save: move |model: Bio| async move {
                         submitted.set(Some(format!("{model:#?}")));

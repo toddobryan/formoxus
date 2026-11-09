@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::prelude::*;
-use formoxus::widgets::{AddItemProps, FieldErrors, Widget, WidgetProps, get_current};
+use formoxus::widgets::{AddItemProps, FieldErrors, Widget, WidgetProps};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -76,7 +76,7 @@ impl Widget for QuestionItem {
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
 
     fn render(&self, props: WidgetProps) -> Element {
-        let current = get_current(&props.path, props.values);
+        let current = props.field_handle().current();
         rsx! {
             input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
             span { class: "question", "{current}" }
@@ -431,7 +431,7 @@ fn a_server_can_reject_one_item_by_index() {
     let wire = WireForm::from_model(&assignment(), spec());
     let submission = Submission::accept(spec(), wire.values()).expect("the assignment is valid");
     let rejected = submission.reject_field(
-        path!(AssignmentForm.groups[2].$QuestionGroup::Streak.set[0]),
+        &path!(AssignmentForm.groups[2].$QuestionGroup::Streak.set[0]),
         "Not in this course.",
     );
     expect_that!(
@@ -442,13 +442,13 @@ fn a_server_can_reject_one_item_by_index() {
     );
     // And read back by the same indexed path, as a client would.
     expect_that!(
-        rejected.error_messages_at(path!(
+        rejected.error_messages_at(&path!(
             AssignmentForm.groups[2].$QuestionGroup::Streak.set[0]
         )),
         elements_are![eq("Not in this course.")]
     );
     expect_that!(
-        rejected.error_messages_at(path!(
+        rejected.error_messages_at(&path!(
             AssignmentForm.groups[2].$QuestionGroup::Streak.set[1]
         )),
         is_empty()

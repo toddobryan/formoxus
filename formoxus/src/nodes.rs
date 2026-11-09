@@ -31,6 +31,7 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
+use crate::widgets::field_handle::OnFieldEvent;
 use crate::widgets::get_errors;
 use dioxus::stores::Store;
 
@@ -436,6 +437,7 @@ pub struct NodeContext {
     pub values: ValuesStore,
     pub required: bool,
     pub on_edit: Callback<Edit>,
+    pub(crate) on_field_event: OnFieldEvent,
     /// Already resolved — the cascade is settled once, where the ctx is built,
     /// rather than re-decided at every node. See
     /// `.claude/memory/config_cascade.md`.
@@ -473,10 +475,11 @@ pub struct NodeContext {
 impl NodeContext {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionNode` says otherwise.
-    pub fn root(
+    pub(crate) fn root(
         form_id: String,
         values: ValuesStore,
         on_edit: Callback<Edit>,
+        on_field_event: OnFieldEvent,
         label_case: LabelCase,
         classes: Classes,
         errors: ErrorsStore,
@@ -487,6 +490,7 @@ impl NodeContext {
             values,
             required: true,
             on_edit,
+            on_field_event,
             label_case,
             classes: Rc::new(classes),
             label_if_unnamed: None,
@@ -503,6 +507,7 @@ impl NodeContext {
             values: self.values,
             required: self.required,
             on_edit: self.on_edit,
+            on_field_event: self.on_field_event,
             label_case: self.label_case,
             classes: self.classes.clone(),
             label_if_unnamed: None,
@@ -521,6 +526,7 @@ impl NodeContext {
             values: self.values,
             required: false,
             on_edit: self.on_edit,
+            on_field_event: self.on_field_event,
             label_case: self.label_case,
             classes: self.classes.clone(),
             label_if_unnamed: None,

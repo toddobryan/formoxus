@@ -220,7 +220,8 @@ fn to_wire_carries_the_live_values() {
     fn App() -> Element {
         let contact = seeded();
         let form = use_form(move || form_for(&contact, form! { Contact {} }));
-        formoxus::widgets::write_value("name", form.values(), "Grace".to_string());
+        form.write(&path!(Contact.name), "Grace")
+            .expect("name is a field of this form");
 
         let wire = form.to_wire();
         rsx! { "{wire.values().get(\"name\").cloned().unwrap_or_default()}" }
@@ -235,7 +236,8 @@ fn absorb_replaces_values_the_server_normalized() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        formoxus::widgets::write_value("email", form.values(), "  ADA@Example.COM ".to_string());
+        form.write(&path!(Contact.email), "  ADA@Example.COM ")
+            .expect("email is a field of this form");
 
         let normalized: ValuesByPath = [("email".to_string(), "ada@example.com".to_string())]
             .into_iter()
@@ -301,7 +303,7 @@ fn handle(wire: &WireForm<Contact>) -> WireForm<Contact> {
         Err(errors) => WireForm::from_errors(errors),
         Ok(sub) => {
             if sub.model().email.contains("@example.com") {
-                return sub.reject_field(path!(Contact.email), "Not a real address.");
+                return sub.reject_field(&path!(Contact.email), "Not a real address.");
             }
             let mut model = sub.into_model();
             model.email = model.email.trim().to_lowercase();

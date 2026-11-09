@@ -143,13 +143,13 @@ fn a_server_can_reject_one_set_item_by_value() {
     let wire = WireForm::from_model(&model, FormSpec::default());
     let submission =
         Submission::accept(FormSpec::default(), wire.values()).expect("the post is valid");
-    let rejected = submission.reject_field(path!(Post.tags[= "perl"]), "Not allowed here.");
+    let rejected = submission.reject_field(&path!(Post.tags[= "perl"]), "Not allowed here.");
     expect_that!(
-        rejected.error_messages_at(path!(Post.tags[= "perl"])),
+        rejected.error_messages_at(&path!(Post.tags[= "perl"])),
         elements_are![eq("Not allowed here.")]
     );
     expect_that!(
-        rejected.error_messages_at(path!(Post.tags[= "go"])),
+        rejected.error_messages_at(&path!(Post.tags[= "go"])),
         is_empty()
     );
 }

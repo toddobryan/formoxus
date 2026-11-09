@@ -1,7 +1,9 @@
 //! The bridge between a widget and the value store.
 //!
-//! `pub` because a custom widget has to read and write like any built-in one,
-//! and the insert-vs-set distinction is not something each one should rediscover.
+//! `pub` for [`get_errors`], which a custom widget reads like any built-in one.
+//! Reading and writing a VALUE is crate-private: a widget does both through a
+//! [`FieldHandle`](crate::widgets::FieldHandle), so that a write cannot happen
+//! without the form hearing of it.
 
 use dioxus::prelude::*;
 
@@ -12,14 +14,13 @@ use crate::{
 
 /// This path's current raw value, or `""` if the map has no entry for it.
 ///
-/// `pub` because a `custom(…)` input lives in the CONSUMING crate and needs
-/// exactly what the built-in widgets use — without it, every custom widget
-/// would reimplement the missing-key rule and get it subtly wrong. A path the
-/// schema has but the map doesn't is normal, not an error: a variant chosen
-/// after mount reveals leaves that were never populated, and an absent key
-/// reads as empty, which is the same "empty IS absence" rule `distribute_values`
-/// follows.
-pub fn get_current(path: &str, values: ValuesStore) -> String {
+/// Crate-private: a widget reads through
+/// [`FieldHandle::current`](crate::widgets::FieldHandle::current), which calls
+/// this. A path the schema has but the map doesn't is normal, not an error: a
+/// variant chosen after mount reveals leaves that were never populated, and an
+/// absent key reads as empty, which is the same "empty IS absence" rule
+/// `distribute_values` follows.
+pub(crate) fn get_current(path: &str, values: ValuesStore) -> String {
     let slot = values.get_unchecked(path.to_string());
     slot.try_read().map(|v| v.clone()).unwrap_or_default()
 }
@@ -42,10 +43,15 @@ pub fn get_errors(path: &str, errors: ErrorsStore) -> Vec<ValidationMessage> {
 
 /// Write this path's raw value back, inserting the key if it wasn't there.
 ///
-/// `pub` for the same reason as [`get_current`]: a custom widget has to be able
-/// to write, and the insert-vs-set distinction is not something each one should
-/// have to rediscover.
-pub fn write_value(path: &str, mut values: ValuesStore, raw: String) {
+/// A bare write: it tells the form nothing, so no live check follows and a
+/// clean result is not made stale. Crate-private for that reason. A widget
+/// writes through a [`FieldHandle`](crate::widgets::FieldHandle), which calls
+/// this and then reports the write. The form calls it directly only where it
+/// settles the errors itself, as [`absorb`](crate::Form::absorb) (the reply
+/// carries its own) and [`reset`](crate::Form::reset) (which clears them) do.
+/// Inserts the key when it is missing, and sets it otherwise, so its existing
+/// subscribers fire.
+pub(crate) fn write_value(path: &str, mut values: ValuesStore, raw: String) {
     let populated = values.peek().contains_key(path);
     if populated {
         values.get_unchecked(path.to_string()).set(raw);

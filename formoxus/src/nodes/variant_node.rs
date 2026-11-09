@@ -290,6 +290,7 @@ impl Node for VariantNode {
                         // the store, and its variants arrive as `variants`.
                         values: ctx.values,
                         choices: None,
+                        on_field_event: ctx.on_field_event,
                     }
                 }
                 { nodes.into_iter() }

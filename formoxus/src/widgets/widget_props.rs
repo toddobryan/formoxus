@@ -7,7 +7,7 @@ use crate::{
     Classes,
     field_attrs::FieldAttrs,
     nodes::{ErrorsStore, ValuesStore},
-    widgets::{Choice, Widget, get_errors},
+    widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent, get_errors},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,7 +43,7 @@ pub struct WidgetProps {
     /// (see there), and `VariantSelect` spreads this as is.
     pub(crate) base_attrs: FieldAttrs,
     pub extra_attrs: Vec<Attribute>,
-    pub values: ValuesStore,
+    pub(crate) values: ValuesStore,
     /// The form's resolved classes, for the widget to look up its parts' slots
     /// (`classes.part_class::<Widget>(Tag::Label, invalid)`). A custom widget gets
     /// them too, so it can borrow a built-in slot and follow the app's preset.
@@ -53,6 +53,7 @@ pub struct WidgetProps {
     /// so a field whose choices change is shown with the new ones. `None` for
     /// a field without any; a chooser over a `bool` then offers true/false.
     pub choices: Option<Vec<Choice>>,
+    pub(crate) on_field_event: OnFieldEvent,
 }
 
 impl WidgetProps {
@@ -61,9 +62,14 @@ impl WidgetProps {
     /// caller sets them afterwards.
     ///
     /// A widget is handed its props, so this is rarely needed: it is for a test
-    /// of a widget on its own, or a widget that renders another. `attrs` are the
-    /// field's attributes before its errors are applied;
-    /// [`current_attrs`](Self::current_attrs) adds those.
+    /// of a widget on its own. `attrs` are the field's attributes before its
+    /// errors are applied; [`current_attrs`](Self::current_attrs) adds those.
+    ///
+    /// **Props built here never trigger a live check.** They are not connected
+    /// to a form, so a [`FieldHandle`] from them writes the value store and
+    /// tells nobody: no check on blur, and a clean result is not made stale. A
+    /// widget that renders another should pass on a clone of its own props, not
+    /// build new ones, or the inner widget loses its live check.
     pub fn new(
         id: impl Into<String>,
         path: impl Into<String>,
@@ -72,7 +78,7 @@ impl WidgetProps {
         errors: ErrorsStore,
         classes: Rc<Classes>,
     ) -> Self {
-        WidgetProps {
+        Self {
             id: id.into(),
             path: path.into(),
             label: None,
@@ -83,6 +89,10 @@ impl WidgetProps {
             values,
             classes,
             choices: None,
+            on_field_event: OnFieldEvent {
+                callback: None,
+                is_live: true,
+            },
         }
     }
 
@@ -132,5 +142,15 @@ impl WidgetProps {
     pub fn control_class<W: Widget>(&self, tag: Tag) -> Option<String> {
         self.base_attrs
             .class(self.classes.part::<W>(tag), self.is_invalid())
+    }
+
+    /// How this widget reads and writes its field's value: the only way to
+    /// write one. See [`FieldHandle`] for which method goes on which element.
+    ///
+    /// Call it while rendering, then move the closures its `on_*` methods
+    /// return into the element's event attributes. Each closure owns a clone
+    /// of the handle, so nothing borrows the props.
+    pub fn field_handle(&self) -> FieldHandle {
+        FieldHandle::new(&self.path, self.values, self.on_field_event)
     }
 }

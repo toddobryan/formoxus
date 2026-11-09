@@ -6,9 +6,8 @@ use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, Wi
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
-use crate::widgets::{
-    FieldErrors, Widget, field_help, get_current, widget_props::WidgetProps, write_value,
-};
+use crate::widgets::values::{get_current, write_value};
+use crate::widgets::{FieldErrors, Widget, field_help, widget_props::WidgetProps};
 
 /// Radio buttons, one per choice, for a REQUIRED field: a picked radio
 /// can't be un-picked. Over a `bool` without choices it offers true and
