@@ -38,9 +38,10 @@
 //!   schema, not state, and it never crosses a server-fn boundary.
 //! - [`FormState`] is the **built tree**: plain data, no signals, testable with
 //!   no Dioxus runtime. [`Form`] is the reactive handle over it.
-//! - Leaf paths (`x.y`, `x.y[]`, `x.y[].z`) are the wire format. A form submits
-//!   `(path, value)` pairs and the server rebuilds against the same
-//!   [`FormSpec`] — see [`Submission`], which packages that side.
+//! - A [`WireForm`] is what crosses: the values by path
+//!   (`x.y`, or `x.#0.z` for one item of a list) and the errors, as plain data.
+//!   The server rebuilds against the same [`FormSpec`] and replies with one —
+//!   see [`Submission`], which packages that side.
 //!
 //! The design reasoning behind all of this — including the parts that were
 //! tried and abandoned — lives in `.claude/memory/`, starting from its

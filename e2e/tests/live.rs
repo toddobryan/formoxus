@@ -142,7 +142,7 @@ async fn a_slow_click_on_submit_lands_when_nothing_moves() -> Result<()> {
     s.close().await
 }
 
-/// **Trap 1 bites (found 2026-11-09), pinned until it is decided.** Submit
+/// **Trap 1 bites (found 2026-11-09); left as it is, issue #24.** Submit
 /// clicked at a human pace, 150 ms between press and release, with a bad
 /// value in the field just above it. The press blurs the field, its error
 /// renders between the field and the button, and the button moves down by
@@ -153,9 +153,10 @@ async fn a_slow_click_on_submit_lands_when_nothing_moves() -> Result<()> {
 /// render lands between them.
 ///
 /// `#submits` is the evidence. The control above, the same click with
-/// nothing moving, counts one. When this is fixed (one fix is reserving the
-/// error line's space; `ERRORS_PLAN.md` box 6's trap 1 has the options), this
-/// fails: rename it without `_yet` and assert `"1"`.
+/// nothing moving, counts one. Left alone on purpose for now: a user just
+/// shown an error would want to fix it before submitting anyway, and no fix
+/// considered covers every case (#24 has them). When one lands, this fails:
+/// rename it without `_yet` and assert `"1"`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "e2e: needs `just e2e` (a served app + a Playwright browser)"]
 async fn a_click_on_submit_misses_while_an_error_appears_above_it_yet() -> Result<()> {

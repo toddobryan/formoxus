@@ -80,34 +80,20 @@ or turn it off for the whole app with
 This is the part that's usually painful, so it's worth showing directly.
 
 A form does **not** cross a server-function boundary — `FormState` holds
-`Box<dyn Node>` and isn't serializable. What crosses is the leaves: plain
-`(path, value)` string pairs. The server rebuilds the form from the *same*
-`FormSpec` and validates it there, so cross-field rules live in one place
-instead of being duplicated on both sides.
+`Box<dyn Node>` and isn't serializable. What crosses is a `WireForm`: the
+form's values and its errors as plain data. The server rebuilds the form from
+the *same* `FormSpec` and validates it there, so cross-field rules live in one
+place instead of being duplicated on both sides.
 
-Client side, send the values and route any errors back onto the fields:
+Client side, send the form and take the reply back into it:
 
 ```rust,ignore
-let values = form.values().read().clone(); // HashMap<String, String>
-
-match change_password(values).await {
-    Ok(Ok(())) => { /* success */ }
-    Ok(Err(errors)) => {
-        for (path, field_errors) in errors.fields {
-            for e in field_errors {
-                // An unplaceable path degrades to a form-level error rather
-                // than being dropped — the user is still owed the message.
-                if form.push_field_error(&path, &e.0).is_err() {
-                    form.push_error(e);
-                }
-            }
-        }
-        for e in errors.form {
-            form.push_error(e);
-        }
-    }
-    Err(e) => { /* transport failure */ }
-}
+let reply = change_password(form.to_wire()).await?; // `?`: a transport failure
+let ok = reply.is_clean();
+// The server's errors back onto their fields, plus any value it normalized.
+// `Err` names a path this form doesn't have: the two sides' specs disagree.
+form.absorb(reply)?;
+if ok { /* success */ }
 ```
 
 Server side, `Submission` packages the rebuild-and-validate boilerplate:
@@ -115,28 +101,31 @@ Server side, `Submission` packages the rebuild-and-validate boilerplate:
 ```rust,ignore
 #[server]
 async fn change_password(
-    values: HashMap<String, String>,
-) -> ServerFnResult<Result<(), FormErrors>> {
+    form: WireForm<ChangePassword>,
+) -> ServerFnResult<WireForm<ChangePassword>> {
     // Runs the spec's own validators, including cross-field ones.
-    let submission = match Submission::accept(change_password_spec(), &values) {
+    let submission = match Submission::accept(change_password_spec(), form.values()) {
         Ok(s) => s,
-        Err(errors) => return Ok(Err(errors)),
+        Err(errors) => return Ok(errors.into()),
     };
 
     if !current_password_matches(submission.model()).await {
         // `reject_field` CONSUMES the submission, so "don't validate again
         // after pushing a server error" is a compile error, not a comment.
-        return Ok(Err(submission.reject_field("current", "That isn't your password")));
+        return Ok(submission.reject_field(
+            &path!(ChangePassword.current),
+            "That isn't your password",
+        ));
     }
 
     apply(submission.into_model()).await;
-    Ok(Ok(()))
+    Ok(WireForm::empty())
 }
 ```
 
-`Result<(), FormErrors>` rather than "an empty `FormErrors` means success",
-because a cross-field failure has an empty `fields` list and would otherwise
-read as success.
+`is_clean()` rather than `errors().fields.is_empty()`, because a cross-field
+failure has no path: it lands in `errors().form`, and would otherwise read as
+success.
 
 ## What isn't done
 
@@ -154,7 +143,8 @@ Being explicit, since this is pre-release:
 - **An error that appears as a field loses focus moves what is below it.**
   Clicking a button just below a field with a bad value blurs the field on
   the press, and its error renders before the release, so the button can move
-  out from under the click, which then has to be repeated.
+  out from under the click, which then has to be repeated
+  ([#24](https://github.com/toddobryan/formoxus/issues/24)).
 - Error rendering is not yet configurable; `FieldErrors` is the component to
   swap when it becomes so.
 

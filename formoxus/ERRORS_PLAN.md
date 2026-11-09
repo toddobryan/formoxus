@@ -1125,7 +1125,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
      publishing. 8d should pin down what happens: type a bad value into the field just
      above Submit, click Submit once. If it bites, decide then (one fix is reserving
      space for the error line). **It bites (2026-11-09, 8d):** the click is lost;
-     measured and pinned there.
+     measured and pinned there. **Decided (Todd, 2026-11-09): left as it is**, since
+     a user just shown an error would want to fix it before submitting, and neither
+     fix covers a field with several messages. Issue #24 has both fixes considered.
   2. **A blur also fires when the window loses focus.** Switching to another app
      halfway through a word checks the field. Every library has this, and we accept
      it.
@@ -1233,9 +1235,9 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     down 29.6 px, more than half its 38.8 px height, before the release.
     Playwright's instant click misses too: its press and release are separate round
     trips. Pinned as `a_click_on_submit_misses_while_an_error_appears_above_it_yet`
-    (`#submits` stays `0`), beside a control where nothing moves (`1`). **A decision
-    for Todd**, not made here; options in box 6's trap 1, chiefly reserving the error
-    line's space. When fixed, that test fails: drop `_yet` and assert `"1"`.
+    (`#submits` stays `0`), beside a control where nothing moves (`1`). **Todd
+    decided to leave it** (box 6's trap 1, issue #24). If it is ever fixed, that test
+    fails: drop `_yet` and assert `"1"`.
 
   - [x] **8e.** `aria-invalid="false"` (6f), in the suite unless a browser is
     needed: a seeded edit form claims nothing on load; a clean field after a submit
@@ -1279,11 +1281,12 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   >    comment above asked, so a warnings list can sit beside it, and `Validity`
   >    can grow a state without breaking a custom widget's `match`.
 
-  **Also found, not fixed (needs a decision):** README's "Crossing the wire"
-  example calls `form.push_field_error(&path, &e.0)` with a `String` path, which no
-  longer compiles since `push_field_error` takes `&ModelPath<T>` (2026-11-08). The
-  replacement is probably `form.distribute_errors(&errors)`, which places each
-  error by its string path; that changes the example's shape, so it is Todd's.
+  **Also found, and fixed after Todd saw it:** README's "Crossing the wire"
+  example no longer compiled: its client half called `push_field_error` with a
+  `String` path (it takes `&ModelPath<T>` since 2026-11-08), and its server half
+  returned `Result<(), FormErrors>` and called `reject_field` with a string. Now
+  `form.to_wire()` → `WireForm<T>` → `form.absorb(reply)`, with
+  `reject_field(&path!(…), …)` on the server and `is_clean()` as the success test.
 
 - [ ] **10.** (Claude) `just ci` and `just e2e` green, then Todd merges to `main`.
   apcsp follows after, since it builds formoxus by path: anything of its own
