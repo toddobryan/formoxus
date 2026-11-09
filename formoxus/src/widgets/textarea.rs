@@ -4,7 +4,6 @@ use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use super::field_row::{LabelSide, field_row};
-use super::values::{get_current, write_value};
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<textarea>`, a multi-line text input. For a `String` field only.
@@ -43,9 +42,8 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let values = props.values;
-    let path = props.path.clone();
-    let current = get_current(&path, values);
+    let handle = props.field_handle();
+    let current = handle.current();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -54,7 +52,7 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
         textarea {
             class: props.control_class::<Textarea>(Tag::Textarea),
             id: "{props.id}",
-            name: "{path}",
+            name: "{props.path}",
             value: "{current}",
             // A textarea's text comes from its CONTENT, not a `value` attribute,
             // and hydration never re-applies attributes, so `value` alone
@@ -66,10 +64,8 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
             // clearing, Edit, Cancel): once the user has typed, content
             // only moves the default value, not what is shown.
             dangerous_inner_html: escape_text(&current),
-            oninput: move |e: FormEvent| {
-                let raw = e.value();
-                write_value(&path, values, raw);
-            },
+            oninput: handle.on_input(),
+            onblur: handle.on_blur(),
             // TODO: delete pattern, since not allowed in HTML
             ..attrs,
         }

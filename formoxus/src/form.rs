@@ -17,11 +17,10 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path};
+use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path, owns};
 use crate::path::ModelPath;
-use crate::widgets::ValuesStore;
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
-use crate::widgets::values::write_value;
+use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
 use dioxus::prelude::*;
 use facet::Facet;
@@ -620,7 +619,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            write_value(path, self.values_store, raw.clone());
+            FieldHandle::unreported(path, self.values_store).input(raw.clone());
         }
         self.distribute_errors(wire.errors())
     }
@@ -670,7 +669,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `distribute_values` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            write_value(&path, self.values_store, raw);
+            FieldHandle::unreported(&path, self.values_store).input(raw);
         }
     }
 
@@ -729,18 +728,15 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         if !self.state_signal.peek().leaf_values().contains_key(&key) {
             return Err(no_such_path(path));
         }
-        write_value(&key, self.values_store, raw.into());
-        apply_field_event(
-            self.state_signal,
+        FieldHandle::new(
+            &key,
             self.values_store,
-            self.errors_store,
-            self.changed_paths,
-            &FieldEvent {
-                path: key,
-                kind: FieldEventKind::Written,
+            OnFieldEvent {
+                callback: Some(self.on_field_event),
                 is_live: false,
             },
-        );
+        )
+        .input(raw.into());
         Ok(())
     }
 }
@@ -952,8 +948,8 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         (&created, edit)
     {
         for (path, raw) in state.peek().leaf_values() {
-            if crate::nodes::owns(item, &path) {
-                crate::widgets::values::write_value(&path, values, raw);
+            if owns(item, &path) {
+                FieldHandle::unreported(&path, values).input(raw);
             }
         }
     }

@@ -1,8 +1,8 @@
 use dioxus::core::Callback;
 use dioxus::prelude::{FocusEvent, FormEvent};
+use dioxus::signals::{ReadableExt, WritableExt};
 
 use crate::nodes::ValuesStore;
-use crate::widgets::values::{get_current, write_value};
 
 /// What a widget tells the form happened to one field, for
 /// `apply_field_event` (in `form.rs`, private there, so not a link).
@@ -57,6 +57,15 @@ pub(crate) struct OnFieldEvent {
 }
 
 impl OnFieldEvent {
+    /// Connected to no form, so every event is dropped. `is_live` is then
+    /// never read, and `false` is only for definiteness.
+    pub(crate) fn unreported() -> Self {
+        Self {
+            callback: None,
+            is_live: false,
+        }
+    }
+
     /// Tell the form `kind` happened to the field at `path`. Does nothing when
     /// there is no form to tell.
     pub(crate) fn send(&self, path: &str, kind: FieldEventKind) {
@@ -116,10 +125,29 @@ impl FieldHandle {
         }
     }
 
+    /// A handle whose writes the form never hears of: no live check follows
+    /// one, and a clean result is not made stale. For the form's own writes
+    /// in `absorb`, `reset` and `apply_edit`, each of which settles the
+    /// field's errors itself. Never for a widget, which would then go
+    /// unchecked until submit.
+    pub(crate) fn unreported(path: &str, values: ValuesStore) -> Self {
+        Self {
+            path: path.to_string(),
+            values,
+            handler: OnFieldEvent::unreported(),
+        }
+    }
+
     /// The field's raw value, or `""` if it has none yet. Reading it while
     /// rendering subscribes the reader to this one field.
+    ///
+    /// **No value is normal, not an error.** The store can lack a key the
+    /// form renders: a variant chosen after mount reveals fields that were
+    /// never given a value. An absent key reads as `""`, the same "empty IS
+    /// absence" rule the form applies when it validates.
     pub fn current(&self) -> String {
-        get_current(&self.path, self.values)
+        let slot = self.values.get_unchecked(self.path.clone());
+        slot.try_read().map(|v| v.clone()).unwrap_or_default()
     }
 
     /// The user typed: write `raw`, then report it. A field that shows an
@@ -167,7 +195,22 @@ impl FieldHandle {
         move |_| handle.blur()
     }
 
+    /// Put `raw` in the store, and nothing else: reporting it is the caller's
+    /// job, which is why this is private and [`input`](Self::input) and
+    /// [`change`](Self::change) are not.
+    ///
+    /// **`set` when the key is there, `insert` only when it is not.** Both wake
+    /// this field's own readers, but `insert` also marks the map's keys as
+    /// changed (dioxus-stores 0.7.10, `HashMap` `insert`). That wakes anything
+    /// that read the whole map, as a custom adder counting its list's entries
+    /// does, on every keystroke. Only a new key changes the keys.
     fn write_value(&self, raw: String) {
-        write_value(&self.path, self.values, raw);
+        let mut values = self.values;
+        let populated = values.peek().contains_key(&self.path);
+        if populated {
+            values.get_unchecked(self.path.clone()).set(raw);
+        } else {
+            values.insert(self.path.clone(), raw);
+        }
     }
 }

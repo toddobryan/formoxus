@@ -6,7 +6,6 @@ use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, Wi
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
-use crate::widgets::values::{get_current, write_value};
 use crate::widgets::{FieldErrors, Widget, field_help, widget_props::WidgetProps};
 
 /// Radio buttons, one per choice, for a REQUIRED field: a picked radio
@@ -77,10 +76,10 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
+    let handle = props.field_handle();
     let is_invalid = props.is_invalid();
     let base_attrs = &props.base_attrs;
     let current_attrs = props.current_attrs();
-    let values = props.values;
     let choices = props.choices.unwrap_or_else(bool_choices);
 
     // `required` and `aria-invalid` are both judgments about the GROUP, but each
@@ -96,7 +95,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
 
     let field_class = base_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
 
-    let current = get_current(&props.path, values);
+    let current = handle.current();
 
     let div_class = props.classes.part_class::<RadioGroup>(Tag::Div, is_invalid);
     let input_class = props
@@ -117,7 +116,6 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
         .into_iter()
         .enumerate()
         .map(|(index, choice)| {
-            let path = props.path.clone();
             rsx! {
                 div {
                     class: &div_class,
@@ -136,7 +134,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                         // On every radio, though one would do for the browser:
                         // each then announces "required" when it has focus.
                         required,
-                        onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+                        onchange: handle.on_change(),
                     }
                     label {
                         class: &label_class,

@@ -11,8 +11,6 @@ use formoxus_spec::{
 };
 
 use super::field_row::{LabelSide, field_row};
-use super::values::{get_current, write_value};
-use crate::nodes::ValuesStore;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
@@ -161,7 +159,7 @@ pub(crate) fn InputView<W: Widget>(
     #[props(default)] widget: PhantomData<W>,
 ) -> Element {
     match body {
-        InputBody::Hidden => hidden(props.path, props.values),
+        InputBody::Hidden => hidden(&props),
         InputBody::Checkbox => checkbox(&props),
         InputBody::TextLike(input_type) => text_like::<W>(input_type, &props),
     }
@@ -171,17 +169,15 @@ pub(crate) fn InputView<W: Widget>(
 /// `<label>` caption and a required marker, which for `type="hidden"` would put
 /// visible text and an asterisk on screen beside a widget nobody can see, and
 /// label an unlabelable element for a screen reader.
-fn hidden(path: String, values: ValuesStore) -> Element {
-    let current = get_current(&path, values);
+fn hidden(props: &WidgetProps) -> Element {
+    let handle = props.field_handle();
+    let current = handle.current();
     rsx! {
         input {
             r#type: "hidden",
-            name: "{path}",
+            name: "{props.path}",
             value: current,
-            oninput: move |e: FormEvent| {
-                let raw = e.value();
-                write_value(&path, values, raw);
-            },
+            oninput: handle.on_input(),
         }
     }
 }
@@ -205,9 +201,8 @@ fn hidden(path: String, values: ValuesStore) -> Element {
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
 fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
-    let values = props.values;
-    let path = props.path.clone();
-    let current = get_current(&path, values);
+    let handle = props.field_handle();
+    let current = handle.current();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -217,12 +212,10 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
             class: props.control_class::<W>(Tag::Input),
             r#type: input_type.html_type(),
             id: "{props.id}",
-            name: "{path}",
+            name: "{props.path}",
             value: "{current}",
-            oninput: move |e: FormEvent| {
-                let raw = e.value();
-                write_value(&path, values, raw);
-            },
+            oninput: handle.on_input(),
+            onblur: handle.on_blur(),
             // Last, and it has to be: rsx! treats everything after a spread
             // as children, so an attribute below this is a parse error.
             ..attrs,
@@ -233,8 +226,7 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
 }
 
 fn checkbox(props: &WidgetProps) -> Element {
-    let values = props.values;
-    let path = props.path.clone();
+    let handle = props.field_handle();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -242,11 +234,11 @@ fn checkbox(props: &WidgetProps) -> Element {
     let control = rsx! {
         input {
             class: props.control_class::<CheckboxInput>(Tag::Input),
-            name: "{path}",
+            name: "{props.path}",
             id: "{props.id}",
             r#type: "checkbox",
-            checked: get_current(&path, values) == "true",
-            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            checked: handle.current() == "true",
+            onchange: handle.on_change(),
             // Last: rsx! reads anything after a spread as children.
             ..attrs,
         }

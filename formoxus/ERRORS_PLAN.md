@@ -1045,7 +1045,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     paid for. No test fails, and each of those allocations lives until the form's
     scope drops. `use_callback` returns the same `Callback` on every render.
 
-  - [ ] **6e. The five controls (G), through the per-field handle.** Every
+  - [x] **6e. The five controls (G), through the per-field handle.** Every
     `get_current(&path, values)` becomes `field.current()`.
 
     1. **Text-like inputs** (`input.rs:181`) **and the textarea** (`textarea.rs:69`):

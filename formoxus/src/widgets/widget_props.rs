@@ -89,10 +89,7 @@ impl WidgetProps {
             values,
             classes,
             choices: None,
-            on_field_event: OnFieldEvent {
-                callback: None,
-                is_live: true,
-            },
+            on_field_event: OnFieldEvent::unreported(),
         }
     }
 

@@ -5,7 +5,6 @@ use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, Wi
 
 use super::field_row::{LabelSide, field_row};
 use super::types::bool_choices;
-use super::values::{get_current, write_value};
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<select>`, the default for an optional `bool` and for a field with
@@ -56,10 +55,9 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let values = props.values;
-    let path = props.path.clone();
+    let handle = props.field_handle();
     let choices = props.choices.clone().unwrap_or_else(bool_choices);
-    let current = get_current(&path, values);
+    let current = handle.current();
     let required = props.base_attrs.contains(Attr::Required);
     let attrs: Vec<Attribute> = props
         .current_attrs()
@@ -71,11 +69,11 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
             id: "{props.id}",
             // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
             // `name` or `distribute_form_values` would never see it.
-            name: "{path}",
+            name: "{props.path}",
             // No branch on emptiness: the "no value" option's value is `""`,
             // and `""` IS absence at both boundaries, so the same write does
             // for every option.
-            onchange: move |e: FormEvent| write_value(&path, values, e.value()),
+            onchange: handle.on_change(),
             // Last among attributes, before the options: rsx! reads
             // anything after a spread as children, and the options ARE
             // children, so this sits between the two.
