@@ -68,6 +68,9 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     /// `.claude/memory/config_cascade.md`.
     pub(super) label_case: Option<LabelCase>,
     pub(super) use_browser_validation: Option<bool>,
+    /// `form!`'s `live_validation:`. `None` is "not stated", as for
+    /// `label_case`.
+    pub(super) live_validation: Option<bool>,
     pub(super) classes: Option<Classes>,
     pub(super) edits: Vec<ClassEdit>,
     _type: PhantomData<T>,
@@ -89,6 +92,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             buttons: Vec::new(),
             label_case: None,
             use_browser_validation: None,
+            live_validation: None,
             classes: None,
             edits: Vec::new(),
             _type: PhantomData,
@@ -276,6 +280,14 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_use_browser_validation(mut self, use_browser_validation: bool) -> Self {
         self.use_browser_validation = Some(use_browser_validation);
+        self
+    }
+
+    /// Whether this form checks fields as the user goes, overriding the app's
+    /// [`Formoxus::live_validation`](crate::defaults::Formoxus::live_validation).
+    /// `form!`'s `live_validation: on | off`.
+    pub fn with_live_validation(mut self, live_validation: bool) -> Self {
+        self.live_validation = Some(live_validation);
         self
     }
 

@@ -825,7 +825,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     struct asking only its first field all fail them. `Form::check_live` carries an
     `#[expect(dead_code)]` until box 6 calls it; its store writes are tested then.
 
-- [ ] **6.** (Todd) The triggers, per A and E, on each control per G. `WidgetProps`
+- [x] **6.** (Todd) The triggers, per A and E, on each control per G. `WidgetProps`
   gains a `Copy` handle, public so that a custom widget can use it as the built-ins
   do, with two calls beside `write_value`: one after a value is written (re-check
   if the field shows an error, else mark it typed into; a chooser checks at once),
@@ -1136,11 +1136,36 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
      path the form no longer has. Box 5 handles that already: no top-level node owns
      it, so the result is `None`, and writing `None` is harmless.
 
-- [ ] **7.** (Claude) `live_validation:` (F): `form!`'s key, its near-miss and
+- [x] **7.** (Claude) `live_validation:` (F): `form!`'s key, its near-miss and
   given-twice tests, `FormSpec::with_live_validation`, `Formoxus`, and what
   `root_ctx` passes: the handle's `bool`, `false` when the knob is off (6c), which
   replaces the `NodeContext.live` this box first named. With the knob off, a clean
   verdict still goes stale on a write (6b step 2).
+
+  Done 2026-11-09. `live_validation: on | off` → `FormSpec::with_live_validation`;
+  `Formoxus::with_live_validation` and its `live_validation` field, default `true`;
+  `FormState::live_validation()` (stated, `Option`) and `Form::live_validation()`
+  (resolved), which `root_ctx` passes as `is_live`. `browser_validation:` and
+  `live_validation:` share one `parse_on_off`. Two things beyond the box, both in
+  the macro:
+
+  1. **A form-level near-miss did not exist.** A misspelled form key
+     (`live_validaton: on`) parsed as a field and failed with "Expected => after a
+     field name". An identifier and a `:` that no form key takes is now "unknown
+     form key `x`. Did you mean `y`?", or, with nothing close, every key and how a
+     field is written. `FORM_KEYS` lists them, and `every_form_key_is_known` checks
+     it against the parser.
+  2. **A form key given twice pointed at the end of the form**, as "unexpected end
+     of input, `x` is given twice", for every form key, not only this one: the
+     error was raised on the body's cursor after it had all been parsed. Each entry
+     now keeps its key's span. Fields already pointed at their path.
+
+  Tests: seven inline in `formoxus-macros/src/form.rs`; goldens
+  `form_unknown_form_key_near_miss` and `form_key_given_twice`; six in the new
+  `tests/suite/live_validation.rs` (default on, on, off, the app's default, a form
+  overriding it, and with it off a write still drops `"false"`), which needed
+  `Harness::blur`. Mutation-checked: `is_live: true` fails the two "off" tests,
+  `is_live: false` the three "on" ones.
 
 - [ ] **8.** (Claude) Tests. Written against 2–6 as each lands.
 

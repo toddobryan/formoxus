@@ -1,0 +1,5 @@
+error: `live_validation` is given twice
+  --> tests/ui/form_key_given_twice.rs:16:13
+   |
+16 |             live_validation: off,
+   |             ^^^^^^^^^^^^^^^

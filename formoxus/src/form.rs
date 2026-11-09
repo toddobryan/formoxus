@@ -288,13 +288,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Clone for Form<T> 
 impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Copy for Form<T> {}
 
 impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
-    /// The live value store, keyed by qualified path.
-    /// `peek`, not `read`: the casing is fixed for the life of the form, so
-    /// subscribing a render scope to the whole state for it would re-render on
-    /// every unrelated structural edit.
     /// Whether the browser's own constraint validation gates this form, with
     /// the whole cascade applied: what the form stated, else the app-wide
-    /// [`Formoxus`](crate::Formoxus), else the built-in (`true`).
+    /// [`Formoxus`](crate::defaults::Formoxus), else the built-in (`true`).
     ///
     /// When this is false the `<form>` renders `novalidate`, which is what
     /// lets formoxus's own validation and error rendering actually run — the
@@ -307,9 +303,27 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .unwrap_or_else(|| crate::defaults::defaults().use_browser_validation)
     }
 
+    /// Whether this form checks a field as the user goes, with the whole
+    /// cascade applied: what the form stated, else the app-wide
+    /// [`Formoxus`](crate::defaults::Formoxus), else the built-in (`true`).
+    ///
+    /// **Off is "only on submit", not "never stale".** A widget still reports
+    /// every write, so a field checked clean drops its `aria-invalid="false"`
+    /// the moment it changes; what turns off is the check that would follow.
+    pub fn live_validation(&self) -> bool {
+        self.state_signal
+            .peek()
+            .live_validation()
+            .unwrap_or_else(|| crate::defaults::defaults().live_validation)
+    }
+
     /// The casing this form's derived labels actually use, with the whole
     /// cascade applied: what the form stated, else the app-wide
-    /// [`Formoxus`](crate::Formoxus), else the built-in.
+    /// [`Formoxus`](crate::defaults::Formoxus), else the built-in.
+    ///
+    /// `peek`, not `read`, here and in the other settings: each is fixed for
+    /// the life of the form, so subscribing a render scope to the whole state
+    /// for it would re-render on every unrelated structural edit.
     pub fn label_case(&self) -> LabelCase {
         self.state_signal
             .peek()
@@ -331,6 +345,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             .fold(base, crate::classes::Classes::with_edit)
     }
 
+    /// The live value store, keyed by qualified path.
     pub fn values(&self) -> ValuesStore {
         self.values_store
     }
@@ -475,7 +490,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.on_edit,
             OnFieldEvent {
                 callback: Some(self.on_field_event),
-                is_live: true,
+                is_live: self.live_validation(),
             },
             self.label_case(),
             self.classes(),

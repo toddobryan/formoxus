@@ -23,9 +23,11 @@ use quote::{quote, quote_spanned};
 use syn::{
     Expr, Ident, Path, Result, Token, braced,
     ext::IdentExt,
-    parse::{Parse, ParseBuffer, ParseStream},
+    parse::{Parse, ParseStream},
     punctuated::Punctuated,
 };
+
+use suggest::edit_distance;
 
 pub(crate) fn impl_form(input: TokenStream2) -> TokenStream2 {
     match syn::parse2::<FormSpecInput>(input) {
@@ -61,6 +63,7 @@ const LABEL_CASES: [(&str, &str); 11] = [
 mod kw {
     syn::custom_keyword!(label_case);
     syn::custom_keyword!(browser_validation);
+    syn::custom_keyword!(live_validation);
     syn::custom_keyword!(on);
     syn::custom_keyword!(off);
     syn::custom_keyword!(title);
@@ -81,6 +84,7 @@ struct FormSpecMeta {
     model_type: Path,
     title: Option<Expr>,
     use_browser_validation: Option<bool>,
+    live_validation: Option<bool>,
     label_case: Option<Ident>,
     classes: Option<Expr>,
     classes_plus: Vec<ClassEntry>,
@@ -95,6 +99,7 @@ impl FormSpecMeta {
             model_type,
             title: None,
             use_browser_validation: None,
+            live_validation: None,
             label_case: None,
             classes: None,
             classes_plus: Vec::new(),
@@ -112,6 +117,7 @@ impl FormSpecInput {
             match e {
                 Entry::Title(expr) => fsm.title = Some(expr),
                 Entry::BrowserValidation(value) => fsm.use_browser_validation = Some(value),
+                Entry::LiveValidation(value) => fsm.live_validation = Some(value),
                 Entry::LabelCase(ident) => fsm.label_case = Some(ident),
                 Entry::Classes(expr) => fsm.classes = Some(expr),
                 Entry::ClassesPlus(entries) => fsm.classes_plus = entries,
@@ -139,6 +145,11 @@ impl FormSpecInput {
         let use_browser_validation: Option<TokenStream2> = fsm.use_browser_validation.map(|ubv| {
             quote! {
                 .with_use_browser_validation(#ubv)
+            }
+        });
+        let live_validation: Option<TokenStream2> = fsm.live_validation.map(|live| {
+            quote! {
+                .with_live_validation(#live)
             }
         });
         let classes: Option<TokenStream2> = fsm.classes.map(|c| quote! { .with_classes(#c) });
@@ -197,6 +208,7 @@ impl FormSpecInput {
                 #title
                 #label_case
                 #use_browser_validation
+                #live_validation
                 #classes
                 #(#classes_plus)*
                 #validator
@@ -212,6 +224,7 @@ impl FormSpecInput {
 struct FormAttribute {
     title: bool,
     browser_validation: bool,
+    live_validation: bool,
     label_case: bool,
     classes: bool,
     classes_plus: bool,
@@ -221,7 +234,10 @@ struct FormAttribute {
 }
 
 impl FormAttribute {
-    fn check_duplicate(&mut self, body: &ParseBuffer<'_>, entry: &Entry) -> Result<()> {
+    /// `key_span` is where a form key was written, for the error on its second
+    /// use. A field's error uses the field's own path span instead, since a
+    /// field may come from a nested block that has no key of its own.
+    fn check_duplicate(&mut self, key_span: Span, entry: &Entry) -> Result<()> {
         if self.check_seen_and_set(entry) {
             if let Entry::Field { path, .. } = entry {
                 let key = path.key();
@@ -231,7 +247,10 @@ impl FormAttribute {
                 ))
             } else {
                 let name = entry.name();
-                Err(body.error(format!("`{name}` is given twice")))
+                Err(syn::Error::new(
+                    key_span,
+                    format!("`{name}` is given twice"),
+                ))
             }
         } else {
             Ok(())
@@ -243,6 +262,7 @@ impl FormAttribute {
             Entry::Title(_) => self.title,
             Entry::LabelCase(_) => self.label_case,
             Entry::BrowserValidation(_) => self.browser_validation,
+            Entry::LiveValidation(_) => self.live_validation,
             Entry::Classes(_) => self.classes,
             Entry::ClassesPlus(_) => self.classes_plus,
             Entry::Validator(_) => self.validator,
@@ -257,6 +277,7 @@ impl FormAttribute {
                 Entry::Title(_) => self.title = true,
                 Entry::LabelCase(_) => self.label_case = true,
                 Entry::BrowserValidation(_) => self.browser_validation = true,
+                Entry::LiveValidation(_) => self.live_validation = true,
                 Entry::Classes(_) => self.classes = true,
                 Entry::ClassesPlus(_) => self.classes_plus = true,
                 Entry::Validator(_) => self.validator = true,
@@ -276,19 +297,30 @@ impl Parse for FormSpecInput {
         let target: Path = input.parse()?;
         let body;
         braced!(body in input);
-        let mut entries: Vec<Entry> = Vec::new();
-        for entry in Punctuated::<Entry, Token![,]>::parse_terminated(&body)? {
+        // Each entry with the span of its first token, which for a form key is
+        // the key: where a repeat's error should point.
+        let parsed =
+            Punctuated::<(Span, Entry), Token![,]>::parse_terminated_with(&body, |input| {
+                Ok((input.span(), input.parse()?))
+            })?;
+        let mut entries: Vec<(Span, Entry)> = Vec::new();
+        for (span, entry) in parsed {
             match entry {
-                Entry::Field { path, body } => flatten(&path, *body, &mut entries)?,
-                other => entries.push(other),
+                Entry::Field { path, body } => {
+                    let mut fields = Vec::new();
+                    flatten(&path, *body, &mut fields)?;
+                    entries.extend(fields.into_iter().map(|field| (span, field)));
+                }
+                other => entries.push((span, other)),
             }
         }
         // After flattening, so that a path written once flat and once inside a
         // nested block is caught like any other repeat.
         let mut attrs: FormAttribute = FormAttribute::default();
-        for e in &entries {
-            attrs.check_duplicate(&body, e)?;
+        for (span, e) in &entries {
+            attrs.check_duplicate(*span, e)?;
         }
+        let entries = entries.into_iter().map(|(_, e)| e).collect();
         Ok(FormSpecInput { target, entries })
     }
 }
@@ -329,6 +361,8 @@ fn flatten(path: &SpecPath, mut body: FieldBody, out: &mut Vec<Entry>) -> Result
 pub(crate) enum Entry {
     Title(Expr),
     BrowserValidation(bool),
+    /// `live_validation: on | off`, as a `bool`.
+    LiveValidation(bool),
     /// The resolved `LabelCase` variant, already looked up — a bad string is a
     /// parse error, so nothing downstream has to handle one.
     LabelCase(Ident),
@@ -381,19 +415,13 @@ impl Entry {
     fn parse_browser_validation(input: ParseStream<'_>) -> Result<Self> {
         let _browser_validation: kw::browser_validation = input.parse()?;
         let _colon: Token![:] = input.parse()?;
-        let is_on = input.peek(kw::on);
-        let is_off = input.peek(kw::off);
-        if !is_on && !is_off {
-            Err(input.error("Expected `on` or `off` after `browser_validation`"))
-        } else if is_on {
-            let _on: kw::on = input.parse()?;
-            Ok(Entry::BrowserValidation(true))
-        } else if is_off {
-            let _off: kw::off = input.parse()?;
-            Ok(Entry::BrowserValidation(false))
-        } else {
-            Err(input.error("It should be impossible to get here"))
-        }
+        parse_on_off(input, "browser_validation").map(Entry::BrowserValidation)
+    }
+
+    fn parse_live_validation(input: ParseStream<'_>) -> Result<Self> {
+        let _live_validation: kw::live_validation = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        parse_on_off(input, "live_validation").map(Entry::LiveValidation)
     }
 
     /// `classes: EXPR` — any expression that is a `Classes`, replacing the
@@ -474,6 +502,7 @@ impl Entry {
         let attr_name: &str = match self {
             Entry::Title(_) => "title",
             Entry::BrowserValidation(_) => "browser_validation",
+            Entry::LiveValidation(_) => "live_validation",
             Entry::LabelCase(_) => "label_case",
             Entry::Classes(_) => "classes",
             Entry::ClassesPlus(_) => "classes_plus",
@@ -493,6 +522,8 @@ impl Parse for Entry {
             Entry::parse_title(input)
         } else if attribute(input, kw::browser_validation) {
             Entry::parse_browser_validation(input)
+        } else if attribute(input, kw::live_validation) {
+            Entry::parse_live_validation(input)
         } else if attribute(input, kw::validator) {
             Entry::parse_validator(input)
         } else if attribute(input, kw::buttons) {
@@ -510,6 +541,15 @@ impl Parse for Entry {
         // swallowed here.
         // `$` too, so that a path written from a variant gets
         // `parse_field`'s message about where a path starts.
+        // An identifier and a `:` that none of the guards above took: a field
+        // needs `=>`, so this is a form key that does not exist, most likely
+        // misspelled. Said as one, rather than as a field missing its `=>`.
+        } else if input.peek(Ident::peek_any) && input.peek2(Token![:]) {
+            let name = input.fork().call(Ident::parse_any)?;
+            Err(syn::Error::new(
+                name.span(),
+                unknown_form_key(&name.to_string()),
+            ))
         } else if input.peek(Ident::peek_any) || input.peek(Token![$]) {
             Entry::parse_field(input)
         } else {
@@ -531,6 +571,56 @@ impl Parse for Entry {
 /// the second token — `title.text => …` and `titles[] => …` are both legal
 /// paths rooted at a keyword, with `.` and `[` sitting where the `=>` would be.
 /// Only `:` is guaranteed to be in this position, and only for an attribute.
+/// Every key a form takes, for [`unknown_form_key`]. Kept beside `Entry`'s
+/// parser, which is what has to agree with it; the
+/// `every_form_key_is_known` test checks the two match.
+const FORM_KEYS: [&str; 8] = [
+    "title",
+    "label_case",
+    "browser_validation",
+    "live_validation",
+    "classes",
+    "classes_plus",
+    "validator",
+    "buttons",
+];
+
+/// The message for `name:` at the form level, where `name` is not a form key:
+/// the nearest key if one is close, else every key, since there are only
+/// eight, and how a field is written, in case one was meant.
+fn unknown_form_key(name: &str) -> String {
+    if let Some(near) = FORM_KEYS
+        .into_iter()
+        .filter(|k| edit_distance(name, k) <= 2)
+        .min_by_key(|k| edit_distance(name, k))
+    {
+        return format!("unknown form key `{name}`. Did you mean `{near}`?");
+    }
+    let all = FORM_KEYS
+        .iter()
+        .map(|k| format!("`{k}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "unknown form key `{name}`. A form takes {all}; a field is written \
+         `{name} => {{ … }}`"
+    )
+}
+
+/// `on` or `off`, the value of a form-level switch, as `true` or `false`.
+/// `key` names the switch in the error.
+fn parse_on_off(input: ParseStream<'_>, key: &str) -> Result<bool> {
+    if input.peek(kw::on) {
+        let _on: kw::on = input.parse()?;
+        Ok(true)
+    } else if input.peek(kw::off) {
+        let _off: kw::off = input.parse()?;
+        Ok(false)
+    } else {
+        Err(input.error(format!("Expected `on` or `off` after `{key}`")))
+    }
+}
+
 fn attribute<K: syn::parse::Peek>(input: ParseStream<'_>, kw: K) -> bool
 where
     K::Token: syn::token::Token,
@@ -715,6 +805,7 @@ pub(crate) mod tests {
             .map(|e| match e {
                 Entry::Title(_) => "title",
                 Entry::BrowserValidation(_) => "browser_validation",
+                Entry::LiveValidation(_) => "live_validation",
                 Entry::LabelCase(_) => "label_case",
                 Entry::Classes(_) => "classes",
                 Entry::ClassesPlus(_) => "classes_plus",
@@ -885,6 +976,81 @@ pub(crate) mod tests {
     #[gtest]
     fn a_nonsense_entry_is_rejected() {
         expect_that!(err_of(quote! { Source { 42 } }).len(), gt(0));
+    }
+
+    // ── Form keys ────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn live_validation_takes_on_or_off() {
+        for tokens in [
+            quote! { Source { live_validation: on } },
+            quote! { Source { live_validation: off } },
+        ] {
+            let spec = parse(tokens).expect("`live_validation:` takes `on` or `off`");
+            expect_that!(kinds(&spec), elements_are![eq(&"live_validation")]);
+        }
+    }
+
+    #[gtest]
+    fn live_validation_refuses_anything_but_on_or_off() {
+        expect_that!(
+            err_of(quote! { Source { live_validation: true } }),
+            eq("Expected `on` or `off` after `live_validation`")
+        );
+    }
+
+    #[gtest]
+    fn live_validation_given_twice_is_rejected() {
+        expect_that!(
+            err_of(quote! { Source { live_validation: on, live_validation: off } }),
+            eq("`live_validation` is given twice")
+        );
+    }
+
+    /// Not taken for the key: `=>` makes it a field, as with `title`.
+    #[gtest]
+    fn a_field_may_be_named_live_validation() {
+        let spec = parse(quote! { Settings { live_validation => { label: "Check as I type" } } })
+            .expect("a field named `live_validation` should parse as a field");
+        expect_that!(kinds(&spec), elements_are![eq(&"field")]);
+    }
+
+    /// A misspelled form key is said to be one, not read as a field missing
+    /// its `=>`, which is what it was taken for before.
+    #[gtest]
+    fn a_misspelled_form_key_suggests_the_nearest() {
+        expect_that!(
+            err_of(quote! { Source { live_validaton: on } }),
+            eq("unknown form key `live_validaton`. Did you mean `live_validation`?")
+        );
+    }
+
+    /// Nothing close: every key, and how to write a field in case one was
+    /// meant.
+    #[gtest]
+    fn an_unknown_form_key_lists_every_key() {
+        expect_that!(
+            err_of(quote! { Source { colour: "red" } }),
+            eq(
+                "unknown form key `colour`. A form takes `title`, `label_case`, \
+                `browser_validation`, `live_validation`, `classes`, `classes_plus`, \
+                `validator`, `buttons`; a field is written `colour => { … }`"
+            )
+        );
+    }
+
+    /// **`FORM_KEYS` and the parser agree.** Each key, given a value no key
+    /// accepts, fails with that key's own error, never "unknown form key".
+    /// A key the parser gains without `FORM_KEYS` is the other direction,
+    /// which `kinds`'s exhaustive `match` cannot reach: add it to both.
+    #[gtest]
+    fn every_form_key_is_known() {
+        for key in FORM_KEYS {
+            let msg = syn::parse_str::<FormSpecInput>(&format!("Source {{ {key}: ! }}"))
+                .expect_err("`!` is no key's value")
+                .to_string();
+            expect_that!(msg, not(contains_substring("unknown form key")), "{key}");
+        }
     }
 
     // ── One entry per path ───────────────────────────────────────────────

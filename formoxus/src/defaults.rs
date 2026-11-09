@@ -52,6 +52,11 @@ pub struct Formoxus {
     pub label_case: LabelCase,
     /// Whether browser validation should run before Formoxus' own validation
     pub use_browser_validation: bool,
+    /// Whether a field is checked as the user goes, rather than only on
+    /// submit: once they leave a field they typed into, then on every
+    /// keystroke while it shows an error. On by default; turn it off for an
+    /// app that wants errors only after a submit, as GOV.UK's guidance does.
+    pub live_validation: bool,
     /// The classes attached to form elements
     pub classes: Classes,
 }
@@ -62,6 +67,7 @@ impl Default for Formoxus {
         Self {
             label_case: LabelCase::Title,
             use_browser_validation: true,
+            live_validation: true,
             classes: Classes::fx(),
         }
     }
@@ -84,6 +90,13 @@ impl Formoxus {
 
     pub fn with_classes(mut self, classes: Classes) -> Self {
         self.classes = classes;
+        self
+    }
+
+    /// See [`live_validation`](Self::live_validation). A form's own
+    /// `live_validation:` overrides it.
+    pub fn with_live_validation(mut self, value: bool) -> Self {
+        self.live_validation = value;
         self
     }
 }

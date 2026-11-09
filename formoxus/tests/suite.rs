@@ -59,6 +59,8 @@ mod into_slot;
 mod item_counts;
 #[path = "suite/label_case.rs"]
 mod label_case;
+#[path = "suite/live_validation.rs"]
+mod live_validation;
 #[path = "suite/newtypes.rs"]
 mod newtypes;
 #[path = "suite/optional_containers.rs"]
@@ -173,8 +175,8 @@ pub fn without_form_id(html: &str) -> String {
 
 use dioxus::core::{AttributeValue, ElementId, Mutation, Mutations};
 use dioxus_html::{
-    PlatformEventData, SerializedFormData, SerializedHtmlEventConverter, SerializedKeyboardData,
-    SerializedMouseData, set_event_converter,
+    PlatformEventData, SerializedFocusData, SerializedFormData, SerializedHtmlEventConverter,
+    SerializedKeyboardData, SerializedMouseData, set_event_converter,
 };
 use std::any::Any;
 use std::rc::Rc;
@@ -342,6 +344,18 @@ impl Harness {
         let payload = PlatformEventData::new(Box::new(SerializedMouseData::default()));
         let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
         self.dom.runtime().handle_event("click", dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
+    /// Move focus off the element at `id`, as a `blur`, then flush. Returns the
+    /// edit count, like [`fire`](Self::fire). A `blur` carries no value, so
+    /// type into the field with `fire("input", …)` first.
+    pub fn blur(&mut self, id: ElementId) -> usize {
+        let payload = PlatformEventData::new(Box::new(SerializedFocusData::default()));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event("blur", dom_event, id);
         let mutations = self.dom.render_immediate_to_vec();
         self.absorb(&mutations);
         mutations.edits.len()

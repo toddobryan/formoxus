@@ -37,7 +37,8 @@ mod path;
 mod using_fns;
 
 // TODO: document the whole grammar here — the form-level keywords (`title`,
-// `label_case`, `browser_validation`, `validator`, `buttons`) and every
+// `label_case`, `browser_validation`, `live_validation`, `classes`,
+// `classes_plus`, `validator`, `buttons`) and every
 // field-body key (`widget`, `label`, `min`, `max`, `min_length`, `max_length`,
 // `pattern`, `required`, `adder` on a list's own path), including
 // which constraints are legal on which value kinds.

@@ -54,6 +54,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.spec.use_browser_validation
     }
 
+    /// What this form *stated* about checking fields as the user goes, if
+    /// anything. `None` means "not stated", resolved by
+    /// [`Form::live_validation`](crate::form::Form::live_validation).
+    pub fn live_validation(&self) -> Option<bool> {
+        self.spec.live_validation
+    }
+
     pub fn classes(&self) -> Option<Classes> {
         self.spec.classes.clone()
     }

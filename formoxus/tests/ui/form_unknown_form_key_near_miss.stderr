@@ -1,0 +1,5 @@
+error: unknown form key `live_validaton`. Did you mean `live_validation`?
+  --> tests/ui/form_unknown_form_key_near_miss.rs:14:13
+   |
+14 |             live_validaton: off,
+   |             ^^^^^^^^^^^^^^
