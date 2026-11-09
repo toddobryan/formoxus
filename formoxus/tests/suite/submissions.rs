@@ -10,6 +10,7 @@ use super::models::{Shape, Title};
 use facet::Facet;
 use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
+use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Credentials {
@@ -671,6 +672,153 @@ fn a_malformed_item_list_is_an_error_at_the_lists_path() {
     .expect_err("a repeated key is not a list of items");
     expect_that!(
         errors.messages_at(Some(path!(Tagged.tags))),
+        elements_are![contains_substring("not a list of item keys")]
+    );
+}
+
+// ── Optional lists and sets: a bad entry is not `None` (#20) ──────────────
+//
+// `Items::distribute_values` records garbage keys, or more keys than
+// `max_items:`, and builds no items. With the collection empty, `is_present`
+// said false, so `OptionNode::validate` skipped the only place either becomes
+// an error, and the field came back `None`. The same fields without the
+// `Option` were always refused. `VariantNode` hit this first, and its
+// `VariantChoice::Unknown` counts as present for the same reason.
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct OptPoll {
+    name: String,
+    tags: Option<Vec<String>>,
+    labels: Option<BTreeSet<String>>,
+}
+
+fn opt_poll_spec() -> FormSpec<OptPoll> {
+    form! {
+        OptPoll {
+            tags? => { max_items: 2 },
+            labels? => { max_items: 2 },
+        }
+    }
+}
+
+#[gtest]
+fn garbage_keys_on_an_optional_list_are_refused_not_none() {
+    let errors = Submission::accept(
+        opt_poll_spec(),
+        &wire(&[("name", "post"), ("tags", "garbage")]),
+    )
+    .map(Submission::into_model)
+    .expect_err("garbage is not a list of item keys");
+    expect_that!(
+        errors.messages_at(Some(path!(OptPoll.tags?))),
+        elements_are![contains_substring("not a list of item keys")]
+    );
+}
+
+#[gtest]
+fn garbage_keys_on_an_optional_set_are_refused_not_none() {
+    let errors = Submission::accept(
+        opt_poll_spec(),
+        &wire(&[("name", "post"), ("labels", "garbage")]),
+    )
+    .map(Submission::into_model)
+    .expect_err("garbage is not a list of item keys");
+    expect_that!(
+        errors.messages_at(Some(path!(OptPoll.labels?))),
+        elements_are![contains_substring("not a list of item keys")]
+    );
+}
+
+/// Over the maximum is refused before any item is built, so the collection is
+/// as empty as with garbage keys, and was `None` for the same reason.
+#[gtest]
+fn too_many_keys_on_an_optional_list_are_refused_not_none() {
+    let errors = Submission::accept(
+        opt_poll_spec(),
+        &wire(&[("name", "post"), ("tags", "#0,#1,#2,#3")]),
+    )
+    .map(Submission::into_model)
+    .expect_err("four tags is over the maximum of two");
+    expect_that!(
+        errors.messages_at(Some(path!(OptPoll.tags?))),
+        elements_are![eq("No more than 2 items.")]
+    );
+}
+
+#[gtest]
+fn too_many_keys_on_an_optional_set_are_refused_not_none() {
+    let errors = Submission::accept(
+        opt_poll_spec(),
+        &wire(&[("name", "post"), ("labels", "#0,#1,#2,#3")]),
+    )
+    .map(Submission::into_model)
+    .expect_err("four labels is over the maximum of two");
+    expect_that!(
+        errors.messages_at(Some(path!(OptPoll.labels?))),
+        elements_are![eq("No more than 2 items.")]
+    );
+}
+
+/// The fix must not make an optional collection present whenever its entry
+/// arrives. Sending nothing for it is still `None`.
+#[gtest]
+fn nothing_sent_for_an_optional_list_or_set_is_still_none() {
+    let accepted =
+        Submission::accept(opt_poll_spec(), &wire(&[("name", "post")])).map(Submission::into_model);
+    expect_that!(
+        accepted,
+        ok(eq(&OptPoll {
+            name: "post".to_string(),
+            tags: None,
+            labels: None,
+        }))
+    );
+}
+
+/// An empty entry is no items, which is neither garbage nor over the maximum,
+/// so it is still `None`, not `Some` of an empty collection.
+#[gtest]
+fn an_empty_key_list_on_an_optional_list_or_set_is_still_none() {
+    let accepted = Submission::accept(
+        opt_poll_spec(),
+        &wire(&[("name", "post"), ("tags", ""), ("labels", "")]),
+    )
+    .map(Submission::into_model);
+    expect_that!(
+        accepted,
+        ok(eq(&OptPoll {
+            name: "post".to_string(),
+            tags: None,
+            labels: None,
+        }))
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Topic {
+    tags: Vec<String>,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Post {
+    name: String,
+    topic: Option<Topic>,
+}
+
+/// One level further out, and on purpose: a struct is present when any of its
+/// fields is (`StructNode::is_present`), so a list inside an optional struct
+/// that holds garbage keys makes the struct present too, and the garbage is
+/// reported rather than the whole struct dropped as `None`.
+#[gtest]
+fn garbage_keys_inside_an_optional_struct_are_refused_not_none() {
+    let errors = Submission::accept(
+        FormSpec::<Post>::default(),
+        &wire(&[("name", "post"), ("topic.tags", "garbage")]),
+    )
+    .map(Submission::into_model)
+    .expect_err("garbage is not a list of item keys");
+    expect_that!(
+        errors.messages_at(Some(path!(Post.topic?.tags))),
         elements_are![contains_substring("not a list of item keys")]
     );
 }

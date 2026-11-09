@@ -151,8 +151,12 @@ impl Items {
         is_valid
     }
 
+    /// returns true if there are `rejected_keys`, a key over the max is present
+    /// or self contains any node that `is_present()`
     pub(crate) fn is_present(&self) -> bool {
-        !self.is_empty() && self.iter().any(|fm| fm.is_present())
+        self.rejected_keys.is_some()
+            || self.over_max.is_some()
+            || (!self.is_empty() && self.iter().any(|n| n.is_present()))
     }
 
     /// Build one item under the next key, from `value` if there is one and

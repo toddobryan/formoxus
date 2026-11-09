@@ -19,7 +19,21 @@ describes the deleted derive path). The survey this was drawn from is
    documenting the `form!` grammar comes *after* the three items that add
    grammar to it (C6, C4, C5), not before.
 
-## ROAD TO PUBLISH — Todd, 2026-11-04, supersedes everything below
+## ROAD TO PUBLISH — Todd, 2026-11-09, supersedes everything below
+
+ErrorsStore + live validation DONE (ERRORS_PLAN, merged `ca0e731`). Then:
+
+1. **#20 + #21 in ONE plan** (bad item keys on an optional list/set; a newtype for
+   live paths). Claude drafts, Todd builds the runtime.
+2. **The missing widgets:** `range`, `checkbox_multiple`, `select_multiple`, `file`.
+3. **#22 + #23** (read-only store view, `BoundField`), after #21 so they take its
+   newtype.
+4. **A1 (`form!` grammar docs), then A2 (the doc pass), then A4 (`wasm-opt`).**
+
+A3 (facet) still waits for 0.50 stable (rc.7 on 2026-11-09). #18, #8 and #19 after
+publishing; #24 left alone.
+
+## ROAD TO PUBLISH — Todd, 2026-11-04 (history, superseded above)
 
 What is left, in order:
 
