@@ -151,8 +151,15 @@ impl Items {
         is_valid
     }
 
-    /// returns true if there are `rejected_keys`, a key over the max is present
-    /// or self contains any node that `is_present()`
+    /// Whether the collection is there at all, which is what an `OptionNode`
+    /// asks before choosing between validating it and reading it as `None`.
+    ///
+    /// Present when any item is, and also while `rejected_keys` or `over_max`
+    /// is set. Both leave the collection empty, since neither builds items, and
+    /// an empty collection reads as absent. Absent, `OptionNode::validate`
+    /// would skip `validate`, the only place either becomes an error, and the
+    /// bad entry would pass as `None` (#20). `VariantChoice::Unknown` counts
+    /// as present for the same reason.
     pub(crate) fn is_present(&self) -> bool {
         self.rejected_keys.is_some()
             || self.over_max.is_some()
