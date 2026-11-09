@@ -57,6 +57,24 @@ Every field path named in `form!` is checked against the model's real shape at
 compile time, so `emial` is a compile error rather than a runtime
 `no_such_path`.
 
+## Checked as you go
+
+A field is checked as the user goes, by the same rules a submit uses:
+
+- not while they first type into it, but when they leave it;
+- then on every keystroke while it shows an error, so the error goes the
+  moment it is fixed;
+- at once when a select, checkbox or radio changes.
+
+Tabbing through a form without typing says nothing, and a server's verdict
+("that name is taken") stays until the user changes the field. A field checked
+and found clean renders `aria-invalid="false"`; one never checked renders no
+`aria-invalid` at all.
+
+To check only on submit, write `live_validation: off` in one form's `form!`,
+or turn it off for the whole app with
+`provide_defaults(Formoxus::new().with_live_validation(false))`.
+
 ## Crossing the wire
 
 This is the part that's usually painful, so it's worth showing directly.
@@ -133,7 +151,10 @@ Being explicit, since this is pre-release:
   yet and are refused by name. Run
   `cargo run -p formoxus-examples --bin widget_matrix` for the current table.
 - **No file upload**, which is the `file` widget above.
-- **No live/as-you-type validation** — validation runs on submit.
+- **An error that appears as a field loses focus moves what is below it.**
+  Clicking a button just below a field with a bad value blurs the field on
+  the press, and its error renders before the release, so the button can move
+  out from under the click, which then has to be repeated.
 - Error rendering is not yet configurable; `FieldErrors` is the component to
   swap when it becomes so.
 

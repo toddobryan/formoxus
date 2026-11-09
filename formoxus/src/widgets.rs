@@ -29,9 +29,39 @@
 //! handed one [`WidgetProps`] and is a plain method, so it must not read the
 //! store itself: each built-in passes its props on to a component of its own,
 //! which is where the per-leaf scope above comes from. A dev's widget that
-//! reads `values` should do the same. (Under the long-gone derive path, the
-//! traits were `FieldWidget`, `DefaultWidget` and `ProvidedWidget`, which this
-//! is not a return to.)
+//! reads its value or its errors should do the same. (Under the long-gone
+//! derive path, the traits were `FieldWidget`, `DefaultWidget` and
+//! `ProvidedWidget`, which this is not a return to.)
+//!
+//! # Writing a widget of your own
+//!
+//! **Its value goes through a [`FieldHandle`],** from
+//! [`WidgetProps::field_handle`]: [`current`](FieldHandle::current) to read
+//! it, and one of two handler pairs to write it, by what the element is.
+//!
+//! - Something the user TYPES into (an `<input>`, a `<textarea>`, an editor):
+//!   `oninput: field.on_input()` and `onblur: field.on_blur()`. Both: the form
+//!   checks such a field when the user leaves it, so without `on_blur` it is
+//!   never checked before submit, unless it already shows an error, which
+//!   each keystroke then rechecks.
+//! - Something the user CHOOSES with (a `<select>`, a checkbox, a radio):
+//!   `onchange: field.on_change()` alone. A choice has no typing to wait out,
+//!   so it counts as leaving the field, and is checked at once.
+//!
+//! An element whose event does not carry the value as `event.value()` calls
+//! [`input`](FieldHandle::input), [`change`](FieldHandle::change) and
+//! [`blur`](FieldHandle::blur) from a handler of its own. The handle is the
+//! only way to write: it is what tells the form a value changed, so a widget
+//! gets the form's checking as the user goes (`live_validation:`) for free.
+//!
+//! **Its errors come from the same props.** [`current_attrs`](WidgetProps::current_attrs)
+//! has `aria-invalid` and `aria-describedby` already set from them, so a
+//! widget that spreads it onto its element needs nothing else;
+//! [`validity`](WidgetProps::validity) is the three-way answer under it, and
+//! [`is_invalid`](WidgetProps::is_invalid) the yes-or-no a class wants.
+//! [`FieldErrors`] renders the messages, as every built-in does, under the
+//! element. Each of these reads only this field's errors, so another field's
+//! error never wakes it.
 //!
 //! Each component is then named for the element at its core — `InputView`,
 //! `SelectView`, `TextareaView`, `RadioGroupView` — since that is what a reader is

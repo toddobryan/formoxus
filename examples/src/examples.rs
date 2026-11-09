@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 mod basics;
 mod lists;
+mod live;
 mod select;
 mod sets;
 
@@ -19,6 +20,12 @@ pub fn Gallery() -> Element {
             title: "A basic form",
             note: "Scalars, a widget override, and buttons — the parts that already work.",
             basics::Basics {},
+        }
+
+        Example {
+            title: "Checked as you go",
+            note: "Nothing shows while you first type. Leave a field and it is checked; once it shows an error, every keystroke checks it again, so the error goes the moment it is fixed. Tab through without typing and nothing is said. Submit as \"admin\": the server's answer stays until you change the name.",
+            live::LiveSignup {},
         }
 
         Example {

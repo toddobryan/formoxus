@@ -1,6 +1,6 @@
 ---
 name: error-model-design
-description: "2026-09-21 design conversation on formoxus's error model, BUILT 2026-09-30 except per-field validators (C4) and ErrorsStore. The gap: no custom check can attach its message to a field, because FormError carries no path. Decisions: merge the two message types, keep storage POSITIONAL, put the path on the PRODUCER where T is still in scope. ErrorsStore (renamed from ErrorsByPath 2026-09-29) is agreed-in-principle but deliberately deferred — it is a performance change whose payoff arrives with live validation"
+description: "2026-09-21 design conversation on formoxus's error model: merge the message types, storage POSITIONAL, the path on the PRODUCER. ErrorsStore, deferred here until live validation, was BUILT with it on branch `errors` (ERRORS_PLAN.md, 2026-11-04 to 11-09): see \"As built\" at the end. Read that first; the ErrorsStore section above it is the reasoning, superseded in its details"
 metadata:
   type: project
 ---
@@ -239,3 +239,45 @@ change once per submit today, and a whole-form re-render on submit is invisible.
 The payoff arrives with blur/live validation — at which point the current
 arrangement would re-render every field in the form on each character typed into
 one of them. Build it then, together with live validation, not before.
+
+## As built (2026-11-09, `formoxus/ERRORS_PLAN.md` boxes 2–8)
+
+What the deferred `ErrorsStore` above became, built together with live validation as
+it said to be. Where this and the section above disagree, this wins.
+
+1. **Not a projection of the tree: a flat map.** Errors left the nodes entirely (box 2).
+   `FormState.field_errors` is an `ErrorsByPath` (`IndexMap<String, Vec<ValidationMessage>>`),
+   plain data, so `Submission::accept` still validates on the server with no Dioxus
+   runtime: the obstacle above, kept.
+2. **The client store holds three states per path** (`ErrorsStore =
+   Store<HashMap<String, Option<Vec<ValidationMessage>>>>`): `None` or no key is
+   unchecked, `Some([])` checked and clean, `Some([..])` invalid. `FieldNode::validate`
+   always inserts its path, empty when clean, which is what makes the middle state
+   exist. Rendered as `aria-invalid` absent / `"false"` / `"true"` (box 6f, issue #7),
+   through `Validity { Unchecked, Valid, Invalid }` (`field_attrs.rs`).
+3. **Reads are one key, never the map.** The crate-private `ErrorsStoreExt` on
+   `ErrorsStore` (`nodes.rs`): `errors_at(path) -> Option<Vec<_>>`, owned because a
+   borrow would outlive its read guard, and `validity_at(path)`. Both
+   `get_unchecked(key).try_read()`, so one field's error wakes that field's widget and
+   no other: `tests/suite/live_checks.rs::one_fields_error_wakes_neither_a_sibling_nor_the_form`
+   fails if `errors_at` reads the whole map. A widget never sees the store: it asks
+   `WidgetProps::validity()` or `is_invalid()`.
+4. **Two kinds of writer, not one.** Whole-form operations (`validate`, `reset`,
+   `push_field_error`, `absorb`, a structural edit) go through `with_errors`, which
+   writes the state and re-syncs the store, re-rendering the form, which is fine once
+   per submit. A live check (`Form::check_live`, box 5) writes only the store, and only
+   the keys whose result changed, so typing never re-renders the form. It decides what
+   to write by running the same `validate` a submit runs, on a clone of the top-level
+   node that owns the path, which is why the two can never disagree (trap 5; pinned by
+   `a_submit_and_a_live_check_render_the_same_field`).
+5. **When a live check runs** (decisions A and E): not while a field is first typed
+   into; on leaving a field typed into since its last check; on every keystroke while it
+   shows an error; at once for a chooser's change. A write to a field checked clean
+   drops its `"false"` even with `live_validation: off`, since the value it vouched for
+   is gone. Every write reaches the form through a `FieldHandle`, the only way a widget
+   can write a value (6c), which is what makes a dev's widget get all of this for free.
+6. **Form-level errors stayed on `FormState`**, the first option above: they render
+   once, at the form, where a whole-form re-render costs nothing.
+
+The larger reshape this points at, a Django-style `BoundField` holding a field's path,
+value and errors together, is issue #23 (see [[django-parallel-design]]).

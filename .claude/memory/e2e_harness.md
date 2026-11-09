@@ -157,3 +157,27 @@ they probably started together. Which subresource stalls is NOT known (the 102 M
 debug wasm is the suspect). Tell them apart with the error's type: a 30 s `Timeout`
 points at the harness, an `AssertionTimeout` at the code. The `dx-e2e.*.log` a run
 leaves in `/tmp` logs each page's `[200]` with a time, which is how to place a hang.
+
+## 2026-11-09: 70 tests, 13 files: `live` (12) for ERRORS_PLAN 8d
+
+On `/t/live-text`, `live-click`, `live-server-error`, `live-select`, `live-off`,
+`live-custom`. Things learned writing them:
+
+1. **`Locator::select_option` does not focus the select.** It fires the events
+   only, so `expect_focused` on the select after it fails; a focus check there proves
+   nothing anyway.
+2. **`ClickOptions::builder().delay(150.0).build()`** holds the button 150 ms between
+   press and release: a human-paced click. Even Playwright's instant click is two round
+   trips, so a render triggered by the press (a blur) lands before the release.
+3. **A click whose press and release land on different elements fires no `click`**
+   on the button. How trap 1 was measured: `bounding_box()` before and after the blur,
+   and an expando property (`el.__probe = 1`) to prove the element was not replaced.
+4. **To count submits a test form cannot see**, wrap the form in
+   `div { onsubmit: … }`: `submit` bubbles through dioxus's delegation. `/t/live-click`
+   does it, with a control test proving the counter works.
+5. **A submit validates EVERY field**, so `.fx-field-error` after one is not unique;
+   scope to a field's list with `[id$="-{path}-errors"] .fx-field-error` (the form id
+   prefix is random).
+6. **Pass e2e extra flags after the recipe's own:** `just e2e --test live --no-capture`
+   works; `--run-ignored …` clashes with the recipe's `ignored-only`.
+

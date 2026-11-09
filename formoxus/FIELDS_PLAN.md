@@ -1404,6 +1404,13 @@ widgets become ONE concept.
 
 ## Step 7: `ErrorsStore`
 
+**Built on branch `errors`, 2026-11-04 to 2026-11-09, by `formoxus/ERRORS_PLAN.md`**,
+together with live validation, so that plan is where this step is now kept. What
+landed differs from the sketch below: errors left the nodes for one flat
+`ErrorsByPath` on `FormState`, the store holds three states per path (unchecked,
+clean, invalid), and widgets read their own key through `WidgetProps`. Decision E-1
+is moot. The text below is kept for its history.
+
 Agreed in principle since 2026-09-21 (`.claude/memory/error_model_design.md`,
 "ErrorsStore"); in scope since 2026-10-16. A client projection with ONE
 writer (`Form::validate`, `push_field_error`, `apply_errors`); `FormState`

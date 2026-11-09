@@ -1248,13 +1248,42 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     Done 2026-11-09: the mapping inline in `field_attrs.rs` (6f); the rest in
     `live_checks.rs` and `live_validation.rs` (knob off: a write still drops it).
 
-- [ ] **9.** (Claude) Docs and memory: `README.md` ("No live/as-you-type
+- [x] **9.** (Claude) Docs and memory: `README.md` ("No live/as-you-type
   validation" goes), a custom widget's errors and its per-field handle (6c) in
   `widgets.rs`'s docs, including which of `on_input` and `on_change` to use and
   that a text box wants `on_blur` too, a gallery
   example, `FIELDS_PLAN.md` Step 7 pointing here, `error_model_design.md` rewritten
   to match, and #7 closed by 6f, with a comment saying where it landed and noting
   #8's warnings as the next user of the third state.
+
+  Done 2026-11-09, except closing #7: README's "Checked as you go" section, and
+  trap 1 in its "What isn't done"; `widgets.rs`'s "Writing a widget of your own";
+  the gallery's "Checked as you go" (`examples/src/examples/live.rs`); `FIELDS_PLAN.md`
+  Step 7; `error_model_design.md`'s "As built". **#7 is left open until this branch
+  is on `main`**, which it is not yet. The comment to post then, as is:
+
+  > Fixed by `ERRORS_PLAN.md` box 6f, on `main` as of <merge commit>.
+  >
+  > 1. `Validity { Unchecked, Valid, Invalid }` (`#[non_exhaustive]`, in
+  >    `formoxus::widgets`), the enum suggested above, rather than `Option<bool>`.
+  > 2. The client error store holds `Option<Vec<ValidationMessage>>` per path: no
+  >    entry is unchecked, an empty list is checked and clean. `FieldNode::validate`
+  >    always writes its path, empty when clean, which is what makes the middle state.
+  > 3. `FieldAttrs::with_error_attrs` takes a `Validity`: `aria-invalid` is `"true"`,
+  >    `"false"` or absent, and `aria-describedby` names the error list only when
+  >    `Invalid`.
+  > 4. Kept honest: any write to a field checked clean drops its `"false"`, with
+  >    live validation on or off. A seeded edit form claims nothing on load;
+  >    validating on load stays out of scope.
+  > 5. For #8: the third state sits on the errors (the store's `Option`), as the
+  >    comment above asked, so a warnings list can sit beside it, and `Validity`
+  >    can grow a state without breaking a custom widget's `match`.
+
+  **Also found, not fixed (needs a decision):** README's "Crossing the wire"
+  example calls `form.push_field_error(&path, &e.0)` with a `String` path, which no
+  longer compiles since `push_field_error` takes `&ModelPath<T>` (2026-11-08). The
+  replacement is probably `form.distribute_errors(&errors)`, which places each
+  error by its string path; that changes the example's shape, so it is Todd's.
 
 - [ ] **10.** (Claude) `just ci` and `just e2e` green, then Todd merges to `main`.
   apcsp follows after, since it builds formoxus by path: anything of its own
@@ -1267,6 +1296,21 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   gains a `&`: `server.rs` (six `error_messages_at`) and
   `fixtures/tests/change_password.rs` (four), plus four more `reject_field`,
   `errors_at` and `push_field_error` calls.
+
+  **Recounted 2026-11-09, by grep in apcsp (read only):**
+  1. `crates/web/src/server.rs`: TEN `error_messages_at`, not six (`:519`, `:592`,
+     `:608`, `:748`, `:769`, `:782`, `:809`, `:1285`, `:1379`, `:1403`). Three of
+     them go through `answer_choices()` (`:672`), which returns a `formoxus::Path`
+     by value: rename its type to `ModelPath`, and pass `&answer_choices()`.
+  2. `crates/fixtures/tests/change_password.rs`: FIVE, not four (`:77`, `:103`,
+     `:156`, `:160`, `:188`).
+  3. `reject_field`: four, as above (`crates/api/src/questions.rs:347`, `:414`,
+     `crates/api/src/auth.rs:197`, `:206`). No `errors_at` or `push_field_error` calls.
+  4. `crates/ui/src/markdown.rs`: imports `get_current` and `write_value` (both gone)
+     and reads `props.values` (`:67`, now crate-private). The whole widget moves to
+     `props.field_handle()`: `current()` for `:69`, and for the textarea's write at
+     `:86`, `on_input()` plus `on_blur()`, so a Markdown field is checked as the
+     user goes like any text box.
 
 ## Not in this plan
 
