@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use facet::{Facet, Partial, Peek};
 
 use crate::{
-    ValidationMessage,
+    error::ValidationMessage,
     field_attrs::FieldAttrs,
     widgets::{AnyWidget, Choice},
 };

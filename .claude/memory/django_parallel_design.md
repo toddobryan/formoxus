@@ -314,3 +314,11 @@ by both sides.
 - formoxus-macros has its OWN `FieldSpec` (plus `FormSpecInput`,
   `FormSpecMeta`, `FieldBody`, `SpecPath`, `PathInput`, `WidgetRef`, …),
   which collides in name with the runtime one.
+
+## 2026-11-08: the missing third piece, BoundField (issue #23)
+
+Field (rules) and Widget (rendering) were mapped; Django's `BoundField` (one field bound to one
+form's live data: value, errors, label, help text, id) was not, and its jobs ended up loose on
+`WidgetProps`. `FieldHandle` (ERRORS_PLAN 6c) is its value half. Todd: "we should have just
+followed Django and made a BoundField in the first place." Open: containers, the name, what stays
+on `WidgetProps`. Do with #21 (path newtype) and #22 (read-only store), before publish.

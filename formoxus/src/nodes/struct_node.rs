@@ -1,11 +1,12 @@
 //! A struct-typed node: its fields, nested under its own name.
 
 use crate::error::FormAccessError;
+use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
-    qualify,
+    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned,
+    no_such_path, owns, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::{FieldErrors, described_by, field_help};
@@ -41,9 +42,7 @@ impl Node for StructNode {
         let nested = ctx.nested(&self.name);
         let nodes_rendered = self.nodes.iter().map(|m| m.render(&nested));
         let path = ctx.path(&self.name);
-
-        let own_errors = ctx.errors_at(&path);
-        let invalid = !own_errors.is_empty();
+        let invalid = ctx.errors.validity_at(&path) == Validity::Invalid;
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Struct, invalid);
         let legend_class = ctx.classes.fixed_class(FixedKey::StructLegend, false);

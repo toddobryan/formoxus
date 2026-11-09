@@ -1,7 +1,7 @@
 use dioxus::core::Element;
 
-use crate::ErrorsByPath;
 use crate::error::FormAccessError;
+use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
     Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, owns, qualify,

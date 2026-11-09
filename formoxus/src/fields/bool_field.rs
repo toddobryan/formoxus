@@ -1,7 +1,7 @@
 use formoxus_spec::{Attr, AttrValue};
 
 use crate::widgets::{AnyWidget, CheckboxInput, Select};
-use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
+use crate::{error::ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 /// A `bool`, parsed from `"true"`/`"false"` by facet's default `parse`.
 ///

@@ -5,11 +5,12 @@
 //! neighbours. See `item_segment` for why renaming would be a data hazard.
 
 use crate::error::FormAccessError;
+use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, Items, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, owns,
-    qualify,
+    Drafts, Edit, ErrorsStoreExt, Items, Node, SpecsByPath, ValuesByPath, default_label,
+    ensure_owned, owns, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::widgets::field_row::required_marker;
@@ -65,9 +66,8 @@ impl Node for ListNode {
         // The list's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
+        let invalid = ctx.errors.validity_at(&path) == Validity::Invalid;
 
-        let own_errors = ctx.errors_at(&path);
-        let invalid = !own_errors.is_empty();
         let describedby = described_by(&id, self.help_text.is_some(), invalid);
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::List, invalid);

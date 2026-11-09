@@ -2,7 +2,7 @@ use dioxus::core::Attribute;
 use formoxus_spec::{Attr, AttrKey, AttrValue, Bound, FieldType, Step};
 use indexmap::IndexMap;
 
-use crate::{classes::Slot, widgets::help::described_by};
+use crate::{classes::Slot, error::ValidationMessage, widgets::help::described_by};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldAttrs(IndexMap<AttrKey, AttrValue>);
@@ -177,17 +177,21 @@ impl FieldAttrs {
 
     /// This map with the attributes that change as the field's errors do. Split
     /// from [`with_owned_attrs`](Self::with_owned_attrs) because of WHO has to
-    /// read the errors: knowing `is_invalid` subscribes the caller, so a component
-    /// that owns one field has to ask, or every error wakes the whole form.
+    /// read the errors: knowing the [`Validity`] subscribes the caller, so a
+    /// component that owns one field has to ask, or every error wakes the whole
+    /// form.
     ///
-    /// - `AriaInvalid` = `"true"` when `is_invalid`, and otherwise ABSENT, never
-    ///   `"false"`: per ARIA, `"false"` asserts "checked, and passed", so an
-    ///   untouched form would claim every field had been validated, a screen
-    ///   reader would say so, and a stylesheet painting a validated-and-clean
-    ///   state would paint it. Telling those apart is issue #7.
+    /// - `AriaInvalid` = `"true"` when [`Invalid`](Validity::Invalid),
+    ///   `"false"` when [`Valid`](Validity::Valid), and ABSENT when
+    ///   [`Unchecked`](Validity::Unchecked). Per ARIA, `"false"` asserts
+    ///   "checked, and passed", so it waits for a check: on an untouched form
+    ///   it would claim every field had been validated, a screen reader would
+    ///   say so, and a stylesheet painting a validated-and-clean state would
+    ///   paint it. Keeping those apart was issue #7.
     /// - `AriaDescribedby` naming the field's hint when there is a `help_text`,
-    ///   then its error list when `is_invalid` ([`described_by`]), and ABSENT with
-    ///   neither: naming an element that is not rendered is itself a defect.
+    ///   then its error list when `Invalid` ([`described_by`]), and ABSENT with
+    ///   neither: naming an element that is not rendered is itself a defect. A
+    ///   `Valid` field has no error list, so it is described by its hint alone.
     ///
     /// After `Required` and before everything else, which is the order the
     /// suite's exact-markup tests expect. This map's own entries go in last, so
@@ -196,20 +200,31 @@ impl FieldAttrs {
         &self,
         field_id: &str,
         help_text: Option<&str>,
-        is_invalid: bool,
+        validity: Validity,
     ) -> FieldAttrs {
         let mut map: IndexMap<AttrKey, AttrValue> = IndexMap::default();
         let required = AttrKey::Std(Attr::Required);
         if let Some(value) = self.0.get(&required) {
             map.insert(required, value.clone());
         }
-        if is_invalid {
-            map.insert(
-                AttrKey::Std(Attr::AriaInvalid),
-                AttrValue::String("true".to_string()),
-            );
+        match validity {
+            Validity::Invalid => {
+                map.insert(
+                    AttrKey::Std(Attr::AriaInvalid),
+                    AttrValue::String("true".to_string()),
+                );
+            }
+            Validity::Valid => {
+                map.insert(
+                    AttrKey::Std(Attr::AriaInvalid),
+                    AttrValue::String("false".to_string()),
+                );
+            }
+            Validity::Unchecked => (),
         }
-        if let Some(ids) = described_by(field_id, help_text.is_some(), is_invalid) {
+        if let Some(ids) =
+            described_by(field_id, help_text.is_some(), validity == Validity::Invalid)
+        {
             map.insert(AttrKey::Std(Attr::AriaDescribedby), AttrValue::String(ids));
         }
         map.extend(self.0.clone());
@@ -268,6 +283,43 @@ pub(crate) fn int_bound(bound: Bound, which: &str) -> i128 {
         )]
         Bound::Float(x) if x.is_finite() && x.fract() == 0.0 => x as i128,
         Bound::Float(x) => panic!("Integer field does not support the fractional {which} {x}"),
+    }
+}
+
+/// Where one field stands with validation: not looked at yet, looked at and
+/// passed, or looked at and failed.
+///
+/// Three states, not a `bool`, because the first two render differently:
+/// `aria-invalid` is absent on an unchecked field and `"false"` on a valid one
+/// (see [`FieldAttrs::with_error_attrs`]). Anything that only cares whether
+/// there are errors to show, the invalid classes or the error list, compares
+/// with [`Invalid`](Self::Invalid) and treats the other two alike.
+///
+/// A widget gets its field's from
+/// [`WidgetProps::validity`](crate::widgets::WidgetProps::validity).
+/// `#[non_exhaustive]` so a state can be added, a pending server check say,
+/// without breaking a custom widget's `match`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Validity {
+    /// Never checked, or its errors were cleared since: nothing to say yet.
+    Unchecked,
+    /// Checked, with no errors.
+    Valid,
+    /// Checked, with at least one error.
+    Invalid,
+}
+
+impl Validity {
+    /// Read from the errors store's entry for one path: no entry (`None`) is
+    /// [`Unchecked`](Self::Unchecked), an empty list is
+    /// [`Valid`](Self::Valid), and any message is [`Invalid`](Self::Invalid).
+    pub fn of(errors: Option<&[ValidationMessage]>) -> Self {
+        match errors {
+            None => Self::Unchecked,
+            Some([]) => Self::Valid,
+            _ => Self::Invalid,
+        }
     }
 }
 
@@ -626,8 +678,11 @@ mod tests {
     /// keeps `required` where the suite's exact-markup tests already expect it.
     #[gtest]
     fn owned_attributes_come_first_then_the_fields_own() {
-        let attrs = FieldAttrs::with_owned_attrs(false, true, &just_max_length())
-            .with_error_attrs(ID, None, true);
+        let attrs = FieldAttrs::with_owned_attrs(false, true, &just_max_length()).with_error_attrs(
+            ID,
+            None,
+            Validity::Invalid,
+        );
         expect_that!(
             keys(&attrs),
             elements_are![
@@ -650,7 +705,7 @@ mod tests {
     /// this test too, on purpose.
     #[gtest]
     fn aria_describedby_names_the_error_list() {
-        let attrs = FieldAttrs::default().with_error_attrs(ID, None, true);
+        let attrs = FieldAttrs::default().with_error_attrs(ID, None, Validity::Invalid);
         expect_that!(
             attrs.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("aB3xY9kq-name-errors".to_string())))
@@ -659,16 +714,18 @@ mod tests {
 
     /// A hint is described-by whether or not the field is invalid, and comes
     /// before the error list when both are there; `aria-invalid` still waits
-    /// on an error.
+    /// on a check.
     #[gtest]
     fn aria_describedby_names_the_hint_then_the_error_list() {
-        let clean = FieldAttrs::default().with_error_attrs(ID, Some("A hint."), false);
+        let unchecked =
+            FieldAttrs::default().with_error_attrs(ID, Some("A hint."), Validity::Unchecked);
         expect_that!(
-            clean.get(Attr::AriaDescribedby),
+            unchecked.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("aB3xY9kq-name-help".to_string())))
         );
-        expect_that!(clean.get(Attr::AriaInvalid), none());
-        let invalid = FieldAttrs::default().with_error_attrs(ID, Some("A hint."), true);
+        expect_that!(unchecked.get(Attr::AriaInvalid), none());
+        let invalid =
+            FieldAttrs::default().with_error_attrs(ID, Some("A hint."), Validity::Invalid);
         expect_that!(
             invalid.get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String(
@@ -685,7 +742,7 @@ mod tests {
     fn required_and_invalid_are_independent() {
         let is_checkbox = false;
         let only_required = FieldAttrs::with_owned_attrs(is_checkbox, true, &just_max_length())
-            .with_error_attrs(ID, None, false);
+            .with_error_attrs(ID, None, Validity::Unchecked);
         expect_that!(
             keys(&only_required),
             elements_are![
@@ -694,7 +751,7 @@ mod tests {
             ]
         );
         let only_invalid = FieldAttrs::with_owned_attrs(is_checkbox, false, &just_max_length())
-            .with_error_attrs(ID, None, true);
+            .with_error_attrs(ID, None, Validity::Invalid);
         expect_that!(
             keys(&only_invalid),
             elements_are![
@@ -706,11 +763,63 @@ mod tests {
     }
 
     /// Neither applying leaves the field's own attributes exactly as they were.
+    /// "Neither" means not required and never checked: a field checked clean
+    /// gains `aria-invalid="false"`, below.
     #[gtest]
     fn without_either_the_fields_attributes_pass_through_unchanged() {
         let attrs = FieldAttrs::with_owned_attrs(false, false, &just_max_length())
-            .with_error_attrs(ID, None, false);
+            .with_error_attrs(ID, None, Validity::Unchecked);
         expect_that!(attrs, eq(&just_max_length()));
+    }
+
+    /// **Checked and clean is `aria-invalid="false"`, not nothing.** It is
+    /// what tells a screen reader the field was looked at and passed, and what
+    /// a stylesheet keys a "valid" look on, so it appears only once the field
+    /// has been checked. There is no error list, so no `aria-describedby`; it
+    /// sits where `"true"` would, after `required`.
+    #[gtest]
+    fn a_field_checked_clean_is_aria_invalid_false() {
+        let attrs = FieldAttrs::with_owned_attrs(false, true, &just_max_length()).with_error_attrs(
+            ID,
+            None,
+            Validity::Valid,
+        );
+        expect_that!(
+            keys(&attrs),
+            elements_are![
+                eq(&AttrKey::Std(Attr::Required)),
+                eq(&AttrKey::Std(Attr::AriaInvalid)),
+                eq(&AttrKey::Std(Attr::MaxLength)),
+            ]
+        );
+        expect_that!(
+            attrs.get(Attr::AriaInvalid),
+            some(eq(&AttrValue::String("false".to_string())))
+        );
+    }
+
+    /// A clean field's hint is still described-by; only the error list waits
+    /// on `Invalid`.
+    #[gtest]
+    fn a_field_checked_clean_still_names_its_hint() {
+        let attrs = FieldAttrs::default().with_error_attrs(ID, Some("A hint."), Validity::Valid);
+        expect_that!(
+            attrs.get(Attr::AriaDescribedby),
+            some(eq(&AttrValue::String("aB3xY9kq-name-help".to_string())))
+        );
+    }
+
+    /// `Validity::of` reads the store's three states: no entry is unchecked,
+    /// an empty list is checked and clean, and any message is invalid.
+    #[gtest]
+    fn validity_reads_the_three_store_states() {
+        let message = ValidationMessage::from("wrong");
+        expect_that!(Validity::of(None), eq(Validity::Unchecked));
+        expect_that!(Validity::of(Some(&[])), eq(Validity::Valid));
+        expect_that!(
+            Validity::of(Some(std::slice::from_ref(&message))),
+            eq(Validity::Invalid)
+        );
     }
 
     /// **A dev's own `aria_describedby` beats the one built here:** the field's
@@ -720,7 +829,7 @@ mod tests {
         let attrs = all(&[(Attr::AriaDescribedby, AttrValue::String("mine".to_string()))]);
         expect_that!(
             attrs
-                .with_error_attrs(ID, Some("A hint."), true)
+                .with_error_attrs(ID, Some("A hint."), Validity::Invalid)
                 .get(Attr::AriaDescribedby),
             some(eq(&AttrValue::String("mine".to_string())))
         );
@@ -775,7 +884,7 @@ mod tests {
     #[gtest]
     fn a_checkbox_never_gets_required() {
         let attrs = FieldAttrs::with_owned_attrs(true, true, &FieldAttrs::default())
-            .with_error_attrs(ID, None, true);
+            .with_error_attrs(ID, None, Validity::Invalid);
         expect_that!(
             keys(&attrs),
             elements_are![

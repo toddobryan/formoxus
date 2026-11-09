@@ -6,8 +6,8 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned, no_such_path, owns,
-    qualify, variant_segment,
+    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned,
+    no_such_path, owns, qualify, variant_segment,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::widgets::field_row::required_marker;
@@ -197,7 +197,6 @@ impl Node for VariantNode {
 
     fn render(&self, ctx: &NodeContext) -> Element {
         let path = ctx.path(&self.name);
-        let own_errors = ctx.errors_at(&path);
         // A `fieldset` so the picker and the fields it revealed read as one
         // thing — same treatment `StructNode` gives a nested struct, and the
         // legend carries the label so the select doesn't repeat it.
@@ -241,7 +240,11 @@ impl Node for VariantNode {
         // spreads this as is. Reading the errors in the form's scope is fine,
         // as the enum's own errors only change on a submit.
         let base_attrs = FieldAttrs::with_owned_attrs(false, ctx.required, &field_attrs)
-            .with_error_attrs(&id, self.help_text.as_deref(), !own_errors.is_empty());
+            .with_error_attrs(
+                &id,
+                self.help_text.as_deref(),
+                ctx.errors.validity_at(&path),
+            );
 
         // Never invalid, unlike a struct's, a list's or a set's fieldset. The
         // enum's own errors ("required" while unchosen, an unknown variant name)

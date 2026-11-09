@@ -62,3 +62,16 @@ engines.
 orders. It was already in the lock, but only through `mime_guess`, which is
 server-only, so it is NEW to the wasm bundle: measure what its fold tables
 cost (expected small) alongside the `regress` check.
+
+## 5. Decide the public API: what is re-exported, and from where
+
+Since 2026-11-09 nothing new gets re-exported ([[prelude-is-the-one-list]], "No new
+re-exports"). Each item is `pub` at its defining module and nowhere else, apart from the
+prelude and the `widgets::*` kit as they stood then. Before publishing, in one pass:
+1. Decide what the prelude holds, for a dev writing forms, and what the `widgets::*` kit
+   holds, for a dev writing a custom widget.
+2. Decide whether the defining modules stay `pub` or go `pub(crate)` behind those two
+   lists. Hiding them shrinks the semver surface but takes away paths devs may already use.
+3. Then update the suite, the examples and apcsp to the result. The suite runs against
+   the public surface, so it is what proves the lists are enough.
+Do this before the doc pass (item 2): it decides which items are public and need docs.

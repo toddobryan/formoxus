@@ -1060,7 +1060,7 @@ fn check_live<T>(
         let values = state.ordered_values(&values.peek());
         state.check_live(path, &values)
     };
-    // No key reads as `None`, as `get_errors` reads it, so writing `None`
+    // No key reads as `None`, as `ErrorsStoreExt::errors_at` reads it, so writing `None`
     // to a path never checked is skipped too.
     let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
     if !unchanged {

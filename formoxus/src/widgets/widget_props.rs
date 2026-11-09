@@ -4,10 +4,10 @@ use dioxus::core::Attribute;
 use formoxus_spec::Tag;
 
 use crate::{
-    Classes,
-    field_attrs::FieldAttrs,
-    nodes::{ErrorsStore, ValuesStore},
-    widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent, get_errors},
+    classes::Classes,
+    field_attrs::{FieldAttrs, Validity},
+    nodes::{ErrorsStore, ErrorsStoreExt, ValuesStore},
+    widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -93,8 +93,12 @@ impl WidgetProps {
         }
     }
 
+    /// Whether the field has errors to show: [`validity`](Self::validity) is
+    /// [`Invalid`](Validity::Invalid). What the invalid classes and the error
+    /// list key on, since an unchecked field and a valid one look alike there;
+    /// only `aria-invalid` tells them apart.
     pub fn is_invalid(&self) -> bool {
-        !get_errors(&self.path, self.errors).is_empty()
+        self.validity() == Validity::Invalid
     }
 
     /// The field's attributes as its form control should carry them: its own
@@ -123,7 +127,7 @@ impl WidgetProps {
     /// is set, so a widget that renders the hint itself still passes it here.
     pub fn current_attrs(&self) -> FieldAttrs {
         self.base_attrs
-            .with_error_attrs(&self.id, self.help_text.as_deref(), self.is_invalid())
+            .with_error_attrs(&self.id, self.help_text.as_deref(), self.validity())
     }
 
     /// `part`'s classes from the form's `Classes`, with its invalid addition
@@ -149,5 +153,16 @@ impl WidgetProps {
     /// of the handle, so nothing borrows the props.
     pub fn field_handle(&self) -> FieldHandle {
         FieldHandle::new(&self.path, self.values, self.on_field_event)
+    }
+
+    /// Where this field stands with validation: unchecked, valid or invalid.
+    /// Reading it while rendering subscribes the reader to this one field's
+    /// errors, so a new error wakes this widget and no other.
+    ///
+    /// A built-in widget rarely needs it directly:
+    /// [`current_attrs`](Self::current_attrs) turns it into `aria-invalid`,
+    /// and [`is_invalid`](Self::is_invalid) is the yes-or-no the classes want.
+    pub fn validity(&self) -> Validity {
+        self.errors.validity_at(&self.path)
     }
 }

@@ -203,7 +203,8 @@ fn a_chosen_value_validates_into_the_model() {
 // this section on purpose: `radio_group` rejects one at compile time, so that
 // case is `tests/ui/form_radio_group_on_an_option.rs`. There is no round-trip
 // test either — a radio writes the raw value to the same path through the same
-// `write_value`, so `a_chosen_value_validates_into_the_model` already covers it.
+// `FieldHandle::change` as a select, so `a_chosen_value_validates_into_the_model`
+// already covers it.
 
 #[gtest]
 fn a_radio_group_renders_one_radio_per_choice() {

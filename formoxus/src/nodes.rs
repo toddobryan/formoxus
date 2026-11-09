@@ -28,11 +28,11 @@ pub use variant_node::{VariantChoice, VariantNode};
 
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
+use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
 use crate::widgets::field_handle::OnFieldEvent;
-use crate::widgets::get_errors;
 use dioxus::stores::Store;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
@@ -415,6 +415,42 @@ pub type ValuesStore = Store<HashMap<String, String>>;
 /// - `Some(vec![...])` means that path did not validate.
 pub type ErrorsStore = Store<HashMap<String, Option<Vec<ValidationMessage>>>>;
 
+/// Reading one path's errors out of an [`ErrorsStore`], for rendering.
+///
+/// A trait because `ErrorsStore` is an alias for dioxus's `Store`, so the
+/// orphan rule allows no inherent methods on it. Crate-private: a widget reads
+/// its field's errors through [`WidgetProps`](crate::widgets::WidgetProps),
+/// which already knows the path, and never needs the store.
+pub(crate) trait ErrorsStoreExt {
+    /// The entry at `path` as the store holds it: `None` when it is unchecked
+    /// (no key, or a key holding `None`), `Some` of the messages otherwise,
+    /// empty when the path is valid.
+    ///
+    /// **Reads one key, not the map.** `self.read()` would subscribe the caller
+    /// to every path, so one field's error would wake every widget. A key that
+    /// is not there yet still wakes its reader when `insert` first writes it.
+    /// Owned rather than a borrow, because the borrow would be of a read guard
+    /// that ends when this returns.
+    fn errors_at(&self, path: &str) -> Option<Vec<ValidationMessage>>;
+
+    /// The [`Validity`] of `path`, from [`errors_at`](Self::errors_at), with
+    /// the same one-key subscription.
+    fn validity_at(&self, path: &str) -> Validity;
+}
+
+impl ErrorsStoreExt for ErrorsStore {
+    fn errors_at(&self, path: &str) -> Option<Vec<ValidationMessage>> {
+        self.get_unchecked(path.to_string())
+            .try_read()
+            .ok()?
+            .cloned()
+    }
+
+    fn validity_at(&self, path: &str) -> Validity {
+        Validity::of(self.errors_at(path).as_deref())
+    }
+}
+
 /// What a node needs in order to render: where it sits in the path tree,
 /// where the live values are, and whether the browser should treat its leaves
 /// as required.
@@ -550,10 +586,6 @@ impl NodeContext {
     /// can contain `--`, since a path is identifiers joined by `.`.
     pub fn title_id(&self) -> String {
         format!("{}--title", self.form_id)
-    }
-
-    pub fn errors_at(&self, path: &str) -> Vec<ValidationMessage> {
-        get_errors(path, self.errors)
     }
 }
 

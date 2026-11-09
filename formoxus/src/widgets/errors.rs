@@ -5,7 +5,11 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
-use crate::{classes::Classes, error::ValidationMessage, nodes::ErrorsStore, widgets::get_errors};
+use crate::{
+    classes::Classes,
+    error::ValidationMessage,
+    nodes::{ErrorsStore, ErrorsStoreExt},
+};
 
 /// The per-field error list, rendered under every widget.
 ///
@@ -47,7 +51,7 @@ pub fn FieldErrors(
     let li_class = classes.fixed_class(FixedKey::FieldError, false);
     let messages: Vec<ValidationMessage> = paths
         .iter()
-        .flat_map(|path| get_errors(path, errors))
+        .flat_map(|path| errors.errors_at(path).unwrap_or_default())
         .collect();
 
     rsx! {

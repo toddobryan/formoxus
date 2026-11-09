@@ -42,7 +42,6 @@
 //! # Layout
 //!
 //! - [`types`] — [`Choice`], one legal value a chooser offers.
-//! - [`values`] — reading and writing one path in the store.
 //! - [`widget`] — the [`Widget`] trait every widget implements, and
 //!   [`AnyWidget`], the form a field holds one in.
 //! - `widget_props` (re-exported as [`WidgetProps`]) — what a widget is handed
@@ -69,13 +68,13 @@ pub mod select;
 pub mod set_item;
 pub mod textarea;
 pub mod types;
-pub mod values;
 pub mod variant_select;
 pub mod widget;
 pub(crate) mod widget_props;
 
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
+pub use crate::field_attrs::Validity;
 pub use errors::FieldErrors;
 pub use field_handle::FieldHandle;
 pub use field_row::{LabelSide, field_label, field_row, required_marker};
@@ -93,7 +92,6 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};
-pub use values::get_errors;
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with

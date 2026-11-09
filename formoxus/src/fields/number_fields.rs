@@ -4,7 +4,7 @@ use facet::Facet;
 use formoxus_spec::{Attr, AttrValue, Bound, FieldType};
 
 use crate::widgets::{AnyWidget, TextInput};
-use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
+use crate::{error::ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 mod sealed {
     /// Public in a private module: nameable as a supertrait, implementable by

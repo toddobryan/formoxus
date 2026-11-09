@@ -1059,7 +1059,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
        early.
     4. **Untouched:** `VariantSelect`, which makes an edit.
 
-  - [ ] **6f. `aria-invalid="false"` (#7), added 2026-11-08.** The store already has
+  - [x] **6f. `aria-invalid="false"` (#7), added 2026-11-08.** The store already has
     the three states (trap 1), so this box is only about rendering them. `None`
     renders no `aria-invalid`, as an unchecked field does today. `Some` of an empty
     `Vec` renders `"false"`. `Some` of messages renders `"true"`. ARIA treats an
@@ -1074,11 +1074,19 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
        `is_invalid: bool`. Only `Invalid` adds the errors id to `aria-describedby`,
        which is what the `bool` does today. A clean field has no error list to point
        at.
-    3. **A `WidgetProps` method that reads one key and returns it,** for
-       `current_attrs` to pass on. Like `get_errors`, it reads only `path`'s key with
-       `get_unchecked`, never the whole map. `is_invalid` stays as it is: classes and
-       `field_row`'s label only ask about invalid. A class for valid fields is not
-       part of this; CSS can select on `[aria-invalid="false"]`.
+    3. **The one-key read moves onto the store (decided 2026-11-08).** A
+       crate-private extension trait on `ErrorsStore`, with `errors_at(&self, path) ->
+       Option<Vec<ValidationMessage>>` (owned: a borrow would outlive its read guard) and `validity_at(&self, path) -> Validity`, both reading
+       only `path`'s key with `get_unchecked`, never the whole map. A trait because
+       `ErrorsStore` is an alias for dioxus's `Store<HashMap<…>>`, so the orphan rule
+       rules out inherent methods. It replaces `get_errors` (`pub`, but nothing outside
+       the crate calls it) and the `get_validity` this step first named, so
+       `widgets/values.rs` goes. Its callers: `WidgetProps::validity()` (new, for
+       `current_attrs`) and `is_invalid()` (now `validity() == Invalid`, same answer),
+       `NodeContext::errors_at` or its four callers directly, and `FieldErrors`.
+       Classes and `field_row`'s label still ask only `is_invalid`. A class for valid
+       fields is not part of this; CSS can select on `[aria-invalid="false"]`. The
+       larger reshape this points at, a `BoundField`, is issue #23.
     4. **`VariantNode`** (`variant_node.rs:244`) applies the error attributes itself
        (the 4c exception), so it computes the same enum from its own key. Choosing a
        variant already removes that key (`variant_node.rs:384`), and the drain then
@@ -1095,7 +1103,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
     **It reaches custom widgets for free:** the attribute through `current_attrs`,
     and keeping it honest through the handle, the only way they can write (6c).
 
-  - [ ] **6g. Checkpoint: `just ci`, then `just e2e`.** Expect to change three
+  - [x] **6g. Checkpoint: `just ci`, then `just e2e`.** Expect to change three
     kinds of suite test: the five that call `formoxus::widgets::write_value` (to the
     new `Form` method), `assignment_shape.rs:79`'s custom widget, which reads
     `props.values` (to the handle), and any test that pins exact markup after a

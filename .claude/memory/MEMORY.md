@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-08**: `formoxus/ERRORS_PLAN.md` box 6 (6a–6g) planned; 6a–6e committed, 6f next; #22 read-only store next; then Claude's 6g tests, 7, 8b–8e
+- [**START HERE: next session**](next_session.md) — **2026-11-08**: `formoxus/ERRORS_PLAN.md` box 6 (6a–6g) planned; 6a–6g done (6f/6g uncommitted); next box 7, 8b–8e; #22 read-only store after the plan
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
@@ -19,7 +19,7 @@
 
 ## Plan
 - [MVP scope](mvp_scope.md) — road to publish, 2026-11-04: `ErrorsStore` + live validation → four widgets incl. `file` (apcsp uploads) → grammar docs → doc pass → `wasm-opt`
-- [Pre-publish checklist](pre_publish_checklist.md) — RAISE WHEN PUBLISHING COMES UP: wasm-opt, the doc pass, facet version, macro-side `regress` out of the bundle
+- [Pre-publish checklist](pre_publish_checklist.md) — RAISE WHEN PUBLISHING COMES UP: wasm-opt, the doc pass, facet version, macro-side `regress`, the public-API pass
 - [Parked: validate_values](parked_validate_values.md) — Todd wants these back: `validate_values`, `collect_values`→`ValuesByPath`, typed path keys (BREAKING, so pre-publish)
 - [Formoxus feature parity](formoxus_feature_parity.md) — vs Django + leptos_form; **#6 DONE 2026-10-01: `required: true` on a non-optional bool = must be ticked**
 - [Lint config](lint_config.md) — RAISE PERIODICALLY: why `unused_qualifications` is off (rsx! false positives) and how to sweep for real ones
@@ -36,7 +36,7 @@
 - [Variant paths in form!](variant_paths_in_form_macro.md) — #15: `$Enum::Variant` (enum named for the `match`), REQUIRED `?` on Options, `.0` tuple fields, nested blocks, FormSpec panics on bad paths
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
-- [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code and macros use full module paths
+- [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code uses full module paths; 2026-11-09: NO new re-exports until publish
 - [Widget is the umbrella word](widget_is_the_umbrella_word.md) — "widget", never "control"; why the 2026-09-19 rename was reversed
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30, C4 BUILT 2026-11-03; its `ErrorsStore` section is SUPERSEDED by `formoxus/ERRORS_PLAN.md` (errors leave the nodes)
 - [Errors here vs within](errors_here_vs_within.md) — 2026-10-09: `has_errors_here` (own, for rendering) vs `has_errors_within` (subtree, for validate); they can never agree

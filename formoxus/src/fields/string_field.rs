@@ -2,7 +2,7 @@ use formoxus_spec::{Attr, AttrValue};
 use regress::Regex;
 
 use crate::widgets::{AnyWidget, TextInput};
-use crate::{ValidationMessage, field::Field, field_attrs::FieldAttrs};
+use crate::{error::ValidationMessage, field::Field, field_attrs::FieldAttrs};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StringField {

@@ -25,11 +25,12 @@ use unicase::{Ascii, UniCase};
 use crate::{
     build::retain_first,
     error::FormAccessError,
+    field_attrs::Validity,
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
-        Drafts, Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, ValuesByPath,
-        default_label, ensure_owned, owns, qualify,
+        Drafts, Edit, ErrorsStoreExt, Items, Node, NodeContext, RawValue, Shown, SpecsByPath,
+        ValuesByPath, default_label, ensure_owned, owns, qualify,
     },
     widgets::{
         AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
@@ -847,8 +848,7 @@ impl Node for SetNode {
         // The set's own path — where an `AddItem`/`RemoveItem` is addressed. NOT
         // `nested.prefix`'s children: the widgets act on the list, not on an item.
         let path = ctx.path(&self.name);
-        let own_errors = ctx.errors_at(&path);
-        let invalid = !own_errors.is_empty();
+        let invalid = ctx.errors.validity_at(&path) == Validity::Invalid;
         let describedby = described_by(&id, self.help_text.is_some(), invalid);
 
         let fieldset_class = ctx.classes.fixed_class(FixedKey::Set, invalid);
