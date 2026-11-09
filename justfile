@@ -30,13 +30,12 @@ test:
     cargo nextest run --workspace
     cargo test --doc --workspace
 
-# Twice, because neither run catches everything. The public one is what
-# docs.rs builds, and only it reports a public doc linking to a private item
-# (`private_intra_doc_links`, silenced once private items are documented). The
-# private one checks the links in docs on crate-private items, which nothing
-# else reads: before 2026-11-08 they had drifted to ten broken ones.
+# With private items, because that run catches everything a public one does
+# and more. `private_intra_doc_links` (a public doc linking to a private item)
+# still fires under --document-private-items (checked on 1.99.1, 2026-11-09),
+# and only this run checks the links in docs on crate-private items, which
+# nothing else reads: before 2026-11-08 they had drifted to ten broken ones.
 docs:
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 
 # The floor we claim in Cargo.toml and the README. Published crates only, and

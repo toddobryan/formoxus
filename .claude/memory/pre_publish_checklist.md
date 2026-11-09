@@ -75,3 +75,32 @@ prelude and the `widgets::*` kit as they stood then. Before publishing, in one p
 3. Then update the suite, the examples and apcsp to the result. The suite runs against
    the public surface, so it is what proves the lists are enough.
 Do this before the doc pass (item 2): it decides which items are public and need docs.
+
+## 6. Scan the built docs for dead links — no lint can see two kinds
+
+Added 2026-11-09 (Todd: "checklist", not a `just docs` step, for now). rustdoc's
+`-D warnings` catches broken and private intra-doc links, but two kinds pass it:
+
+1. **A link to a `#[doc(hidden)]` item.** It resolves, so no lint fires, but the
+   page is never generated. formoxus has 13 hidden items (mostly `path.rs`'s
+   macro support) and no links to them as of 2026-11-09.
+2. **A hand-written HTML link,** `[x](../formoxus/…/struct.X.html)`. Never
+   checked. `formoxus-macros` cannot intra-doc link into `formoxus` (no
+   dependency), and the one it had (`path!`'s `ModelPath`) was dead from the
+   prelude page and would have been dead on docs.rs, which documents each crate
+   separately. Fixed 2026-11-09 by deleting it: formoxus's re-export of `path`
+   already says it with a working link.
+
+What to do in the doc pass, after the last doc is written: build the public docs
+(`cargo doc --no-deps -p formoxus -p formoxus-spec -p formoxus-macros`, public,
+since that is what a reader gets) and check every local `href` in
+`target/doc/{formoxus,formoxus_spec,formoxus_macros}/**/*.html` resolves to a file.
+About ten lines of Python did it (regex `href="([^"#?]+\.html)`, skip `http`, resolve
+against the page's directory). `cargo-deadlinks` is the packaged version. If it
+keeps finding things, promote it to a `just docs` step.
+
+Leftover from the fix, for the doc pass to settle: the prelude's `path!` page shows
+only the macros crate's doc (its `pub use formoxus_macros::{form, path, using_fns}`
+carries none), so its summary line now opens "Emits a witness borrow…". `form!`
+avoids this by keeping a plain-text summary in the macros crate (`FormSpec`, no
+link), which the root page then shows twice.

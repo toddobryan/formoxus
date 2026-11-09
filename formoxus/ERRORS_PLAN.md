@@ -1288,7 +1288,7 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
   `form.to_wire()` → `WireForm<T>` → `form.absorb(reply)`, with
   `reject_field(&path!(…), …)` on the server and `is_clean()` as the success test.
 
-- [ ] **10.** (Claude) `just ci` and `just e2e` green, then Todd merges to `main`.
+- [x] **10.** (Claude) `just ci` and `just e2e` green, then Todd merges to `main`.
   apcsp follows after, since it builds formoxus by path: anything of its own
   reading `WidgetProps.errors` changes then, and its markdown widget
   (`crates/ui/src/markdown.rs:69`, `:86`) moves from `get_current` and
@@ -1314,6 +1314,10 @@ G. **The handlers go on each control, not on a wrapper.** Each control already
      `props.field_handle()`: `current()` for `:69`, and for the textarea's write at
      `:86`, `on_input()` plus `on_blur()`, so a Markdown field is checked as the
      user goes like any text box.
+
+  Done 2026-11-09: merged to `main` as `ca0e731` (fast-forward); apcsp followed in
+  its `81e0c21` (pushed), which also added its own `just ci`, and Todd reports it
+  builds and passes all its tests. #7 got box 9's comment and was closed the same day.
 
 ## Not in this plan
 

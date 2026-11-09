@@ -51,9 +51,6 @@ pub fn form(input: TokenStream) -> TokenStream {
     form::impl_form(input.into()).into()
 }
 
-/// `path!(Model.field)` — a compile-checked [`ModelPath`](../formoxus/path/struct.ModelPath.html)
-/// into `Model`.
-///
 /// Emits a witness borrow of the field beside the path's string form, so a
 /// typo is `E0609` at the call site instead of a runtime `no_such_path`. Works
 /// for any field, nested (`Model.venue.city`), items (`Model.answers[].text`),

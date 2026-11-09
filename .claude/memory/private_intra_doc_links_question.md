@@ -1,9 +1,32 @@
 ---
 name: private-intra-doc-links-question
-description: "OPEN 2026-11-09, look with Todd: the `docs` recipe's comment says `private_intra_doc_links` is silenced under --document-private-items, but apcsp's identical run raised it as an error"
+description: "RESOLVED 2026-11-09: the `docs` recipe's comment was WRONG. `private_intra_doc_links` fires with or without --document-private-items (1.99.1 and stable); the public run caught nothing extra, so Todd dropped it (justfile now runs the private pass only)"
 metadata:
   type: project
 ---
+
+## RESOLVED 2026-11-09 (Todd + Claude)
+
+Checked in a scratch crate on 1.99.1 and stable, each with and without
+`--document-private-items`: a public doc linking to a private `mod`, a private fn,
+or a `pub(crate)` fn fails `-D warnings` in ALL FOUR runs. The private run does not
+silence the lint; it adds the note "this link resolves only because you passed
+`--document-private-items`, but will break without". No case was found where the
+public run caught something the private one missed, so the comment (written by
+Claude in `5b0da99`, 2026-11-08) gave a false reason. Todd chose to DROP the public
+run; `just docs` is now the private pass alone, ~11 s saved.
+
+Two things neither run catches, found the same day:
+1. A public doc linking to a `#[doc(hidden)]` item passes silently in both modes,
+   though that page is never generated. formoxus has none today.
+2. A hand-written HTML link is never checked. `formoxus-macros`' `path!` doc links
+   `ModelPath` as `../formoxus/path/struct.ModelPath.html`, which works only from
+   `formoxus_macros/macro.path.html` in a local workspace build: it is dead from
+   formoxus's prelude page (where the doc is re-exported) and on docs.rs (separate
+   crate docs). Found by scanning the generated HTML for missing local targets.
+
+The original question, kept as history:
+
 
 **Raised 2026-11-09 from apcsp, to look at together when Todd is back in formoxus.**
 
