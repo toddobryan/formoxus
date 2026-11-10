@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-10**: `paths` WIP pushed NOT compiling (NodePath, boxes 3–4); open: spec paths into ModelPath? (A/B/C); then widgets, then #22+#23
+- [**START HERE: next session**](next_session.md) — **2026-11-10 end**: `paths` boxes 1–8 DONE, pushed, ci+e2e green; next box 9 (docs/memory, Claude), box 10 merge (Todd)
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
@@ -67,6 +67,7 @@
 - [Mutation restore keeps the mutant](mutation_restore_mtime.md) — restoring by moving a backup back leaves an old mtime: cargo/dx keep the MUTATED build; `os.utime` on restore
 - [`optional` is payload-only](optional_flag_is_payload_only.md) — the walk's `optional` = "this node IS an Option's payload"; never pass a container's down to rebuilt children; test with `bool`, not `String`
 - [Toolchain pin & goldens](toolchain_pin_and_goldens.md) — 1.99.1 + rust-src pinned 2026-10-21; a golden flips on another stable OR missing rust-src; check both before re-blessing
+- [Test-only impls need a feature](test_only_impls_need_a_feature.md) — suite-only impls: `cfg(any(test, feature = "__test-util"))` + self dev-dep; not `cfg(test)` (off for tests/), not in the suite (orphan rule)
 - [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
