@@ -14,6 +14,7 @@ use crate::nodes::{Drafts, Shown};
 use crate::nodes::{
     Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label, qualify,
 };
+use crate::path::NodePath;
 use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{AnyWidget, CheckboxInput, Widget};
 
@@ -26,7 +27,7 @@ use crate::widgets::{AnyWidget, CheckboxInput, Widget};
 #[derive(Debug)]
 pub struct LeafArgs<'a> {
     pub name: &'a str,
-    pub path: &'a str,
+    pub path: &'a NodePath,
     pub peek: Option<Peek<'a, 'static>>,
     pub optional: bool,
     pub wrapper: Option<&'static Shape>,
@@ -229,15 +230,20 @@ impl<F: Field> Node for FieldNode<F> {
         )
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
         out.push(RawValue::Leaf {
-            path: qualify(prefix, &self.name),
+            path: prefix.join(&self.name),
             data: self.raw_value(),
         });
     }
 
-    fn distribute_values(&mut self, prefix: &str, _specs: &SpecsByPath, values: &ValuesByPath) {
-        let Some(raw) = values.get(&qualify(prefix, &self.name)) else {
+    fn distribute_values(
+        &mut self,
+        prefix: &NodePath,
+        _specs: &SpecsByPath,
+        values: &ValuesByPath,
+    ) {
+        let Some(raw) = values.get(&prefix.join(&self.name)) else {
             return; // nothing supplied for this field; leave it as it stands
         };
 
@@ -268,11 +274,11 @@ impl<F: Field> Node for FieldNode<F> {
         };
     }
 
-    fn paths(&self, prefix: &str, _drafts: Drafts, out: &mut Vec<String>) {
-        out.push(qualify(prefix, &self.name));
+    fn paths(&self, prefix: &NodePath, _drafts: Drafts, out: &mut Vec<NodePath>) {
+        out.push(prefix.join(&self.name));
     }
 
-    fn absent_owner(&self, _prefix: &str, _path: &str) -> Option<String> {
+    fn absent_owner(&self, _prefix: &NodePath, _path: &NodePath) -> Option<String> {
         None
     }
 
@@ -317,7 +323,7 @@ impl<F: Field> Node for FieldNode<F> {
         })
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
         let mut errors: Vec<ValidationMessage> = Vec::new();
 
         // An `Invalid` value carries its own parse error, and this is the only
@@ -364,7 +370,7 @@ impl<F: Field> Node for FieldNode<F> {
                 errors.extend(messages);
             }
         }
-        let path: String = qualify(prefix, &self.name);
+        let path: NodePath = prefix.join(&self.name);
         let is_valid = errors.is_empty();
         out.insert(path, errors);
         is_valid
@@ -427,7 +433,7 @@ impl<F: Field> Node for FieldNode<F> {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         _specs: &SpecsByPath,
         _errors: &mut ErrorsByPath,
@@ -436,7 +442,7 @@ impl<F: Field> Node for FieldNode<F> {
         // worth saying: hitting a real field means the caller's path was right
         // and its *expectation* was wrong.
         let path = edit.path();
-        Err(if path == qualify(prefix, &self.name) {
+        Err(if *path == prefix.join(&self.name) {
             // The article has to travel with the noun, so this carries both.
             let wanted = match edit {
                 Edit::ChooseVariant { .. } => "an enum",
@@ -480,7 +486,7 @@ mod tests {
 
     fn validation_messages<F: Field>(node: &FieldNode<F>) -> Vec<String> {
         let mut errors = ErrorsByPath::default();
-        node.validate("", &mut errors);
+        node.validate(&NodePath::root(), &mut errors);
         errors.into_values().flatten().map(|e| e.0).collect()
     }
 

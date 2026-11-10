@@ -16,6 +16,7 @@ use crate::{
         Drafts, Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path, owns,
         qualify,
     },
+    path::NodePath,
 };
 
 #[derive(Clone, Debug)]
@@ -212,7 +213,7 @@ impl Items {
     /// next key, and `set_items`, which takes the key the wire named.
     pub(crate) fn new_item(
         &self,
-        my_path: &str,
+        my_path: &NodePath,
         key: usize,
         specs: &SpecsByPath,
         value: Option<&ItemValue>,
@@ -224,7 +225,7 @@ impl Items {
     /// rebuild its draft blank under the key the draft already holds.
     pub(crate) fn new_named(
         &self,
-        my_path: &str,
+        my_path: &NodePath,
         name: &str,
         specs: &SpecsByPath,
         value: Option<&ItemValue>,
@@ -351,7 +352,7 @@ impl Items {
     /// A blank item under a key of its own, which no item will ever be given:
     /// a set's draft (`SETS_PLAN.md` 7a). Not one of the items until
     /// [`insert_node`](Self::insert_node) makes it one.
-    pub(crate) fn new_draft(&mut self, my_path: &str, specs: &SpecsByPath) -> Box<dyn Node> {
+    pub(crate) fn new_draft(&mut self, my_path: &NodePath, specs: &SpecsByPath) -> Box<dyn Node> {
         let draft = self.new_item(my_path, self.next_key, specs, None);
         self.next_key += 1;
         draft
@@ -502,11 +503,6 @@ impl PartialEq for ItemValue {
         self.shape == other.shape && self.peek() == other.peek()
     }
 }
-
-/// Item keys are `#`-prefixed for the same reason variants are `$`-prefixed:
-/// neither character can begin a Rust identifier, so a key can never be mistaken
-/// for a field name.
-pub(crate) const ITEM_SIGIL: char = '#';
 
 /// `1 item`, `2 items`: a count of items, for a message.
 fn items_word(count: usize) -> String {

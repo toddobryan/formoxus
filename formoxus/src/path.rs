@@ -21,6 +21,8 @@
 //! a panic on a server, discovered by a user.
 
 use facet::{Facet, Peek};
+use serde::Deserialize;
+use serde::Serialize;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
@@ -79,6 +81,98 @@ impl<T> ModelPath<T> {
     /// [`FormState::push_field_error`]: crate::FormState::push_field_error
     pub fn as_str(&self) -> &str {
         &self.raw
+    }
+
+    pub fn to_node_path(&self) -> NodePath {
+        NodePath::new(self.raw.clone())
+    }
+}
+
+/// Item keys are `#`-prefixed for the same reason variants are `$`-prefixed:
+/// neither character can begin a Rust identifier, so a key can never be mistaken
+/// for a field name.
+pub(crate) const ITEM_SIGIL: char = '#';
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct NodePath(String);
+
+impl NodePath {
+    /// Constructor for a path off the wire or in a test
+    pub fn new(path: impl Into<String>) -> Self {
+        Self(path.into())
+    }
+
+    pub(crate) fn root() -> Self {
+        Self("".to_string())
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// `("", "title") -> "title"`, `("location", "street") -> "location.street"`.
+    pub(crate) fn join(&self, name: &str) -> Self {
+        debug_assert!(
+            !name.contains('.'),
+            "join cannot accept a name containing a dot"
+        );
+        if self.0.is_empty() {
+            Self(name.to_string())
+        } else {
+            let prefix = &self.0;
+            Self(format!("{prefix}.{name}"))
+        }
+    }
+
+    pub(crate) fn join_item(&self, key: usize) -> Self {
+        self.join(&format!("{ITEM_SIGIL}{key}"))
+    }
+
+    pub(crate) fn join_variant(&self, name: &str) -> Self {
+        self.join(&format!("${name}"))
+    }
+
+    /// The spec key that names the node at self.
+    ///
+    /// Items are keyed by identity (`venues.#3`), but a spec names every item at
+    /// once (`venues[]`), so each `.#n` segment folds into a `[]` on the segment
+    /// before it: `venues.#3.city` is `venues[].city`, and `answers.#0` is
+    /// `answers[]`. Variant segments (`$Circle`) are spelled the same in both.
+    pub(crate) fn spec_key(&self) -> String {
+        let path = &self.0;
+        let mut out = String::with_capacity(path.len());
+        for segment in path.split('.') {
+            if segment.starts_with(ITEM_SIGIL) {
+                out.push_str("[]");
+            } else {
+                if !out.is_empty() {
+                    out.push('.');
+                }
+                out.push_str(segment);
+            }
+        }
+        out
+    }
+
+    /// Is `path` exactly `nested`, or somewhere inside its subtree?
+    ///
+    /// The guard every container's `choose_variant` uses before recursing. Testing
+    /// containment up front means at most ONE child is ever asked, so a child's real
+    /// failure ("no such variant") propagates verbatim instead of being swallowed as
+    /// "no such path" by a parent that was still shopping around.
+    pub(crate) fn owns(&self, path: &NodePath) -> bool {
+        path == self
+            || path
+                .0
+                .strip_prefix(&self.0)
+                .is_some_and(|rest| rest.starts_with('.'))
+    }
+}
+
+impl Display for NodePath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -210,10 +304,10 @@ impl<T> AsRef<str> for ModelPath<T> {
 /// as one. A path with neither is returned as it is, which is every path but
 /// one a validator wrote with `path!(…[i])` or `path!(…[= value])`.
 pub(crate) fn resolve_indices<'k>(
-    path: &str,
+    path: &NodePath,
     entry: impl Fn(&str) -> Option<&'k str>,
 ) -> Option<String> {
-    if !path.contains('[') {
+    if !path.as_str().contains('[') {
         return Some(path.to_string());
     }
     let mut resolved = String::with_capacity(path.len());

@@ -11,9 +11,10 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    ITEM_SIGIL, Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode,
-    VariantChoice, VariantNode, item_segment, qualify, variant_segment,
+    Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode, VariantChoice,
+    VariantNode, item_segment, qualify, variant_segment,
 };
+use crate::path::{ITEM_SIGIL, NodePath};
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -57,30 +58,9 @@ pub(crate) struct Walk<'s> {
 
 impl<'s> Walk<'s> {
     /// The spec that names the node at `path`, if any.
-    fn spec_for(&self, path: &str) -> Option<&'s FieldSpec> {
-        self.specs.get(&spec_key(path))
+    fn spec_for(&self, path: &NodePath) -> Option<&'s FieldSpec> {
+        self.specs.get(&path.spec_key())
     }
-}
-
-/// The spec key that names the node at `path`.
-///
-/// Items are keyed by identity (`venues.#3`), but a spec names every item at
-/// once (`venues[]`), so each `.#n` segment folds into a `[]` on the segment
-/// before it: `venues.#3.city` is `venues[].city`, and `answers.#0` is
-/// `answers[]`. Variant segments (`$Circle`) are spelled the same in both.
-pub(crate) fn spec_key(path: &str) -> String {
-    let mut out = String::with_capacity(path.len());
-    for segment in path.split('.') {
-        if segment.starts_with(ITEM_SIGIL) {
-            out.push_str("[]");
-        } else {
-            if !out.is_empty() {
-                out.push('.');
-            }
-            out.push_str(segment);
-        }
-    }
-    out
 }
 
 /// Returns the `Shape` a spec key names as `Ok`, or an `Err` explaining why, if it doesn't.
@@ -241,7 +221,7 @@ pub(crate) fn nodes_for(
     shape: &'static Shape,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
     match &shape.ty {
@@ -259,7 +239,7 @@ fn fields_from_struct(
     struct_type: &StructType,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
     let peek_struct = peek.map(|p| {
@@ -275,13 +255,7 @@ fn fields_from_struct(
                 ps.field_by_name(field.name)
                     .expect("field came from this shape, so it exists on the value")
             });
-            node_for(
-                field,
-                field_peek,
-                walk,
-                &qualify(prefix, field.name),
-                optional,
-            )
+            node_for(field, field_peek, walk, &prefix.join(field.name), optional)
         })
         .collect()
 }
@@ -301,7 +275,7 @@ fn chosen_variant(
     enum_type: &EnumType,
     peek_enum: Option<PeekEnum<'_, 'static>>,
     walk: Walk<'_>,
-    _prefix: &str,
+    _prefix: &NodePath,
 ) -> Option<&'static Variant> {
     if walk.mode == FormMode::Populated {
         // `?` is the `None` case: populating from a value whose optional enum
@@ -333,7 +307,7 @@ pub(crate) fn variant_nodes(
     variant: &'static Variant,
     peek_enum: Option<PeekEnum<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
     variant
@@ -345,13 +319,7 @@ pub(crate) fn variant_nodes(
                 pe.field_by_name(field.name)
                     .expect("field belongs to the active variant, so access can't error")
             });
-            node_for(
-                field,
-                field_peek,
-                walk,
-                &qualify(prefix, field.name),
-                optional,
-            )
+            node_for(field, field_peek, walk, &prefix.join(field.name), optional)
         })
         .collect()
 }
@@ -363,7 +331,7 @@ fn fields_from_enum(
     enum_type: &EnumType,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Vec<Box<dyn Node>> {
     let peek_enum = peek.map(|p| {
@@ -381,7 +349,7 @@ fn node_for(
     field: &'static FacetField,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
     node_for_shape(field.shape(), field.name, peek, walk, prefix, optional)
@@ -398,7 +366,7 @@ pub(crate) fn node_for_shape(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
     if let Ok(option_def) = shape.def.into_option() {
@@ -457,7 +425,7 @@ fn option_node(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
 ) -> Box<dyn Node> {
     let inner_peek = peek.and_then(|p| {
         p.into_option()
@@ -533,7 +501,7 @@ fn scalar_node(
     walk: Walk<'_>,
     // This leaf's own full path: `node_for_shape`'s `prefix` already has the
     // name qualified on.
-    path: &str,
+    path: &NodePath,
     optional: bool,
     // The newtype this scalar is wrapped in, if any. The field carries the
     // INNER type (`Field<String>` for a `Markdown`), because a concrete `T`
@@ -608,7 +576,7 @@ fn list_node(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
     let items: Vec<Box<dyn Node>> = peek
@@ -632,7 +600,7 @@ fn list_node(
                         &item,
                         Some(element),
                         walk,
-                        &qualify(prefix, &item),
+                        &prefix.join_item(i),
                         /* optional */ false,
                     )
                 })
@@ -650,7 +618,7 @@ fn list_node(
         (0..min_items.unwrap_or(0))
             .map(|i| {
                 let item = item_segment(i);
-                node_for_shape(shape, &item, None, walk, &qualify(prefix, &item), false)
+                node_for_shape(shape, &item, None, walk, &prefix.join_item(i), false)
             })
             .collect()
     } else {
@@ -691,7 +659,7 @@ fn set_node(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
     let spec = walk.spec_for(prefix);
@@ -735,7 +703,7 @@ fn set_node(
                         &item,
                         Some(element),
                         walk,
-                        &qualify(prefix, &item),
+                        &prefix.join_item(i),
                         /* optional */ false,
                     )
                 })
@@ -785,7 +753,7 @@ fn struct_node(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
     let spec = walk.spec_for(prefix);
@@ -815,7 +783,7 @@ fn enum_node(
     name: &str,
     peek: Option<Peek<'_, 'static>>,
     walk: Walk<'_>,
-    prefix: &str,
+    prefix: &NodePath,
 ) -> Box<dyn Node> {
     let peek_enum = peek.map(|p| {
         p.into_enum()
@@ -845,7 +813,7 @@ fn enum_node(
                     v,
                     peek_enum,
                     walk,
-                    &qualify(prefix, &variant_segment(v.name)),
+                    &prefix.join_variant(v.name),
                     /* optional */ false,
                 )
             })

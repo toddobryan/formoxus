@@ -17,6 +17,7 @@ use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Edit, Node, ValuesByPath, no_such_path, owns};
 use crate::nodes::{NodeContext, RawValue};
+use crate::path::NodePath;
 use crate::{classes::Classes, error::ValidationError};
 
 use super::FormSpec;
@@ -259,7 +260,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// leaves it out: neither `to_wire` nor `validate` sees what was typed into
     /// an adder and never added. [`draft_values`](Self::draft_values) is the
     /// one read of it.
-    pub(crate) fn ordered_values(&self, store: &HashMap<String, String>) -> ValuesByPath {
+    pub(crate) fn ordered_values(&self, store: &HashMap<NodePath, String>) -> ValuesByPath {
         self.raw_values()
             .into_iter()
             .filter_map(|v| match v {
@@ -275,7 +276,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
 
     pub(crate) fn ordered_errors(
         &self,
-        store: &HashMap<String, Option<Vec<ValidationMessage>>>,
+        store: &HashMap<NodePath, Option<Vec<ValidationMessage>>>,
     ) -> FormErrors {
         self.errors_from(|path| store.get(path)?.as_ref())
     }
@@ -283,7 +284,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// The leaves of every set draft under `path`, read from the store: what
     /// committing a draft distributes first (`SETS_PLAN.md` 7c), since the
     /// state never sees a keystroke.
-    pub(crate) fn draft_values(&self, path: &str, store: &HashMap<String, String>) -> ValuesByPath {
+    pub(crate) fn draft_values(
+        &self,
+        path: &NodePath,
+        store: &HashMap<String, String>,
+    ) -> ValuesByPath {
         self.raw_values()
             .into_iter()
             .filter_map(|v| match v {
@@ -299,8 +304,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// Whether `path` names a set: a `Def::Set`, or a list `treat_as_set`
     /// marked. For `use_form`, which focuses the item an Add made, except in a
     /// set, whose Add leaves focus in its draft.
-    pub(crate) fn is_set(&self, path: &str) -> bool {
-        let key = crate::build::spec_key(path);
+    pub(crate) fn is_set(&self, path: &NodePath) -> bool {
+        let key = path.spec_key();
         crate::build::spec_key_shape(T::SHAPE, &key).is_ok_and(|shape| {
             crate::field_kind::is_set(shape)
                 || (crate::field_kind::is_list(shape)
@@ -378,7 +383,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// `Vec` is the model's own; or by value, `tags[=rust]`, the item holding
     /// that text. It is resolved to that item's key (`answers.#5`) here, so
     /// an index past the end or a value no item holds is no path at all.
-    pub fn push_field_error(&mut self, path: &str, message: &str) -> Result<(), FormAccessError> {
+    pub fn push_field_error(
+        &mut self,
+        path: &NodePath,
+        message: &str,
+    ) -> Result<(), FormAccessError> {
         let keyed = self.key_for(path);
         let mut this_error = ErrorsByPath::default();
         this_error.insert(keyed, vec![ValidationMessage::from(message)]);
@@ -390,7 +399,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    pub(crate) fn key_for(&self, path: &str) -> String {
+    pub(crate) fn key_for(&self, path: &NodePath) -> String {
         keyed_or_as_written(path, &self.item_keys())
     }
 
@@ -480,7 +489,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// "did it pass?" off `fields` must not see.
     fn errors_from<'a>(
         &self,
-        read: impl Fn(&str) -> Option<&'a Vec<ValidationMessage>>,
+        read: impl Fn(&NodePath) -> Option<&'a Vec<ValidationMessage>>,
     ) -> FormErrors {
         let fields = self
             .paths(Drafts::Exclude)
@@ -496,10 +505,10 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    fn paths(&self, drafts: Drafts) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
+    fn paths(&self, drafts: Drafts) -> Vec<NodePath> {
+        let mut out: Vec<NodePath> = Vec::new();
         for n in &self.nodes {
-            n.paths("", drafts, &mut out);
+            n.paths(&NodePath::root(), drafts, &mut out);
         }
         out
     }
@@ -559,7 +568,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
 /// `path` with each index resolved to its item's key, or as written when one
 /// names no item: then the error is placed by a spelling no node claims, and
 /// reaches the user the way every unclaimed path does.
-fn keyed_or_as_written(path: &str, item_keys: &HashMap<String, String>) -> String {
+fn keyed_or_as_written(path: &NodePath, item_keys: &HashMap<NodePath, String>) -> String {
     crate::path::resolve_indices(path, |list| item_keys.get(list).map(String::as_str))
         .unwrap_or_else(|| path.to_string())
 }

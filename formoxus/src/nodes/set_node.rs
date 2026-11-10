@@ -58,7 +58,7 @@ pub struct SetOrder {
 impl SetOrder {
     /// The order of a set at `path` whose items are `shape`, when no
     /// `sort_by` was given. Only scalar items have one.
-    pub fn default_for(shape: &'static Shape, path: &str) -> Self {
+    pub fn default_for(shape: &'static Shape, path: &NodePath) -> Self {
         if let Some(scalar_type) = shape.scalar_type() {
             let default_order = DefaultOrder::for_type(scalar_type);
             SetOrder {

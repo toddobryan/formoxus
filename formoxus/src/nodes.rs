@@ -16,7 +16,7 @@ mod struct_node;
 mod variant_node;
 
 pub use items::ItemValue;
-pub(crate) use items::{ITEM_SIGIL, Items, item_segment};
+pub(crate) use items::{Items, item_segment};
 pub use list_node::ListNode;
 pub use option_node::OptionNode;
 pub use set_node::{
@@ -32,6 +32,7 @@ use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
+use crate::path::NodePath;
 use crate::widgets::field_handle::OnFieldEvent;
 use dioxus::stores::Store;
 
@@ -68,19 +69,19 @@ pub trait Node: Debug {
     /// Flatten this node's leaves into `(qualified_path, raw_value)` pairs,
     /// e.g. `("location.street", "123 Main St")`. Paths are qualified because
     /// two structs in one form can each have a `street`.
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>);
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>);
 
     /// The reverse of [`collect_values`](Self::collect_values): each leaf looks
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath);
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath);
 
     /// Validate this node and its children, adding any errors to out, by path
     /// returns true if no errors were added, false if some were
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool;
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool;
 
     /// All paths on this node (that can hold an error).
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>);
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>);
 
     fn clone_box(&self) -> Box<dyn Node>;
 
@@ -120,7 +121,7 @@ pub trait Node: Debug {
     /// an `ItemValue` of the wrong type. A refused edit changes nothing.
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
@@ -140,7 +141,7 @@ pub trait Node: Debug {
     /// and nothing outside it (`FormState::check_live`). A node that does not own
     /// `path` answers `None`, so a container can ask each child in turn and take
     /// the first `Some`.
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String>;
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<String>;
 }
 
 impl Clone for Box<dyn Node> {
@@ -149,26 +150,13 @@ impl Clone for Box<dyn Node> {
     }
 }
 
-/// Is `path` exactly `nested`, or somewhere inside its subtree?
-///
-/// The guard every container's `choose_variant` uses before recursing. Testing
-/// containment up front means at most ONE child is ever asked, so a child's real
-/// failure ("no such variant") propagates verbatim instead of being swallowed as
-/// "no such path" by a parent that was still shopping around.
-pub(crate) fn owns(nested: &str, path: &str) -> bool {
-    path == nested
-        || path
-            .strip_prefix(nested)
-            .is_some_and(|rest| rest.starts_with('.'))
-}
-
-pub(crate) fn no_such_path(path: &str) -> FormAccessError {
+pub(crate) fn no_such_path(path: &NodePath) -> FormAccessError {
     FormAccessError(format!("no such path: {path}"))
 }
 
 /// Guard that `path` is this node's own path or somewhere inside it.
-pub(crate) fn ensure_owned(container: &str, path: &str) -> Result<(), FormAccessError> {
-    if owns(container, path) {
+pub(crate) fn ensure_owned(container: &NodePath, path: &NodePath) -> Result<(), FormAccessError> {
+    if container.owns(path) {
         Ok(())
     } else {
         Err(no_such_path(path))
@@ -246,13 +234,13 @@ pub(crate) fn qualify(prefix: &str, name: &str) -> String {
 /// the set.
 #[derive(Clone, Debug)]
 pub enum RawValue {
-    Leaf { path: String, data: String },
-    Structure { path: String, data: String },
-    Draft { path: String, data: String },
+    Leaf { path: NodePath, data: String },
+    Structure { path: NodePath, data: String },
+    Draft { path: NodePath, data: String },
 }
 
 impl RawValue {
-    pub fn into_pair(self) -> (String, String) {
+    pub fn into_pair(self) -> (NodePath, String) {
         match self {
             RawValue::Leaf { path: p, data: d }
             | RawValue::Structure { path: p, data: d }
@@ -397,14 +385,14 @@ impl Shown {
 
 /// The live raw values, keyed by qualified path — what `leaves()` produces
 /// and what `apply()` consumes.
-pub type ValuesByPath = IndexMap<String, String>;
+pub type ValuesByPath = IndexMap<NodePath, String>;
 
 /// A [`std::collections::HashMap`] equivalent to [`ValuesByPath`] held in
 /// a store so a write touches one input. The two maps are different,
 /// because [`ValuesByPath`] maintains insertion order, but
 /// [`struct@dioxus_stores::Store`] doesn't support [`indexmap::IndexMap`], just
 /// [`std::collections::HashMap`] and a few others.
-pub type ValuesStore = Store<HashMap<String, String>>;
+pub type ValuesStore = Store<HashMap<NodePath, String>>;
 
 /// Client home for field errors. Held in a store so that an error on one
 /// field only redraws that field, not the whole page. This is a three-way
@@ -413,7 +401,7 @@ pub type ValuesStore = Store<HashMap<String, String>>;
 /// - `None`, or a missing key, means that path was never checked or was cleared.
 /// - `Some(vec![])` means that path was valid.
 /// - `Some(vec![...])` means that path did not validate.
-pub type ErrorsStore = Store<HashMap<String, Option<Vec<ValidationMessage>>>>;
+pub type ErrorsStore = Store<HashMap<NodePath, Option<Vec<ValidationMessage>>>>;
 
 /// Reading one path's errors out of an [`ErrorsStore`], for rendering.
 ///
@@ -431,19 +419,16 @@ pub(crate) trait ErrorsStoreExt {
     /// is not there yet still wakes its reader when `insert` first writes it.
     /// Owned rather than a borrow, because the borrow would be of a read guard
     /// that ends when this returns.
-    fn errors_at(&self, path: &str) -> Option<Vec<ValidationMessage>>;
+    fn errors_at(&self, path: &NodePath) -> Option<Vec<ValidationMessage>>;
 
     /// The [`Validity`] of `path`, from [`errors_at`](Self::errors_at), with
     /// the same one-key subscription.
-    fn validity_at(&self, path: &str) -> Validity;
+    fn validity_at(&self, path: &NodePath) -> Validity;
 }
 
 impl ErrorsStoreExt for ErrorsStore {
-    fn errors_at(&self, path: &str) -> Option<Vec<ValidationMessage>> {
-        self.get_unchecked(path.to_string())
-            .try_read()
-            .ok()?
-            .cloned()
+    fn errors_at(&self, path: &NodePath) -> Option<Vec<ValidationMessage>> {
+        self.get_unchecked(path).try_read().ok()?.cloned()
     }
 
     fn validity_at(&self, path: &str) -> Validity {
@@ -595,11 +580,11 @@ impl NodeContext {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Edit {
     ChooseVariant {
-        path: String,
+        path: NodePath,
         variant: Option<String>,
     },
     AddItem {
-        path: String,
+        path: NodePath,
         /// What the new item holds. `None` is a blank item, the one the Add
         /// button makes: every leaf empty, an enum item with no variant chosen.
         /// `Some` builds the item from the value the way `form_for` builds a
@@ -621,11 +606,11 @@ pub enum Edit {
         before: Option<usize>,
     },
     RemoveItem {
-        path: String,
+        path: NodePath,
         index: usize,
     },
     MoveItem {
-        path: String,
+        path: NodePath,
         /// The position of the item to move. Positions, not keys, for the same
         /// reason as `AddItem::before`: a ↑/↓ button knows where its item is.
         from: usize,
@@ -641,7 +626,7 @@ pub enum Edit {
     /// was, and empties the draft. A set's only: a list's items are edited in
     /// place.
     EditItem {
-        path: String,
+        path: NodePath,
         index: Option<usize>,
     },
 }
@@ -649,7 +634,7 @@ pub enum Edit {
 impl Edit {
     /// Every edit names a target, and the containment walk reads only this —
     /// never the kind.
-    pub fn path(&self) -> &str {
+    pub fn path(&self) -> &NodePath {
         match self {
             Edit::ChooseVariant { path, .. }
             | Edit::AddItem { path, .. }

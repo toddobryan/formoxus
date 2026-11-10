@@ -17,8 +17,8 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path, owns};
-use crate::path::ModelPath;
+use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path};
+use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
@@ -43,7 +43,7 @@ pub use state::{FormState, empty_form, form_for};
 /// `FormSpec`'s own fields use it: insertion order is preserved, and
 /// `collect_errors` deliberately builds this in the same order `render` walks
 /// the tree.
-pub type ErrorsByPath = IndexMap<String, Vec<ValidationMessage>>;
+pub type ErrorsByPath = IndexMap<NodePath, Vec<ValidationMessage>>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FormErrors {
@@ -52,7 +52,7 @@ pub struct FormErrors {
 }
 
 impl FormErrors {
-    pub fn paths(&self) -> Vec<String> {
+    pub fn paths(&self) -> Vec<NodePath> {
         self.fields.keys().cloned().collect()
     }
 
@@ -75,7 +75,7 @@ impl FormErrors {
             None => self.form.iter().map(|e| e.0.clone()).collect(),
             Some(p) => self
                 .fields
-                .get(p.as_str())
+                .get(&NodePath::new(p.as_str().to_string()))
                 .into_iter()
                 .flatten()
                 .map(|e| e.0.clone())
@@ -580,7 +580,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         } else {
             let paths: String = unclaimed
                 .keys()
-                .map(String::as_str)
+                .map(|np| np.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
             Err(FormAccessError(format!(
@@ -736,7 +736,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         path: &ModelPath<T>,
         raw: impl Into<String>,
     ) -> Result<(), FormAccessError> {
-        let path = path.as_str();
+        let path = path.to_node_path();
         // Two `peek()`s, not one guard bound to a `let`: the guard would still
         // be held below, and `apply_field_event` is free to write the state.
         let key = self.state_signal.peek().key_for(path);
@@ -950,7 +950,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // in its list would go on leaving out a removed one. By prefix rather than
     // the item's current leaves, so an unchosen variant's values go too.
     if let Some(item) = removed {
-        values.retain(|path, _| !crate::nodes::owns(&item, path));
+        values.retain(|path, _| !owns(&item, path));
     }
     // A filled item was built from its value, so the TREE has its values, but
     // widgets, `validate` and `to_wire` read the STORE. Copy the new item's
@@ -1141,12 +1141,12 @@ where
 /// (`#0,#2,#1`). `None` if there is no such item, which the edit then reports.
 fn item_path_at<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: &FormState<T>,
-    path: &str,
+    path: &NodePath,
     index: usize,
-) -> Option<String> {
+) -> Option<NodePath> {
     let keys = state.collect_values().shift_remove(path)?;
     let key = keys.split(',').nth(index).filter(|key| !key.is_empty())?;
-    Some(format!("{path}.{key}"))
+    Some(NodePath::new(format!("{path}.{key}")))
 }
 
 const ALPHANUMERIC: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

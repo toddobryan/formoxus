@@ -3,6 +3,7 @@ use dioxus::prelude::{FocusEvent, FormEvent};
 use dioxus::signals::{ReadableExt, WritableExt};
 
 use crate::nodes::ValuesStore;
+use crate::path::NodePath;
 
 /// What a widget tells the form happened to one field, for
 /// `apply_field_event` (in `form.rs`, private there, so not a link).
@@ -68,7 +69,7 @@ impl OnFieldEvent {
 
     /// Tell the form `kind` happened to the field at `path`. Does nothing when
     /// there is no form to tell.
-    pub(crate) fn send(&self, path: &str, kind: FieldEventKind) {
+    pub(crate) fn send(&self, path: &NodePath, kind: FieldEventKind) {
         if let Some(callback) = self.callback {
             callback(FieldEvent {
                 path: path.to_string(),
@@ -111,15 +112,15 @@ impl OnFieldEvent {
 /// [`blur`](Self::blur) from a handler of your own.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldHandle {
-    path: String,
+    path: NodePath,
     values: ValuesStore,
     handler: OnFieldEvent,
 }
 
 impl FieldHandle {
-    pub(crate) fn new(path: &str, values: ValuesStore, handler: OnFieldEvent) -> Self {
+    pub(crate) fn new(path: &NodePath, values: ValuesStore, handler: OnFieldEvent) -> Self {
         Self {
-            path: path.to_string(),
+            path: path.clone(),
             values,
             handler,
         }
@@ -130,9 +131,9 @@ impl FieldHandle {
     /// in `absorb`, `reset` and `apply_edit`, each of which settles the
     /// field's errors itself. Never for a widget, which would then go
     /// unchecked until submit.
-    pub(crate) fn unreported(path: &str, values: ValuesStore) -> Self {
+    pub(crate) fn unreported(path: &NodePath, values: ValuesStore) -> Self {
         Self {
-            path: path.to_string(),
+            path: path.clone(),
             values,
             handler: OnFieldEvent::unreported(),
         }
