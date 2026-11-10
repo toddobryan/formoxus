@@ -12,9 +12,9 @@ use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
     Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode, VariantChoice,
-    VariantNode, item_segment, qualify, variant_segment,
+    VariantNode,
 };
-use crate::path::{ITEM_SIGIL, NodePath};
+use crate::path::{ITEM_SIGIL, NodePath, item_segment};
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -89,7 +89,11 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
             field_named(at, name, &walked).and_then(|field| items_of(field.shape(), name, brackets))
         };
         at = next?;
-        walked = qualify(&walked, segment);
+        // A spec key, not a `NodePath`: `answers[]` names every item at once.
+        if !walked.is_empty() {
+            walked.push('.');
+        }
+        walked.push_str(segment);
     }
     match at {
         At::Variant(_) => Err(format!(
@@ -561,7 +565,7 @@ fn scalar_node(
 }
 
 /// A list-typed field: a [`ListNode`] whose items are named by a `#`-prefixed key,
-/// so the leaf paths (`answer_choices.#0.text`) fall out of the same `qualify`
+/// so the leaf paths (`answer_choices.#0.text`) fall out of the same `join`
 /// nesting a struct's fields use — no special casing anywhere downstream.
 ///
 /// `shape` is the *element* shape (`ListDef::t`), not the `Vec`'s, and the

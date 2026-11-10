@@ -3,9 +3,8 @@ use dioxus::core::Element;
 use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::nodes::{
-    Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, owns, qualify,
-};
+use crate::nodes::{Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath};
+use crate::path::NodePath;
 
 #[derive(Clone, Debug)]
 pub struct OptionNode {
@@ -32,19 +31,19 @@ impl Node for OptionNode {
         self.inner.raw_value()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
         self.inner.collect_values(prefix, out);
     }
 
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
         self.inner.distribute_values(prefix, specs, values);
     }
 
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
         self.inner.paths(prefix, drafts, out);
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
         !self.is_present() || self.inner.validate(prefix, out)
     }
 
@@ -69,20 +68,20 @@ impl Node for OptionNode {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         // `name()` delegates to the inner, so the inner derives the same
         // qualified path from this same prefix. Passing it through unchanged is
         // what keeps `Option` from contributing a path segment of its own.
         self.inner.edit(prefix, edit, specs, errors)
     }
 
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
-        let my_path = qualify(prefix, &self.name());
-        if !owns(&my_path, path) {
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath> {
+        let my_path = prefix.join(&self.name());
+        if !path.starts_with(&my_path) {
             None
         } else if !self.is_present() {
             Some(my_path)

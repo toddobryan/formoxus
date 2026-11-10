@@ -50,9 +50,11 @@ is set. `ListNode` and `SetNode` both ask `Items`, so one change covers both.
 ## #21: the design
 
 **One owned newtype, `NodePath`, for live paths only** (names and placement are
-decisions A and B below). Model paths stay `ModelPath<T>`; spec paths
-(`answers[].text`, what `FormSpec`'s builders and `SpecsByPath` take) stay strings,
-since `form!` writes them and nothing builds them at runtime.
+decisions A and B below). Model paths stay `ModelPath<T>`, and spec paths
+(`answers[].text`, what `FormSpec`'s builders take) become `ModelPath<T>` too
+(decision H, 2026-11-10), so a path is one of exactly two kinds: a place in the
+model's TYPE, written by a dev and checked at compile time, or one live node,
+built at run time. `SpecsByPath` keeps its `String` keys.
 
 It wraps the same `String` it replaces, so the wire spelling, the `name`
 attribute and every map's iteration order stay exactly as they are. What changes is
@@ -66,7 +68,7 @@ who can make one and what you can do with one.
 | `qualify(prefix, name)`, 68 uses | `prefix.join(name)` | `nodes.rs:225` |
 | `item_segment(key)`, 12 uses | `prefix.join_item(key)` | `nodes/items.rs:522` |
 | `variant_segment(v)`, 7 uses | `prefix.join_variant(v)` | `nodes.rs:200` |
-| `owns(nested, path)`, 39 uses | `path.is_within(&nested)` | `nodes.rs:158` |
+| `owns(nested, path)`, 39 uses | `path.starts_with(&nested)` (decision J) | `nodes.rs:158` |
 | `ensure_owned(c, p)`, 8 uses | a method returning the same `Result` | `nodes.rs:170` |
 | `path_without_variants(p)` (pub) | `path.without_variants()` | `nodes.rs:217` |
 | `spec_key(p)` | `path.spec_key()`, still returning a `String` | `build.rs:71` |
@@ -154,6 +156,43 @@ G. **#20 on `main` first, before the branch. DECIDED.** It is one line,
    breaks nothing, and the branch would otherwise carry a bug fix through a long
    refactor.
 
+## Decisions (Todd, 2026-11-10): three more, from box 4's review
+
+Todd asked whether spec paths and live paths could be one type. They cannot
+without bringing back #21's bug class: a live path names ONE node and holds an
+item key (`answers.#5`), while a spec path names a place in the type and holds a
+pattern (`answers[].text`). Spec paths and model paths, though, are already the
+same thing: `path!(Quiz.answers[].text)` yields `"answers[].text"`, through the
+same parser that turns `form!`'s paths into keys.
+
+H. **Spec paths become `ModelPath<T>`. DECIDED.** Every `FormSpec` builder
+   that takes a path (`with_widget`, `with_label`, `with_min_items`,
+   `treat_as_set`, `with_attrs` and the rest, `form/spec.rs:156–311`) takes
+   `&ModelPath<T>` in place of `&str`. `FormSpec` is already generic over `T`,
+   so a path for another model no longer compiles, and a typo is caught by rustc
+   instead of by `shape_at`'s panic. `form!` emits `&ModelPath::__new("…")` keys
+   (the string it emits today, wrapped). `SpecsByPath` keeps its `String` keys,
+   since nothing outside `FormSpec` builds one. The cost is the hand-written
+   builder calls in the suite and the examples, about 86, which become
+   `&path!(M.x)`.
+
+I. **A builder given an instance path panics. DECIDED.** `path!` can spell
+   `answers[2]` and `tags[= rust]`, which name ONE item; a spec names every item
+   at once (`answers[]`). The builder panics with a message naming the path and
+   saying to write `[]`, the same kind of panic `shape_at` gives a path that
+   names nothing. Not taken: a separate pattern-only type from `path!`, which
+   would rule it out at compile time but split a macro devs already know in two,
+   when `form!`, the main way to build a spec, never emits an index.
+
+J. **`owns` becomes `starts_with`, called on the inner path, true on the root.
+   DECIDED.** It matches `std::path::Path::starts_with` (checked 2026-11-10):
+   the receiver is the longer path, `path.starts_with(&nested)`; only whole
+   segments match, so `address2` does not start with `address`; and an empty
+   base is a prefix of every path, so `starts_with(&NodePath::root())` is true
+   everywhere. That settles trap 3 below. `is_within`, the name this plan used
+   before, goes. The one thing to watch is that `p.as_str().starts_with(…)` is
+   `str`'s method and compares characters, the same split `Path` and `str` have.
+
 ## Traps, checked against the source
 
 1. **`dioxus-stores` takes a lookup key by value, and it must be `'static`.**
@@ -169,8 +208,8 @@ G. **#20 on `main` first, before the branch. DECIDED.** It is one line,
 3. **`owns("", path)` is false today for every path except `""`.**
    `"x".strip_prefix("")` is `"x"`, which does not start with `.`. Nothing seems to
    rely on it, since every container computes its own path with `qualify` before
-   calling `owns`, but `is_within(&root)` should be true for every path, and the
-   change should be deliberate. Grep for an `owns` whose first argument can be a
+   calling `owns`, but `starts_with(&root)` should be true for every path
+   (decision J, as `std::path::Path` does), and the change should be deliberate. Grep for an `owns` whose first argument can be a
    prefix, not a node's own path.
 4. **`OptionNode` adds no segment.** It hands its `prefix` to the inner node
    unchanged (`option_node.rs:77`), so the inner node computes the same path. With
@@ -237,32 +276,61 @@ G. **#20 on `main` first, before the branch. DECIDED.** It is one line,
 
   Done 2026-11-09: Todd's fix, `just ci` green, committed by Claude, #20 closed.
 
-- [ ] **3.** (Todd) Branch `paths`. The type and its methods, per A–E, in
+- [x] **3.** (Todd) Branch `paths`. The type and its methods, per A–E, in
   `path.rs` beside `ModelPath`, with nothing using it yet. (Claude) its inline
   tests (`#[cfg(test)] mod tests`, which is the right home for a pure type),
   ported from whatever tests `qualify`, `owns`, `path_without_variants` and
-  `spec_key` have now, plus: `join` on the root gives no leading dot; `is_within`
+  `spec_key` have now, plus: `join` on the root gives no leading dot; `starts_with`
   refuses a mere string prefix (`address2` in `address`) and, per trap 3, is true
   of the root; a `&str` lookup in a `HashMap<NodePath, _>` finds what a
   `NodePath` key inserted (trap 2); and serde round-trips as a plain string.
 
-- [ ] **4.** (Todd) The radical change: every item under "What changes type"
+  Done 2026-11-10: 21 tests in `path.rs`, plus `replace_prefix` (added for
+  `SetNode::edit_item`) and `without_variants`, ported from the suite's
+  `path_without_variants` test. Both `starts_with` bugs found in review (the root,
+  and a mere string prefix) were put back by hand and each fails tests.
+
+- [x] **4.** (Todd) The radical change: every item under "What changes type"
   above, in one go, deleting the free functions as their last callers go. The
   compiler's errors are the list. `cargo check -p formoxus` green is the end of
   this box; the suite will not compile yet.
+
+  Done 2026-11-10: `cargo check`, `clippy -D warnings` and the 198 inline tests
+  green. `owns` became `starts_with` (decision J), `ensure_owned` became
+  `ensure_starts_with`, `qualify` and `variant_segment` went (`NodeContext`
+  gained `nested_variant`), `item_segment` moved to `path.rs`, and
+  `path_without_variants` became `NodePath::without_variants`. `Node::name`
+  stays a `String`: it is one segment, not a path.
 
 - [ ] **5.** (Todd) Decision F, and the model-to-live bridge: `resolve_indices`
   returns `Option<NodePath>`, `key_for` and `keyed_or_as_written` change or go,
   and `Form::push_field_error`'s stale doc goes with them.
 
-- [ ] **6.** (Claude) The suite, the examples and the gallery follow: map lookups
+  Mostly done inside box 4, 2026-11-10: `ModelPath::resolve` (taking an `entry`
+  over `&NodePath`), `key_for` and `keyed_or_as_written` over `&ModelPath<T>`,
+  decision F, and `to_node_path` gone. Left: `Form::push_field_error`'s doc.
+
+- [ ] **6.** (Todd) Decisions H and I: every `FormSpec` builder that takes a path
+  takes `&ModelPath<T>`, stores `path.as_str()` as the `SpecsByPath` key, and
+  panics on an instance path (`[2]`, `[= v]`) with a message that says to write
+  `[]`. `shape_at` stays, since a `ModelPath` checks the model's fields but
+  `spec_key_shape` is what checks a key against the node tree. `cargo check -p
+  formoxus` green again is the end of this box.
+
+- [ ] **7.** (Claude) `form!` follows: every builder call it emits wraps its key
+  in `&::formoxus::path::ModelPath::__new("…")` (full module path, per the prelude
+  rule). Regenerate the trybuild goldens with `TRYBUILD=overwrite` and read the
+  diff: a span that moves is expected, a message that changes is not.
+
+- [ ] **8.** (Claude) The suite, the examples and the gallery follow: map lookups
   by `&str` stay, inserts take `NodePath::new`, and any custom widget or adder in
   the suite that builds a path by `format!` uses the methods instead (that is the
-  point, so it is not a mechanical rename). Then `just ci` and `just e2e`. The
-  e2e selectors read `name` attributes, which do not change, so a failure there is
-  a real one.
+  point, so it is not a mechanical rename). The hand-written builder calls (about
+  86) become `&path!(M.x)`, and two new tests pin decision I's panic, one for `[i]`
+  and one for `[= v]`. Then `just ci` and `just e2e`. The e2e selectors read
+  `name` attributes, which do not change, so a failure there is a real one.
 
-- [ ] **7.** (Claude) Docs and memory: `README.md` and `widgets.rs` wherever a
+- [ ] **9.** (Claude) Docs and memory: `README.md` and `widgets.rs` wherever a
   live path is called a string; the trait docs on `Node`; the memory files that
   name the free functions (`structure_on_the_wire.md`, `indexed_paths.md`,
   `optional_flag_is_payload_only.md` at least); and a comment on #22 saying its
@@ -270,13 +338,12 @@ G. **#20 on `main` first, before the branch. DECIDED.** It is one line,
   10: what in apcsp names `ValuesByPath`, `ErrorsByPath`, `RawValue`, `Node`, or a
   `props.path` as a `String`.
 
-- [ ] **8.** (Todd) Merge `paths` to `main`; #21 closes; apcsp follows.
+- [ ] **10.** (Todd) Merge `paths` to `main`; #21 closes; apcsp follows.
 
 ## Not in this plan
 
-1. **Spec paths as a type.** `answers[].text` has its own grammar and is written
-   by `form!`, not built at runtime. #21 leaves it for later, and nothing here
-   needs it.
+1. ~~**Spec paths as a type.**~~ Taken into the plan 2026-11-10 as decision H:
+   they are `ModelPath<T>`, not a third kind.
 2. **#22 (a read-only store view) and #23 (`BoundField`).** After the missing
    widgets. They take `NodePath`, which is why this goes first.
 3. **A structured key** (segments stored parsed, strings only at the wire). The

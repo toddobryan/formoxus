@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use crate::field_attrs::FieldAttrs;
+use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
 use crate::widgets::{FieldErrors, Widget, field_help, widget_props::WidgetProps};
@@ -48,7 +49,7 @@ impl Widget for RadioGroup {
 
 /// A radio group cannot say "no answer", so an optional field is refused.
 /// `form!` refuses it at compile time; this catches a hand-built spec.
-pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &str) {
+pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &NodePath) {
     assert!(
         attrs.contains(Attr::Required),
         "do not use `radio_group` because the field {path} is not required - use `select` instead",
@@ -194,14 +195,14 @@ mod tests {
     #[gtest]
     #[should_panic(expected = "the field title is not required")]
     fn a_field_that_is_not_required_is_refused() {
-        reject_if_not_required(&FieldAttrs::default(), "title");
+        reject_if_not_required(&FieldAttrs::default(), &NodePath::new("title"));
     }
 
     #[gtest]
     fn a_required_field_is_accepted() {
         reject_if_not_required(
             &FieldAttrs::from([(AttrKey::Std(Attr::Required), AttrValue::Flag)]),
-            "title",
+            &NodePath::new("title"),
         );
     }
 }

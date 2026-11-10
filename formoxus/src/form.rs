@@ -254,7 +254,7 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// subscribes, so a write on every keystroke wakes nothing. Never `read()`
     /// it while rendering: whatever made that read would then re-render on
     /// every keystroke, and no test would fail.
-    changed_paths: Signal<HashSet<String>>,
+    changed_paths: Signal<HashSet<NodePath>>,
     /// Where a structural edit goes. Closes over `state`, which is what lets the
     /// widget layer stay ignorant of `T` — [`NodeContext`] can't be generic
     /// without making every node type generic too.
@@ -547,7 +547,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.state_signal,
             self.errors_store,
             self.changed_paths,
-            |state| state.push_field_error(path.as_str(), message),
+            |state| state.push_field_error(path, message),
         )
     }
 
@@ -580,7 +580,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         } else {
             let paths: String = unclaimed
                 .keys()
-                .map(|np| np.as_str())
+                .map(NodePath::as_str)
                 .collect::<Vec<_>>()
                 .join(", ");
             Err(FormAccessError(format!(
@@ -647,7 +647,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// Unlike a button, which can only log a rejected edit, this returns it.
     /// `Ok(Some(path))` is an item it created (`answers.#3`), so a caller can find
     /// it; `Ok(None)` is every other edit.
-    pub fn edit(&self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
+    pub fn edit(&self, edit: &Edit) -> Result<Option<NodePath>, FormAccessError> {
         apply_edit(
             self.state_signal,
             self.values_store,
@@ -736,7 +736,6 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         path: &ModelPath<T>,
         raw: impl Into<String>,
     ) -> Result<(), FormAccessError> {
-        let path = path.to_node_path();
         // Two `peek()`s, not one guard bound to a `let`: the guard would still
         // be held below, and `apply_field_event` is free to write the state.
         let key = self.state_signal.peek().key_for(path);
@@ -839,7 +838,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         working.field_errors.clear();
         working
     });
-    let mut new_blank_item = use_signal(|| None::<String>);
+    let mut new_blank_item = use_signal(|| None::<NodePath>);
     let changed_paths = use_signal(HashSet::new);
     // `peek`, not `read`: seeding the store must not subscribe this component to
     // the state, or every structural edit would re-run the initializer's scope
@@ -922,9 +921,9 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
     mut values: ValuesStore,
     errors: ErrorsStore,
-    changed_paths: Signal<HashSet<String>>,
+    changed_paths: Signal<HashSet<NodePath>>,
     edit: &Edit,
-) -> Result<Option<String>, FormAccessError> {
+) -> Result<Option<NodePath>, FormAccessError> {
     // Found before the edit, while the item is still there to look up.
     let removed = match edit {
         Edit::RemoveItem { path, index } => item_path_at(&state.peek(), path, *index),
@@ -950,7 +949,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // in its list would go on leaving out a removed one. By prefix rather than
     // the item's current leaves, so an unchosen variant's values go too.
     if let Some(item) = removed {
-        values.retain(|path, _| !owns(&item, path));
+        values.retain(|path, _| path.starts_with(&item));
     }
     // A filled item was built from its value, so the TREE has its values, but
     // widgets, `validate` and `to_wire` read the STORE. Copy the new item's
@@ -963,7 +962,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         (&created, edit)
     {
         for (path, raw) in state.peek().leaf_values() {
-            if owns(item, &path) {
+            if path.starts_with(item) {
                 FieldHandle::unreported(&path, values).input(raw);
             }
         }
@@ -1005,12 +1004,12 @@ fn apply_field_event<T>(
     state: Signal<FormState<T>>,
     values: ValuesStore,
     mut errors: ErrorsStore,
-    mut changed_paths: Signal<HashSet<String>>,
+    mut changed_paths: Signal<HashSet<NodePath>>,
     event: &FieldEvent,
 ) where
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
-    let path: &str = &event.path;
+    let path: &NodePath = &event.path;
     let at_path = match errors.peek().get(path) {
         Some(Some(v)) if !v.is_empty() => AtPath::ShowsErrors,
         Some(Some(_)) => AtPath::Clean,
@@ -1023,7 +1022,7 @@ fn apply_field_event<T>(
     // is a claim about the value, and the value just changed.
     if !event.is_live {
         if at_path == AtPath::Clean {
-            errors.insert(path.to_string(), None);
+            errors.insert(path.clone(), None);
         }
         return;
     }
@@ -1035,11 +1034,11 @@ fn apply_field_event<T>(
                 changed_paths.write().remove(path);
             }
             AtPath::Clean => {
-                errors.insert(path.to_string(), None);
-                changed_paths.write().insert(path.to_string());
+                errors.insert(path.clone(), None);
+                changed_paths.write().insert(path.clone());
             }
             AtPath::Nothing => {
-                changed_paths.write().insert(path.to_string());
+                changed_paths.write().insert(path.clone());
             }
         },
         FieldEventKind::Blurred => {
@@ -1066,7 +1065,7 @@ fn check_live<T>(
     state: Signal<FormState<T>>,
     values: ValuesStore,
     mut errors: ErrorsStore,
-    path: &str,
+    path: &NodePath,
 ) where
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
@@ -1079,7 +1078,7 @@ fn check_live<T>(
     // to a path never checked is skipped too.
     let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
     if !unchanged {
-        errors.insert(path.to_string(), check.errors_at_path);
+        errors.insert(path.clone(), check.errors_at_path);
     }
     for cleared in check.paths_to_clear {
         // `Some` of an empty `Vec` too: "checked and clean" stops applying
@@ -1094,7 +1093,7 @@ fn check_live<T>(
 fn with_errors<T, R>(
     mut state: Signal<FormState<T>>,
     mut errors: ErrorsStore,
-    mut changed_paths: Signal<HashSet<String>>,
+    mut changed_paths: Signal<HashSet<NodePath>>,
     operation: impl FnOnce(&mut FormState<T>) -> R,
 ) -> R
 where
@@ -1109,7 +1108,7 @@ where
     let result = operation(&mut state);
     let after = std::mem::take(&mut state.field_errors);
     // A key is never removed (trap 1): what left the map becomes `None`.
-    let gone: Vec<String> = errors
+    let gone: Vec<NodePath> = errors
         .peek()
         .iter()
         .filter(|(path, messages)| messages.is_some() && !after.contains_key(*path))
@@ -1146,7 +1145,7 @@ fn item_path_at<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 ) -> Option<NodePath> {
     let keys = state.collect_values().shift_remove(path)?;
     let key = keys.split(',').nth(index).filter(|key| !key.is_empty())?;
-    Some(NodePath::new(format!("{path}.{key}")))
+    Some(path.join(key))
 }
 
 const ALPHANUMERIC: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

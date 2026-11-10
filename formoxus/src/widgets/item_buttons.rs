@@ -15,6 +15,7 @@ use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
 use crate::nodes::ValuesStore;
+use crate::path::NodePath;
 use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
@@ -31,7 +32,7 @@ use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 pub struct AddItemProps {
     /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
     /// item's: an adder acts on the list.
-    pub path: String,
+    pub path: NodePath,
     /// The list's own id, `{form}-{path}`, a base for the ids of the adder's
     /// elements (a `<select>` and the `<label for>` naming it). Suffix it
     /// rather than using it as-is: the list's `<fieldset>` already has it.
@@ -256,7 +257,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
 /// names nothing a user can see.
 #[component]
 pub fn EditItemButton(
-    path: String,
+    path: NodePath,
     index: usize,
     /// The item as the user sees it, for the button's name.
     text: String,
@@ -295,7 +296,7 @@ pub fn EditItemButton(
 /// `<ol>` numbers on screen by default and a screen reader announces.
 #[component]
 pub fn RemoveItemButton(
-    path: String,
+    path: NodePath,
     index: usize,
     /// The item as the user sees it, for the button's name.
     text: Option<String>,
@@ -334,7 +335,7 @@ pub fn RemoveItemButton(
 /// meets the same buttons in each.
 #[component]
 pub fn MoveItemButtons(
-    path: String,
+    path: NodePath,
     index: usize,
     /// How many items the list has, which is what says this one is the last.
     count: usize,

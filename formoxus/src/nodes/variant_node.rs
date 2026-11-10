@@ -6,10 +6,10 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned,
-    no_such_path, owns, qualify, variant_segment,
+    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, no_such_path,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
+use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{VariantSelect, field_help};
@@ -65,12 +65,9 @@ impl VariantNode {
     /// Where this node's *children* live: its own path plus a `$Variant`
     /// descriptor, so two variants that share a field name can't both claim
     /// `footprint.size`. `None` when unchosen — there are no children then.
-    fn child_prefix(&self, prefix: &str) -> Option<String> {
+    fn child_prefix(&self, prefix: &NodePath) -> Option<NodePath> {
         match &self.choice {
-            VariantChoice::Named(variant) => Some(qualify(
-                &qualify(prefix, &self.name),
-                &variant_segment(variant),
-            )),
+            VariantChoice::Named(variant) => Some(prefix.join(&self.name).join_variant(variant)),
             VariantChoice::Unchosen | VariantChoice::Unknown(_) => None,
         }
     }
@@ -80,11 +77,11 @@ impl VariantNode {
     /// simply becomes reachable once `outer` is answered.
     fn forward_to_child(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         let path = edit.path();
         let Some(child_prefix) = self.child_prefix(prefix) else {
             return Err(no_such_path(path)); // unchosen: no children to be inside
@@ -93,7 +90,7 @@ impl VariantNode {
         // containment rather than trying each in turn is what lets a child's real
         // error reach the caller intact.
         for m in &mut self.nodes {
-            if owns(&qualify(&child_prefix, &m.name()), path) {
+            if path.starts_with(&child_prefix.join(&m.name())) {
                 return m.edit(&child_prefix, edit, specs, errors);
             }
         }
@@ -103,7 +100,7 @@ impl VariantNode {
     /// Swap to `variant`, or clear back to `Unchosen` with `None`.
     fn set_variant(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         variant: Option<&str>,
         specs: &SpecsByPath,
     ) -> Result<(), FormAccessError> {
@@ -123,7 +120,7 @@ impl VariantNode {
                 mode: FormMode::Blank,
                 specs,
             },
-            &qualify(my_path, &variant_segment(chosen.name)),
+            &my_path.join_variant(chosen.name),
             // As `enum_node` builds them: the enum may be an `Option`'s
             // payload, but its variant's fields are not.
             /* optional */
@@ -136,7 +133,7 @@ impl VariantNode {
     fn lookup_variant(
         &self,
         name: &str,
-        my_path: &str,
+        my_path: &NodePath,
     ) -> Result<&'static Variant, FormAccessError> {
         if let Some(found) = self.enum_type.variants.iter().find(|v| v.name == name) {
             return Ok(found);
@@ -209,7 +206,7 @@ impl Node for VariantNode {
         let nodes: Vec<Element> = match &self.choice {
             VariantChoice::Unchosen | VariantChoice::Unknown(_) => Vec::new(),
             VariantChoice::Named(variant) => {
-                let nested = ctx.nested(&self.name).nested(&variant_segment(variant));
+                let nested = ctx.nested(&self.name).nested_variant(variant);
                 self.nodes.iter().map(|m| m.render(&nested)).collect()
             }
         };
@@ -301,8 +298,8 @@ impl Node for VariantNode {
         }
     }
 
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
-        let my_path = qualify(prefix, &self.name);
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
+        let my_path = prefix.join(&self.name);
         out.push(my_path);
         if let Some(var_path) = self.child_prefix(prefix) {
             for n in &self.nodes {
@@ -311,9 +308,9 @@ impl Node for VariantNode {
         }
     }
 
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
-        let nested = qualify(prefix, &self.name);
-        if owns(&nested, path) {
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath> {
+        let nested = prefix.join(&self.name);
+        if path.starts_with(&nested) {
             self.child_prefix(prefix).and_then(|var_path| {
                 self.nodes
                     .iter()
@@ -324,8 +321,8 @@ impl Node for VariantNode {
         }
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
-        let my_path = qualify(prefix, &self.name);
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
+        let my_path = prefix.join(&self.name);
         match &self.choice {
             VariantChoice::Unchosen => {
                 out.insert(
@@ -344,10 +341,8 @@ impl Node for VariantNode {
             VariantChoice::Named(_) => {
                 let mut is_valid = true;
                 for m in &self.nodes {
-                    is_valid = m.validate(
-                        self.child_prefix(prefix).expect("should be Some").as_ref(),
-                        out,
-                    ) && is_valid;
+                    is_valid = m.validate(&self.child_prefix(prefix).expect("should be Some"), out)
+                        && is_valid;
                 }
                 if is_valid {
                     let errors = self
@@ -365,19 +360,20 @@ impl Node for VariantNode {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         // Two paths are in play, and they are NOT the same: this node sits at
         // `my_path`, where the `<select>` lives, but its children sit one segment
         // deeper under the chosen variant's descriptor. `forward_to_child` owns
         // that second one, via `child_prefix`.
         let path = edit.path();
-        let my_path = qualify(prefix, &self.name);
-        ensure_owned(&my_path, path)?;
-        if path != my_path {
+        let my_path = prefix.join(&self.name);
+        path.ensure_starts_with(&my_path)?;
+
+        if *path != my_path {
             return self.forward_to_child(prefix, edit, specs, errors);
         }
         match edit {
@@ -408,7 +404,7 @@ impl Node for VariantNode {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
         // The choice goes out even when unchosen, as `""`, so a list item that
         // holds an unchosen optional enum still has an entry to be rebuilt from.
         // An `Unknown` sends its bad name back, so a reply shows what was rejected.
@@ -417,7 +413,7 @@ impl Node for VariantNode {
             VariantChoice::Named(name) | VariantChoice::Unknown(name) => name.clone(),
         };
         out.push(RawValue::Structure {
-            path: qualify(prefix, &self.name),
+            path: prefix.join(&self.name),
             data,
         });
         let Some(nested) = self.child_prefix(prefix) else {
@@ -428,8 +424,8 @@ impl Node for VariantNode {
         }
     }
 
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
-        let my_path = qualify(prefix, &self.name);
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
+        let my_path = prefix.join(&self.name);
 
         // Apply the choice, if one was sent. Absent means "leave it alone": a
         // leaves-only map (a native form submit) has no entry here, and must

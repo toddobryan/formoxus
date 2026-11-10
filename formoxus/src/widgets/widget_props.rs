@@ -7,6 +7,7 @@ use crate::{
     classes::Classes,
     field_attrs::{FieldAttrs, Validity},
     nodes::{ErrorsStore, ErrorsStoreExt, ValuesStore},
+    path::NodePath,
     widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent},
 };
 
@@ -20,7 +21,7 @@ pub struct WidgetProps {
     /// store, and what the server matches a submitted value to. The same for
     /// every copy of the form, and never containing the form id, which the
     /// server does not have.
-    pub path: String,
+    pub path: NodePath,
     pub label: Option<String>,
     /// The field's hint (`help_text:`), which [`field_row`](super::field_row::field_row)
     /// renders after the caption, and which its control's `aria-describedby`,
@@ -72,7 +73,7 @@ impl WidgetProps {
     /// build new ones, or the inner widget loses its live check.
     pub fn new(
         id: impl Into<String>,
-        path: impl Into<String>,
+        path: NodePath,
         attrs: FieldAttrs,
         values: ValuesStore,
         errors: ErrorsStore,
@@ -80,7 +81,7 @@ impl WidgetProps {
     ) -> Self {
         Self {
             id: id.into(),
-            path: path.into(),
+            path,
             label: None,
             help_text: None,
             errors,

@@ -145,9 +145,7 @@ impl<T> WireForm<T> {
     /// is resolved to that item's key through the entries these values
     /// carry, as the form placed it; one naming no item has none.
     pub fn errors_at(&self, path: &ModelPath<T>) -> &[ValidationMessage] {
-        let keyed = crate::path::resolve_indices(path.as_str(), |list| {
-            self.values.get(list).map(String::as_str)
-        });
+        let keyed = path.resolve(|list| self.values.get(list).map(String::as_str));
         keyed
             .and_then(|keyed| self.errors.fields.get(&keyed))
             .map_or(&[], Vec::as_slice)

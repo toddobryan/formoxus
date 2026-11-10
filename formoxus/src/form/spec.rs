@@ -107,7 +107,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// If `path` names no node in a form over `T`. The spec would be stored
     /// and never looked up, so a typo would do nothing at all. `form!` only
     /// writes paths it has already checked at compile time.
-    fn shape_at(path: &str) -> &'static Shape {
+    fn shape_at(path: /* ModelPath */ &str) -> &'static Shape {
         crate::build::spec_key_shape(T::SHAPE, path).unwrap_or_else(|why| {
             panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE)
         })
@@ -118,7 +118,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// # Panics
     ///
     /// As [`shape_at`](Self::shape_at) does, if `path` names nothing.
-    fn field(&mut self, path: &str) -> &mut FieldSpec {
+    fn field(&mut self, path: /* ModelPath */ &str) -> &mut FieldSpec {
         Self::shape_at(path);
         self.fields.entry(path.to_string()).or_default()
     }
@@ -129,7 +129,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// # Panics
     ///
     /// As `field` does, and if `path` names anything but a list.
-    fn collection_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
+    fn collection_field(&mut self, path: /* ModelPath */ &str, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
             is_list(shape) || is_set(shape),
@@ -153,19 +153,23 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_widget(mut self, path: &str, widget: impl Into<AnyWidget>) -> Self {
+    pub fn with_widget(mut self, path: /* ModelPath */ &str, widget: impl Into<AnyWidget>) -> Self {
         self.field(path).widget = Some(widget.into());
         self
     }
 
     /// Build the leaf at `path` (a `[]` item path is fine) with `ctor` instead
     /// of the default for its type.
-    pub fn with_node(mut self, path: &str, ctor: crate::field_node::NodeCtor) -> Self {
+    pub fn with_node(
+        mut self,
+        path: /* ModelPath */ &str,
+        ctor: crate::field_node::NodeCtor,
+    ) -> Self {
         self.field(path).node = Some(ctor);
         self
     }
 
-    pub fn with_label(mut self, path: &str, l: &str) -> Self {
+    pub fn with_label(mut self, path: /* ModelPath */ &str, l: &str) -> Self {
         self.field(path).label = Some(l.to_string());
         self
     }
@@ -176,7 +180,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// sees a whole struct, and only on a value that is there.
     pub fn with_field_validator(
         mut self,
-        path: &str,
+        path: /* ModelPath */ &str,
         validator: crate::nodes::FieldValidator,
     ) -> Self {
         self.field(path).validator = Some(validator);
@@ -187,7 +191,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// `form!`): checked in `validate`, Remove disabled at it, the legend
     /// marked required when it is at least 1, and a blank list (`empty_form`)
     /// built with that many blank items.
-    pub fn with_min_items(mut self, path: &str, min: usize) -> Self {
+    pub fn with_min_items(mut self, path: /* ModelPath */ &str, min: usize) -> Self {
         self.field(path).min_items = Some(min);
         self
     }
@@ -195,7 +199,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// The most items the list or set at `path` may have (`max_items:` in
     /// `form!`): checked in `validate`, Add disabled at it, and a submission
     /// listing more refused before any of them are built.
-    pub fn with_max_items(mut self, path: &str, max: usize) -> Self {
+    pub fn with_max_items(mut self, path: /* ModelPath */ &str, max: usize) -> Self {
         self.field(path).max_items = Some(max);
         self
     }
@@ -203,17 +207,17 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// A hint for the field at `path` (`help_text:` in `form!`): a line under
     /// its caption saying what it wants, which its control is described by
     /// (`aria-describedby`). On a list, set, struct or enum, under its legend.
-    pub fn with_help_text(mut self, path: &str, text: &str) -> Self {
+    pub fn with_help_text(mut self, path: /* ModelPath */ &str, text: &str) -> Self {
         self.field(path).help_text = Some(text.to_string());
         self
     }
 
-    pub fn with_adder(mut self, path: &str, adder: ItemAdder) -> Self {
+    pub fn with_adder(mut self, path: /* ModelPath */ &str, adder: ItemAdder) -> Self {
         self.collection_field(path, "adder").adder = Some(adder);
         self
     }
 
-    pub fn treat_as_set(mut self, path: &str) -> Self {
+    pub fn treat_as_set(mut self, path: /* ModelPath */ &str) -> Self {
         let shape = Self::shape_at(path);
         assert!(
             !is_set(shape),
@@ -231,21 +235,25 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_sort_by(mut self, path: &str, order: SetOrder) -> Self {
+    pub fn with_sort_by(mut self, path: /* ModelPath */ &str, order: SetOrder) -> Self {
         self.set_field(path, "sort_by").sort_by = Some(order);
         self
     }
 
     /// Replace formoxus's words for what an edit to the set at `path` did
     /// ("“rust” was added successfully.") with the dev's.
-    pub fn with_feedback(mut self, path: &str, feedback: SetFeedback) -> Self {
+    pub fn with_feedback(mut self, path: /* ModelPath */ &str, feedback: SetFeedback) -> Self {
         self.set_field(path, "feedback").feedback = Some(feedback);
         self
     }
 
     /// Show each item of the set at `path` with `view` instead of its bare
     /// text. Formoxus still renders the item's errors, Edit and Remove.
-    pub fn with_item_view(mut self, path: &str, view: crate::widgets::ItemView) -> Self {
+    pub fn with_item_view(
+        mut self,
+        path: /* ModelPath */ &str,
+        view: crate::widgets::ItemView,
+    ) -> Self {
         self.set_field(path, "item").item_view = Some(view);
         self
     }
@@ -253,7 +261,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// The spec of the set at `path`, for a key only a set takes: a
     /// `Def::Set`, or a list `treat_as_set` has already marked, since `form!`
     /// emits `treat_as_set` first (decision B in box 5).
-    fn set_field(&mut self, path: &str, key: &str) -> &mut FieldSpec {
+    fn set_field(&mut self, path: /* ModelPath */ &str, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
             !is_list(shape) || self.field(path).treat_as_set,
@@ -308,7 +316,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     ///
     /// If `attrs` holds an attribute formoxus validates. It would render and
     /// never be checked, so the browser and the server would disagree.
-    pub fn with_attrs(mut self, path: &str, attrs: FieldAttrs) -> Self {
+    pub fn with_attrs(mut self, path: /* ModelPath */ &str, attrs: FieldAttrs) -> Self {
         if let Some(attr) = attrs.first_validated() {
             // `form!`'s spelling (`max_length`), not the HTML name (`maxlength`):
             // the one the dev wrote, and the field's setting is named the same.

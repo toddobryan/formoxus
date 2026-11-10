@@ -9,6 +9,7 @@ use crate::{
     classes::Classes,
     error::ValidationMessage,
     nodes::{ErrorsStore, ErrorsStoreExt},
+    path::NodePath,
 };
 
 /// The per-field error list, rendered under every widget.
@@ -43,7 +44,7 @@ use crate::{
 #[component]
 pub fn FieldErrors(
     field_id: String,
-    paths: Vec<String>,
+    paths: Vec<NodePath>,
     errors: ErrorsStore,
     classes: Rc<Classes>,
 ) -> Element {

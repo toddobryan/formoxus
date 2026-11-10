@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use facet::{Partial, Peek, ReflectError};
 use indexmap::IndexMap;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 mod items;
@@ -16,7 +16,7 @@ mod struct_node;
 mod variant_node;
 
 pub use items::ItemValue;
-pub(crate) use items::{Items, item_segment};
+pub(crate) use items::Items;
 pub use list_node::ListNode;
 pub use option_node::OptionNode;
 pub use set_node::{
@@ -32,7 +32,7 @@ use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
-use crate::path::NodePath;
+use crate::path::{ITEM_SIGIL, NodePath};
 use crate::widgets::field_handle::OnFieldEvent;
 use dioxus::stores::Store;
 
@@ -125,7 +125,7 @@ pub trait Node: Debug {
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError>;
+    ) -> Result<Option<NodePath>, FormAccessError>;
 
     /// The path of the OUTERMOST absent option that owns `path`, or `None` if
     /// no option around it is absent. `prefix` is this node's parent's path, as
@@ -141,7 +141,7 @@ pub trait Node: Debug {
     /// and nothing outside it (`FormState::check_live`). A node that does not own
     /// `path` answers `None`, so a container can ask each child in turn and take
     /// the first `Some`.
-    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<String>;
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath>;
 }
 
 impl Clone for Box<dyn Node> {
@@ -150,17 +150,8 @@ impl Clone for Box<dyn Node> {
     }
 }
 
-pub(crate) fn no_such_path(path: &NodePath) -> FormAccessError {
+pub(crate) fn no_such_path(path: &impl Display) -> FormAccessError {
     FormAccessError(format!("no such path: {path}"))
-}
-
-/// Guard that `path` is this node's own path or somewhere inside it.
-pub(crate) fn ensure_owned(container: &NodePath, path: &NodePath) -> Result<(), FormAccessError> {
-    if container.owns(path) {
-        Ok(())
-    } else {
-        Err(no_such_path(path))
-    }
 }
 
 /// A node's name humanized for display: `can_shuffle` -> "Can Shuffle".
@@ -177,44 +168,6 @@ pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
         None
     } else {
         Some(name.to_case(case))
-    }
-}
-
-/// A variant descriptor segment: `Circle` -> `$Circle`.
-///
-/// `$` cannot begin a Rust identifier, so a descriptor can never collide with a
-/// field name. That's what lets two variants of the same enum each have a
-/// `size` without both claiming `footprint.size` — see [`path_without_variants`].
-pub(crate) fn variant_segment(variant: &str) -> String {
-    format!("${variant}")
-}
-
-/// Strip variant descriptors from a leaf path, giving the path through the
-/// *model*: `footprint.$Circle.size` -> `footprint.size`.
-///
-/// Leaf paths mirror the model exactly apart from these segments, which exist
-/// only to keep same-named fields in different variants apart. A path segment
-/// beginning with `$` is never a field, and a descriptor never appears as the
-/// final segment of a leaf path — it is only ever a prefix.
-///
-/// A list-item key (`answers.#3.text`) is left alone: it *is* a real element of
-/// the model, just identified by identity rather than position. Which element
-/// it is cannot be read off the string —
-/// only `ListNode::items` knows that — so the result names the item without
-/// placing it.
-pub fn path_without_variants(path: &str) -> String {
-    path.split('.')
-        .filter(|segment| !segment.starts_with('$'))
-        .collect::<Vec<_>>()
-        .join(".")
-}
-
-/// `("", "title") -> "title"`, `("location", "street") -> "location.street"`.
-pub(crate) fn qualify(prefix: &str, name: &str) -> String {
-    if prefix.is_empty() {
-        name.to_string()
-    } else {
-        format!("{prefix}.{name}")
     }
 }
 
@@ -340,7 +293,7 @@ impl Shown {
     /// The entries `node.collect_values` sends, each shown as it is.
     pub(crate) fn of_values<N: Node + ?Sized>(node: &N) -> Self {
         let mut values = Vec::new();
-        node.collect_values("", &mut values);
+        node.collect_values(&NodePath::root(), &mut values);
         Self(
             values
                 .into_iter()
@@ -428,10 +381,10 @@ pub(crate) trait ErrorsStoreExt {
 
 impl ErrorsStoreExt for ErrorsStore {
     fn errors_at(&self, path: &NodePath) -> Option<Vec<ValidationMessage>> {
-        self.get_unchecked(path).try_read().ok()?.cloned()
+        self.get_unchecked(path.clone()).try_read().ok()?.cloned()
     }
 
-    fn validity_at(&self, path: &str) -> Validity {
+    fn validity_at(&self, path: &NodePath) -> Validity {
         Validity::of(self.errors_at(path).as_deref())
     }
 }
@@ -454,7 +407,7 @@ impl ErrorsStoreExt for ErrorsStore {
 #[derive(Clone, Debug)]
 pub struct NodeContext {
     pub form_id: String,
-    pub prefix: String,
+    pub prefix: NodePath,
     pub values: ValuesStore,
     pub required: bool,
     pub on_edit: Callback<Edit>,
@@ -507,7 +460,7 @@ impl NodeContext {
     ) -> Self {
         Self {
             form_id,
-            prefix: String::new(),
+            prefix: NodePath::root(),
             values,
             required: true,
             on_edit,
@@ -520,11 +473,23 @@ impl NodeContext {
         }
     }
 
-    /// Descend into a named child — the `qualify` every container already does.
+    /// Descend into a named child, as [`NodePath::join`] does.
     pub fn nested(&self, name: &str) -> Self {
+        self.descend_to(self.prefix.join(name))
+    }
+
+    /// Descend into the chosen variant of an enum, as [`NodePath::join_variant`]
+    /// does.
+    pub fn nested_variant(&self, name: &str) -> Self {
+        self.descend_to(self.prefix.join_variant(name))
+    }
+
+    /// What `nested` and `nested_variant` share: everything inherited but the
+    /// path, and the per-node settings (`label_if_unnamed`, `in_draft`) reset.
+    fn descend_to(&self, prefix: NodePath) -> Self {
         Self {
             form_id: self.form_id.clone(),
-            prefix: qualify(&self.prefix, name),
+            prefix,
             values: self.values,
             required: self.required,
             on_edit: self.on_edit,
@@ -557,8 +522,8 @@ impl NodeContext {
     }
 
     /// This node's own qualified path, for a leaf's `name` attribute.
-    pub fn path(&self, name: &str) -> String {
-        qualify(&self.prefix, name)
+    pub fn path(&self, name: &str) -> NodePath {
+        self.prefix.join(name)
     }
 
     pub fn id(&self, name: &str) -> String {
@@ -644,9 +609,9 @@ impl Edit {
         }
     }
 
-    pub fn new_choose_variant(path: &str, variant: Option<&str>) -> Edit {
+    pub fn new_choose_variant(path: &NodePath, variant: Option<&str>) -> Edit {
         Edit::ChooseVariant {
-            path: path.to_string(),
+            path: path.clone(),
             variant: variant.map(str::to_string),
         }
     }

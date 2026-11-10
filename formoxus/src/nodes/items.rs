@@ -12,11 +12,8 @@ use crate::{
     build::{FormMode, Walk, node_for_shape},
     error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
-    nodes::{
-        Drafts, Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path, owns,
-        qualify,
-    },
-    path::NodePath,
+    nodes::{Drafts, Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path},
+    path::{ITEM_SIGIL, NodePath, item_segment},
 };
 
 #[derive(Clone, Debug)]
@@ -70,10 +67,10 @@ impl Items {
         self.min.is_some_and(|min| self.len() <= min)
     }
 
-    pub(crate) fn collect_values(&self, my_path: &str, out: &mut Vec<RawValue>) {
+    pub(crate) fn collect_values(&self, my_path: &NodePath, out: &mut Vec<RawValue>) {
         let keys: Vec<String> = self.iter().map(|item| item.name()).collect();
         out.push(RawValue::Structure {
-            path: my_path.to_string(),
+            path: my_path.clone(),
             data: keys.join(","),
         });
         for item in self {
@@ -83,7 +80,7 @@ impl Items {
 
     pub(crate) fn distribute_values(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         specs: &SpecsByPath,
         values: &ValuesByPath,
     ) {
@@ -111,13 +108,13 @@ impl Items {
         }
     }
 
-    pub(crate) fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
+    pub(crate) fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
         for r in &self.collection {
             r.paths(prefix, drafts, out);
         }
     }
 
-    pub(crate) fn validate(&self, my_path: &str, out: &mut ErrorsByPath) -> bool {
+    pub(crate) fn validate(&self, my_path: &NodePath, out: &mut ErrorsByPath) -> bool {
         let mut errors: Vec<ValidationMessage> = Vec::new();
 
         if let Some(raw) = &self.rejected_keys {
@@ -144,7 +141,7 @@ impl Items {
             )));
         }
         let mut is_valid = errors.is_empty();
-        out.insert(my_path.to_string(), errors);
+        out.insert(my_path.clone(), errors);
         for r in &self.collection {
             // `validate` first, otherwise &&'s short circuit stops on error
             is_valid = r.validate(my_path, out) && is_valid;
@@ -175,11 +172,11 @@ impl Items {
     /// `new_item` keeps the two the same.
     pub(crate) fn add_item(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         before: Option<usize>,
         specs: &SpecsByPath,
         value: Option<&ItemValue>,
-    ) -> Result<String, FormAccessError> {
+    ) -> Result<NodePath, FormAccessError> {
         if let Some(value) = value
             && value.shape() != self.shape
         {
@@ -200,7 +197,7 @@ impl Items {
         let item = self.new_item(my_path, self.next_key, specs, value);
         // Taken before the item moves into `items`: its full path, which is what
         // `FormState::edit` hands back so the caller can find the item.
-        let item_path = qualify(my_path, &item.name());
+        let item_path = my_path.join(&item.name());
         self.next_key += 1;
         self.collection.insert(at, item);
         Ok(item_path)
@@ -242,7 +239,7 @@ impl Items {
             name,
             peek,
             Walk { mode, specs },
-            &qualify(my_path, name),
+            &my_path.join(name),
             // Never the container's own `optional`: that says the container is an
             // `Option`'s payload, which its items are not, exactly as
             // `list_node` builds them. An item that can be absent says so in its
@@ -258,7 +255,7 @@ impl Items {
     /// This is how a server, which starts from a collection with no items, gets the
     /// client's items back. `next_key` only ever grows, so a key the wire named
     /// is never handed out again by a later `add_item`.
-    pub(crate) fn set_items(&mut self, my_path: &str, keys: &[usize], specs: &SpecsByPath) {
+    pub(crate) fn set_items(&mut self, my_path: &NodePath, keys: &[usize], specs: &SpecsByPath) {
         let mut existing: HashMap<String, Box<dyn Node>> =
             self.collection.drain(..).map(|r| (r.name(), r)).collect();
         let items: Vec<Box<dyn Node>> = keys
@@ -284,7 +281,7 @@ impl Items {
     /// `ErrorBoundary`.
     pub(crate) fn remove_item(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         index: usize,
     ) -> Result<(), FormAccessError> {
         if index >= self.collection.len() {
@@ -301,7 +298,7 @@ impl Items {
     /// return `FormAccessError`.
     pub(crate) fn move_item(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         from: usize,
         to: usize,
     ) -> Result<(), FormAccessError> {
@@ -341,7 +338,7 @@ impl Items {
     /// next key, which it never takes.
     pub(crate) fn probe(
         &self,
-        my_path: &str,
+        my_path: &NodePath,
         specs: &SpecsByPath,
         value: &ItemValue,
     ) -> Option<Box<dyn Node>> {
@@ -390,14 +387,14 @@ impl Items {
     // same trap `StructNode::choose_variant` fell into.
     pub(crate) fn edit_within(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         let edit_path = edit.path();
         for m in &mut self.collection {
-            if owns(&qualify(my_path, &m.name()), edit_path) {
+            if edit_path.starts_with(&my_path.join(&m.name())) {
                 return m.edit(my_path, edit, specs, errors);
             }
         }
@@ -511,23 +508,6 @@ fn items_word(count: usize) -> String {
     } else {
         format!("{count} items")
     }
-}
-
-/// An item key segment: `3` -> `#3`.
-///
-/// An item's name is its *identity*, not its position — which is what lets an item
-/// be inserted in the middle, removed, or reordered without renaming its
-/// neighbours. Renaming them would move every leaf beneath them to a different
-/// key in the value store, and the values would have to be shuffled to match:
-/// the same silent-corruption hazard
-/// [`variant_segment`](crate::nodes::variant_segment) exists to prevent, except
-/// recurring on every insert and remove rather than only on a variant switch.
-///
-/// The cost is that an item's *position* is no longer recoverable from its path.
-/// Order lives in `ListNode::items` and nowhere else — see
-/// [`path_without_variants`](crate::nodes::path_without_variants).
-pub(crate) fn item_segment(key: usize) -> String {
-    format!("{ITEM_SIGIL}{key}")
 }
 
 /// The item keys a list's wire entry names, in order: `"#0,#2"` is `[0, 2]`, and

@@ -5,10 +5,10 @@ use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, ensure_owned,
-    no_such_path, owns, qualify,
+    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, no_such_path,
 };
 use crate::nodes::{NodeContext, RawValue};
+use crate::path::NodePath;
 use crate::widgets::{FieldErrors, described_by, field_help};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
@@ -69,8 +69,8 @@ impl Node for StructNode {
         }
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
-        let my_path = qualify(prefix, &self.name);
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
+        let my_path = prefix.join(&self.name);
         let mut is_valid = true;
         for m in &self.nodes {
             is_valid = m.validate(&my_path, out) && is_valid;
@@ -96,15 +96,15 @@ impl Node for StructNode {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
-        let nested = qualify(prefix, &self.name);
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
+        let nested = prefix.join(&self.name);
         for m in &self.nodes {
             m.collect_values(&nested, out);
         }
     }
 
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
-        let nested = qualify(prefix, &self.name);
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
+        let nested = prefix.join(&self.name);
         for m in &mut self.nodes {
             m.distribute_values(&nested, specs, values);
         }
@@ -123,37 +123,37 @@ impl Node for StructNode {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
-        let nested = qualify(prefix, &self.name);
+    ) -> Result<Option<NodePath>, FormAccessError> {
+        let nested = prefix.join(&self.name);
         let path = edit.path();
-        ensure_owned(&nested, path)?;
+        path.ensure_starts_with(&nested)?;
 
         // Paths are unique, so at most one child can own this one. Dispatching
         // by containment rather than trying each in turn is what lets a child's
         // real error ("no such variant") reach the caller intact.
         for m in &mut self.nodes {
-            if owns(&qualify(&nested, &m.name()), path) {
+            if path.starts_with(&nested.join(&m.name())) {
                 return m.edit(&nested, edit, specs, errors);
             }
         }
         Err(no_such_path(path))
     }
 
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
-        let nested = qualify(prefix, &self.name);
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
+        let nested = prefix.join(&self.name);
         out.push(nested.clone());
         for n in &self.nodes {
             n.paths(&nested, drafts, out);
         }
     }
 
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
-        let nested = qualify(prefix, &self.name);
-        if owns(&nested, path) {
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath> {
+        let nested = prefix.join(&self.name);
+        if path.starts_with(&nested) {
             self.nodes
                 .iter()
                 .find_map(|n| n.absent_owner(&nested, path))

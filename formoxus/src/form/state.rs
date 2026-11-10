@@ -15,9 +15,9 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Edit, Node, ValuesByPath, no_such_path, owns};
+use crate::nodes::{Drafts, Edit, Node, ValuesByPath, no_such_path};
 use crate::nodes::{NodeContext, RawValue};
-use crate::path::NodePath;
+use crate::path::{ModelPath, NodePath};
 use crate::{classes::Classes, error::ValidationError};
 
 use super::FormSpec;
@@ -96,7 +96,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         self.field_errors.clear();
         let mut is_valid = true;
         for n in &self.nodes {
-            is_valid = n.validate("", &mut self.field_errors) && is_valid;
+            is_valid = n.validate(&NodePath::root(), &mut self.field_errors) && is_valid;
         }
         if !is_valid {
             return None;
@@ -126,7 +126,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
                     Some(p) => {
                         let keys = item_keys.get_or_insert_with(|| self.item_keys());
                         errors_by_path
-                            .entry(keyed_or_as_written(p.as_str(), keys))
+                            .entry(keyed_or_as_written(&p, keys))
                             .or_default()
                             .push(message);
                     }
@@ -152,8 +152,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    pub(crate) fn check_live(&self, path: &str, values: &ValuesByPath) -> LiveCheck {
-        let owning_node = self.nodes.iter().find(|n| owns(&n.name(), path));
+    pub(crate) fn check_live(&self, path: &NodePath, values: &ValuesByPath) -> LiveCheck {
+        let owning_node = self
+            .nodes
+            .iter()
+            .find(|n| path.starts_with(&NodePath::root().join(&n.name())));
         match owning_node {
             None => LiveCheck {
                 errors_at_path: None,
@@ -161,17 +164,17 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             },
             Some(n) => {
                 let mut owning_node = n.clone();
-                owning_node.distribute_values("", &self.spec.fields, values);
+                owning_node.distribute_values(&NodePath::root(), &self.spec.fields, values);
                 let mut scratch_errors: ErrorsByPath = ErrorsByPath::default();
-                owning_node.validate("", &mut scratch_errors);
-                let paths_to_clear = match owning_node.absent_owner("", path) {
+                owning_node.validate(&NodePath::root(), &mut scratch_errors);
+                let paths_to_clear = match owning_node.absent_owner(&NodePath::root(), path) {
                     None => Vec::new(),
                     Some(owner) => {
                         let mut all_paths = Vec::new();
-                        owning_node.paths("", Drafts::Exclude, &mut all_paths);
+                        owning_node.paths(&NodePath::root(), Drafts::Exclude, &mut all_paths);
                         all_paths
                             .into_iter()
-                            .filter(|p| p != path && owns(&owner, p))
+                            .filter(|p| p != path && p.starts_with(&owner))
                             .collect()
                     }
                 };
@@ -186,7 +189,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     fn raw_values(&self) -> Vec<RawValue> {
         let mut out = Vec::new();
         for m in &self.nodes {
-            m.collect_values("", &mut out);
+            m.collect_values(&NodePath::root(), &mut out);
         }
         out
     }
@@ -287,12 +290,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     pub(crate) fn draft_values(
         &self,
         path: &NodePath,
-        store: &HashMap<String, String>,
+        store: &HashMap<NodePath, String>,
     ) -> ValuesByPath {
         self.raw_values()
             .into_iter()
             .filter_map(|v| match v {
-                RawValue::Draft { path: draft, .. } if owns(path, &draft) => {
+                RawValue::Draft { path: draft, .. } if draft.starts_with(path) => {
                     let raw = store.get(&draft).cloned().unwrap_or_default();
                     Some((draft, raw))
                 }
@@ -318,7 +321,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// `validate()`.
     pub fn distribute_values(&mut self, values: &ValuesByPath) {
         for m in &mut self.nodes {
-            m.distribute_values("", &self.spec.fields, values);
+            m.distribute_values(&NodePath::root(), &self.spec.fields, values);
         }
     }
 
@@ -326,7 +329,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// item keys in the order shown (`"answers"` → `"#0,#5"`), and each
     /// item's own text, which a set's item is found by. What
     /// [`crate::path::resolve_indices`] reads.
-    fn item_keys(&self) -> HashMap<String, String> {
+    fn item_keys(&self) -> HashMap<NodePath, String> {
         self.collect_values().into_iter().collect()
     }
 
@@ -334,7 +337,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// path for. A draft's path is not one: a draft is no part of what was
     /// submitted, so an error aimed at it comes back unclaimed.
     pub fn distribute_errors(&mut self, errors: ErrorsByPath) -> ErrorsByPath {
-        let paths: HashSet<String> = self.paths(Drafts::Exclude).into_iter().collect();
+        let paths: HashSet<NodePath> = self.paths(Drafts::Exclude).into_iter().collect();
         let mut unclaimed = ErrorsByPath::default();
         for (path, messages) in errors {
             if paths.contains(&path) {
@@ -351,27 +354,36 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// input's `name` attribute — which is exactly the qualified path
     /// [`collect_values`](Self::collect_values) emitted — so no per-field signal is needed to
     /// track edits: the DOM already did it.
-    pub fn distribute_form_values(&mut self, values: &[(String, String)]) {
+    pub fn distribute_form_values(&mut self, values: &[(NodePath, String)]) {
         let map: ValuesByPath = values.iter().cloned().collect();
         self.distribute_values(&map);
     }
 
-    pub fn edit(&mut self, edit: &Edit) -> Result<Option<String>, FormAccessError> {
+    pub fn edit(&mut self, edit: &Edit) -> Result<Option<NodePath>, FormAccessError> {
         let path = edit.path();
-        let Some(idx) = self.nodes.iter().position(|m| owns(&m.name(), path)) else {
+        let Some(idx) = self
+            .nodes
+            .iter()
+            .position(|n| path.starts_with(&NodePath::root().join(&n.name())))
+        else {
             return Err(no_such_path(path));
         };
         // A structural edit can CREATE nodes: `AddItem` builds a fresh item and
         // choosing a variant reveals that variant's fields. Handing the edit the
         // spec is what builds them the way the walk built their siblings, so a
         // item added after mount carries the spec's labels and widgets too.
-        let result = self.nodes[idx].edit("", edit, &self.spec.fields, &mut self.field_errors);
+        let result = self.nodes[idx].edit(
+            &NodePath::root(),
+            edit,
+            &self.spec.fields,
+            &mut self.field_errors,
+        );
         // An error on a path the edit took away goes with it: a removed item's,
         // or the fields of a variant no longer chosen. This runs on `Err` too,
         // which is why the line above has no `?`: a refused edit records its
         // message before it returns. Drafts count here, so a refusal on one
         // stays until the draft is judged again.
-        let paths: HashSet<String> = self.paths(Drafts::Include).into_iter().collect();
+        let paths: HashSet<NodePath> = self.paths(Drafts::Include).into_iter().collect();
         self.field_errors.retain(|path, _| paths.contains(path));
         result
     }
@@ -385,7 +397,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// an index past the end or a value no item holds is no path at all.
     pub fn push_field_error(
         &mut self,
-        path: &NodePath,
+        path: &ModelPath<T>,
         message: &str,
     ) -> Result<(), FormAccessError> {
         let keyed = self.key_for(path);
@@ -399,7 +411,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    pub(crate) fn key_for(&self, path: &NodePath) -> String {
+    pub(crate) fn key_for(&self, path: &ModelPath<T>) -> NodePath {
         keyed_or_as_written(path, &self.item_keys())
     }
 
@@ -416,7 +428,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// layer is expected to push it into the boundary rather than recover.
     pub fn choose_variant(
         &mut self,
-        path: &str,
+        path: &NodePath,
         variant: Option<&str>,
     ) -> Result<(), FormAccessError> {
         self.edit(&Edit::new_choose_variant(path, variant))
@@ -553,7 +565,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
             mode,
             specs: &spec.fields,
         },
-        "",
+        &NodePath::root(),
         /* optional */ false,
     );
     FormState {
@@ -568,9 +580,9 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
 /// `path` with each index resolved to its item's key, or as written when one
 /// names no item: then the error is placed by a spelling no node claims, and
 /// reaches the user the way every unclaimed path does.
-fn keyed_or_as_written(path: &NodePath, item_keys: &HashMap<NodePath, String>) -> String {
-    crate::path::resolve_indices(path, |list| item_keys.get(list).map(String::as_str))
-        .unwrap_or_else(|| path.to_string())
+fn keyed_or_as_written<T>(path: &ModelPath<T>, item_keys: &HashMap<NodePath, String>) -> NodePath {
+    path.resolve(|list| item_keys.get(list).map(String::as_str))
+        .unwrap_or_else(|| NodePath::new(path.as_str()))
 }
 
 /// What a live check of one path found: what `FormState::check_live` returns
@@ -589,7 +601,7 @@ pub(crate) struct LiveCheck {
     /// pairs with an `Option`, so a live check can only ever CLEAR a sibling,
     /// never add an error to one: a field the user has not reached yet is not
     /// scolded.
-    pub paths_to_clear: Vec<String>,
+    pub paths_to_clear: Vec<NodePath>,
 }
 
 #[cfg(test)]
@@ -604,6 +616,7 @@ mod tests {
     use crate::error::ValidationMessage;
     use crate::form::spec::FormSpec;
     use crate::nodes::ValuesByPath;
+    use crate::path::NodePath;
 
     #[derive(Facet, Clone, Debug, PartialEq)]
     struct Phone {
@@ -639,7 +652,7 @@ mod tests {
     fn values(state: &FormState<Person>, filled: &[(&str, &str)]) -> ValuesByPath {
         let mut values = state.collect_values();
         for (path, text) in filled {
-            values.insert((*path).to_string(), (*text).to_string());
+            values.insert(NodePath::new(*path), (*text).to_string());
         }
         values
     }
@@ -653,7 +666,7 @@ mod tests {
     #[gtest]
     fn a_blank_required_field_is_required() {
         let state = state();
-        let check = state.check_live("name", &values(&state, &[]));
+        let check = state.check_live(&NodePath::new("name"), &values(&state, &[]));
         expect_that!(
             check,
             eq(&LiveCheck {
@@ -667,7 +680,7 @@ mod tests {
     #[gtest]
     fn a_filled_field_is_checked_and_clean() {
         let state = state();
-        let check = state.check_live("name", &values(&state, &[("name", "Ada")]));
+        let check = state.check_live(&NodePath::new("name"), &values(&state, &[("name", "Ada")]));
         expect_that!(check.errors_at_path, some(is_empty()));
     }
 
@@ -677,11 +690,14 @@ mod tests {
     #[gtest]
     fn blanking_the_last_field_clears_the_option() {
         let state = state();
-        let check = state.check_live("reach.phone.number", &values(&state, &[]));
+        let check = state.check_live(&NodePath::new("reach.phone.number"), &values(&state, &[]));
         expect_that!(check.errors_at_path, none());
         expect_that!(
             check.paths_to_clear,
-            unordered_elements_are![eq("reach.phone"), eq("reach.phone.ext")]
+            unordered_elements_are![
+                displays_as(eq("reach.phone")),
+                displays_as(eq("reach.phone.ext"))
+            ]
         );
     }
 
@@ -692,7 +708,7 @@ mod tests {
     fn a_present_option_clears_nothing() {
         let state = state();
         let check = state.check_live(
-            "reach.phone.number",
+            &NodePath::new("reach.phone.number"),
             &values(&state, &[("reach.phone.number", "555")]),
         );
         expect_that!(
@@ -711,9 +727,12 @@ mod tests {
     #[gtest]
     fn another_absent_option_is_left_alone() {
         let state = state();
-        let phone = state.check_live("reach.phone.number", &values(&state, &[]));
-        expect_that!(phone.paths_to_clear, each(not(starts_with("reach.fax"))));
-        let email = state.check_live("reach.email", &values(&state, &[]));
+        let phone = state.check_live(&NodePath::new("reach.phone.number"), &values(&state, &[]));
+        expect_that!(
+            phone.paths_to_clear,
+            each(not(displays_as(starts_with("reach.fax"))))
+        );
+        let email = state.check_live(&NodePath::new("reach.email"), &values(&state, &[]));
         expect_that!(email.paths_to_clear, is_empty());
     }
 
@@ -723,14 +742,17 @@ mod tests {
     #[gtest]
     fn the_outermost_absent_option_is_cleared() {
         let state = state();
-        let check = state.check_live("reach.alt.phone.number", &values(&state, &[]));
+        let check = state.check_live(
+            &NodePath::new("reach.alt.phone.number"),
+            &values(&state, &[]),
+        );
         expect_that!(
             check.paths_to_clear,
             unordered_elements_are![
-                eq("reach.alt"),
-                eq("reach.alt.label"),
-                eq("reach.alt.phone"),
-                eq("reach.alt.phone.ext"),
+                displays_as(eq("reach.alt")),
+                displays_as(eq("reach.alt.label")),
+                displays_as(eq("reach.alt.phone")),
+                displays_as(eq("reach.alt.phone.ext")),
             ]
         );
     }
@@ -741,12 +763,15 @@ mod tests {
     fn an_inner_absent_option_clears_only_itself() {
         let state = state();
         let check = state.check_live(
-            "reach.alt.phone.number",
+            &NodePath::new("reach.alt.phone.number"),
             &values(&state, &[("reach.alt.label", "Work")]),
         );
         expect_that!(
             check.paths_to_clear,
-            unordered_elements_are![eq("reach.alt.phone"), eq("reach.alt.phone.ext")]
+            unordered_elements_are![
+                displays_as(eq("reach.alt.phone")),
+                displays_as(eq("reach.alt.phone.ext"))
+            ]
         );
     }
 
@@ -754,7 +779,7 @@ mod tests {
     #[gtest]
     fn an_unknown_path_finds_nothing() {
         let state = state();
-        let check = state.check_live("nope", &values(&state, &[]));
+        let check = state.check_live(&NodePath::new("nope"), &values(&state, &[]));
         expect_that!(
             check,
             eq(&LiveCheck {

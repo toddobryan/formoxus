@@ -114,7 +114,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// [`FormState::push_field_error`]: crate::FormState::push_field_error
     pub fn reject_field(mut self, path: &ModelPath<T>, message: &str) -> WireForm<T> {
         self.state
-            .push_field_error(path.as_str(), message)
+            .push_field_error(path, message)
             .unwrap_or_else(|e| panic!("cannot reject `{path}`: {e}"));
         self.into_wire_with_errors()
     }

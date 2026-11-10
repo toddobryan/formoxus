@@ -12,6 +12,7 @@ use dioxus::prelude::*;
 
 use crate::classes::Classes;
 use crate::nodes::ValuesStore;
+use crate::path::NodePath;
 
 /// What an item's view is handed: [`ItemText`], or a dev's own component
 /// named by `item:`.
@@ -25,7 +26,7 @@ pub struct SetItemProps {
     /// its choice's label when the item's field has choices.
     pub text: String,
     /// The item's own path (`tags.#1`), whose leaf in `values` holds `text`.
-    pub path: String,
+    pub path: NodePath,
     /// The item's place in the set as it is sorted now.
     pub index: usize,
     /// Whether the item is the one being edited, its value in the draft.

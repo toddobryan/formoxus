@@ -1,5 +1,5 @@
 //! A list-typed node. Items are nodes named by a `#`-prefixed KEY, which is
-//! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
+//! what makes `answer_choices.#0.text` fall out of the ordinary `join`
 //! nesting — and, because a key is an identity rather than a position, what lets
 //! an item be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `item_segment` for why renaming would be a data hazard.
@@ -10,9 +10,9 @@ use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
     Drafts, Edit, ErrorsStoreExt, Items, Node, SpecsByPath, ValuesByPath, default_label,
-    ensure_owned, owns, qualify,
 };
 use crate::nodes::{NodeContext, RawValue};
+use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
 use crate::widgets::{described_by, field_help};
@@ -144,23 +144,23 @@ impl Node for ListNode {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
-        self.items.collect_values(&qualify(prefix, &self.name), out);
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
+        self.items.collect_values(&prefix.join(&self.name), out);
     }
 
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
         self.items
-            .distribute_values(&qualify(prefix, &self.name), specs, values);
+            .distribute_values(&prefix.join(&self.name), specs, values);
     }
 
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
-        let path = qualify(prefix, &self.name);
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
+        let path = prefix.join(&self.name);
         out.push(path.clone());
         self.items.paths(&path, drafts, out);
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
-        let my_path = qualify(prefix, &self.name);
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
+        let my_path = prefix.join(&self.name);
         let mut is_valid = self.items.validate(&my_path, out);
         if is_valid {
             let errors = self
@@ -194,15 +194,15 @@ impl Node for ListNode {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         let path = edit.path();
-        let my_path = qualify(prefix, &self.name);
-        ensure_owned(&my_path, path)?;
-        if path == my_path {
+        let my_path = prefix.join(&self.name);
+        path.ensure_starts_with(&my_path)?;
+        if *path == my_path {
             return match edit {
                 Edit::AddItem { before, value, .. } => self
                     .items
@@ -226,9 +226,9 @@ impl Node for ListNode {
         self.items.edit_within(&my_path, edit, specs, errors)
     }
 
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
-        let nested = qualify(prefix, &self.name);
-        if owns(&nested, path) {
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath> {
+        let nested = prefix.join(&self.name);
+        if path.starts_with(&nested) {
             self.items
                 .iter()
                 .find_map(|i| i.absent_owner(&nested, path))

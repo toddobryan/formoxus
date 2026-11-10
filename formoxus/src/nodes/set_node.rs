@@ -1,5 +1,5 @@
 //! A set-typed node. Items are nodes named by a `#`-prefixed KEY, which is
-//! what makes `answer_choices.#0.text` fall out of the ordinary `qualify`
+//! what makes `answer_choices.#0.text` fall out of the ordinary `join`
 //! nesting — and, because a key is an identity rather than a position, what lets
 //! an item be inserted anywhere.
 //!
@@ -30,8 +30,9 @@ use crate::{
     label_case::LabelCase,
     nodes::{
         Drafts, Edit, ErrorsStoreExt, Items, Node, NodeContext, RawValue, Shown, SpecsByPath,
-        ValuesByPath, default_label, ensure_owned, owns, qualify,
+        ValuesByPath, default_label,
     },
+    path::NodePath,
     widgets::{
         AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
         RemoveItemButton, SetItemProps, described_by, field_help, field_row::required_marker,
@@ -203,7 +204,7 @@ struct CustomOrder<T> {
 /// value to build (an `Empty` or `Invalid` leaf). For what needs a typed item
 /// and has only the node: a custom order, and a dev's `feedback`.
 fn item_value<T: Facet<'static>>(node: &dyn Node) -> Option<T> {
-    let is_valid = node.validate("", &mut ErrorsByPath::default());
+    let is_valid = node.validate(&NodePath::root(), &mut ErrorsByPath::default());
     if !is_valid {
         return None;
     }
@@ -463,7 +464,7 @@ impl SetNode {
                         self.item_view.0,
                         SetItemProps {
                             text: text.clone(),
-                            path: qualify(&path, &name),
+                            path: path.join(&name),
                             index,
                             editing,
                             values: ctx.values,
@@ -521,14 +522,14 @@ impl SetNode {
     /// the item's path to the draft's. Whatever was typed into it goes.
     fn edit_item(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         index: Option<usize>,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<String, FormAccessError> {
+    ) -> Result<NodePath, FormAccessError> {
         self.forget_draft_errors(my_path, errors);
         let draft_name = self.draft.name();
-        let draft_path = qualify(my_path, &draft_name);
+        let draft_path = my_path.join(&draft_name);
         let mut draft = self.items.new_named(my_path, &draft_name, specs, None);
         self.editing = match index {
             None => None,
@@ -539,15 +540,17 @@ impl SetNode {
                         self.items.len()
                     ))
                 })?;
-                let item_path = qualify(my_path, &item.name());
+                let item_path = my_path.join(&item.name());
                 let mut values = Vec::new();
                 item.collect_values(my_path, &mut values);
                 let moved: ValuesByPath = values
                     .into_iter()
                     .map(|value| {
                         let (path, data) = value.into_pair();
-                        // Every path under the item starts with its own.
-                        (format!("{draft_path}{}", &path[item_path.len()..]), data)
+                        let moved_path = path
+                            .replace_prefix(&item_path, &draft_path)
+                            .expect("ever path under the item should start with its own path");
+                        (moved_path, data)
                     })
                     .collect();
                 draft.distribute_values(my_path, specs, &moved);
@@ -558,9 +561,9 @@ impl SetNode {
         Ok(draft_path)
     }
 
-    fn forget_draft_errors(&self, my_path: &str, out: &mut ErrorsByPath) {
-        let draft_path = qualify(my_path, &self.draft.name());
-        out.retain(|path, _| !owns(&draft_path, path));
+    fn forget_draft_errors(&self, my_path: &NodePath, out: &mut ErrorsByPath) {
+        let draft_path = my_path.join(&self.draft.name());
+        out.retain(|path, _| !path.starts_with(&draft_path));
     }
 
     /// Make the draft an item, if it can be one (`SETS_PLAN.md` 7c), and
@@ -580,10 +583,10 @@ impl SetNode {
     ///    the same edit, so the set never holds both.
     fn commit_draft(
         &mut self,
-        my_path: &str,
+        my_path: &NodePath,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Option<String> {
+    ) -> Option<NodePath> {
         self.forget_draft_errors(my_path, errors);
         if !self.draft.is_present() || !self.draft.validate(my_path, errors) {
             return None;
@@ -602,7 +605,7 @@ impl SetNode {
         }
         let fresh = self.items.new_draft(my_path, specs);
         let item = std::mem::replace(&mut self.draft, fresh);
-        let added = qualify(my_path, &item.name());
+        let added = my_path.join(&item.name());
         let replaced = self
             .editing
             .take()
@@ -674,8 +677,8 @@ impl Node for SetNode {
         String::new()
     }
 
-    fn collect_values(&self, prefix: &str, out: &mut Vec<RawValue>) {
-        let my_path = qualify(prefix, &self.name);
+    fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
+        let my_path = prefix.join(&self.name);
         self.items.collect_values(&my_path, out);
         // Its leaves as drafts, so the store holds them but the wire does not.
         // Its structure (a unit enum draft's chosen variant) not at all: like
@@ -690,8 +693,8 @@ impl Node for SetNode {
         }));
     }
 
-    fn distribute_values(&mut self, prefix: &str, specs: &SpecsByPath, values: &ValuesByPath) {
-        let my_path = qualify(prefix, &self.name);
+    fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
+        let my_path = prefix.join(&self.name);
         self.items.distribute_values(&my_path, specs, values);
         // A server's draft was built before the wire's keys arrived, so one
         // of them can be its key. Nothing was typed into a server's draft, so
@@ -704,8 +707,8 @@ impl Node for SetNode {
         self.items.dedup(&self.comparator);
     }
 
-    fn validate(&self, prefix: &str, out: &mut ErrorsByPath) -> bool {
-        let my_path = qualify(prefix, &self.name);
+    fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
+        let my_path = prefix.join(&self.name);
         let mut is_valid = self.items.validate(&my_path, out);
         if is_valid {
             let errors = self
@@ -758,15 +761,15 @@ impl Node for SetNode {
 
     fn edit(
         &mut self,
-        prefix: &str,
+        prefix: &NodePath,
         edit: &Edit,
         specs: &SpecsByPath,
         errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         let path = edit.path();
-        let my_path = qualify(prefix, &self.name);
-        ensure_owned(&my_path, path)?;
-        if path == my_path {
+        let my_path = prefix.join(&self.name);
+        path.ensure_starts_with(&my_path)?;
+        if *path == my_path {
             // A message answers the last edit only: whatever the set does next,
             // it is stale.
             self.message = None;
@@ -790,7 +793,7 @@ impl Node for SetNode {
                         self.message = self
                             .items
                             .iter()
-                            .find(|item| qualify(&my_path, &item.name()) == added)
+                            .find(|item| my_path.join(&item.name()) == added)
                             .and_then(|item| self.message_for(NodeEvent::Added(&**item)));
                         Ok(Some(added))
                     }
@@ -823,7 +826,7 @@ impl Node for SetNode {
         }
 
         // An edit inside the draft, such as a unit enum draft's choice.
-        if owns(&qualify(&my_path, &self.draft.name()), path) {
+        if path.starts_with(&my_path.join(&self.draft.name())) {
             return self.draft.edit(&my_path, edit, specs, errors);
         }
         self.items.edit_within(&my_path, edit, specs, errors)
@@ -944,8 +947,8 @@ impl Node for SetNode {
         }
     }
 
-    fn paths(&self, prefix: &str, drafts: Drafts, out: &mut Vec<String>) {
-        let my_path = qualify(prefix, &self.name);
+    fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {
+        let my_path = prefix.join(&self.name);
         out.push(my_path.clone());
         self.items.paths(&my_path, drafts, out);
         if drafts == Drafts::Include {
@@ -953,9 +956,9 @@ impl Node for SetNode {
         }
     }
 
-    fn absent_owner(&self, prefix: &str, path: &str) -> Option<String> {
-        let nested = qualify(prefix, &self.name);
-        if owns(&nested, path) {
+    fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath> {
+        let nested = prefix.join(&self.name);
+        if path.starts_with(&nested) {
             self.items
                 .iter()
                 .find_map(|n| n.absent_owner(&nested, path))

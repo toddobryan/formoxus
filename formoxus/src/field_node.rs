@@ -11,9 +11,7 @@ use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Shown};
-use crate::nodes::{
-    Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label, qualify,
-};
+use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
 use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{AnyWidget, CheckboxInput, Widget};
@@ -278,7 +276,7 @@ impl<F: Field> Node for FieldNode<F> {
         out.push(prefix.join(&self.name));
     }
 
-    fn absent_owner(&self, _prefix: &NodePath, _path: &NodePath) -> Option<String> {
+    fn absent_owner(&self, _prefix: &NodePath, _path: &NodePath) -> Option<NodePath> {
         None
     }
 
@@ -437,7 +435,7 @@ impl<F: Field> Node for FieldNode<F> {
         edit: &Edit,
         _specs: &SpecsByPath,
         _errors: &mut ErrorsByPath,
-    ) -> Result<Option<String>, FormAccessError> {
+    ) -> Result<Option<NodePath>, FormAccessError> {
         // A leaf can only ever be the wrong answer, but which wrong answer is
         // worth saying: hitting a real field means the caller's path was right
         // and its *expectation* was wrong.

@@ -32,7 +32,7 @@ pub(crate) enum FieldEventKind {
 #[derive(Debug)]
 pub(crate) struct FieldEvent {
     /// The field's store key, as the widget's props have it (`answers.#3.text`).
-    pub(crate) path: String,
+    pub(crate) path: NodePath,
     pub(crate) kind: FieldEventKind,
     /// Whether this field is checked as the user goes; see
     /// [`OnFieldEvent::is_live`].
@@ -72,7 +72,7 @@ impl OnFieldEvent {
     pub(crate) fn send(&self, path: &NodePath, kind: FieldEventKind) {
         if let Some(callback) = self.callback {
             callback(FieldEvent {
-                path: path.to_string(),
+                path: path.clone(),
                 kind,
                 is_live: self.is_live,
             });
