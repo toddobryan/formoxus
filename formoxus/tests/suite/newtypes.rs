@@ -9,6 +9,7 @@
 
 use super::across_the_wire;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 
@@ -54,7 +55,10 @@ struct HasPair {
 fn paths_of(
     form: &FormState<impl Clone + std::fmt::Debug + PartialEq + Facet<'static>>,
 ) -> Vec<String> {
-    form.collect_values().into_iter().map(|(p, _)| p).collect()
+    form.collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect()
 }
 
 // ── The leaf, not a fieldset ─────────────────────────────────────────────
@@ -121,8 +125,8 @@ fn a_populated_newtype_shows_its_inner_value_in_the_input() {
 fn a_newtype_builds_from_submitted_values() {
     let mut form = empty_form::<Doc>(FormSpec::default());
     form.distribute_form_values(&[
-        ("title".to_string(), "Unit 1".to_string()),
-        ("body".to_string(), "typed by hand".to_string()),
+        (NodePath::new("title"), "Unit 1".to_string()),
+        (NodePath::new("body"), "typed by hand".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -139,8 +143,8 @@ fn a_newtype_builds_from_submitted_values() {
 fn a_numeric_newtype_parses_through_the_inner_vtable() {
     let mut form = empty_form::<Tally>(FormSpec::default());
     form.distribute_form_values(&[
-        ("label".to_string(), "Votes".to_string()),
-        ("count".to_string(), "42".to_string()),
+        (NodePath::new("label"), "Votes".to_string()),
+        (NodePath::new("count"), "42".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -158,8 +162,8 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
     // quietly becoming `Count(0)`.
     let mut form = empty_form::<Tally>(FormSpec::default());
     form.distribute_form_values(&[
-        ("label".to_string(), "Votes".to_string()),
-        ("count".to_string(), "not-a-number".to_string()),
+        (NodePath::new("label"), "Votes".to_string()),
+        (NodePath::new("count"), "not-a-number".to_string()),
     ]);
     expect_that!(form.validate(), none());
     expect_that!(
@@ -175,7 +179,7 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
 #[gtest]
 fn an_empty_newtype_field_is_required_like_any_other() {
     let mut form = empty_form::<Doc>(FormSpec::default());
-    form.distribute_form_values(&[("title".to_string(), "Unit 1".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(
         form.collect_errors()
@@ -198,7 +202,7 @@ struct MaybeDoc {
 #[gtest]
 fn an_absent_optional_newtype_round_trips_as_none() {
     let mut form = empty_form::<MaybeDoc>(FormSpec::default());
-    form.distribute_form_values(&[("title".to_string(), "Unit 1".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(
         form.validate(),
         some(eq(&MaybeDoc {

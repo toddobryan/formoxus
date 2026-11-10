@@ -26,6 +26,7 @@ use super::models::{Location, Mode};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::ValuesByPath;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
@@ -78,12 +79,15 @@ fn contact(address: Option<Location>) -> Contact {
 fn applied(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(p, v)| (p.to_string(), v.to_string()))
+        .map(|(p, v)| (NodePath::new(p.to_string()), v.to_string()))
         .collect()
 }
 
 fn paths<T: Clone + Debug + PartialEq + Facet<'static>>(form: &FormState<T>) -> Vec<String> {
-    form.collect_values().into_iter().map(|(p, _)| p).collect()
+    form.collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect()
 }
 
 // ── Shape of the form ──
@@ -112,10 +116,10 @@ fn an_absent_optional_struct_still_offers_its_leaves() {
         // and the order is part of what this asserts.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("name".to_string(), "Ada".to_string()),
-            ("address.street".to_string(), String::new()),
-            ("address.city".to_string(), String::new()),
-            ("address.zip".to_string(), String::new()),
+            (NodePath::new("name"), "Ada".to_string()),
+            (NodePath::new("address.street"), String::new()),
+            (NodePath::new("address.city"), String::new()),
+            (NodePath::new("address.zip"), String::new()),
         ])
     );
 }
@@ -347,9 +351,9 @@ fn a_chosen_unit_variant_survives_two_containers_deep() {
         // Into a `Vec`, not compared as a map: `IndexMap`'s `==` ignores order.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("modes".to_string(), "#0,#1".to_string()),
-            ("modes.#0".to_string(), "Fast".to_string()),
-            ("modes.#1".to_string(), "Slow".to_string()),
+            (NodePath::new("modes"), "#0,#1".to_string()),
+            (NodePath::new("modes.#0"), "Fast".to_string()),
+            (NodePath::new("modes.#1"), "Slow".to_string()),
         ]),
         "fieldless variants have no leaves, only their choices"
     );
@@ -545,7 +549,7 @@ fn a_choices_value_has_to_be_what_parse_scalar_expects() {
     // strings must be, those say the widget emits them.
     for (raw, expected) in [("true", Some(true)), ("false", Some(false)), ("", None)] {
         let mut form = empty_form::<Prefs>(FormSpec::default());
-        form.distribute_form_values(&[("subscribed".to_string(), raw.to_string())]);
+        form.distribute_form_values(&[(NodePath::new("subscribed"), raw.to_string())]);
         expect_that!(
             form.validate(),
             some(eq(&Prefs {
@@ -598,7 +602,7 @@ fn an_untouched_checkbox_submits_as_false() {
         "an untouched checkbox stays empty the whole way through — nothing on \
          the leaf path reinterprets it, and `false` appears only at write time"
     );
-    values.insert("email".to_string(), "ada@example.com".to_string());
+    values.insert(NodePath::new("email"), "ada@example.com".to_string());
 
     form.distribute_values(&values);
     expect_that!(
@@ -658,7 +662,7 @@ fn TaggedWithAnAddedRow() -> Element {
         );
         state
             .edit(&formoxus::nodes::Edit::AddItem {
-                path: "tags".to_string(),
+                path: NodePath::new("tags"),
                 before: None,
                 value: None,
             })
@@ -698,7 +702,7 @@ fn an_empty_added_row_of_an_optional_list_is_refused_like_the_first() {
             FormSpec::default(),
         );
         form.edit(&formoxus::nodes::Edit::AddItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             before: None,
             value: None,
         })
@@ -759,7 +763,7 @@ fn an_empty_added_struct_row_of_an_optional_list_is_refused_like_the_first() {
             FormSpec::default(),
         );
         form.edit(&formoxus::nodes::Edit::AddItem {
-            path: "nodes".to_string(),
+            path: NodePath::new("nodes"),
             before: None,
             value: None,
         })
@@ -801,7 +805,7 @@ fn FlagsWithAnAddedRow() -> Element {
         );
         state
             .edit(&formoxus::nodes::Edit::AddItem {
-                path: "flags".to_string(),
+                path: NodePath::new("flags"),
                 before: None,
                 value: None,
             })
@@ -887,7 +891,7 @@ fn AlarmWithAVariantChosen() -> Element {
         let mut state = empty_form::<Alarm>(FormSpec::default());
         state
             .edit(&formoxus::nodes::Edit::new_choose_variant(
-                "mode",
+                &NodePath::new("mode"),
                 Some("On"),
             ))
             .expect("`On` is a variant of `mode`");

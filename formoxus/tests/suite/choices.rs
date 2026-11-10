@@ -6,6 +6,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 
 use super::FORM_ID;
@@ -190,7 +191,7 @@ fn a_chosen_value_validates_into_the_model() {
     };
     let values = [("state", "AK"), ("zip", "99501")]
         .into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect();
 
     let submission = Submission::accept(spec(), &values).expect("a chosen value is a valid value");

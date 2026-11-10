@@ -1516,7 +1516,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". with_label (\"notes\" , & \"Notes\") . with_help_text (\"notes\" , & NOTES_HELP)"
+                ". with_label (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & \"Notes\") . with_help_text (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & NOTES_HELP)"
             )
         );
     }
@@ -1527,7 +1527,12 @@ mod tests {
     fn a_validator_expands_through_the_option() {
         let spec = parse(quote! { Source { age? => { validator: must_be_adult } } }).unwrap();
         let out = spec.expand().to_string();
-        expect_that!(out, contains_substring(". with_field_validator (\"age\" ,"));
+        expect_that!(
+            out,
+            contains_substring(
+                ". with_field_validator (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"age\") ,"
+            )
+        );
         expect_that!(
             out,
             contains_substring(":: formoxus :: field_kind :: validator_for")
@@ -1539,10 +1544,17 @@ mod tests {
     fn item_counts_expand_to_their_builders() {
         let spec = parse(quote! { Source { tags => { min_items: 1, max_items: LIMIT } } }).unwrap();
         let out = spec.expand().to_string();
-        expect_that!(out, contains_substring(". with_min_items (\"tags\" , 1)"));
         expect_that!(
             out,
-            contains_substring(". with_max_items (\"tags\" , LIMIT)")
+            contains_substring(
+                ". with_min_items (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , 1)"
+            )
+        );
+        expect_that!(
+            out,
+            contains_substring(
+                ". with_max_items (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , LIMIT)"
+            )
         );
     }
 
@@ -1623,7 +1635,9 @@ mod tests {
         let spec = parse(quote! { Source { notes => { label: NOTES_LABEL } } }).unwrap();
         expect_that!(
             spec.expand().to_string(),
-            contains_substring(". with_label (\"notes\" , & NOTES_LABEL)")
+            contains_substring(
+                ". with_label (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & NOTES_LABEL)"
+            )
         );
     }
 
@@ -2162,7 +2176,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". with_item_view (\"tags\" , :: formoxus :: widgets :: ItemView (ui :: TagChip))"
+                ". with_item_view (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , :: formoxus :: widgets :: ItemView (ui :: TagChip))"
             )
         );
     }
@@ -2217,7 +2231,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". with_adder (\"answers\" , :: formoxus :: widgets :: ItemAdder (ui :: SearchToAdd))"
+                ". with_adder (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"answers\") , :: formoxus :: widgets :: ItemAdder (ui :: SearchToAdd))"
             )
         );
     }
@@ -2229,7 +2243,9 @@ mod tests {
         let spec = parse(quote! { Source { rows[] => { adder: SearchToAdd } } }).unwrap();
         expect_that!(
             spec.expand().to_string(),
-            contains_substring(". with_adder (\"rows[]\"")
+            contains_substring(
+                ". with_adder (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"rows[]\")"
+            )
         );
     }
 
@@ -2375,7 +2391,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". with_sort_by (\"tags\" , :: formoxus :: field_kind :: set_items_of (| __m : & \
+                ". with_sort_by (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , :: formoxus :: field_kind :: set_items_of (| __m : & \
                  Source | & __m . tags) . sort_by (by_length , \"by_length\"))"
             )
         );
@@ -2496,7 +2512,9 @@ mod tests {
         let spec = parse(quote! { Source { tags => { set } } }).unwrap();
         expect_that!(
             spec.expand().to_string(),
-            contains_substring(". treat_as_set (\"tags\")")
+            contains_substring(
+                ". treat_as_set (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\"))"
+            )
         );
     }
 
@@ -2508,7 +2526,9 @@ mod tests {
         let spec = parse(quote! { Source { tags => { sort_by: String::cmp, set } } }).unwrap();
         expect_that!(
             spec.expand().to_string(),
-            contains_substring(". treat_as_set (\"tags\") . with_sort_by (\"tags\"")
+            contains_substring(
+                ". treat_as_set (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\")) . with_sort_by (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\")"
+            )
         );
     }
 
@@ -2538,9 +2558,9 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". treat_as_set (\"tags\") . with_sort_by (\"tags\" , :: formoxus :: field_kind :: \
+                ". treat_as_set (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\")) . with_sort_by (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , :: formoxus :: field_kind :: \
                  set_items_of (| __m : & Source | & __m . tags) . sort_by (String :: cmp , \
-                 \"String::cmp\")) . with_feedback (\"tags\" , :: formoxus :: field_kind :: \
+                 \"String::cmp\")) . with_feedback (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"tags\") , :: formoxus :: field_kind :: \
                  set_items_of (| __m : & Source | & __m . tags) . feedback (| _ | None))"
             )
         );

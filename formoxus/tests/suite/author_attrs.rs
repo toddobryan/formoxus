@@ -20,6 +20,7 @@ use formoxus::attrs::{AttrSet, HtmlElement, InputType};
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
@@ -88,7 +89,7 @@ fn author_attributes_reach_the_input() {
 #[gtest]
 fn an_array_of_pairs_converts_into_author_attributes() {
     let html = render!(FormSpec::<Person>::new().with_attrs(
-        "name",
+        &path!(Person.name),
         FieldAttrs::from([(
             AttrKey::NonStd("placeholder"),
             AttrValue::String("Ada".to_string())
@@ -189,13 +190,13 @@ impl Widget for Spreading {
 fn a_custom_widget_receives_the_fields_attributes() {
     let html = render!(
         FormSpec::<Person>::new()
-            .with_widget("name", Spreading)
+            .with_widget(&path!(Person.name), Spreading)
             .with_node(
-                "name",
+                &path!(Person.name),
                 field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
             )
             .with_attrs(
-                "name",
+                &path!(Person.name),
                 FieldAttrs::from([(
                     AttrKey::NonStd("data-x"),
                     AttrValue::String("1".to_string())
@@ -210,7 +211,9 @@ fn a_custom_widget_receives_the_fields_attributes() {
 
 #[component]
 fn InvalidSpreading() -> Element {
-    let form = use_form(|| empty_form(FormSpec::<Person>::new().with_widget("name", Spreading)));
+    let form = use_form(|| {
+        empty_form(FormSpec::<Person>::new().with_widget(&path!(Person.name), Spreading))
+    });
     use_hook(|| form.validate());
     form.render(using_fns! {})
 }
@@ -449,11 +452,11 @@ fn an_author_attribute_overrides_a_constraint_attribute() {
     let html = render!(
         FormSpec::<Person>::new()
             .with_node(
-                "name",
+                &path!(Person.name),
                 field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
             )
             .with_attrs(
-                "name",
+                &path!(Person.name),
                 FieldAttrs::from([(
                     AttrKey::NonStd("maxlength"),
                     AttrValue::String("99".to_string())
@@ -471,8 +474,9 @@ fn an_author_attribute_overrides_a_constraint_attribute() {
 /// because `form!` refuses the quoted `"maxlength"` for exactly this reason.
 #[gtest]
 fn author_attributes_do_not_constrain_the_value() {
-    let spec = FormSpec::<Person>::new().with_attrs("name", attrs([("maxlength", "3")]));
-    let values: ValuesByPath = [("name".to_string(), "Ada Lovelace".to_string())]
+    let spec =
+        FormSpec::<Person>::new().with_attrs(&path!(Person.name), attrs([("maxlength", "3")]));
+    let values: ValuesByPath = [(NodePath::new("name"), "Ada Lovelace".to_string())]
         .into_iter()
         .collect();
     let submission = Submission::accept(spec, &values)

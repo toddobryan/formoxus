@@ -7,6 +7,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{Edit, ItemValue};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AddItemButton, AddItemProps, ItemAdder};
 use googletest::prelude::*;
@@ -97,11 +98,11 @@ fn items_are_named_by_key() {
         // and the order is part of what this asserts.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("title".to_string(), "Unit 1".to_string()),
+            (NodePath::new("title"), "Unit 1".to_string()),
             // The list's own entry: its item keys, in item order.
-            ("answers".to_string(), "#0,#1".to_string()),
-            ("answers.#0".to_string(), "alpha".to_string()),
-            ("answers.#1".to_string(), "beta".to_string()),
+            (NodePath::new("answers"), "#0,#1".to_string()),
+            (NodePath::new("answers.#0"), "alpha".to_string()),
+            (NodePath::new("answers.#1"), "beta".to_string()),
         ])
     );
 }
@@ -109,7 +110,11 @@ fn items_are_named_by_key() {
 #[gtest]
 fn struct_items_qualify_through_their_key() {
     let form = form_for(&venues(), FormSpec::default());
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(
         paths,
         elements_are![
@@ -137,12 +142,12 @@ fn nested_lists_nest_their_keys() {
         // Every list says which items it has, the inner ones included.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("rows".to_string(), "#0,#1".to_string()),
-            ("rows.#0".to_string(), "#0,#1".to_string()),
-            ("rows.#0.#0".to_string(), "a".to_string()),
-            ("rows.#0.#1".to_string(), "b".to_string()),
-            ("rows.#1".to_string(), "#0".to_string()),
-            ("rows.#1.#0".to_string(), "c".to_string()),
+            (NodePath::new("rows"), "#0,#1".to_string()),
+            (NodePath::new("rows.#0"), "#0,#1".to_string()),
+            (NodePath::new("rows.#0.#0"), "a".to_string()),
+            (NodePath::new("rows.#0.#1"), "b".to_string()),
+            (NodePath::new("rows.#1"), "#0".to_string()),
+            (NodePath::new("rows.#1.#0"), "c".to_string()),
         ])
     );
 
@@ -166,7 +171,11 @@ fn enum_items_are_pinned_by_the_value() {
         ],
     };
     let form = form_for(&drawings, FormSpec::default());
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(
         paths,
         elements_are![
@@ -188,7 +197,7 @@ fn enum_items_are_pinned_by_the_value() {
 fn editing_one_item_leaves_the_others_alone() {
     let mut form = form_for(&venues(), FormSpec::default());
     form.distribute_values(&IndexMap::from([(
-        "places.#1.city".to_string(),
+        NodePath::new("places.#1.city"),
         "Ogdenville".to_string(),
     )]));
 
@@ -221,7 +230,7 @@ fn create_mode_yields_no_items_yet() {
     // make that silence visible, and SHOULD start failing at step 4.
     let mut form = empty_form::<Quiz>(FormSpec::default());
     form.distribute_values(&IndexMap::from([(
-        "title".to_string(),
+        NodePath::new("title"),
         "Unit 1".to_string(),
     )]));
     expect_that!(
@@ -243,14 +252,17 @@ fn create_mode_yields_no_items_yet() {
 fn paths_of<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
     form: &FormState<T>,
 ) -> Vec<String> {
-    form.collect_values().into_iter().map(|(p, _)| p).collect()
+    form.collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect()
 }
 
 #[gtest]
 fn adding_an_item_appends_by_default() {
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: None,
         value: None,
     })
@@ -275,12 +287,12 @@ fn a_new_item_is_blank_and_buildable() {
     // the model builds.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: None,
         value: None,
     })
     .expect("answers is a list");
-    form.distribute_form_values(&[("answers.#2".to_string(), "gamma".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("answers.#2"), "gamma".to_string())]);
 
     expect_that!(
         form.validate(),
@@ -300,7 +312,7 @@ fn inserting_at_the_front_does_not_move_the_items_below_it() {
     // item 0. Keys make the insert a pure addition: nobody else is touched.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: Some(0),
         value: None,
     })
@@ -311,16 +323,16 @@ fn inserting_at_the_front_does_not_move_the_items_below_it() {
         // and the order is part of what this asserts.
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("title".to_string(), "Unit 1".to_string()),
+            (NodePath::new("title"), "Unit 1".to_string()),
             // The list's own entry carries the ORDER, which the keys alone
             // cannot: #2 is the newest key but the first item.
-            ("answers".to_string(), "#2,#0,#1".to_string()),
+            (NodePath::new("answers"), "#2,#0,#1".to_string()),
             // The new item comes FIRST in order...
-            ("answers.#2".to_string(), String::new()),
+            (NodePath::new("answers.#2"), String::new()),
             // ...while the two that were already here keep both their keys and
             // their values. Order and identity are different things now.
-            ("answers.#0".to_string(), "alpha".to_string()),
-            ("answers.#1".to_string(), "beta".to_string()),
+            (NodePath::new("answers.#0"), "alpha".to_string()),
+            (NodePath::new("answers.#1"), "beta".to_string()),
         ])
     );
 }
@@ -332,12 +344,12 @@ fn the_list_builds_in_item_order_not_key_order() {
     // the model even though its key is the highest.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: Some(0),
         value: None,
     })
     .expect("answers is a list");
-    form.distribute_form_values(&[("answers.#2".to_string(), "aardvark".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("answers.#2"), "aardvark".to_string())]);
 
     expect_that!(
         form.validate(),
@@ -359,7 +371,7 @@ fn removing_an_item_leaves_the_survivors_keys_untouched() {
     // values already sitting under `places.#1.*` in the store.
     let mut form = form_for(&venues(), FormSpec::default());
     form.edit(&Edit::RemoveItem {
-        path: "places".to_string(),
+        path: NodePath::new("places"),
         index: 0,
     })
     .expect("places is a list");
@@ -388,12 +400,12 @@ fn a_key_is_never_reused() {
     // silently populate the new one.
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::RemoveItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         index: 1,
     })
     .expect("places is a list");
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: None,
         value: None,
     })
@@ -419,12 +431,12 @@ fn an_item_edit_reaches_an_item_that_was_added_after_construction() {
     // means its prefix has to match what `list_node` would have produced.
     let mut form = form_for(&Drawings { shapes: Vec::new() }, FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "shapes".to_string(),
+        path: NodePath::new("shapes"),
         before: None,
         value: None,
     })
     .expect("shapes is a list");
-    form.choose_variant("shapes.#0", Some("Circle"))
+    form.choose_variant(&NodePath::new("shapes.#0"), Some("Circle"))
         .expect("the new item is an enum, and Circle is one of its variants");
 
     expect_that!(
@@ -444,7 +456,7 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             before: Some(9),
             value: None,
         }),
@@ -452,7 +464,7 @@ fn an_out_of_range_edit_is_an_error_rather_than_a_panic() {
     );
     expect_that!(
         form.edit(&Edit::RemoveItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             index: 9
         }),
         err(anything())
@@ -477,7 +489,7 @@ fn an_add_item_aimed_at_a_list_is_no_longer_reported_as_no_such_path() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             before: None,
             value: None,
         }),
@@ -501,7 +513,7 @@ fn abc() -> Quiz {
 
 fn move_answer(form: &mut FormState<Quiz>, from: usize, to: usize) {
     form.edit(&Edit::MoveItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         from,
         to,
     })
@@ -518,11 +530,11 @@ fn moving_the_first_item_to_the_end_shifts_the_others_up() {
     expect_that!(
         form.collect_values().into_iter().collect::<Vec<_>>(),
         eq(&vec![
-            ("title".to_string(), "Unit 1".to_string()),
-            ("answers".to_string(), "#1,#2,#0".to_string()),
-            ("answers.#1".to_string(), "b".to_string()),
-            ("answers.#2".to_string(), "c".to_string()),
-            ("answers.#0".to_string(), "a".to_string()),
+            (NodePath::new("title"), "Unit 1".to_string()),
+            (NodePath::new("answers"), "#1,#2,#0".to_string()),
+            (NodePath::new("answers.#1"), "b".to_string()),
+            (NodePath::new("answers.#2"), "c".to_string()),
+            (NodePath::new("answers.#0"), "a".to_string()),
         ])
     );
     expect_that!(
@@ -572,7 +584,7 @@ fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
     for (from, to) in [(3, 0), (0, 3), (9, 9)] {
         expect_that!(
             form.edit(&Edit::MoveItem {
-                path: "answers".to_string(),
+                path: NodePath::new("answers"),
                 from,
                 to
             })
@@ -596,7 +608,7 @@ fn an_out_of_range_move_is_an_error_rather_than_a_panic() {
     );
     expect_that!(
         empty.edit(&Edit::MoveItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             from: 0,
             to: 0
         }),
@@ -609,7 +621,7 @@ fn a_move_aimed_at_a_field_says_it_is_not_a_list() {
     let mut form = form_for(&abc(), FormSpec::default());
     let error = form
         .edit(&Edit::MoveItem {
-            path: "title".to_string(),
+            path: NodePath::new("title"),
             from: 0,
             to: 1,
         })
@@ -623,10 +635,10 @@ fn a_moved_item_takes_its_values_and_errors_with_it() {
     // server's verdict on one cell; after the move it must still be on that
     // cell (same key, same path), not on whatever item now sits at position 0.
     let mut form = form_for(&venues(), FormSpec::default());
-    form.push_field_error("places.#0.city", "No such city.")
+    form.push_field_error(&path!(Venues.places[0].city), "No such city.")
         .expect("places.#0.city is a path of this form");
     form.edit(&Edit::MoveItem {
-        path: "places".to_string(),
+        path: NodePath::new("places"),
         from: 0,
         to: 1,
     })
@@ -648,7 +660,7 @@ fn a_moved_item_takes_its_values_and_errors_with_it() {
         form.collect_errors()
             .fields
             .keys()
-            .map(String::as_str)
+            .map(NodePath::as_str)
             .collect::<Vec<_>>(),
         eq(&vec!["places.#0.city"])
     );
@@ -680,7 +692,7 @@ fn a_move_inside_a_nested_list_reorders_only_that_list() {
     };
     let mut form = form_for(&grid, FormSpec::default());
     form.edit(&Edit::MoveItem {
-        path: "rows.#0".to_string(),
+        path: NodePath::new("rows.#0"),
         from: 0,
         to: 2,
     })
@@ -896,7 +908,7 @@ fn errors_at(path: &str, message: &str) -> FormErrors {
     FormErrors {
         form: Vec::new(),
         fields: [(
-            path.to_string(),
+            NodePath::new(path),
             vec![ValidationMessage(message.to_string())],
         )]
         .into_iter()
@@ -1326,7 +1338,7 @@ fn an_item_values_debug_shows_the_value() {
 
 fn add_item(path: &str, value: Option<formoxus::nodes::ItemValue>) -> Edit {
     Edit::AddItem {
-        path: path.to_string(),
+        path: NodePath::new(path),
         before: None,
         value,
     }
@@ -1360,7 +1372,7 @@ fn an_item_inserted_mid_list_returns_its_key_not_its_position() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             before: Some(0),
             value: None,
         }),
@@ -1418,7 +1430,7 @@ fn no_other_edit_returns_a_path() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::MoveItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             from: 0,
             to: 1,
         }),
@@ -1426,7 +1438,7 @@ fn no_other_edit_returns_a_path() {
     );
     expect_that!(
         form.edit(&Edit::RemoveItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             index: 0,
         }),
         ok(none())
@@ -1438,7 +1450,10 @@ fn no_other_edit_returns_a_path() {
         FormSpec::default(),
     );
     expect_that!(
-        drawings.edit(&Edit::new_choose_variant("shapes.#0", Some("Rectangle"))),
+        drawings.edit(&Edit::new_choose_variant(
+            &NodePath::new("shapes.#0"),
+            Some("Rectangle")
+        )),
         ok(none())
     );
 }
@@ -1450,7 +1465,7 @@ fn no_other_edit_returns_a_path() {
 fn a_filled_item_inserted_mid_list_lands_there_with_its_value() {
     let mut form = form_for(&quiz(), FormSpec::default());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: Some(1),
         value: Some(formoxus::nodes::ItemValue::new("between".to_string())),
     })
@@ -1480,7 +1495,7 @@ fn an_item_value_of_the_wrong_type_is_refused() {
     let mut form = form_for(&quiz(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "answers".to_string(),
+            path: NodePath::new("answers"),
             before: None,
             value: Some(formoxus::nodes::ItemValue::new(7_u8)),
         }),
@@ -1723,14 +1738,14 @@ fn ProbeAdder(props: AddItemProps) -> Element {
     // crate-private, and nothing public reads one key yet (issue #22).
     let first = values
         .read()
-        .get(&format!("{path}.#0"))
+        .get(format!("{path}.#0").as_str())
         .cloned()
         .unwrap_or_default();
     let under = format!("{path}.");
     let stored = values
         .read()
         .keys()
-        .filter(|k| k.starts_with(&under))
+        .filter(|k| k.as_str().starts_with(&under))
         .count();
     let says = format!("{path} has {item_count}, first {first}, stored {stored}");
     rsx! {
@@ -1738,7 +1753,7 @@ fn ProbeAdder(props: AddItemProps) -> Element {
             r#type: "button",
             id: "{id}-add",
             onclick: move |_| {
-                on_edit.call(add_item(&path, Some(ItemValue::new("gamma".to_string()))));
+                on_edit.call(add_item(path.as_str(), Some(ItemValue::new("gamma".to_string()))));
             },
             "{says}"
         }
@@ -1847,7 +1862,7 @@ fn every_items_adder_reaches_each_inner_list_and_not_the_outer_one() {
 
 fn remove_item(path: &str, index: usize) -> Edit {
     Edit::RemoveItem {
-        path: path.to_string(),
+        path: NodePath::new(path),
         index,
     }
 }
@@ -1897,8 +1912,11 @@ fn RemovedEnumRowProbe() -> Element {
         )
     });
     let left_behind = use_hook(|| {
-        form.edit(&Edit::new_choose_variant("shapes.#0", Some("Rectangle")))
-            .expect("Rectangle is a variant");
+        form.edit(&Edit::new_choose_variant(
+            &NodePath::new("shapes.#0"),
+            Some("Rectangle"),
+        ))
+        .expect("Rectangle is a variant");
         let left_behind = form
             .values()
             .peek()

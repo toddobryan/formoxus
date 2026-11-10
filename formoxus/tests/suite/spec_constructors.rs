@@ -15,6 +15,7 @@ use formoxus::field::Field;
 use formoxus::field_kind::choice_field_for;
 use formoxus::field_node::NodeCtor;
 use formoxus::nodes::Edit;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AnyWidget, TextInput};
 use googletest::prelude::*;
@@ -77,9 +78,9 @@ fn errors_at<T>(mut state: FormState<T>, values: &[(&str, &str)], path: &str) ->
 where
     T: Clone + std::fmt::Debug + PartialEq + Facet<'static>,
 {
-    let values: Vec<(String, String)> = values
+    let values: Vec<(NodePath, String)> = values
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect();
     state.distribute_form_values(&values);
     let _ = state.validate();
@@ -120,7 +121,7 @@ fn a_constructor_reaches_an_item_built_from_the_value() {
             capacity: 5,
         }],
     };
-    let spec = FormSpec::default().with_node("venues[].capacity", cap_at_100());
+    let spec = FormSpec::default().with_node(&path!(Trip.venues[].capacity), cap_at_100());
     let state = form_for(&trip, spec);
     expect_that!(
         errors_at(
@@ -136,11 +137,11 @@ fn a_constructor_reaches_an_item_built_from_the_value() {
 /// the same walk, spec and all.
 #[gtest]
 fn a_constructor_reaches_an_item_added_later() {
-    let spec = FormSpec::default().with_node("venues[].capacity", cap_at_100());
+    let spec = FormSpec::default().with_node(&path!(Trip.venues[].capacity), cap_at_100());
     let mut state = empty_form::<Trip>(spec);
     state
         .edit(&Edit::AddItem {
-            path: "venues".into(),
+            path: NodePath::new("venues"),
             before: None,
             value: None,
         })
@@ -159,17 +160,21 @@ fn a_constructor_reaches_an_item_added_later() {
 /// after the item was added.
 #[gtest]
 fn a_constructor_reaches_a_variant_chosen_inside_an_added_item() {
-    let spec = FormSpec::default().with_node("shapes[].$Circle.radius", cap_at_100());
+    let spec =
+        FormSpec::default().with_node(&path!(Drawing.shapes[].$Shape::Circle.radius), cap_at_100());
     let mut state = empty_form::<Drawing>(spec);
     state
         .edit(&Edit::AddItem {
-            path: "shapes".into(),
+            path: NodePath::new("shapes"),
             before: None,
             value: None,
         })
         .unwrap();
     state
-        .edit(&Edit::new_choose_variant("shapes.#0", Some("Circle")))
+        .edit(&Edit::new_choose_variant(
+            &NodePath::new("shapes.#0"),
+            Some("Circle"),
+        ))
         .unwrap();
     expect_that!(
         errors_at(
@@ -189,7 +194,8 @@ fn a_constructor_reaches_a_variant_built_from_the_value() {
     let drawing = Drawing {
         shapes: vec![Shape::Circle { radius: 5 }],
     };
-    let spec = FormSpec::default().with_node("shapes[].$Circle.radius", cap_at_100());
+    let spec =
+        FormSpec::default().with_node(&path!(Drawing.shapes[].$Shape::Circle.radius), cap_at_100());
     let state = form_for(&drawing, spec);
     expect_that!(
         errors_at(
@@ -207,7 +213,8 @@ fn a_constructor_for_one_variant_leaves_the_other_alone() {
     let drawing = Drawing {
         shapes: vec![Shape::Square { side: 5 }],
     };
-    let spec = FormSpec::default().with_node("shapes[].$Circle.radius", cap_at_100());
+    let spec =
+        FormSpec::default().with_node(&path!(Drawing.shapes[].$Shape::Circle.radius), cap_at_100());
     let state = form_for(&drawing, spec);
     expect_that!(
         errors_at(
@@ -250,7 +257,7 @@ fn order_values<'a>(size: &'a str, state: &'a str) -> [(&'a str, &'a str); 3] {
 fn choices_over_a_number_field_are_that_number() {
     let spec = || {
         FormSpec::default().with_node(
-            "size",
+            &path!(Order.size),
             choice_field_for(|m: &Order| &m.size, [(1, "Small"), (2, "Large")]),
         )
     };
@@ -269,7 +276,7 @@ fn choices_over_a_number_field_are_that_number() {
 fn an_optional_field_chooses_among_what_it_holds() {
     let spec = || {
         FormSpec::default().with_node(
-            "gift_wrap",
+            &path!(Order.gift_wrap?),
             choice_field_for(|m: &Order| &m.gift_wrap, [(1, "Paper"), (2, "Box")]),
         )
     };
@@ -292,8 +299,12 @@ fn an_optional_field_chooses_among_what_it_holds() {
 /// works for a `String` field.
 #[gtest]
 fn a_const_str_table_serves_a_string_field() {
-    let spec =
-        || FormSpec::default().with_node("state", choice_field_for(|m: &Order| &m.state, STATES));
+    let spec = || {
+        FormSpec::default().with_node(
+            &path!(Order.state),
+            choice_field_for(|m: &Order| &m.state, STATES),
+        )
+    };
     expect_that!(
         errors_at(
             form_for(&order(), spec()),
@@ -322,7 +333,7 @@ fn choices_reach_an_item() {
         }],
     };
     let spec = FormSpec::default().with_node(
-        "venues[].city",
+        &path!(Trip.venues[].city),
         choice_field_for(
             |m: &Trip| &formoxus::field_kind::item(m.venues.iter()).city,
             [("Paris", "Paris"), ("Rome", "Rome")],

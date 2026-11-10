@@ -11,6 +11,7 @@ use super::{across_the_wire, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue, SetFeedback, SetOrder, ValuesByPath};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AddItemProps, ItemAdder};
 use googletest::prelude::*;
@@ -145,7 +146,7 @@ fn an_empty_set_renders_no_ul_but_still_its_adder() {
 
 fn add_tag(value: Option<ItemValue>) -> Edit {
     Edit::AddItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         before: None,
         value,
     }
@@ -156,7 +157,7 @@ fn a_set_refuses_a_move() {
     let mut form = form_for(&post(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::MoveItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             from: 0,
             to: 1,
         })
@@ -214,7 +215,7 @@ fn RemovedSetItemProbe() -> Element {
     let form = use_form(|| form_for(&post(), FormSpec::default()));
     use_hook(|| {
         form.edit(&Edit::RemoveItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: 0,
         })
         .expect("item 0 exists")
@@ -293,7 +294,7 @@ fn CustomAdderPostForm() -> Element {
     let form = use_form(|| {
         form_for(
             &post(),
-            FormSpec::default().with_adder("tags", ItemAdder(TagAdder)),
+            FormSpec::default().with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
         )
     });
     form.render(using_fns! {})
@@ -349,7 +350,7 @@ fn by_length(a: &Tag, b: &Tag) -> Ordering {
 }
 
 fn shelf_spec() -> FormSpec<Shelf> {
-    FormSpec::default().with_sort_by("tags", SetOrder::custom(by_length, "by_length"))
+    FormSpec::default().with_sort_by(&path!(Shelf.tags), SetOrder::custom(by_length, "by_length"))
 }
 
 fn shelf(names: &[&str]) -> Shelf {
@@ -361,7 +362,7 @@ fn shelf(names: &[&str]) -> Shelf {
 fn values(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect()
 }
 
@@ -382,7 +383,7 @@ fn item_keys<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
 fn tag_values(form: &FormState<Shelf>) -> Vec<String> {
     form.collect_values()
         .into_iter()
-        .filter(|(path, _)| path.starts_with("tags.#"))
+        .filter(|(path, _)| path.as_str().starts_with("tags.#"))
         .map(|(_, raw)| raw)
         .collect()
 }
@@ -409,7 +410,7 @@ fn a_set_with_sort_by_puts_an_added_item_in_order() {
     let mut form = form_for(&shelf(&["dioxus", "go", "rust"]), shelf_spec());
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             before: None,
             value: Some(ItemValue::new(Tag("css".to_string()))),
         }),
@@ -466,7 +467,7 @@ fn by_rank(a: &Pin, b: &Pin) -> Ordering {
 #[gtest]
 fn a_set_item_that_cannot_be_built_sorts_last_without_panicking() {
     let mut form = empty_form::<Board>(
-        FormSpec::default().with_sort_by("pins", SetOrder::custom(by_rank, "by_rank")),
+        FormSpec::default().with_sort_by(&path!(Board.pins), SetOrder::custom(by_rank, "by_rank")),
     );
     form.distribute_values(&values(&[
         ("pins", "#0,#1,#2,#3"),
@@ -512,7 +513,7 @@ fn form_sort_by_takes_a_fn() {
 fn post_tags(form: &FormState<Post>) -> Vec<String> {
     form.collect_values()
         .into_iter()
-        .filter(|(path, _)| path.starts_with("tags.#"))
+        .filter(|(path, _)| path.as_str().starts_with("tags.#"))
         .map(|(_, raw)| raw)
         .collect()
 }
@@ -590,7 +591,7 @@ fn form_sort_by_reaches_a_set_behind_an_option() {
     let order: Vec<String> = form
         .collect_values()
         .into_iter()
-        .filter(|(path, _)| path.starts_with("tags.#"))
+        .filter(|(path, _)| path.as_str().starts_with("tags.#"))
         .map(|(_, raw)| raw)
         .collect();
     expect_that!(order, elements_are![eq("a"), eq("bb"), eq("ccc")]);
@@ -659,7 +660,7 @@ fn form_set_treats_the_list_as_a_set() {
         format!("{:?}", form! { Draft { tags => { set } } }),
         eq(&format!(
             "{:?}",
-            FormSpec::<Draft>::default().treat_as_set("tags")
+            FormSpec::<Draft>::default().treat_as_set(&path!(Draft.tags))
         ))
     );
 }
@@ -678,7 +679,7 @@ fn form_set_and_sort_by_on_a_vec_build_a_spec() {
 fn draft_tags(form: &FormState<Draft>) -> Vec<String> {
     form.collect_values()
         .into_iter()
-        .filter(|(path, _)| path.starts_with("tags.#"))
+        .filter(|(path, _)| path.as_str().starts_with("tags.#"))
         .map(|(_, raw)| raw)
         .collect()
 }
@@ -692,7 +693,7 @@ fn a_list_treated_as_a_set_drops_its_duplicates_when_built() {
     let draft = Draft {
         tags: tags(&["rust", "dioxus", "rust", "css"]),
     };
-    let mut form = form_for(&draft, FormSpec::default().treat_as_set("tags"));
+    let mut form = form_for(&draft, FormSpec::default().treat_as_set(&path!(Draft.tags)));
     expect_that!(
         draft_tags(&form),
         elements_are![eq("css"), eq("dioxus"), eq("rust")]
@@ -725,13 +726,16 @@ fn a_list_treated_as_a_set_drops_by_equality_not_by_its_order() {
     let mut form = form_for(
         &list,
         FormSpec::default()
-            .treat_as_set("tags")
-            .with_sort_by("tags", SetOrder::custom(by_length, "by_length")),
+            .treat_as_set(&path!(TagList.tags))
+            .with_sort_by(
+                &path!(TagList.tags),
+                SetOrder::custom(by_length, "by_length"),
+            ),
     );
     let values: Vec<String> = form
         .collect_values()
         .into_iter()
-        .filter(|(path, _)| path.starts_with("tags.#"))
+        .filter(|(path, _)| path.as_str().starts_with("tags.#"))
         .map(|(_, raw)| raw)
         .collect();
     expect_that!(values, elements_are![eq("ab"), eq("cd"), eq("xyz")]);
@@ -752,7 +756,8 @@ fn DraftAsSetForm() -> Element {
     let draft = Draft {
         tags: tags(&["dioxus", "rust"]),
     };
-    let form = use_form(move || form_for(&draft, FormSpec::default().treat_as_set("tags")));
+    let form =
+        use_form(move || form_for(&draft, FormSpec::default().treat_as_set(&path!(Draft.tags))));
     form.render(using_fns! {})
 }
 
@@ -782,7 +787,7 @@ fn a_list_treated_as_a_set_renders_as_a_set() {
 fn draft_with(names: &[&str]) -> FormState<Draft> {
     form_for(
         &Draft { tags: tags(names) },
-        FormSpec::default().treat_as_set("tags"),
+        FormSpec::default().treat_as_set(&path!(Draft.tags)),
     )
 }
 
@@ -791,7 +796,7 @@ fn a_list_treated_as_a_set_refuses_a_move_and_adds_nothing_from_an_empty_draft()
     let mut form = draft_with(&["dioxus", "rust"]);
     expect_that!(
         form.edit(&Edit::MoveItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             from: 0,
             to: 1,
         })
@@ -829,7 +834,7 @@ fn a_list_treated_as_a_set_puts_an_added_item_in_order() {
 /// re-render without it. Decision D: dropped quietly, not refused.
 #[gtest]
 fn a_list_treated_as_a_set_drops_a_duplicate_from_the_wire() {
-    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set("tags"));
+    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set(&path!(Draft.tags)));
     form.distribute_values(&values(&[
         ("tags", "#0,#1,#2"),
         ("tags.#0", "rust"),
@@ -866,7 +871,7 @@ fn a_set_drops_a_duplicate_from_the_wire_from_its_nodes_too() {
 /// on them as it would anyway.
 #[gtest]
 fn blank_items_are_not_duplicates_of_each_other() {
-    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set("tags"));
+    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set(&path!(Draft.tags)));
     form.distribute_values(&values(&[
         ("tags", "#0,#1,#2"),
         ("tags.#0", ""),
@@ -909,7 +914,7 @@ fn a_list_behind_an_option_can_be_treated_as_a_set() {
 #[gtest]
 #[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
 fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
-    let _ = empty_form::<TagList>(FormSpec::default().treat_as_set("tags"));
+    let _ = empty_form::<TagList>(FormSpec::default().treat_as_set(&path!(TagList.tags)));
 }
 
 // ── Duplicates refused at the adder (box 6) ──────────────────────────────
@@ -952,7 +957,7 @@ fn a_set_takes_an_item_its_order_ties_but_its_type_does_not_equal() {
 fn a_set_with_sort_by_refuses_only_an_equal_item() {
     let mut form = form_for(&shelf(&["go", "rust"]), shelf_spec());
     let add = |name: &str| Edit::AddItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         before: None,
         value: Some(ItemValue::new(Tag(name.to_string()))),
     };
@@ -1030,7 +1035,7 @@ fn RemoveProbe() -> Element {
     let form = use_form(|| form_for(&post(), FormSpec::default()));
     use_hook(|| {
         form.edit(&Edit::RemoveItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: 1,
         })
         .expect("item 1 exists")
@@ -1104,7 +1109,7 @@ fn DuplicateTagProbe() -> Element {
     let form = use_form(|| form_for(&shelf(&["go", "rust"]), shelf_spec()));
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             before: None,
             value: Some(ItemValue::new(Tag("go".to_string()))),
         })
@@ -1125,7 +1130,7 @@ fn AddPriorityProbe() -> Element {
     });
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "levels".to_string(),
+            path: NodePath::new("levels"),
             before: None,
             value: Some(ItemValue::new(Priority::High)),
         })
@@ -1153,7 +1158,7 @@ fn DuplicateCustomAdderProbe() -> Element {
     let form = use_form(|| {
         form_for(
             &post(),
-            FormSpec::default().with_adder("tags", ItemAdder(TagAdder)),
+            FormSpec::default().with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
         )
     });
     use_hook(|| {
@@ -1202,7 +1207,7 @@ fn ShoutingRemoveProbe() -> Element {
     let form = use_form(|| form_for(&post(), form! { Post { tags => { feedback: shout } } }));
     use_hook(|| {
         form.edit(&Edit::RemoveItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: 1,
         })
         .expect("item 1 exists")
@@ -1302,7 +1307,7 @@ fn TagFeedbackProbe() -> Element {
     });
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             before: None,
             value: Some(ItemValue::new(Tag("css".to_string()))),
         })
@@ -1327,7 +1332,7 @@ fn HandBuiltFeedbackProbe() -> Element {
         form_for(
             &post(),
             FormSpec::default().with_feedback(
-                "tags",
+                &path!(Post.tags),
                 SetFeedback::new(|event: SetEvent<'_, String>| match event {
                     SetEvent::Added(tag) => Some(format!("+{tag}")),
                     _ => None,
@@ -1353,8 +1358,10 @@ fn a_hand_built_spec_takes_feedback_too() {
 #[gtest]
 #[should_panic(expected = "title: `feedback` applies only to a set, not `String`")]
 fn feedback_on_a_scalar_is_refused() {
-    let _ = FormSpec::<Post>::default()
-        .with_feedback("title", SetFeedback::new(|_: SetEvent<'_, String>| None));
+    let _ = FormSpec::<Post>::default().with_feedback(
+        &path!(Post.title),
+        SetFeedback::new(|_: SetEvent<'_, String>| None),
+    );
 }
 
 #[gtest]
@@ -1362,8 +1369,10 @@ fn feedback_on_a_scalar_is_refused() {
     expected = "tags: if you want to treat this list as a set, call `treat_as_set` first"
 )]
 fn feedback_on_a_list_not_yet_treated_as_a_set_is_refused() {
-    let _ = FormSpec::<Draft>::default()
-        .with_feedback("tags", SetFeedback::new(|_: SetEvent<'_, String>| None));
+    let _ = FormSpec::<Draft>::default().with_feedback(
+        &path!(Draft.tags),
+        SetFeedback::new(|_: SetEvent<'_, String>| None),
+    );
 }
 
 // ── The draft (box 7) ────────────────────────────────────────────────────
@@ -1565,7 +1574,7 @@ fn reset_clears_the_draft() {
 fn post_with_draft(text: &str) -> FormState<Post> {
     let mut form = form_for(&post(), FormSpec::default());
     form.distribute_values(&ValuesByPath::from_iter([(
-        "tags.#2".to_string(),
+        NodePath::new("tags.#2"),
         text.to_string(),
     )]));
     form
@@ -1602,7 +1611,7 @@ fn a_drafts_key_moves_when_the_wire_takes_it() {
     let mut form = empty_form(FormSpec::<Tagged>::default());
     form.distribute_values(&ValuesByPath::from_iter(
         [("tags", "#0"), ("tags.#0", "x"), ("tags.#1", "y")]
-            .map(|(path, raw)| (path.to_string(), raw.to_string())),
+            .map(|(path, raw)| (NodePath::new(path.to_string()), raw.to_string())),
     ));
     expect_that!(form.edit(&add_tag(None)), ok(some(eq("tags.#1"))));
     expect_that!(
@@ -1619,7 +1628,7 @@ fn the_items_constraints_refuse_a_draft() {
     // 6: "dioxus" is an item already.
     let mut form = form_for(&post(), form! { Post { tags[] => { max_length: 6 } } });
     form.distribute_values(&ValuesByPath::from_iter([(
-        "tags.#2".to_string(),
+        NodePath::new("tags.#2"),
         "toolong".to_string(),
     )]));
     expect_that!(form.edit(&add_tag(None)), ok(none()));
@@ -1652,14 +1661,14 @@ fn a_unit_enum_draft_takes_a_choice_and_adds_it() {
     let mut form = empty_form(form! { Triage { levels => { sort_by: most_urgent_first } } });
     expect_that!(
         form.edit(&Edit::ChooseVariant {
-            path: "levels.#0".to_string(),
+            path: NodePath::new("levels.#0"),
             variant: Some("High".to_string()),
         }),
         ok(none())
     );
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "levels".to_string(),
+            path: NodePath::new("levels"),
             before: None,
             value: None,
         }),
@@ -1885,7 +1894,7 @@ fn an_item_being_edited_is_still_in_the_set() {
     let mut form = form_for(&post(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::EditItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: Some(1),
         }),
         ok(some(eq("tags.#2")))
@@ -1899,12 +1908,12 @@ fn an_item_being_edited_is_still_in_the_set() {
 fn removing_the_item_being_edited_ends_the_edit() {
     let mut form = form_for(&post(), FormSpec::default());
     form.edit(&Edit::EditItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         index: Some(1),
     })
     .expect("item 1 exists");
     form.edit(&Edit::RemoveItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         index: 1,
     })
     .expect("item 1 exists");
@@ -1917,7 +1926,7 @@ fn editing_an_item_that_is_not_there_is_refused() {
     let mut form = form_for(&post(), FormSpec::default());
     expect_that!(
         form.edit(&Edit::EditItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: Some(2),
         }),
         err(displays_as(contains_substring(
@@ -1937,18 +1946,18 @@ fn a_unit_enum_item_is_edited_through_its_draft() {
         form! { Triage { levels => { sort_by: most_urgent_first } } },
     );
     form.edit(&Edit::EditItem {
-        path: "levels".to_string(),
+        path: NodePath::new("levels"),
         index: Some(0),
     })
     .expect("item 0 exists");
     form.edit(&Edit::ChooseVariant {
-        path: "levels.#1".to_string(),
+        path: NodePath::new("levels.#1"),
         variant: Some("High".to_string()),
     })
     .expect("the draft takes a choice");
     expect_that!(
         form.edit(&Edit::AddItem {
-            path: "levels".to_string(),
+            path: NodePath::new("levels"),
             before: None,
             value: None,
         }),
@@ -1976,7 +1985,7 @@ fn ItemErrorForm() -> Element {
     let form = use_form(|| {
         let mut state = form_for(&post(), FormSpec::default());
         state
-            .push_field_error("tags.#1", "Not that one.")
+            .push_field_error(&path!(Post.tags[= "rust"]), "Not that one.")
             .expect("item 1 exists");
         state
     });
@@ -2026,7 +2035,7 @@ fn a_list_refuses_an_item_edit() {
     let mut form = form_for(&Draft { tags: tags(&["a"]) }, FormSpec::default());
     expect_that!(
         form.edit(&Edit::EditItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: Some(0),
         }),
         err(displays_as(contains_substring(
@@ -2142,7 +2151,8 @@ fn HandBuiltChipForm() -> Element {
     let form = use_form(|| {
         form_for(
             &tagged(),
-            FormSpec::default().with_item_view("tags", formoxus::widgets::ItemView(TagChip)),
+            FormSpec::default()
+                .with_item_view(&path!(Tagged.tags), formoxus::widgets::ItemView(TagChip)),
         )
     });
     form.render(using_fns! {})
@@ -2210,8 +2220,8 @@ fn a_dev_item_view_shows_a_list_treated_as_a_set() {
 #[gtest]
 #[should_panic(expected = "title: `item` applies only to a set, not `String`")]
 fn an_item_view_on_a_scalar_is_refused() {
-    let _ =
-        FormSpec::<Post>::default().with_item_view("title", formoxus::widgets::ItemView(TagChip));
+    let _ = FormSpec::<Post>::default()
+        .with_item_view(&path!(Post.title), formoxus::widgets::ItemView(TagChip));
 }
 
 #[gtest]
@@ -2219,8 +2229,8 @@ fn an_item_view_on_a_scalar_is_refused() {
     expected = "tags: if you want to treat this list as a set, call `treat_as_set` first"
 )]
 fn an_item_view_on_a_list_not_yet_treated_as_a_set_is_refused() {
-    let _ =
-        FormSpec::<Draft>::default().with_item_view("tags", formoxus::widgets::ItemView(TagChip));
+    let _ = FormSpec::<Draft>::default()
+        .with_item_view(&path!(Draft.tags), formoxus::widgets::ItemView(TagChip));
 }
 
 /// Named for the item it replaces, not for what the draft holds, so the name
@@ -2362,7 +2372,7 @@ fn AddCityProbe() -> Element {
     let form = use_form(|| form_for(&itinerary(&["BOS"]), itinerary_spec()));
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "cities".to_string(),
+            path: NodePath::new("cities"),
             before: None,
             value: Some(ItemValue::new("ORD".to_string())),
         })
@@ -2406,7 +2416,7 @@ fn RegionsProbe() -> Element {
     });
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "regions".to_string(),
+            path: NodePath::new("regions"),
             before: None,
             value: Some(ItemValue::new(Region::PacificNorthwest)),
         })
@@ -2445,7 +2455,7 @@ fn LowerRegionsProbe() -> Element {
     });
     use_hook(|| {
         form.edit(&Edit::AddItem {
-            path: "regions".to_string(),
+            path: NodePath::new("regions"),
             before: None,
             value: Some(ItemValue::new(Region::PacificNorthwest)),
         })

@@ -9,6 +9,7 @@
 use super::across_the_wire;
 use super::models::{EventForCreate, Location, Shape};
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::{
     FormSpec, empty_form,
     error::{ValidationError, ValidationMessage},
@@ -60,10 +61,10 @@ fn only_the_failing_fields_appear() {
     // which is the same rule as above seen from the other side.
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
     form.distribute_form_values(&[
-        ("title".to_string(), "Recital".to_string()),
-        ("location.street".to_string(), "123 Main St".to_string()),
-        ("location.city".to_string(), String::new()),
-        ("location.zip".to_string(), "12345".to_string()),
+        (NodePath::new("title"), "Recital".to_string()),
+        (NodePath::new("location.street"), "123 Main St".to_string()),
+        (NodePath::new("location.city"), String::new()),
+        (NodePath::new("location.zip"), "12345".to_string()),
     ]);
     expect_that!(form.validate(), none());
 
@@ -102,7 +103,7 @@ fn an_unchosen_enum_reports_at_its_own_path() {
     // "you must choose a variant" PRECISELY in that state, so the early return
     // dropped the one error this node reliably produces.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("name"), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
 
     let errors = form.collect_errors();
@@ -119,9 +120,12 @@ fn a_chosen_variants_fields_report_under_the_variant_segment() {
     // Chosen but unfilled: now the error is a leaf's, one segment deeper, and
     // the enum itself has nothing to say.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
-    form.edit(&Edit::new_choose_variant("shape", Some("Circle")))
-        .expect("Circle is a variant of Shape");
+    form.distribute_form_values(&[(NodePath::new("name"), "Sketch".to_string())]);
+    form.edit(&Edit::new_choose_variant(
+        &NodePath::new("shape"),
+        Some("Circle"),
+    ))
+    .expect("Circle is a variant of Shape");
     expect_that!(form.validate(), none());
 
     expect_that!(
@@ -137,15 +141,18 @@ fn choosing_a_variant_clears_the_enums_own_error() {
     // a form that reported both would be telling the user to choose a variant
     // they had already chosen.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "Sketch".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("name"), "Sketch".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(form.collect_errors().paths(), contains(eq("shape")));
 
-    form.edit(&Edit::new_choose_variant("shape", Some("Circle")))
-        .expect("Circle is a variant of Shape");
+    form.edit(&Edit::new_choose_variant(
+        &NodePath::new("shape"),
+        Some("Circle"),
+    ))
+    .expect("Circle is a variant of Shape");
     form.distribute_form_values(&[
-        ("name".to_string(), "Sketch".to_string()),
-        ("shape.$Circle.radius".to_string(), "1.5".to_string()),
+        (NodePath::new("name"), "Sketch".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "1.5".to_string()),
     ]);
     expect_that!(form.validate(), some(anything()));
     expect_that!(form.collect_errors().fields, is_empty());
@@ -159,8 +166,11 @@ fn a_server_verdict_about_the_choice_itself_comes_back_out() {
     // a path has to be collectable from that path. `VariantNode` is the one
     // node where the two could disagree, because it accepts its OWN path.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.push_field_error("shape", "That shape is not available on this plan.")
-        .expect("the enum's own path is a legal target");
+    form.push_field_error(
+        &path!(Drawing.shape),
+        "That shape is not available on this plan.",
+    )
+    .expect("the enum's own path is a legal target");
 
     expect_that!(
         &form
@@ -175,7 +185,7 @@ fn a_server_verdict_survives_the_enum_being_unchosen() {
     // Same push, made explicit about the state that used to swallow it: nothing
     // has been chosen, so there is no child subtree to recurse into at all.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.push_field_error("shape", "Pick a shape first.")
+    form.push_field_error(&path!(Drawing.shape), "Pick a shape first.")
         .expect("the enum's own path is a legal target while unchosen");
 
     let errors = form.collect_errors();
@@ -189,7 +199,7 @@ fn a_server_verdict_survives_the_enum_being_unchosen() {
 #[gtest]
 fn a_server_verdict_on_a_leaf_round_trips_at_its_own_path() {
     let mut form = form_for(&filled_event(), FormSpec::default());
-    form.push_field_error("location.zip", "No such ZIP code.")
+    form.push_field_error(&path!(EventForCreate.location.zip), "No such ZIP code.")
         .expect("a qualified leaf path is a legal target");
 
     expect_that!(
@@ -216,7 +226,7 @@ fn list_items_report_their_own_item_keys() {
         counts: vec![1, 2, 3],
     };
     let mut form = form_for(&tally, FormSpec::default());
-    form.distribute_form_values(&[("counts.#1".to_string(), "not a number".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("counts.#1"), "not a number".to_string())]);
     expect_that!(form.validate(), none());
 
     expect_that!(
@@ -237,7 +247,7 @@ fn an_absent_optional_enum_reports_nothing() {
     // inner node's errors when absent — so the "choose a variant" error the
     // required case produces must NOT appear here.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "Doodle".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("name"), "Doodle".to_string())]);
     expect_that!(form.validate(), some(anything()));
 
     expect_that!(form.collect_errors().fields, is_empty());
@@ -266,8 +276,11 @@ fn an_enum_inside_a_variant_reports_at_its_own_nested_path() {
     // other, so its own error lands at `outer.$First.inner` — the prefix it
     // inherited, plus its name, and no segment of its own.
     let mut form = empty_form::<Doc>(FormSpec::default());
-    form.edit(&Edit::new_choose_variant("outer", Some("First")))
-        .expect("First is a variant of Outer");
+    form.edit(&Edit::new_choose_variant(
+        &NodePath::new("outer"),
+        Some("First"),
+    ))
+    .expect("First is a variant of Outer");
     expect_that!(form.validate(), none());
 
     expect_that!(
@@ -279,10 +292,16 @@ fn an_enum_inside_a_variant_reports_at_its_own_nested_path() {
 #[gtest]
 fn a_nested_enums_leaf_error_carries_both_variant_segments() {
     let mut form = empty_form::<Doc>(FormSpec::default());
-    form.edit(&Edit::new_choose_variant("outer", Some("First")))
-        .expect("First is a variant of Outer");
-    form.edit(&Edit::new_choose_variant("outer.$First.inner", Some("A")))
-        .expect("A is a variant of Inner");
+    form.edit(&Edit::new_choose_variant(
+        &NodePath::new("outer"),
+        Some("First"),
+    ))
+    .expect("First is a variant of Outer");
+    form.edit(&Edit::new_choose_variant(
+        &NodePath::new("outer.$First.inner"),
+        Some("A"),
+    ))
+    .expect("A is a variant of Inner");
     expect_that!(form.validate(), none());
 
     expect_that!(

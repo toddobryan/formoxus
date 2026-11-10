@@ -951,7 +951,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // in its list would go on leaving out a removed one. By prefix rather than
     // the item's current leaves, so an unchosen variant's values go too.
     if let Some(item) = removed {
-        values.retain(|path, _| path.starts_with(&item));
+        values.retain(|path, _| !path.starts_with(&item));
     }
     // A filled item was built from its value, so the TREE has its values, but
     // widgets, `validate` and `to_wire` read the STORE. Copy the new item's

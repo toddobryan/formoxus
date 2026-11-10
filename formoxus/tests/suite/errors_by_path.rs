@@ -13,6 +13,7 @@ use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ValuesByPath};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::collections::BTreeSet;
@@ -20,7 +21,7 @@ use std::collections::BTreeSet;
 fn values(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect()
 }
 
@@ -45,7 +46,7 @@ struct Drawing {
 
 fn choose(variant: Option<&str>) -> Edit {
     Edit::ChooseVariant {
-        path: "shape".to_string(),
+        path: NodePath::new("shape"),
         variant: variant.map(ToString::to_string),
     }
 }
@@ -177,13 +178,13 @@ fn a_removed_items_errors_go() {
         tags: ["go".to_string(), "rust".to_string()].into(),
     };
     let mut form = form_for(&post, FormSpec::default());
-    form.push_field_error("tags.#0", "Retired.")
+    form.push_field_error(&path!(Post.tags[= "go"]), "Retired.")
         .expect("the item exists");
-    form.push_field_error("tags.#1", "Also retired.")
+    form.push_field_error(&path!(Post.tags[= "rust"]), "Also retired.")
         .expect("the item exists");
 
     form.edit(&Edit::RemoveItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         index: 0,
     })
     .expect("the item exists");
@@ -204,7 +205,7 @@ const DRAFT: &str = "ages.#1";
 
 fn add_the_draft() -> Edit {
     Edit::AddItem {
-        path: "ages".to_string(),
+        path: NodePath::new("ages"),
         before: None,
         value: None,
     }
@@ -256,13 +257,26 @@ fn a_refused_draft_stays_off_the_wire() {
 }
 
 /// An error aimed at a draft from outside has no submitted value to be about,
-/// so it comes back as a path the form does not have.
+/// so it comes back as a path the form does not have. From a server, through
+/// `distribute_errors`: `push_field_error` takes a `ModelPath`, which names a
+/// set's item only by a value it holds, so it cannot name a draft at all.
 #[gtest]
-fn a_pushed_error_does_not_land_on_a_draft() {
+fn a_distributed_error_does_not_land_on_a_draft() {
     let ages = Ages { ages: [30].into() };
     let mut form = form_for(&ages, FormSpec::default());
 
-    expect_that!(form.push_field_error(DRAFT, "Too old."), err(anything()));
+    let unclaimed = form.distribute_errors(
+        [(
+            NodePath::new(DRAFT),
+            vec![ValidationMessage::from("Too old.")],
+        )]
+        .into_iter()
+        .collect(),
+    );
+    expect_that!(
+        unclaimed.keys().map(NodePath::as_str).collect::<Vec<_>>(),
+        elements_are![eq(&DRAFT)]
+    );
     expect_that!(draft_errors(&form), eq(0));
 }
 
@@ -284,7 +298,7 @@ fn editing_an_item_clears_a_refused_drafts_error() {
     let mut form = refused_draft();
 
     form.edit(&Edit::EditItem {
-        path: "ages".to_string(),
+        path: NodePath::new("ages"),
         index: Some(0),
     })
     .expect("the item exists");
@@ -319,7 +333,7 @@ struct Callback {
 fn a_pushed_error_on_an_absent_option_is_gone_after_validate() {
     let mut form = empty_form::<Callback>(FormSpec::default());
     form.distribute_values(&values(&[("name", "Ada")]));
-    form.push_field_error("phone", "That number is taken.")
+    form.push_field_error(&path!(Callback.phone?), "That number is taken.")
         .expect("an absent option's field still has a path");
     expect_that!(form.collect_errors().paths(), elements_are![eq("phone")]);
 

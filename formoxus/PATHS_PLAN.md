@@ -324,18 +324,44 @@ J. **`owns` becomes `starts_with`, called on the inner path, true on the root.
   spelling. `path!` refuses a path ending at a variant too, so `shape_at`'s
   `spec_key_shape` panic is now a backstop, and its doc says so.
 
-- [ ] **7.** (Claude) `form!` follows: every builder call it emits wraps its key
+- [x] **7.** (Claude) `form!` follows: every builder call it emits wraps its key
   in `&::formoxus::path::ModelPath::__new("…")` (full module path, per the prelude
   rule). Regenerate the trybuild goldens with `TRYBUILD=overwrite` and read the
   diff: a span that moves is expected, a message that changes is not.
 
-- [ ] **8.** (Claude) The suite, the examples and the gallery follow: map lookups
+  Done 2026-11-10: one change, in `FieldSpec::builder_calls`, which every key
+  goes through, wrapping it as `&::formoxus::path::ModelPath::<Model>::__new("…")`.
+  The 12 macro unit tests that pin the emitted text were updated; all 95 trybuild
+  goldens passed unchanged, so none was re-blessed; and every `form!` in the
+  examples crate compiles. For box 8: `examples/src/bin/widget_matrix.rs` builds
+  its spec from a runtime `String` path (`FIELDS`), which becomes `path!(Sampler.x)`.
+
+- [x] **8.** (Claude) The suite, the examples and the gallery follow: map lookups
   by `&str` stay, inserts take `NodePath::new`, and any custom widget or adder in
   the suite that builds a path by `format!` uses the methods instead (that is the
   point, so it is not a mechanical rename). The hand-written builder calls (about
   86) become `&path!(M.x)`, and two new tests pin decision I's panic, one for `[i]`
   and one for `[= v]`. Then `just ci` and `just e2e`. The e2e selectors read
   `name` attributes, which do not change, so a failure there is a real one.
+
+  Done 2026-11-10: `just ci` (1272 tests) and `just e2e` (70) green. The suite
+  found one real bug, in box 4's conversion: `Form`'s `RemoveItem` cleanup had
+  lost its `!` (`retain(|p, _| p.starts_with(&item))`), so removing an item kept
+  only that item's values. Every other converted `owns` was checked against
+  `main` for its negation and direction. Along the way:
+  - `NodePath::as_str` is public: the suite, and a custom adder, match string
+    prefixes (`tags.#`) that are not whole segments.
+  - The runtime-panic tests for a misspelled spec path (`specs.rs`) now reach
+    `spec_key_shape` through the hidden `ModelPath::__new`, since `path!`
+    refuses those at compile time; they pin the backstop's messages.
+  - Decision I's two tests are `an_index_is_refused` and `a_value_is_refused`.
+  - Errors pushed at an item KEY (`tags.#1`) became `path!` by value or index;
+    the draft test moved to `distribute_errors`, since a `ModelPath` cannot
+    name a draft.
+  - `path_without_variants`' suite unit test moved inline (box 3).
+  - OPEN for Todd: `join`/`join_item` are crate-private, so a custom adder
+    still builds `format!("{path}.#0")`. Making them public is the way to
+    finish "uses the methods instead".
 
 - [ ] **9.** (Claude) Docs and memory: `README.md` and `widgets.rs` wherever a
   live path is called a string; the trait docs on `Node`; the memory files that

@@ -32,7 +32,7 @@ use formoxus::widgets::{
     MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput,
     Textarea, TimeInput, UrlInput, WeekInput, Widget,
 };
-use formoxus::{FormSpec, empty_form, use_form};
+use formoxus::{FormSpec, ModelPath, empty_form, path, use_form};
 use std::panic;
 
 /// One field per scalar value kind a model can currently reach. The widget
@@ -47,15 +47,15 @@ struct Sampler {
     flag: bool,
 }
 
-const FIELDS: [(&str, FieldType); 4] = [
-    ("text", FieldType::Text),
-    ("int", FieldType::Int),
-    ("float", FieldType::Float),
-    ("flag", FieldType::Bool),
+const FIELDS: [(ModelPath<Sampler>, FieldType); 4] = [
+    (path!(Sampler.text), FieldType::Text),
+    (path!(Sampler.int), FieldType::Int),
+    (path!(Sampler.float), FieldType::Float),
+    (path!(Sampler.flag), FieldType::Bool),
 ];
 
 #[component]
-fn OneField(path: String, widget: AnyWidget) -> Element {
+fn OneField(path: ModelPath<Sampler>, widget: AnyWidget) -> Element {
     let form =
         use_form(move || empty_form(FormSpec::<Sampler>::new().with_widget(&path, widget.clone())));
     form.render(using_fns! {})
@@ -103,11 +103,11 @@ fn every_widget() -> [Entry; 18] {
 /// a user would hit, and is why this looks for the field's own label in the
 /// output instead.
 #[cfg(not(target_arch = "wasm32"))]
-fn renders(path: &str, widget: AnyWidget) -> bool {
+fn renders(path: &ModelPath<Sampler>, widget: AnyWidget) -> bool {
     let mut dom = VirtualDom::new_with_props(
         OneField,
         OneFieldProps {
-            path: path.to_string(),
+            path: path.clone(),
             widget,
         },
     );
@@ -141,8 +141,8 @@ fn main() {
 
     println!("\nformoxus widget matrix — which (value kind, widget) pairs render\n");
     print!("{:width$}", "widget", width = width);
-    for (p, _) in FIELDS {
-        print!("  {p:>7}");
+    for (p, _) in &FIELDS {
+        print!("  {:>7}", p.as_str());
     }
     println!();
     println!("{}", "─".repeat(width + FIELDS.len() * 9));
@@ -151,8 +151,8 @@ fn main() {
     let (mut ok, mut unchecked, mut bad) = (0, 0, 0);
     for (name, widget, accepts) in &widgets {
         print!("{name:width$}");
-        for (path, field_type) in FIELDS {
-            let cell = match (renders(path, widget.clone()), accepts(field_type)) {
+        for (path, field_type) in &FIELDS {
+            let cell = match (renders(path, widget.clone()), accepts(*field_type)) {
                 (true, true) => {
                     ok += 1;
                     "ok"

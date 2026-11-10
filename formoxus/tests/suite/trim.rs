@@ -7,6 +7,7 @@
 use super::Harness;
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 use std::collections::BTreeSet;
@@ -37,7 +38,7 @@ fn spec() -> FormSpec<Account> {
 fn raw(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(path, value)| ((*path).to_string(), (*value).to_string()))
+        .map(|(path, value)| (NodePath::new(*path), (*value).to_string()))
         .collect()
 }
 

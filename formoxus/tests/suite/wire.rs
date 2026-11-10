@@ -9,6 +9,7 @@ use super::models::Title;
 use super::{Harness, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::{
     ErrorsByPath, Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form,
     form, form_for, nodes::ValuesByPath, path, use_form, using_fns,
@@ -49,7 +50,7 @@ fn errors_at(path: &str, message: &str) -> FormErrors {
     FormErrors {
         form: Vec::new(),
         fields: [(
-            path.to_string(),
+            NodePath::new(path),
             vec![ValidationMessage(message.to_string())],
         )]
         .into_iter()
@@ -165,7 +166,7 @@ fn good_paths_land_and_every_bad_path_is_named() {
                 ("location.nope", "second stray"),
             ]
             .into_iter()
-            .map(|(path, message)| (path.to_string(), vec![ValidationMessage::from(message)]))
+            .map(|(path, message)| (NodePath::new(path), vec![ValidationMessage::from(message)]))
             .collect(),
         };
         let outcome = form.distribute_errors(&reply);
@@ -239,7 +240,7 @@ fn absorb_replaces_values_the_server_normalized() {
         form.write(&path!(Contact.email), "  ADA@Example.COM ")
             .expect("email is a field of this form");
 
-        let normalized: ValuesByPath = [("email".to_string(), "ada@example.com".to_string())]
+        let normalized: ValuesByPath = [(NodePath::new("email"), "ada@example.com".to_string())]
             .into_iter()
             .collect();
         form.absorb(WireForm::new(normalized, FormErrors::default()))
@@ -258,7 +259,7 @@ fn absorb_applies_values_and_errors_in_one_pass() {
     #[component]
     fn App() -> Element {
         let form = use_form(|| empty_form(form! { Contact {} }));
-        let values: ValuesByPath = [("name".to_string(), "Ada".to_string())]
+        let values: ValuesByPath = [(NodePath::new("name"), "Ada".to_string())]
             .into_iter()
             .collect();
         form.absorb(WireForm::new(
@@ -323,7 +324,7 @@ fn a_rejected_round_trip_comes_back_with_the_verdict() {
             ("location.zip", "NW1"),
         ]
         .into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect(),
         FormErrors::default(),
     );
@@ -351,7 +352,7 @@ fn an_accepted_round_trip_comes_back_normalized() {
             ("location.zip", "NW1"),
         ]
         .into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect(),
         FormErrors::default(),
     );
@@ -369,7 +370,7 @@ fn an_accepted_round_trip_comes_back_normalized() {
 #[gtest]
 fn a_wire_form_round_trips_through_json() {
     let wire = WireForm::<Contact>::new(
-        [("name".to_string(), "Ada".to_string())]
+        [(NodePath::new("name"), "Ada".to_string())]
             .into_iter()
             .collect(),
         errors_at("email", "Already registered."),

@@ -8,6 +8,7 @@
 use super::across_the_wire;
 use super::models::{Shape, Title};
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::{nodes::ValuesByPath, prelude::*};
 use googletest::prelude::*;
 use std::collections::BTreeSet;
@@ -34,7 +35,7 @@ fn credentials_spec() -> FormSpec<Credentials> {
 fn wire(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect()
 }
 
@@ -84,7 +85,7 @@ fn an_unknown_path_is_ignored_rather_than_trusted() {
     // inject anything: each leaf looks ITSELF up in the map, so a stray key has
     // nothing to attach to.
     let mut values = filled();
-    values.insert("is_admin".to_string(), "true".to_string());
+    values.insert(NodePath::new("is_admin"), "true".to_string());
 
     let submission = Submission::accept(credentials_spec(), &values)
         .expect("a stray key is not a validation failure");
@@ -615,7 +616,7 @@ fn an_item_inserted_at_the_front_arrives_at_the_front() {
         FormSpec::default(),
     );
     form.edit(&formoxus::nodes::Edit::AddItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         before: Some(0),
         value: None,
     })

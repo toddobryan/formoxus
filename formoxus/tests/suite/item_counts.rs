@@ -8,6 +8,7 @@ use super::{Harness, render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue, ValuesByPath};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::AddItemProps;
 use googletest::prelude::*;
@@ -84,7 +85,7 @@ fn too_many_items_is_the_lists_and_the_sets_own_error() {
 fn the_count_is_checked_whatever_the_items_say() {
     let mut form = form_for(&poll(&["Yes"], &[]), spec());
     form.distribute_values(
-        &[("answers.#0".to_string(), String::new())]
+        &[(NodePath::new("answers.#0"), String::new())]
             .into_iter()
             .collect(),
     );
@@ -115,8 +116,8 @@ fn the_blank_items_fill_as_any_item_does() {
     let mut form = empty_form(spec());
     form.distribute_values(
         &[
-            ("answers.#0".to_string(), "Yes".to_string()),
-            ("answers.#1".to_string(), "No".to_string()),
+            (NodePath::new("answers.#0"), "Yes".to_string()),
+            (NodePath::new("answers.#1"), "No".to_string()),
         ]
         .into_iter()
         .collect(),
@@ -147,14 +148,15 @@ fn a_new_items_own_list_starts_with_its_minimum() {
     );
     let added = form
         .edit(&Edit::AddItem {
-            path: "questions".to_string(),
+            path: NodePath::new("questions"),
             before: None,
             value: None,
         })
         .expect("questions is a list")
         .expect("an item was made");
     expect_that!(
-        form.collect_values().get(&format!("{added}.choices")),
+        form.collect_values()
+            .get(format!("{added}.choices").as_str()),
         some(eq("#0,#1"))
     );
 }
@@ -241,7 +243,7 @@ fn FullSetEditing() -> Element {
     let form = use_form(|| form_for(&poll(&["Yes", "No"], &["a", "b"]), spec()));
     use_hook(|| {
         form.edit(&Edit::EditItem {
-            path: "tags".to_string(),
+            path: NodePath::new("tags"),
             index: Some(0),
         })
         .expect("tags has an item 0")
@@ -285,7 +287,7 @@ fn a_custom_adder_is_told_the_maximum() {
 fn an_add_past_the_maximum_fails_validation() {
     let mut form = form_for(&poll(&["a", "b", "c"], &[]), spec());
     form.edit(&Edit::AddItem {
-        path: "answers".to_string(),
+        path: NodePath::new("answers"),
         before: None,
         value: Some(ItemValue::new("d".to_string())),
     })
@@ -305,12 +307,12 @@ fn an_add_past_the_maximum_fails_validation() {
 fn the_server_refuses_too_many_items_unbuilt() {
     let keys: Vec<String> = (0..10_000).map(|i| format!("#{i}")).collect();
     let mut values: ValuesByPath = [
-        ("answers".to_string(), keys.join(",")),
-        ("tags".to_string(), String::new()),
+        (NodePath::new("answers"), keys.join(",")),
+        (NodePath::new("tags"), String::new()),
     ]
     .into_iter()
     .collect();
-    values.insert("answers.#0".to_string(), "a".to_string());
+    values.insert(NodePath::new("answers.#0"), "a".to_string());
     let refused = Submission::accept(spec(), &values).expect_err("10,000 answers is too many");
     expect_that!(
         refused.fields.get("answers"),
@@ -321,10 +323,10 @@ fn the_server_refuses_too_many_items_unbuilt() {
     // Unbuilt: the server's form keeps the two blank answers `empty_form`
     // starts with (its minimum), and builds none of the 10,000 listed, so no
     // item past those two has anything to say.
-    let item_errors: Vec<&String> = refused
+    let item_errors: Vec<&NodePath> = refused
         .fields
         .keys()
-        .filter(|path| path.starts_with("answers.#"))
+        .filter(|path| path.as_str().starts_with("answers.#"))
         .collect();
     expect_that!(item_errors.len(), le(2));
     expect_that!(refused.fields.contains_key("answers.#9999"), eq(false));

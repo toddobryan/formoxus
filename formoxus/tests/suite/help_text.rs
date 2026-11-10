@@ -246,7 +246,9 @@ fn without_a_hint_nothing_is_rendered_or_described() {
 #[component]
 fn HandBuilt() -> Element {
     let form = use_form(|| {
-        empty_form(FormSpec::<Account>::default().with_help_text("name", "Built by hand."))
+        empty_form(
+            FormSpec::<Account>::default().with_help_text(&path!(Account.name), "Built by hand."),
+        )
     });
     form.render(using_fns! {})
 }

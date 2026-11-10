@@ -12,6 +12,7 @@ use super::{Harness, across_the_wire, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AddItemProps, FieldErrors, Widget, WidgetProps};
 use googletest::prelude::*;
@@ -146,7 +147,7 @@ fn the_assignment_round_trips() {
 fn moving_a_group_carries_its_questions() {
     let mut form = form_for(&assignment(), spec());
     form.edit(&Edit::MoveItem {
-        path: "groups".to_string(),
+        path: NodePath::new("groups"),
         from: 0,
         to: 2,
     })
@@ -162,7 +163,7 @@ fn moving_a_group_carries_its_questions() {
 fn moving_a_question_reorders_only_its_group() {
     let mut form = form_for(&assignment(), spec());
     form.edit(&Edit::MoveItem {
-        path: "groups.#0.$All.questions".to_string(),
+        path: NodePath::new("groups.#0.$All.questions"),
         from: 2,
         to: 0,
     })
@@ -182,13 +183,13 @@ fn moving_a_question_reorders_only_its_group() {
 fn a_filled_item_reaches_a_pool_after_its_group_moves() {
     let mut form = form_for(&assignment(), spec());
     form.edit(&Edit::MoveItem {
-        path: "groups".to_string(),
+        path: NodePath::new("groups"),
         from: 1,
         to: 0,
     })
     .expect("groups is a list with three items");
     let added = form.edit(&Edit::AddItem {
-        path: "groups.#1.$Random.set".to_string(),
+        path: NodePath::new("groups.#1.$Random.set"),
         before: None,
         value: Some(ItemValue::new("q9".to_string())),
     });
@@ -250,7 +251,7 @@ fn AssignmentWithANestedError() -> Element {
     form.absorb(WireForm::from_errors(FormErrors {
         form: Vec::new(),
         fields: [(
-            "groups.#1.$Random.set.#0".to_string(),
+            NodePath::new("groups.#1.$Random.set.#0"),
             vec![ValidationMessage("Already in group 1.".to_string())],
         )]
         .into_iter()
@@ -378,7 +379,7 @@ fn after_a_move_the_index_resolves_to_the_moved_items_key() {
         spec().with_validator(one_group_per_question),
     );
     form.edit(&Edit::MoveItem {
-        path: "groups".to_string(),
+        path: NodePath::new("groups"),
         from: 1,
         to: 0,
     })

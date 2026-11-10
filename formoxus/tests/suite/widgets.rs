@@ -11,6 +11,7 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{
     AnyWidget, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
@@ -30,7 +31,7 @@ use std::{collections::HashMap, fmt::Debug};
 /// how many fields the shape turned out to have.
 fn use_field_signals<T: Clone + Debug + PartialEq + Facet<'static>>(
     form: &FormState<T>,
-) -> HashMap<String, Signal<String>> {
+) -> HashMap<NodePath, Signal<String>> {
     let leaves = form.collect_values();
     use_hook(|| {
         leaves
@@ -58,8 +59,8 @@ fn EventFormView() -> Element {
     let signals = use_field_signals(&form);
 
     // Stable order so the rendered output is deterministic.
-    let mut paths: Vec<String> = signals.keys().cloned().collect();
-    paths.sort();
+    let mut paths: Vec<NodePath> = signals.keys().cloned().collect();
+    paths.sort_by(|a, b| a.as_str().cmp(b.as_str()));
 
     rsx! {
         form {
@@ -85,11 +86,11 @@ fn UncontrolledEventForm() -> Element {
     rsx! {
         form {
             onsubmit: move |e: FormEvent| {
-                let values: Vec<(String, String)> = e
+                let values: Vec<(NodePath, String)> = e
                     .values()
                     .into_iter()
                     .filter_map(|(name, v)| match v {
-                        FormValue::Text(text) => Some((name, text)),
+                        FormValue::Text(text) => Some((NodePath::new(name), text)),
                         // File inputs are a separate story — there's no
                         // text for a scalar widget to parse.
                         FormValue::File(_) => None,
@@ -121,10 +122,10 @@ fn uncontrolled_inputs_are_named_by_qualified_path() {
 fn submitted_values_shuffle_into_a_model() {
     // Exactly the shape `FormData::values()` produces, minus the DOM.
     let submitted = vec![
-        ("title".to_string(), "Board Game Night".to_string()),
-        ("location.street".to_string(), "123 Main St".to_string()),
-        ("location.city".to_string(), "Springfield".to_string()),
-        ("location.zip".to_string(), "12345".to_string()),
+        (NodePath::new("title"), "Board Game Night".to_string()),
+        (NodePath::new("location.street"), "123 Main St".to_string()),
+        (NodePath::new("location.city"), "Springfield".to_string()),
+        (NodePath::new("location.zip"), "12345".to_string()),
     ];
 
     let mut form = empty_form::<EventForCreate>(FormSpec::default());
@@ -179,7 +180,7 @@ const ID: &str = "rand0123-name";
 fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetProps {
     let mut props = WidgetProps::new(
         ID,
-        path,
+        NodePath::new(path),
         FieldAttrs::default(),
         values,
         use_store(HashMap::new),
@@ -192,7 +193,7 @@ fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetPr
 #[component]
 fn PopulatedInput() -> Element {
     let values =
-        use_store(|| HashMap::from([("title".to_string(), "Board Game Night".to_string())]));
+        use_store(|| HashMap::from([(NodePath::new("title"), "Board Game Night".to_string())]));
     rsx! {
         {TextInput.render(plain_props(values, "title", Some("Title")))}
     }
@@ -202,7 +203,7 @@ fn PopulatedInput() -> Element {
 fn EmptyInput() -> Element {
     // A path the schema has but the value map has never seen — what a variant
     // chosen after mount produces.
-    let values = use_store(HashMap::<String, String>::new);
+    let values = use_store(HashMap::<NodePath, String>::new);
     rsx! {
         {TextInput.render(plain_props(values, "shape.radius", None))}
     }
@@ -298,7 +299,7 @@ struct Score {
 #[component]
 fn ScoreFormWithBadInput() -> Element {
     let mut state = empty_form::<Score>(FormSpec::default());
-    state.distribute_form_values(&[("credit".to_string(), "abc".to_string())]);
+    state.distribute_form_values(&[(NodePath::new("credit"), "abc".to_string())]);
     // Validating BEFORE mounting is what makes this a pure render assertion —
     // errors are populated by `validate`, and blur-time validation doesn't
     // exist yet, so there is no interaction to drive here.
@@ -334,7 +335,7 @@ fn an_unparseable_value_does_not_also_claim_to_be_required() {
     // value is unparseable — which satisfies "not also required" by making the
     // field report nothing at all, so the real error never renders either.
     let mut form = empty_form::<Score>(FormSpec::default());
-    form.distribute_form_values(&[("credit".to_string(), "abc".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("credit"), "abc".to_string())]);
     expect_that!(form.validate(), none());
 
     let html = render_to_html(ScoreFormWithBadInput);
@@ -439,8 +440,9 @@ thread_local! {
 #[component]
 fn WithWidget() -> Element {
     let widget = WIDGET.with_borrow(|c| c.clone().expect("set by rendered_with"));
-    let form =
-        use_form(|| empty_form(FormSpec::<OneString>::default().with_widget("secret", widget)));
+    let form = use_form(|| {
+        empty_form(FormSpec::<OneString>::default().with_widget(&path!(OneString.secret), widget))
+    });
     form.render(using_fns! {})
 }
 
@@ -515,7 +517,8 @@ fn a_password_round_trips_its_value_like_any_other_field() {
                 &OneString {
                     secret: "hunter2".to_string(),
                 },
-                FormSpec::<OneString>::default().with_widget("secret", PasswordInput),
+                FormSpec::<OneString>::default()
+                    .with_widget(&path!(OneString.secret), PasswordInput),
             )
         });
         form.render(using_fns! {})
@@ -551,7 +554,7 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
 /// the value, so the rendered `value=` attribute cannot be the evidence.
 #[component]
 fn PasswordWithEcho() -> Element {
-    let values = use_store(HashMap::<String, String>::new);
+    let values = use_store(HashMap::<NodePath, String>::new);
     let stored = values.read().get("secret").cloned().unwrap_or_default();
     rsx! {
         {PasswordInput.render(plain_props(values, "secret", Some("Secret")))}

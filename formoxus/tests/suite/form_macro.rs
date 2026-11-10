@@ -9,6 +9,7 @@ use facet::Facet;
 use formoxus::attrs::Tag;
 use formoxus::form;
 use formoxus::nodes::ValuesByPath;
+use formoxus::path::NodePath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
@@ -836,8 +837,8 @@ fn a_second_validate_clears_the_first_ones_verdict() {
     expect_that!(state.validate(), none());
 
     state.distribute_values(&::indexmap::IndexMap::from([
-        ("headline".to_string(), "Trees are good".to_string()),
-        ("words".to_string(), "400".to_string()),
+        (NodePath::new("headline"), "Trees are good".to_string()),
+        (NodePath::new("words"), "400".to_string()),
     ]));
     expect_that!(state.validate(), some(anything()));
     expect_that!(state.has_errors(), eq(false));
@@ -866,8 +867,8 @@ fn a_field_error_stops_the_validator_from_running_at_all() {
         form! { Article { validator: counting_validator } },
     );
     state.distribute_values(&::indexmap::IndexMap::from([
-        ("headline".to_string(), "Trees".to_string()),
-        ("words".to_string(), "not a number".to_string()),
+        (NodePath::new("headline"), "Trees".to_string()),
+        (NodePath::new("words"), "not a number".to_string()),
     ]));
 
     expect_that!(state.validate(), none());
@@ -1022,12 +1023,12 @@ fn a_keyword_named_field_is_addressable_bare() {
 fn wire(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect()
 }
 
 fn failing_paths(errors: &FormErrors) -> Vec<String> {
-    errors.fields.iter().map(|(p, _)| p.clone()).collect()
+    errors.fields.iter().map(|(p, _)| p.to_string()).collect()
 }
 
 /// The whole chain the macro was the last missing link in: `form!` -> the

@@ -9,6 +9,7 @@ use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::path::NodePath;
 use formoxus::widgets::Choice;
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{
@@ -76,16 +77,16 @@ fn errors() -> Vec<ValidationMessage> {
     vec![ValidationMessage::from("too short")]
 }
 
-fn values() -> HashMap<String, String> {
-    HashMap::from([(PATH.to_string(), "A".to_string())])
+fn values() -> HashMap<NodePath, String> {
+    HashMap::from([(NodePath::new(PATH), "A".to_string())])
 }
 
 fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
     let values = use_store(values);
-    let errors = use_store(|| HashMap::from([(PATH.to_string(), Some(errors()))]));
+    let errors = use_store(|| HashMap::from([(NodePath::new(PATH), Some(errors()))]));
     let mut props = WidgetProps::new(
         ID,
-        PATH,
+        NodePath::new(PATH),
         field_attrs(),
         values,
         errors,

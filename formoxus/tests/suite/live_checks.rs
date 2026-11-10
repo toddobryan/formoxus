@@ -11,6 +11,7 @@ use std::cell::Cell;
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{Widget, WidgetProps};
 use googletest::prelude::*;
@@ -549,7 +550,7 @@ fn SeededWithAnError() -> Element {
         let mut state = empty_form(form! { Signup {} });
         state
             .field_errors
-            .insert("name".to_string(), vec!["Taken.".into()]);
+            .insert(NodePath::new("name"), vec!["Taken.".into()]);
         state
     });
     form.render(using_fns! {})

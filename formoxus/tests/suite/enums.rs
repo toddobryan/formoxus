@@ -27,8 +27,9 @@ use super::models::{Mode, Shape};
 use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::nodes::Edit;
 use formoxus::nodes::ValuesByPath;
-use formoxus::nodes::{Edit, path_without_variants};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
@@ -141,7 +142,7 @@ fn a_blank_form_starts_every_enum_unchosen() {
     // single biggest consequence of the change.
     let form = empty_form::<Drawing>(FormSpec::default());
     let values = form.collect_values();
-    let paths: Vec<String> = values.keys().cloned().collect();
+    let paths: Vec<String> = values.keys().map(ToString::to_string).collect();
     expect_that!(
         paths,
         elements_are![eq("name"), eq("shape")],
@@ -160,7 +161,7 @@ fn an_untouched_optional_enum_validates_as_none() {
     // suppresses the inner error exactly as it does for an empty scalar. This is
     // why two states suffice and `Absent` was not needed.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "Doodle".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("name"), "Doodle".to_string())]);
     expect_that!(
         form.validate(),
         some(eq(&Sketch {
@@ -264,7 +265,7 @@ fn DocWithChosenOuter() -> Element {
     let form = use_form(|| {
         let mut state = empty_form::<Doc>(FormSpec::default());
         state
-            .choose_variant("outer", Some("First"))
+            .choose_variant(&NodePath::new("outer"), Some("First"))
             .expect("First is a variant of Outer2");
         state
     });
@@ -379,7 +380,7 @@ fn an_unchosen_required_enum_is_a_validation_error() {
     // form silently validates into a model with no variant selected — which it
     // can't, so it would panic in `write_value_into` instead.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.distribute_form_values(&[("name".to_string(), "My Drawing".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("name"), "My Drawing".to_string())]);
     expect_that!(
         form.validate(),
         none(),
@@ -393,15 +394,19 @@ fn an_unchosen_required_enum_is_a_validation_error() {
 #[gtest]
 fn choosing_a_variant_reveals_its_fields() {
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
 
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(paths, contains(eq("shape.$Circle.radius")));
 
     form.distribute_form_values(&[
-        ("name".to_string(), "My Drawing".to_string()),
-        ("shape.$Circle.radius".to_string(), "3.5".to_string()),
+        (NodePath::new("name"), "My Drawing".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "3.5".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -417,12 +422,12 @@ fn choosing_a_variant_behind_an_option_builds_a_some() {
     // The `begin_some` frame still has to happen, but `OptionNode` owns it now
     // rather than `VariantNode` knowing it is optional.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
 
     form.distribute_form_values(&[
-        ("name".to_string(), "Doodle".to_string()),
-        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
+        (NodePath::new("name"), "Doodle".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "2.5".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -440,7 +445,7 @@ fn choosing_an_unknown_variant_is_an_error() {
     // arrive from a stale client, not just from our own bug.
     let mut form = empty_form::<Drawing>(FormSpec::default());
     expect_that!(
-        form.choose_variant("shape", Some("Hexagon")),
+        form.choose_variant(&NodePath::new("shape"), Some("Hexagon")),
         err(anything())
     );
 }
@@ -451,17 +456,21 @@ fn choosing_a_variant_leaves_a_nested_enum_unchosen() {
     // not exist until `outer` is answered — but now it simply appears, unchosen,
     // and the user answers it in the form. No pre-flight, no second round trip.
     let mut form = empty_form::<Doc>(FormSpec::default());
-    form.choose_variant("outer", Some("First"))
+    form.choose_variant(&NodePath::new("outer"), Some("First"))
         .expect("First is a variant of Outer2");
 
     // `inner` is now reachable and unanswered, so it contributes no leaves yet…
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(paths, not(contains(starts_with("outer.$First.inner."))));
 
     // …and answering it reveals its fields.
-    form.choose_variant("outer.$First.inner", Some("A"))
+    form.choose_variant(&NodePath::new("outer.$First.inner"), Some("A"))
         .expect("A is a variant of Inner");
-    form.distribute_form_values(&[("outer.$First.inner.$A.x".to_string(), "1.5".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("outer.$First.inner.$A.x"), "1.5".to_string())]);
     expect_that!(
         form.validate(),
         some(eq(&Doc {
@@ -477,13 +486,17 @@ fn switching_a_variant_replaces_the_subtree() {
     // The destructive switch, which is now a UX rule rather than something the
     // type system prevents: the old variant's fields are gone, not merged.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant");
-    form.distribute_form_values(&[("shape.$Circle.radius".to_string(), "3.5".to_string())]);
+    form.distribute_form_values(&[(NodePath::new("shape.$Circle.radius"), "3.5".to_string())]);
 
-    form.choose_variant("shape", Some("Rectangle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Rectangle"))
         .expect("Rectangle is a variant");
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(paths, not(contains(eq("shape.$Circle.radius"))));
     expect_that!(paths, contains(eq("shape.$Rectangle.width")));
 }
@@ -503,14 +516,14 @@ struct Gallery {
 fn choosing_a_variant_through_a_struct_node() {
     // `drawing.shape` — the path crosses a `StructNode` on its way down.
     let mut form = empty_form::<Outer>(FormSpec::default());
-    form.choose_variant("drawing.shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("drawing.shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
 
     form.distribute_form_values(&[
-        ("title".to_string(), "T".to_string()),
-        ("drawing.name".to_string(), "N".to_string()),
+        (NodePath::new("title"), "T".to_string()),
+        (NodePath::new("drawing.name"), "N".to_string()),
         (
-            "drawing.shape.$Circle.radius".to_string(),
+            NodePath::new("drawing.shape.$Circle.radius"),
             "1.0".to_string(),
         ),
     ]);
@@ -569,10 +582,14 @@ fn choosing_a_variant_on_one_list_item_leaves_the_others_alone() {
         shapes: vec![Shape::Circle { radius: 1.0 }, Shape::Circle { radius: 2.0 }],
     };
     let mut form = form_for(&gallery, FormSpec::default());
-    form.choose_variant("shapes.#1", Some("Rectangle"))
+    form.choose_variant(&NodePath::new("shapes.#1"), Some("Rectangle"))
         .expect("Rectangle is a variant of Shape");
 
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(
         paths,
         elements_are![
@@ -587,8 +604,14 @@ fn choosing_a_variant_on_one_list_item_leaves_the_others_alone() {
     );
 
     form.distribute_form_values(&[
-        ("shapes.#1.$Rectangle.width".to_string(), "3.0".to_string()),
-        ("shapes.#1.$Rectangle.height".to_string(), "4.0".to_string()),
+        (
+            NodePath::new("shapes.#1.$Rectangle.width"),
+            "3.0".to_string(),
+        ),
+        (
+            NodePath::new("shapes.#1.$Rectangle.height"),
+            "4.0".to_string(),
+        ),
     ]);
     expect_that!(
         form.validate(),
@@ -607,10 +630,16 @@ fn choosing_a_variant_on_one_list_item_leaves_the_others_alone() {
 #[gtest]
 fn a_bad_path_is_an_error_not_a_panic() {
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    expect_that!(form.choose_variant("nope", Some("Circle")), err(anything()));
+    expect_that!(
+        form.choose_variant(&NodePath::new("nope"), Some("Circle")),
+        err(anything())
+    );
     // A real field, but not an enum — worth distinguishing, since it means the
     // caller's path was right and its expectation wasn't.
-    expect_that!(form.choose_variant("name", Some("Circle")), err(anything()));
+    expect_that!(
+        form.choose_variant(&NodePath::new("name"), Some("Circle")),
+        err(anything())
+    );
 }
 
 // ── Variants that share a field name ─────────────────────────────────────
@@ -637,12 +666,16 @@ fn a_variants_fields_are_namespaced_under_a_variant_segment() {
     // collide with a field name. Strip the `$` segments and the path mirrors
     // the model again: `footprint.size`.
     let mut form = empty_form::<Plot>(FormSpec::default());
-    form.choose_variant("footprint", Some("Circle"))
+    form.choose_variant(&NodePath::new("footprint"), Some("Circle"))
         .expect("Circle is a variant of Footprint");
 
     // The choice itself sits at the enum's own path, its fields one `$` segment
     // below it.
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(
         paths,
         elements_are![eq("footprint"), eq("footprint.$Circle.size")]
@@ -655,7 +688,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
     // rather than the fix: whatever the paths are, a value typed into Circle
     // must not reappear in Square.
     let mut form = empty_form::<Plot>(FormSpec::default());
-    form.choose_variant("footprint", Some("Circle"))
+    form.choose_variant(&NodePath::new("footprint"), Some("Circle"))
         .expect("Circle is a variant of Footprint");
 
     // Type into every leaf Circle offers, then snapshot the value map. Leaves
@@ -665,7 +698,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
     let variant_leaves = |values: ValuesByPath| -> ValuesByPath {
         values
             .into_iter()
-            .filter(|(p, _)| p.contains(".$"))
+            .filter(|(p, _)| p.as_str().contains(".$"))
             .collect()
     };
     let typed: ValuesByPath = variant_leaves(form.collect_values())
@@ -677,7 +710,7 @@ fn switching_variants_does_not_inherit_a_same_named_field() {
 
     // Switch. The store is keyed by path and survives structural edits by
     // design, so the Circle's entry is still sitting in it.
-    form.choose_variant("footprint", Some("Square"))
+    form.choose_variant(&NodePath::new("footprint"), Some("Square"))
         .expect("Square is a variant of Footprint");
     form.distribute_values(&store);
 
@@ -726,34 +759,9 @@ fn switching_variants_keeps_each_ones_values_apart() {
 
 // ── Paths still mirror the model, modulo `$` segments ────────────────────
 
-#[gtest]
-fn model_path_strips_variant_descriptors() {
-    // The rule that keeps namespacing from costing us path/model mirroring:
-    // drop every `$` segment and what's left is the path through the model.
-    expect_that!(
-        path_without_variants("footprint.$Circle.size"),
-        eq("footprint.size")
-    );
-    expect_that!(
-        path_without_variants("outer.$First.inner.$A.x"),
-        eq("outer.inner.x")
-    );
-
-    // An item KEY survives: it names a real element of the model. Which element
-    // is a question the string can't answer — a key is an identity, not a
-    // position, and only `ListNode::items` knows the order.
-    expect_that!(
-        path_without_variants("shapes.#0.$Circle.radius"),
-        eq("shapes.#0.radius")
-    );
-
-    // Nothing to strip.
-    expect_that!(
-        path_without_variants("location.street"),
-        eq("location.street")
-    );
-    expect_that!(path_without_variants("title"), eq("title"));
-}
+// The unit cases (`footprint.$Circle.size` is `footprint.size`, and so on) are
+// `NodePath::without_variants`' inline tests in `path.rs`; this is the property
+// they are examples of, against a real form.
 
 #[gtest]
 fn every_leaf_path_maps_back_onto_the_model() {
@@ -762,13 +770,13 @@ fn every_leaf_path_maps_back_onto_the_model() {
     // real fields — here `shape.radius`, which is exactly how you'd reach the
     // value in `Drawing` itself.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant");
 
     let model: Vec<String> = form
         .collect_values()
         .into_iter()
-        .map(|(p, _)| path_without_variants(&p))
+        .map(|(p, _)| p.without_variants())
         .collect();
 
     expect_that!(model, each(not(contains_substring("$"))));
@@ -784,7 +792,7 @@ fn an_item_edit_aimed_at_an_enum_is_rejected() {
     let mut form = empty_form::<Drawing>(FormSpec::default());
     let error = form
         .edit(&Edit::AddItem {
-            path: "shape".to_string(),
+            path: NodePath::new("shape"),
             before: None,
             value: None,
         })
@@ -798,7 +806,7 @@ fn a_variant_edit_aimed_at_a_scalar_is_rejected() {
     // *expectation* was wrong — worth saying differently from "no such path".
     let mut form = empty_form::<Drawing>(FormSpec::default());
     let error = form
-        .choose_variant("name", Some("Circle"))
+        .choose_variant(&NodePath::new("name"), Some("Circle"))
         .expect_err("a String field is not an enum");
     expect_that!(error.0, contains_substring("name is a field, not an enum"));
 }
@@ -811,11 +819,11 @@ fn an_optional_enum_can_be_unset_after_being_chosen() {
     // enum's `<select>`. Without it there was no way back to `Unchosen` — you
     // could answer the question but never un-answer it.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
     form.distribute_form_values(&[
-        ("name".to_string(), "Doodle".to_string()),
-        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
+        (NodePath::new("name"), "Doodle".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "2.5".to_string()),
     ]);
     expect_that!(
         form.validate(),
@@ -825,7 +833,7 @@ fn an_optional_enum_can_be_unset_after_being_chosen() {
         }))
     );
 
-    form.choose_variant("shape", None)
+    form.choose_variant(&NodePath::new("shape"), None)
         .expect("an optional enum can be cleared");
     expect_that!(
         form.validate(),
@@ -841,15 +849,19 @@ fn unsetting_drops_the_subtree_from_the_form() {
     // The nodes go, so the enum contributes no leaves and `is_present` reads
     // false — which is what lets `OptionNode` write a `None`.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
-    let chosen: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let chosen: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
     expect_that!(chosen, contains(eq("shape.$Circle.radius")));
 
-    form.choose_variant("shape", None)
+    form.choose_variant(&NodePath::new("shape"), None)
         .expect("an optional enum can be cleared");
     let cleared = form.collect_values();
-    let cleared_paths: Vec<String> = cleared.keys().cloned().collect();
+    let cleared_paths: Vec<String> = cleared.keys().map(ToString::to_string).collect();
     expect_that!(cleared_paths, elements_are![eq("name"), eq("shape")]);
     expect_that!(
         cleared.get("shape"),
@@ -865,17 +877,17 @@ fn unsetting_a_required_enum_is_structurally_legal_but_fails_validation() {
     // an enum that was never answered at all. `Drawing.shape` is a bare `Shape`,
     // with no `Option` around it.
     let mut form = empty_form::<Drawing>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant");
     form.distribute_form_values(&[
-        ("name".to_string(), "My Drawing".to_string()),
-        ("shape.$Circle.radius".to_string(), "3.5".to_string()),
+        (NodePath::new("name"), "My Drawing".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "3.5".to_string()),
     ]);
     // Fully answered first, so the `none()` below can only be the clearing —
     // otherwise this would pass just as well against an unset that did nothing.
     expect_that!(form.validate(), some(anything()));
 
-    form.choose_variant("shape", None)
+    form.choose_variant(&NodePath::new("shape"), None)
         .expect("clearing is structurally legal");
     expect_that!(form.validate(), none());
 }
@@ -886,15 +898,15 @@ fn unsetting_then_rechoosing_restores_what_was_typed() {
     // edits, and clearing doesn't touch it, so the radius is still sitting under
     // `shape.$Circle.radius` when the user changes their mind.
     let mut form = empty_form::<Sketch>(FormSpec::default());
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
     form.distribute_form_values(&[
-        ("name".to_string(), "Doodle".to_string()),
-        ("shape.$Circle.radius".to_string(), "2.5".to_string()),
+        (NodePath::new("name"), "Doodle".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "2.5".to_string()),
     ]);
     let store: ValuesByPath = form.collect_values();
 
-    form.choose_variant("shape", None)
+    form.choose_variant(&NodePath::new("shape"), None)
         .expect("an optional enum can be cleared");
     // Pin the intermediate state, so this can't pass against an unset that
     // silently did nothing.
@@ -906,7 +918,7 @@ fn unsetting_then_rechoosing_restores_what_was_typed() {
         }))
     );
 
-    form.choose_variant("shape", Some("Circle"))
+    form.choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("and chosen again");
     form.distribute_values(&store);
 
@@ -956,11 +968,11 @@ fn switching_variants_actually_edits_the_dom() {
 fn DrawingWithABadRadius() -> Element {
     let mut state = empty_form::<Drawing>(FormSpec::default());
     state
-        .choose_variant("shape", Some("Circle"))
+        .choose_variant(&NodePath::new("shape"), Some("Circle"))
         .expect("Circle is a variant of Shape");
     state.distribute_form_values(&[
-        ("name".to_string(), "Doodle".to_string()),
-        ("shape.$Circle.radius".to_string(), "abc".to_string()),
+        (NodePath::new("name"), "Doodle".to_string()),
+        (NodePath::new("shape.$Circle.radius"), "abc".to_string()),
     ]);
     let _ = state.validate();
     let form = use_form(|| state);

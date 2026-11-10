@@ -11,6 +11,7 @@ use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::collections::{BTreeSet, HashSet};
@@ -67,25 +68,30 @@ fn the_value_finds_its_item_after_adds_and_removes() {
         FormSpec::default().with_validator(no_retired_tags),
     );
     form.edit(&Edit::RemoveItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         index: 0,
     })
     .expect("go is item 0");
     form.edit(&Edit::AddItem {
-        path: "tags".to_string(),
+        path: NodePath::new("tags"),
         before: None,
         value: Some(ItemValue::new("cobol".to_string())),
     })
     .expect("cobol is a new tag");
     expect_that!(form.validate(), none());
-    let keyed: Vec<String> = form.collect_errors().fields.keys().cloned().collect();
+    let keyed: Vec<String> = form
+        .collect_errors()
+        .fields
+        .keys()
+        .map(ToString::to_string)
+        .collect();
     let added = form
         .collect_values()
         .into_iter()
         .find(|(_, value)| value == "cobol")
         .map(|(path, _)| path)
         .expect("cobol is an item");
-    expect_that!(keyed, elements_are![eq(&added)]);
+    expect_that!(keyed, elements_are![eq(added.as_str())]);
 }
 
 /// Shown beside the item, as any of its errors is.

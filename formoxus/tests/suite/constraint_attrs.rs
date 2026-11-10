@@ -10,6 +10,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 
 use super::FORM_ID;
@@ -114,8 +115,8 @@ fn a_numeric_bound_stays_off_a_text_input_but_is_still_checked() {
     let mut form = empty_form(form! { Counts { whole => { min: 1, max: 9 } } });
     form.distribute_values(
         &[
-            ("whole".to_string(), "12".to_string()),
-            ("fraction".to_string(), "0.5".to_string()),
+            (NodePath::new("whole"), "12".to_string()),
+            (NodePath::new("fraction"), "0.5".to_string()),
         ]
         .into_iter()
         .collect(),
@@ -237,7 +238,7 @@ fn a_textareas_pattern_is_still_checked() {
         Bio { about => { pattern: r"\w+", widget: textarea } }
     });
     form.distribute_values(
-        &[("about".to_string(), "two words".to_string())]
+        &[(NodePath::new("about"), "two words".to_string())]
             .into_iter()
             .collect(),
     );

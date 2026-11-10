@@ -658,7 +658,12 @@ impl FieldSpec {
     /// (`treat_as_set`), `sort_by` and `feedback`.
     /// Each is omitted when the body says nothing about it.
     fn builder_calls(&self, model: &Path) -> TokenStream2 {
+        // A `ModelPath`, which the builders take (decision H in `PATHS_PLAN.md`).
+        // `__new` is hidden because a `ModelPath` must come from a path rustc
+        // has checked against the model, and this one has: `form!` checks each
+        // field path the way `path!` does.
         let key = self.path.key();
+        let key = quote! { &::formoxus::path::ModelPath::<#model>::__new(#key) };
         let label = self
             .body
             .label

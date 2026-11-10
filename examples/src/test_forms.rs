@@ -700,7 +700,7 @@ fn SongPicker(props: formoxus::widgets::AddItemProps) -> Element {
 /// body cannot hold the `let` its clone would need.
 fn pick(
     on_edit: Callback<formoxus::widgets::Edit>,
-    path: String,
+    path: formoxus::path::NodePath,
     song: &'static str,
 ) -> impl FnMut(MouseEvent) {
     move |_| {

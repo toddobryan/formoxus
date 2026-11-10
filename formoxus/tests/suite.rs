@@ -131,7 +131,12 @@ pub fn with_store_keys<T>(form: formoxus::Form<T>) -> Element
 where
     T: Clone + std::fmt::Debug + PartialEq + facet::Facet<'static> + 'static,
 {
-    let mut keys: Vec<String> = form.values().read().keys().cloned().collect();
+    let mut keys: Vec<String> = form
+        .values()
+        .read()
+        .keys()
+        .map(ToString::to_string)
+        .collect();
     keys.sort();
     let keys = keys.join(" ");
     rsx! {

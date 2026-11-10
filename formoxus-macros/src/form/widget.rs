@@ -827,7 +827,9 @@ mod tests {
         let tokens = spec.expand().to_string();
         expect_that!(
             tokens,
-            contains_substring(". with_widget (\"notes\" , MarkdownWidget { rows : 5 ,")
+            contains_substring(
+                ". with_widget (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , MarkdownWidget { rows : 5 ,"
+            )
         );
         expect_that!(tokens, not(contains_substring("with_custom_widget")));
     }

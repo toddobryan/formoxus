@@ -187,7 +187,9 @@ impl NodePath {
         Self(String::new())
     }
 
-    pub(crate) fn as_str(&self) -> &str {
+    /// The wire spelling, as the `name` attribute holds it. For reading only:
+    /// a path is built with `join`, never by editing this string.
+    pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 

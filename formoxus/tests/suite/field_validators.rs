@@ -9,6 +9,7 @@
 use super::{Harness, render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 use std::collections::BTreeSet;
@@ -146,7 +147,7 @@ fn the_fields_own_checks_come_first() {
 
     let mut form = form_for(&signup(30, None, "Hi."), signup_spec());
     form.distribute_values(
-        &[("age".to_string(), "thirty".to_string())]
+        &[(NodePath::new("age"), "thirty".to_string())]
             .into_iter()
             .collect(),
     );

@@ -17,6 +17,7 @@ use formoxus::fields::StringField;
 use formoxus::label_case::LabelCase;
 use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{Node, StructNode};
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::TextInput;
 use googletest::prelude::*;
@@ -90,7 +91,11 @@ fn node_names(nodes: &[Box<dyn Node>]) -> Vec<String> {
 #[gtest]
 fn repeated_struct_types_get_distinct_paths() {
     let form = empty_form::<Trip>(FormSpec::default());
-    let paths: Vec<String> = form.collect_values().into_iter().map(|(p, _)| p).collect();
+    let paths: Vec<String> = form
+        .collect_values()
+        .into_iter()
+        .map(|(p, _)| p.to_string())
+        .collect();
 
     expect_that!(
         paths,
@@ -225,7 +230,7 @@ fn option_fields_round_trip_both_ways() {
 fn values(pairs: &[(&str, &str)]) -> ValuesByPath {
     pairs
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
         .collect()
 }
 
@@ -640,7 +645,7 @@ fn validate_clears_a_pushed_error() {
     expect_that!(state.has_errors(), eq(true));
 
     state.distribute_values(&indexmap::IndexMap::from([(
-        "username".to_string(),
+        NodePath::new("username"),
         "bob".to_string(),
     )]));
     let model = state.validate();
