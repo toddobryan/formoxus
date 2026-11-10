@@ -473,12 +473,12 @@ impl NodeContext {
         }
     }
 
-    /// Descend into a named child, as [`NodePath::join`] does.
+    /// Descend into a named child, as `NodePath::join` does.
     pub fn nested(&self, name: &str) -> Self {
         self.descend_to(self.prefix.join(name))
     }
 
-    /// Descend into the chosen variant of an enum, as [`NodePath::join_variant`]
+    /// Descend into the chosen variant of an enum, as `NodePath::join_variant`
     /// does.
     pub fn nested_variant(&self, name: &str) -> Self {
         self.descend_to(self.prefix.join_variant(name))

@@ -310,6 +310,27 @@ impl Display for NodePath {
     }
 }
 
+/// Test-only, so a test can write `eq("venues.#3.city")` against a `NodePath`.
+/// Never compiled into a dev's build: a path compared to a bare string is what
+/// `NodePath` exists to stop. See `__test-util` in `Cargo.toml`.
+#[cfg(any(test, feature = "__test-util"))]
+#[doc(hidden)]
+impl PartialEq<str> for NodePath {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+/// As for `PartialEq<str>`, for a `&str` literal, which is what googletest's
+/// `eq("…")` compares against.
+#[cfg(any(test, feature = "__test-util"))]
+#[doc(hidden)]
+impl PartialEq<&str> for NodePath {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
 impl Borrow<str> for NodePath {
     fn borrow(&self) -> &str {
         &self.0

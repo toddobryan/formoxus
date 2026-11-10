@@ -328,7 +328,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// Every entry `collect_values` sends, by path: each list's and set's
     /// item keys in the order shown (`"answers"` → `"#0,#5"`), and each
     /// item's own text, which a set's item is found by. What
-    /// [`crate::path::resolve_indices`] reads.
+    /// [`ModelPath::resolve`](crate::path::ModelPath::resolve) reads.
     fn item_keys(&self) -> HashMap<NodePath, String> {
         self.collect_values().into_iter().collect()
     }
@@ -694,10 +694,7 @@ mod tests {
         expect_that!(check.errors_at_path, none());
         expect_that!(
             check.paths_to_clear,
-            unordered_elements_are![
-                displays_as(eq("reach.phone")),
-                displays_as(eq("reach.phone.ext"))
-            ]
+            unordered_elements_are![eq("reach.phone"), eq("reach.phone.ext")]
         );
     }
 
@@ -749,10 +746,10 @@ mod tests {
         expect_that!(
             check.paths_to_clear,
             unordered_elements_are![
-                displays_as(eq("reach.alt")),
-                displays_as(eq("reach.alt.label")),
-                displays_as(eq("reach.alt.phone")),
-                displays_as(eq("reach.alt.phone.ext")),
+                eq("reach.alt"),
+                eq("reach.alt.label"),
+                eq("reach.alt.phone"),
+                eq("reach.alt.phone.ext"),
             ]
         );
     }
@@ -768,10 +765,7 @@ mod tests {
         );
         expect_that!(
             check.paths_to_clear,
-            unordered_elements_are![
-                displays_as(eq("reach.alt.phone")),
-                displays_as(eq("reach.alt.phone.ext"))
-            ]
+            unordered_elements_are![eq("reach.alt.phone"), eq("reach.alt.phone.ext")]
         );
     }
 

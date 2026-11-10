@@ -534,10 +534,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// next submit.
     ///
     /// **Takes a [`ModelPath`], not a `&str`**, so a misspelled field is a compile
-    /// error rather than this `Err`. The `Err` remains for the paths a
-    /// `path!` cannot spell: a specific item (`venues.#0.city`) has an index
-    /// only the runtime knows, so those go through
-    /// [`FormState::push_field_error`] with a string.
+    /// error rather than this `Err`. One item is named as `path!` spells it, by
+    /// index (`path!(M.venues[i].city)`) or by value (`path!(Post.tags[= "rust"])`),
+    /// and resolved to that item's key here. The `Err` remains for what the type
+    /// cannot know: an index past the end, a value no item holds, a field of a
+    /// variant that is not the chosen one, or a part of the model this form
+    /// does not cover.
     pub fn push_field_error(
         &self,
         path: &ModelPath<T>,

@@ -39,7 +39,18 @@ formoxus-macros = { workspace = true }
 # time to validate and emit the same attributes.
 formoxus-spec = { workspace = true }
 
+[features]
+# Test-only conveniences, never for a dev: today `NodePath == "a.b"`, so the
+# suite's ~350 path literals compare without a constructor each. A feature and
+# not `#[cfg(test)]`, because `cfg(test)` is off when the library is built for
+# its integration tests, and the suite (a separate crate) cannot write these
+# impls itself: the orphan rule. Switched on only by the dev-dependency on this
+# crate below, which `cargo publish` drops (it has no version).
+__test-util = []
+
 [dev-dependencies]
+# This crate, with `__test-util` on, for the suite. See `[features]`.
+formoxus = { path = ".", features = ["__test-util"] }
 dioxus-html = { workspace = true }
 dioxus-ssr = { workspace = true }
 googletest = { workspace = true }

@@ -1587,6 +1587,7 @@ dependencies = [
  "dioxus-html",
  "dioxus-ssr",
  "facet",
+ "formoxus",
  "formoxus-macros",
  "formoxus-spec",
  "googletest",

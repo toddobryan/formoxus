@@ -302,20 +302,27 @@ J. **`owns` becomes `starts_with`, called on the inner path, true on the root.
   `path_without_variants` became `NodePath::without_variants`. `Node::name`
   stays a `String`: it is one segment, not a path.
 
-- [ ] **5.** (Todd) Decision F, and the model-to-live bridge: `resolve_indices`
+- [x] **5.** (Todd) Decision F, and the model-to-live bridge: `resolve_indices`
   returns `Option<NodePath>`, `key_for` and `keyed_or_as_written` change or go,
   and `Form::push_field_error`'s stale doc goes with them.
 
   Mostly done inside box 4, 2026-11-10: `ModelPath::resolve` (taking an `entry`
   over `&NodePath`), `key_for` and `keyed_or_as_written` over `&ModelPath<T>`,
-  decision F, and `to_node_path` gone. Left: `Form::push_field_error`'s doc.
+  decision F, and `to_node_path` gone. `Form::push_field_error`'s doc
+  rewritten by Claude the same day.
 
-- [ ] **6.** (Todd) Decisions H and I: every `FormSpec` builder that takes a path
+- [x] **6.** (Todd) Decisions H and I: every `FormSpec` builder that takes a path
   takes `&ModelPath<T>`, stores `path.as_str()` as the `SpecsByPath` key, and
   panics on an instance path (`[2]`, `[= v]`) with a message that says to write
   `[]`. `shape_at` stays, since a `ModelPath` checks the model's fields but
   `spec_key_shape` is what checks a key against the node tree. `cargo check -p
   formoxus` green again is the end of this box.
+
+  Done 2026-11-10: Todd moved the signatures; Claude added the panic, in
+  `shape_at` alone since every builder reaches it, through a pure
+  `every_item_spelling` (inline-tested) that also gives the message its `[]`
+  spelling. `path!` refuses a path ending at a variant too, so `shape_at`'s
+  `spec_key_shape` panic is now a backstop, and its doc says so.
 
 - [ ] **7.** (Claude) `form!` follows: every builder call it emits wraps its key
   in `&::formoxus::path::ModelPath::__new("…")` (full module path, per the prelude

@@ -19,6 +19,7 @@ use crate::field_kind::is_list_of_leaves;
 use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
 use crate::nodes::{SetFeedback, SetOrder};
+use crate::path::ModelPath;
 use crate::widgets::AnyWidget;
 use crate::widgets::item_buttons::ItemAdder;
 
@@ -104,11 +105,23 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     ///
     /// # Panics
     ///
-    /// If `path` names no node in a form over `T`. The spec would be stored
-    /// and never looked up, so a typo would do nothing at all. `form!` only
-    /// writes paths it has already checked at compile time.
-    fn shape_at(path: /* ModelPath */ &str) -> &'static Shape {
-        crate::build::spec_key_shape(T::SHAPE, path).unwrap_or_else(|why| {
+    /// If `path` names one item (`answers[2]`, `tags[=rust]`): a spec names
+    /// every item at once (`answers[]`), and `path!` spells both, so this is
+    /// the one mistake the type lets through (decision I in `PATHS_PLAN.md`).
+    ///
+    /// If `path` names no node in a form over `T`, as `spec_key_shape` judges
+    /// it: the spec would be stored and never looked up, so it would do nothing
+    /// at all. A `ModelPath` comes only from `path!` or `form!`, which refuse
+    /// the same paths at compile time, so this is a backstop: the two checks
+    /// are separate code, and a disagreement between them should be loud.
+    fn shape_at(path: &ModelPath<T>) -> &'static Shape {
+        if let Some(every_item) = every_item_spelling(path.as_str()) {
+            panic!(
+                "{path}: names one item, but a spec names every item at once; \
+                 write `{every_item}`"
+            );
+        }
+        crate::build::spec_key_shape(T::SHAPE, path.as_str()).unwrap_or_else(|why| {
             panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE)
         })
     }
@@ -118,7 +131,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// # Panics
     ///
     /// As [`shape_at`](Self::shape_at) does, if `path` names nothing.
-    fn field(&mut self, path: /* ModelPath */ &str) -> &mut FieldSpec {
+    fn field(&mut self, path: &ModelPath<T>) -> &mut FieldSpec {
         Self::shape_at(path);
         self.fields.entry(path.to_string()).or_default()
     }
@@ -129,7 +142,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// # Panics
     ///
     /// As `field` does, and if `path` names anything but a list.
-    fn collection_field(&mut self, path: /* ModelPath */ &str, key: &str) -> &mut FieldSpec {
+    fn collection_field(&mut self, path: &ModelPath<T>, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
             is_list(shape) || is_set(shape),
@@ -153,23 +166,19 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_widget(mut self, path: /* ModelPath */ &str, widget: impl Into<AnyWidget>) -> Self {
+    pub fn with_widget(mut self, path: &ModelPath<T>, widget: impl Into<AnyWidget>) -> Self {
         self.field(path).widget = Some(widget.into());
         self
     }
 
     /// Build the leaf at `path` (a `[]` item path is fine) with `ctor` instead
     /// of the default for its type.
-    pub fn with_node(
-        mut self,
-        path: /* ModelPath */ &str,
-        ctor: crate::field_node::NodeCtor,
-    ) -> Self {
+    pub fn with_node(mut self, path: &ModelPath<T>, ctor: crate::field_node::NodeCtor) -> Self {
         self.field(path).node = Some(ctor);
         self
     }
 
-    pub fn with_label(mut self, path: /* ModelPath */ &str, l: &str) -> Self {
+    pub fn with_label(mut self, path: &ModelPath<T>, l: &str) -> Self {
         self.field(path).label = Some(l.to_string());
         self
     }
@@ -180,7 +189,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// sees a whole struct, and only on a value that is there.
     pub fn with_field_validator(
         mut self,
-        path: /* ModelPath */ &str,
+        path: &ModelPath<T>,
         validator: crate::nodes::FieldValidator,
     ) -> Self {
         self.field(path).validator = Some(validator);
@@ -191,7 +200,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// `form!`): checked in `validate`, Remove disabled at it, the legend
     /// marked required when it is at least 1, and a blank list (`empty_form`)
     /// built with that many blank items.
-    pub fn with_min_items(mut self, path: /* ModelPath */ &str, min: usize) -> Self {
+    pub fn with_min_items(mut self, path: &ModelPath<T>, min: usize) -> Self {
         self.field(path).min_items = Some(min);
         self
     }
@@ -199,7 +208,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// The most items the list or set at `path` may have (`max_items:` in
     /// `form!`): checked in `validate`, Add disabled at it, and a submission
     /// listing more refused before any of them are built.
-    pub fn with_max_items(mut self, path: /* ModelPath */ &str, max: usize) -> Self {
+    pub fn with_max_items(mut self, path: &ModelPath<T>, max: usize) -> Self {
         self.field(path).max_items = Some(max);
         self
     }
@@ -207,17 +216,17 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// A hint for the field at `path` (`help_text:` in `form!`): a line under
     /// its caption saying what it wants, which its control is described by
     /// (`aria-describedby`). On a list, set, struct or enum, under its legend.
-    pub fn with_help_text(mut self, path: /* ModelPath */ &str, text: &str) -> Self {
+    pub fn with_help_text(mut self, path: &ModelPath<T>, text: &str) -> Self {
         self.field(path).help_text = Some(text.to_string());
         self
     }
 
-    pub fn with_adder(mut self, path: /* ModelPath */ &str, adder: ItemAdder) -> Self {
+    pub fn with_adder(mut self, path: &ModelPath<T>, adder: ItemAdder) -> Self {
         self.collection_field(path, "adder").adder = Some(adder);
         self
     }
 
-    pub fn treat_as_set(mut self, path: /* ModelPath */ &str) -> Self {
+    pub fn treat_as_set(mut self, path: &ModelPath<T>) -> Self {
         let shape = Self::shape_at(path);
         assert!(
             !is_set(shape),
@@ -235,25 +244,21 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    pub fn with_sort_by(mut self, path: /* ModelPath */ &str, order: SetOrder) -> Self {
+    pub fn with_sort_by(mut self, path: &ModelPath<T>, order: SetOrder) -> Self {
         self.set_field(path, "sort_by").sort_by = Some(order);
         self
     }
 
     /// Replace formoxus's words for what an edit to the set at `path` did
     /// ("“rust” was added successfully.") with the dev's.
-    pub fn with_feedback(mut self, path: /* ModelPath */ &str, feedback: SetFeedback) -> Self {
+    pub fn with_feedback(mut self, path: &ModelPath<T>, feedback: SetFeedback) -> Self {
         self.set_field(path, "feedback").feedback = Some(feedback);
         self
     }
 
     /// Show each item of the set at `path` with `view` instead of its bare
     /// text. Formoxus still renders the item's errors, Edit and Remove.
-    pub fn with_item_view(
-        mut self,
-        path: /* ModelPath */ &str,
-        view: crate::widgets::ItemView,
-    ) -> Self {
+    pub fn with_item_view(mut self, path: &ModelPath<T>, view: crate::widgets::ItemView) -> Self {
         self.set_field(path, "item").item_view = Some(view);
         self
     }
@@ -261,7 +266,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// The spec of the set at `path`, for a key only a set takes: a
     /// `Def::Set`, or a list `treat_as_set` has already marked, since `form!`
     /// emits `treat_as_set` first (decision B in box 5).
-    fn set_field(&mut self, path: /* ModelPath */ &str, key: &str) -> &mut FieldSpec {
+    fn set_field(&mut self, path: &ModelPath<T>, key: &str) -> &mut FieldSpec {
         let shape = Self::shape_at(path);
         assert!(
             !is_list(shape) || self.field(path).treat_as_set,
@@ -316,7 +321,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     ///
     /// If `attrs` holds an attribute formoxus validates. It would render and
     /// never be checked, so the browser and the server would disagree.
-    pub fn with_attrs(mut self, path: /* ModelPath */ &str, attrs: FieldAttrs) -> Self {
+    pub fn with_attrs(mut self, path: &ModelPath<T>, attrs: FieldAttrs) -> Self {
         if let Some(attr) = attrs.first_validated() {
             // `form!`'s spelling (`max_length`), not the HTML name (`maxlength`):
             // the one the dev wrote, and the field's setting is named the same.
@@ -334,5 +339,61 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 impl<T: Clone + Debug + Facet<'static>> Default for FormSpec<T> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// `None` for a spec path, whose only brackets are `[]`; for a path naming one
+/// item, the spelling that names every item instead: each `[2]` or `[=rust]`
+/// becomes `[]`, so `answers[2].text` gives `answers[].text`. A value never
+/// holds a `]` of its own (`item_value_key` encodes it), so the first `]`
+/// closes its bracket.
+fn every_item_spelling(raw: &str) -> Option<String> {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    let mut changed = false;
+    while let Some(open) = rest.find('[') {
+        out.push_str(&rest[..=open]);
+        let close = rest[open..].find(']').map_or(rest.len(), |at| open + at);
+        changed |= close != open + 1;
+        out.push(']');
+        rest = rest.get(close + 1..).unwrap_or("");
+    }
+    out.push_str(rest);
+    changed.then_some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::every_item_spelling;
+
+    #[gtest]
+    fn a_spec_path_needs_no_respelling() {
+        expect_that!(every_item_spelling("title"), none());
+        expect_that!(every_item_spelling("answers[].text"), none());
+        expect_that!(every_item_spelling("rows[][]"), none());
+        expect_that!(every_item_spelling("groups[].$Random.set[]"), none());
+    }
+
+    #[gtest]
+    fn an_index_or_a_value_becomes_brackets() {
+        expect_that!(every_item_spelling("answers[2]"), some(eq("answers[]")));
+        expect_that!(
+            every_item_spelling("answers[2].text"),
+            some(eq("answers[].text"))
+        );
+        expect_that!(every_item_spelling("tags[=rust]"), some(eq("tags[]")));
+        expect_that!(
+            every_item_spelling("groups[1].$Random.set[=q%2E2]"),
+            some(eq("groups[].$Random.set[]"))
+        );
+    }
+
+    /// **One `[]` among indices is still a path naming one item,** and is
+    /// respelled whole.
+    #[gtest]
+    fn a_mix_of_brackets_and_an_index_is_respelled() {
+        expect_that!(every_item_spelling("rows[][0]"), some(eq("rows[][]")));
     }
 }
