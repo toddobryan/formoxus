@@ -11,7 +11,8 @@
 //! store, the model and the screen agree from the first render. HTML's rule:
 //! the default value is `min + (max − min) / 2`, and a value that is not on a
 //! step moves to the NEAREST one (`min` plus a multiple of `step`), the larger
-//! of two equally near. A range's `step` is 1 unless given, for a float too.
+//! of two equally near. A range's `step` is 1 unless given, which is why a
+//! float range must be given one.
 
 use dioxus::prelude::*;
 use facet::Facet;
@@ -173,21 +174,24 @@ fn a_midpoint_between_two_steps_takes_the_larger() {
     );
 }
 
-/// **A float range still steps by 1 unless told otherwise.** So 0 to 1 with no
-/// `step` offers only 0 and 1, and the midpoint 0.5 is a tie that goes to 1.
-/// Surprising, but it is what the browser draws, so it is what the field must
-/// hold; a dev who wants tenths writes `step: 0.1`.
+/// A float range, which must be given a `step:` (a range steps by 1 unless
+/// told otherwise, so without one a float range offers only whole numbers;
+/// `form_range_float_without_step.rs` pins the refusal). The same rule as an
+/// integer's: 0.5 is on a step of 0.1, and with a step of 0.4 it moves to the
+/// nearer of 0.4 and 0.8.
 #[gtest]
-fn a_float_range_steps_by_one_unless_given_a_step() {
-    expect_that!(
-        starting_model(form! { Dial { level => { widget: range, min: 0.0, max: 1.0 } } }),
-        some(eq(&Dial { level: 1.0 }))
-    );
+fn a_float_range_starts_on_its_step() {
     expect_that!(
         starting_model(
             form! { Dial { level => { widget: range, min: 0.0, max: 1.0, step: 0.1 } } }
         ),
         some(eq(&Dial { level: 0.5 }))
+    );
+    expect_that!(
+        starting_model(
+            form! { Dial { level => { widget: range, min: 0.0, max: 1.0, step: 0.4 } } }
+        ),
+        some(eq(&Dial { level: 0.4 }))
     );
 }
 

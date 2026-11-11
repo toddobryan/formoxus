@@ -125,7 +125,9 @@ back.
   a new `Widget` method, say `fn value_when_empty(attrs: &FieldAttrs) ->
   Option<String>`, defaulting to `None`, which `RangeInput` overrides. A dev's own
   slider can then say the same thing. Requiring `min` and `max` keeps the starting
-  value in plain sight, instead of a 0–100 that nobody chose for an `i32`.
+  value in plain sight, instead of a 0–100 that nobody chose for an `i32`. A float
+  range must be given `step:` as well (Todd, 2026-11-11): HTML's default step is 1, so
+  without one it offers only whole numbers.
 - (ii) Keep `""` and let the slider show a value the form does not have until it is
   touched. Cheapest, and wrong in the way described above.
 - (iii) Refuse `range` on any field the model does not give a value, so it works
@@ -397,9 +399,9 @@ several?
   - `tests/suite/range.rs`, 13 tests, with its `mod` line in `suite.rs` COMMENTED OUT:
     a `widget: range` the macro does not know yet would stop the whole suite compiling.
     Uncomment it once boxes 2 and 3 are in. The starting-value cases are 0–10 → 5, step
-    3 → 6, step 4 → 4, 1–4 → 3 (a tie takes the larger), and a float 0–1 → 1.0 with no
-    `step` (a range steps by 1 unless told otherwise) and 0.5 with `step: 0.1`.
-  - Five goldens in `tests/ui-pending/` (the existing home for checks not built yet, no
+    3 → 6, step 4 → 4, 1–4 → 3 (a tie takes the larger), and a float 0–1 → 0.5 with `step: 0.1`
+    and 0.4 with `step: 0.4`.
+  - Goldens in `tests/ui-pending/` (the existing home for checks not built yet, no
     `.stderr` until the check exists): `range` on a `String`, on an `Option<i32>`,
     without `min:`, without `max:`, and `omit_value` on a `number`. Run with
     `cargo test -p formoxus --test compile_fail -- --ignored`; today all five fail on
@@ -409,10 +411,11 @@ several?
     `formoxus-macros` at once, at the three exhaustive matches in `form/widget.rs`
     (`optional_refusal`, `takes_choices`, `cannot_render`). Those are box 3's, so either
     leave them failing for Claude or add the arms; they are one line each.
-  - **Question for Todd:** the float case. A float range with no `step:` offers only
-    whole numbers, which is HTML's default and almost never what a dev meant. Should
-    `form!` require `step:` on a float range, the way decision A requires `min:` and
-    `max:`?
+  - **Decided (Todd), the float case:** `form!` requires `step:` on a float range. A
+    range steps by 1 unless told otherwise, so a float range without `step:` would offer
+    only whole numbers ("why use a float if you don't want to allow fractional values?").
+    The suite's float test now gives a step, and a sixth golden,
+    `form_range_float_without_step.rs`, pins the refusal.
 
 - [ ] **2.** (Todd) The runtime. `RangeInput`: a row in `WidgetName`, and its own body
   in `InputView` rather than a `text_like_inputs!` row, because of the `<output>`. The
@@ -425,7 +428,7 @@ several?
 
 - [ ] **3.** (Claude) The `form!` side: `range` in the three exhaustive message
   matches in `formoxus-macros/src/form/widget.rs` (the compiler lists them), the
-  check that `min:` and `max:` are both given, the `omit_value` flag (refused on any
+  check that `min:` and `max:` are both given (and `step:` on a float), the `omit_value` flag (refused on any
   widget but `range`), and the goldens. An e2e test form
   `/t/range` with its test: an untouched submit sends the midpoint (trap 1), and a
   keyboard change sends the new value. A gallery entry. Docs and memory for the part.
