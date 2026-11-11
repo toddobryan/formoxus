@@ -383,7 +383,7 @@ several?
 
 ### Part 1: `range` (branch `range`)
 
-- [ ] **1.** (Claude) Tests first, failing until boxes 2 and 3. Suite tests for the
+- [x] **1.** (Claude) Tests first, failing until boxes 2 and 3. Suite tests for the
   markup: `type="range"`, `min`, `max` and `step` as written, no `required` attribute
   on a required field, the `<output>` showing the value (decision B), and no `<output>`
   with `omit_value`. Tests for the
@@ -392,6 +392,27 @@ several?
   `4`; and `reset` returns there. Box 3's e2e test checks the same three cases against
   a real browser. A wire round trip. Goldens for `range` on
   a `String`, on an `Option<i32>`, and without `min:` or `max:`.
+
+  Done 2026-11-11, on branch `range`:
+  - `tests/suite/range.rs`, 15 tests, with its `mod` line in `suite.rs` COMMENTED OUT:
+    a `widget: range` the macro does not know yet would stop the whole suite compiling.
+    Uncomment it once boxes 2 and 3 are in. The starting-value cases are 0–10 → 5, step
+    3 → 6, step 4 → 4, 1–4 → 3 (a tie takes the larger), and a float 0–1 → 1.0 with no
+    `step` (a range steps by 1 unless told otherwise) and 0.5 with `step: 0.1`.
+  - Five goldens in `tests/ui-pending/` (the existing home for checks not built yet, no
+    `.stderr` until the check exists): `range` on a `String`, on an `Option<i32>`,
+    without `min:`, without `max:`, and `omit_value` on a `number`. Run with
+    `cargo test -p formoxus --test compile_fail -- --ignored`; today all five fail on
+    "unknown widget `range`" or "unknown key `omit_value`", the wrong reason. Box 3 moves
+    them to `tests/ui/` and blesses them.
+  - **Seam between boxes 2 and 3:** adding `RangeInput`'s row to `WidgetName` breaks
+    `formoxus-macros` at once, at the three exhaustive matches in `form/widget.rs`
+    (`optional_refusal`, `takes_choices`, `cannot_render`). Those are box 3's, so either
+    leave them failing for Claude or add the arms; they are one line each.
+  - **Question for Todd:** the float case. A float range with no `step:` offers only
+    whole numbers, which is HTML's default and almost never what a dev meant. Should
+    `form!` require `step:` on a float range, the way decision A requires `min:` and
+    `max:`?
 
 - [ ] **2.** (Todd) The runtime. `RangeInput`: a row in `WidgetName`, and its own body
   in `InputView` rather than a `text_like_inputs!` row, because of the `<output>`. The
