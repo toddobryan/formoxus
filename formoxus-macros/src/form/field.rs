@@ -608,7 +608,7 @@ impl FieldBody {
     /// builder call.
     ///
     /// Without `sort_by`: that a set's items have a default order, which only
-    /// scalars do, spanned on `set` if it is there and on the path otherwise.
+    /// scalars and unit enums do, spanned on `set` if it is there and on the path otherwise.
     /// Beside `set`, asked only of a list of leaves, so a list `set` already
     /// refuses is not refused twice. A set field no `form!` names reaches only
     /// `SetOrder::default_for`'s panic.
@@ -630,8 +630,8 @@ impl FieldBody {
             (None, set) => {
                 let span = set.as_ref().map_or(path_span, Ident::span);
                 let marked_set = set.is_some();
-                let message = "this set's items have no default order (only strings, numbers \
-                               and bools have one): give it `sort_by: …`, which for an `Ord` \
+                let message = "this set's items have no default order (only strings, numbers, \
+                               bools and enums without data have one): give it `sort_by: …`, which for an `Ord` \
                                type is `sort_by: Type::cmp`";
                 let applies = if marked_set {
                     quote!(!#fk::is_list_of_leaves(#shape) ||)

@@ -530,6 +530,16 @@ several?
   re-exported from `widgets`, and `build.rs`'s leaf-widget-on-a-set panic now names
   `with_set_widget`, pinned by a test. 3h found decision O; 3i builds it.
 
+  Progress 2026-11-11, at home, last: 3i done (Claude, at Todd's request), `just ci`
+  1313. `DeclaredOrder` in `set_node.rs`, ranking a node by `own_entry`, which
+  `SetNode::chosen` now shares. Found on the way: `form!`'s compile-time order check
+  (`field_kind::items_have_default_order`) had the same scalars-only rule, so a unit
+  enum set without `sort_by` would not have COMPILED; it now takes a bare unit enum
+  too (not through a newtype, matching the run time), and its message, in two goldens,
+  names enums without data. Eight suite tests, on an enum declared in one order and
+  `Ord`ered in the other so the two cannot be confused; the 3h tests lost their
+  `sort_by`.
+
   **Step 3, written out (Todd asked).** Each piece here is small; the order is the
   order they depend on each other.
 

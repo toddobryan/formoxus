@@ -4,9 +4,10 @@
 //! an item be inserted anywhere.
 //!
 //! Items are kept sorted by a [`SetOrder`]. A set of scalars (`String`, the
-//! integers, `bool`, the floats) has a default order; any other item type
-//! needs one given, by `sort_by:` in `form!` (for an `Ord` type,
-//! `sort_by: Tag::cmp`), and [`SetOrder::default_for`] panics without it.
+//! integers, `bool`, the floats) has a default order, and so does a set of a
+//! unit enum: its variants' declaration order (`WIDGETS_PLAN.md` decision O).
+//! Any other item type needs one given, by `sort_by:` in `form!` (for an `Ord`
+//! type, `sort_by: Tag::cmp`), and [`SetOrder::default_for`] panics without it.
 
 use std::{
     cmp::Ordering,
@@ -18,7 +19,7 @@ use dioxus::{
     core::{DynamicNode, VComponent},
     prelude::*,
 };
-use facet::{Def, Facet, Partial, Peek, ReflectError, ScalarType, Shape};
+use facet::{Def, Facet, Partial, Peek, ReflectError, ScalarType, Shape, Type, UserType};
 use formoxus_spec::FixedKey;
 use unicase::{Ascii, UniCase};
 
@@ -59,17 +60,20 @@ pub struct SetOrder {
 
 impl SetOrder {
     /// The order of a set at `path` whose items are `shape`, when no
-    /// `sort_by` was given. Only scalar items have one.
+    /// `sort_by` was given. Scalar items and unit enum items have one.
     pub fn default_for(shape: &'static Shape, path: &NodePath) -> Self {
         if let Some(scalar_type) = shape.scalar_type() {
-            let default_order = DefaultOrder::for_type(scalar_type);
             SetOrder {
-                item_order: Arc::new(default_order),
+                item_order: Arc::new(DefaultOrder::for_type(scalar_type)),
+            }
+        } else if let Some(declared_order) = DeclaredOrder::for_shape(shape) {
+            SetOrder {
+                item_order: Arc::new(declared_order),
             }
         } else {
             panic!(
                 "{path}: a set of `{shape}` has no default order; give it a sort_by \
-                 (only a set of scalars sorts without one)"
+                 (only a set of scalars or of a unit enum sorts without one)"
             );
         }
     }
@@ -194,6 +198,104 @@ impl ItemHandler for DefaultOrder {
             .iter()
             .position(|node| node.peek_value().is_some_and(|item| item == value))
     }
+}
+
+/// A unit enum's default order: its variants' declaration order, which is
+/// also the order its `choices` list them in, so a set widget's ticked items
+/// line up with its boxes (`WIDGETS_PLAN.md` decision O).
+///
+/// A peek knows its variant's index. A node does not: a `VariantNode`'s
+/// `peek_value` is `None`, as it holds a choice, not a value. So a node is
+/// ranked by its entry, the variant name it sends at its own path, looked up
+/// in `variants`. An item with no variant chosen, or an unknown one from a bad
+/// submit, has no rank and goes last, as an `Empty` leaf does in
+/// `DefaultOrder`.
+struct DeclaredOrder {
+    shape: &'static Shape,
+    variants: Vec<&'static str>,
+}
+
+impl DeclaredOrder {
+    /// `Some` for an enum whose every variant is unit. Matched on `shape.ty`
+    /// directly, not through `field_kind::is_unit_enum`, which also looks
+    /// through a transparent newtype: a newtype's peek and node are the
+    /// newtype's, not the enum's, so the lookups here would not hold. An
+    /// `Option` is a `UserType::Enum` too, but its `Some` carries a field.
+    fn for_shape(shape: &'static Shape) -> Option<Self> {
+        let Type::User(UserType::Enum(enum_type)) = &shape.ty else {
+            return None;
+        };
+        if !enum_type.variants.iter().all(|v| v.data.fields.is_empty()) {
+            return None;
+        }
+        Some(Self {
+            shape,
+            variants: enum_type.variants.iter().map(|v| v.name).collect(),
+        })
+    }
+
+    fn node_rank(&self, node: &dyn Node) -> Option<usize> {
+        let entry = own_entry(node)?;
+        self.variants.iter().position(|v| *v == entry)
+    }
+}
+
+impl Debug for DeclaredOrder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DeclaredOrder({})", self.shape)
+    }
+}
+
+impl ItemHandler for DeclaredOrder {
+    fn name(&self) -> String {
+        format!("{self:?}")
+    }
+
+    fn sort_peeks(&self, peeks: &mut Vec<Peek<'_, 'static>>) {
+        let shape = self.shape;
+        peeks.sort_by_key(|p| {
+            p.into_enum()
+                .unwrap_or_else(|e| panic!("a `{shape}` item should peek as an enum: {e}"))
+                .variant_index()
+                .unwrap_or_else(|e| panic!("a `{shape}` item has no active variant: {e}"))
+        });
+    }
+
+    fn sort_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        // `None` last: a plain `Option` sorts it first.
+        nodes.sort_by_key(|n| self.node_rank(&**n).map_or((1, 0), |rank| (0, rank)));
+    }
+
+    fn dedup_nodes(&self, nodes: &mut Vec<Box<dyn Node>>) {
+        retain_first(
+            nodes,
+            |a, b| matches!((self.node_rank(&**a), self.node_rank(&**b)), (Some(a), Some(b)) if a == b),
+        );
+    }
+
+    fn position(&self, nodes: &[Box<dyn Node>], candidate: &dyn Node) -> Option<usize> {
+        let rank = self.node_rank(candidate)?;
+        nodes
+            .iter()
+            .position(|node| self.node_rank(&**node) == Some(rank))
+    }
+}
+
+/// What an item sends at its own path: a leaf's raw value, or a unit enum's
+/// variant name, which goes out as structure. `None` for an item with nothing
+/// there, such as a struct, whose values are all at paths below its own.
+///
+/// Asked at the root, so the item's own path is just its name. Read from the
+/// tree, never the store; see `SetNode::chosen`.
+fn own_entry(item: &dyn Node) -> Option<String> {
+    let own_path = NodePath::root().join(&item.name());
+    let mut values = Vec::new();
+    item.collect_values(&NodePath::root(), &mut values);
+    values
+        .into_iter()
+        .map(RawValue::into_pair)
+        .find(|(path, _)| *path == own_path)
+        .map(|(_, data)| data)
 }
 
 struct CustomOrder<T> {
@@ -442,13 +544,12 @@ impl SetMessage {
 
 impl SetNode {
     /// A set widget's `chosen`: what each item now in the set sends at its own
-    /// path (`colors.#0` → `"Red"`), in item order, so position `i` is the index
-    /// a `RemoveItem` for that item takes. `path` is the set's own.
+    /// path (`colors.#0` → `"Red"`), its [`own_entry`], in item order, so
+    /// position `i` is the index a `RemoveItem` for that item takes. `path` is
+    /// the set's own, for the panic.
     ///
     /// Each item is asked on its own, not the whole set through
-    /// `collect_values`, which would bring the draft along too. A unit enum item
-    /// sends its variant name as structure and a leaf item its raw value as a
-    /// leaf; either way it is the one value at the item's own path.
+    /// `collect_values`, which would bring the draft along too.
     ///
     /// Read from the tree, never from the value store: `render` runs in the
     /// form's scope, so a store read here would make every keystroke anywhere
@@ -458,23 +559,14 @@ impl SetNode {
         self.items
             .iter()
             .map(|item| {
-                let item_path = path.join(&item.name());
-                let mut values = Vec::new();
-                item.collect_values(path, &mut values);
-                values
-                    .into_iter()
-                    .map(RawValue::into_pair)
-                    .find(|(p, _)| *p == item_path)
-                    .map_or_else(
-                        || {
-                            panic!(
-                                "{item_path}: an item of a set with a widget sends no value \
-                             at its own path; the set's item type should have been \
-                             refused for a set widget"
-                            )
-                        },
-                        |(_, data)| data,
+                own_entry(&**item).unwrap_or_else(|| {
+                    panic!(
+                        "{}: an item of a set with a widget sends no value at its own \
+                         path; the set's item type should have been refused for a set \
+                         widget",
+                        path.join(&item.name())
                     )
+                })
             })
             .collect()
     }

@@ -357,21 +357,8 @@ impl formoxus::widgets::SetWidget for PropsAsText {
     }
 }
 
-/// `Priority`'s own order, which is its declaration order. A set of a unit
-/// enum has no default order (4a), so even a set with a widget panics at build
-/// without one.
-#[allow(clippy::trivially_copy_pass_by_ref)]
-fn declared_order(a: &Priority, b: &Priority) -> Ordering {
-    a.cmp(b)
-}
-
 fn triage_with_props_as_text() -> FormSpec<Triage> {
-    FormSpec::default()
-        .with_sort_by(
-            &path!(Triage.levels),
-            SetOrder::custom(declared_order, "declared_order"),
-        )
-        .with_set_widget(&path!(Triage.levels), PropsAsText)
+    FormSpec::default().with_set_widget(&path!(Triage.levels), PropsAsText)
 }
 
 fn low_and_high() -> Triage {
@@ -452,12 +439,7 @@ fn a_set_with_a_widget_still_round_trips() {
 fn a_leaf_widget_on_a_set_names_with_set_widget() {
     let _ = form_for(
         &low_and_high(),
-        FormSpec::default()
-            .with_sort_by(
-                &path!(Triage.levels),
-                SetOrder::custom(declared_order, "declared_order"),
-            )
-            .with_widget(&path!(Triage.levels), formoxus::widgets::Textarea),
+        FormSpec::default().with_widget(&path!(Triage.levels), formoxus::widgets::Textarea),
     );
 }
 
@@ -762,9 +744,9 @@ fn most_urgent_first(a: &Priority, b: &Priority) -> Ordering {
     b.cmp(a)
 }
 
-/// A unit enum has no default order (4a): its item is a variant node, which
-/// holds no value to compare. With `sort_by` it sorts at build and on the
-/// server's rebuild, and still round-trips.
+/// A unit enum's `sort_by` replaces its default declaration order (decision
+/// O, below): it sorts at build and on the server's rebuild, and still
+/// round-trips.
 #[gtest]
 fn a_unit_enum_set_sorts_by_its_sort_by() {
     let spec = || form! { Triage { levels => { sort_by: most_urgent_first } } };
@@ -787,6 +769,192 @@ fn a_unit_enum_set_sorts_by_its_sort_by() {
     ]));
     expect_that!(item_keys(&rebuilt, "levels"), eq("#1,#2,#0"));
     expect_that!(rebuilt.validate(), some(eq(&triage)));
+}
+
+// ── A unit enum's default order (`WIDGETS_PLAN.md` decision O) ───────────
+
+/// Declared small to large, but ORDERED large to small, so a test can tell
+/// declaration order from `Ord`: a `BTreeSet<Size>` iterates Large first.
+#[derive(Facet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+enum Size {
+    Small,
+    Medium,
+    Large,
+}
+
+impl Ord for Size {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (*other as u8).cmp(&(*self as u8))
+    }
+}
+
+impl PartialOrd for Size {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Order {
+    sizes: BTreeSet<Size>,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Bin {
+    sizes: HashSet<Size>,
+}
+
+fn all_sizes() -> [Size; 3] {
+    [Size::Large, Size::Small, Size::Medium]
+}
+
+/// Each item's entry, in item order: the set's order as a reader sees it.
+fn entries<T: Clone + std::fmt::Debug + PartialEq + Facet<'static>>(
+    form: &FormState<T>,
+    set: &str,
+) -> Vec<String> {
+    let values = form.collect_values();
+    item_keys(form, set)
+        .split(',')
+        .map(|key| {
+            values
+                .get(format!("{set}.{key}").as_str())
+                .cloned()
+                .unwrap_or_else(|| panic!("{set}.{key} has an entry"))
+        })
+        .collect()
+}
+
+/// No `sort_by`, and no panic: declaration order, not the enum's `Ord`.
+#[gtest]
+fn a_unit_enum_set_sorts_in_declaration_order_by_default() {
+    let order = Order {
+        sizes: all_sizes().into(),
+    };
+    let form = form_for(&order, FormSpec::default());
+    expect_that!(
+        entries(&form, "sizes"),
+        elements_are![eq("Small"), eq("Medium"), eq("Large")]
+    );
+}
+
+/// A `HashSet` iterates differently in each process; sorting before keys are
+/// assigned is what makes a server's render and a client's hydration agree.
+#[gtest]
+fn a_unit_enum_hash_set_sorts_in_declaration_order_too() {
+    let bin = Bin {
+        sizes: all_sizes().into(),
+    };
+    let form = form_for(&bin, FormSpec::default());
+    expect_that!(
+        entries(&form, "sizes"),
+        elements_are![eq("Small"), eq("Medium"), eq("Large")]
+    );
+}
+
+/// An item added by entry goes where declaration order puts it, not last.
+#[gtest]
+fn an_added_unit_enum_item_takes_its_declared_place() {
+    let mut form = form_for(
+        &Order {
+            sizes: [Size::Small, Size::Large].into(),
+        },
+        FormSpec::default(),
+    );
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("sizes"),
+            before: None,
+            value: Some(ItemValue::raw("Medium")),
+        }),
+        // `#3`, not `#2`: the draft already holds the next key.
+        ok(some(eq("sizes.#3")))
+    );
+    expect_that!(
+        entries(&form, "sizes"),
+        elements_are![eq("Small"), eq("Medium"), eq("Large")]
+    );
+}
+
+/// The draft's way in, choosing a variant and then Add, sorts the same.
+#[gtest]
+fn a_unit_enum_draft_adds_in_declared_place() {
+    let mut form = form_for(
+        &Order {
+            sizes: [Size::Small, Size::Large].into(),
+        },
+        FormSpec::default(),
+    );
+    // The draft takes the next key after the two items'.
+    expect_that!(
+        form.edit(&Edit::ChooseVariant {
+            path: NodePath::new("sizes.#2"),
+            variant: Some("Medium".to_string()),
+        }),
+        ok(none())
+    );
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("sizes"),
+            before: None,
+            value: None,
+        }),
+        ok(some(eq("sizes.#2")))
+    );
+    expect_that!(
+        entries(&form, "sizes"),
+        elements_are![eq("Small"), eq("Medium"), eq("Large")]
+    );
+}
+
+/// Equal is the same variant: adding one already there adds nothing.
+#[gtest]
+fn a_unit_enum_set_refuses_a_variant_it_has() {
+    let order = Order {
+        sizes: [Size::Small, Size::Large].into(),
+    };
+    let mut form = form_for(&order, FormSpec::default());
+    expect_that!(
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("sizes"),
+            before: None,
+            value: Some(ItemValue::raw("Large")),
+        }),
+        ok(none())
+    );
+    expect_that!(form.validate(), some(eq(&order)));
+}
+
+/// `form!`'s compile-time check agrees with the run time: a unit enum set
+/// written with no `sort_by` compiles, and `set` on a `Vec` of one does too.
+#[gtest]
+fn form_takes_a_unit_enum_set_without_sort_by() {
+    let order = Order {
+        sizes: all_sizes().into(),
+    };
+    let mut form = form_for(&order, form! { Order { sizes => { label: "Sizes" } } });
+    expect_that!(
+        entries(&form, "sizes"),
+        elements_are![eq("Small"), eq("Medium"), eq("Large")]
+    );
+    expect_that!(form.validate(), some(eq(&order)));
+}
+
+#[gtest]
+fn a_unit_enum_set_in_default_order_round_trips() {
+    let order = Order {
+        sizes: all_sizes().into(),
+    };
+    expect_that!(
+        form_for(&order, FormSpec::default()).validate(),
+        some(eq(&order))
+    );
+    expect_that!(across_the_wire(&order), ok(eq(&order)));
+    let bin = Bin {
+        sizes: all_sizes().into(),
+    };
+    expect_that!(across_the_wire(&bin), ok(eq(&bin)));
 }
 
 // ── `set` on a `Vec` ─────────────────────────────────────────────────────

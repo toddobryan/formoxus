@@ -399,11 +399,12 @@ pub const fn is_list_of_leaves(shape: &Shape) -> bool {
 
 /// Whether this field's items have an order without a `sort_by`: `false`
 /// only for a set (or, when `marked_set`, a list written with `set`) whose
-/// items are not scalars, so `true` for any other field.
+/// items are neither scalars nor a unit enum, so `true` for any other field.
 ///
-/// A scalar is a `String`, an integer, a float or a `bool`, as
-/// `SetOrder::default_for` decides at run time, and NOT a newtype over one or
-/// an `Option` of one: neither is asked through `kind`, which peels both.
+/// A scalar is a `String`, an integer, a float or a `bool`, and a unit enum
+/// sorts in declaration order (`WIDGETS_PLAN.md` decision O), as
+/// `SetOrder::default_for` decides at run time. NOT a newtype over either or
+/// an `Option` of either: neither is asked through `kind`, which peels both.
 /// The item's own value is all the default order compares, and a newtype's
 /// leaf holds only its inner value.
 pub const fn items_have_default_order(shape: &Shape, marked_set: bool) -> bool {
@@ -412,10 +413,16 @@ pub const fn items_have_default_order(shape: &Shape, marked_set: bool) -> bool {
         _ => shape,
     };
     match &shape.def {
-        Def::Set(set) => is_scalar(set.t),
-        Def::List(list) if marked_set => is_scalar(list.t),
+        Def::Set(set) => has_default_order(set.t),
+        Def::List(list) if marked_set => has_default_order(list.t),
         _ => true,
     }
+}
+
+/// An item `SetOrder::default_for` can order: a scalar, or a unit enum as
+/// declared, not seen through a newtype.
+const fn has_default_order(item: &Shape) -> bool {
+    is_scalar(item) || is_bare_unit_enum(item)
 }
 
 /// A `String` or a primitive [`primitive`] knows, by name, with nothing
@@ -442,21 +449,28 @@ const fn is_leaf(shape: &Shape) -> bool {
 /// `kind` does, since that is how `kind` came to say `Enum`.
 const fn is_unit_enum(shape: &Shape) -> bool {
     match &shape.ty {
-        Type::User(UserType::Enum(enum_type)) => {
-            let mut i = 0;
-            while i < enum_type.variants.len() {
-                if !enum_type.variants[i].data.fields.is_empty() {
-                    return false;
-                }
-                i += 1;
-            }
-            true
-        }
+        Type::User(UserType::Enum(_)) => is_bare_unit_enum(shape),
         _ => match shape.inner {
             Some(inner) => is_unit_enum(inner),
             None => false,
         },
     }
+}
+
+/// An enum none of whose variants carries data, looking through nothing. An
+/// `Option` is a `UserType::Enum` too, but its `Some` carries a field.
+const fn is_bare_unit_enum(shape: &Shape) -> bool {
+    let Type::User(UserType::Enum(enum_type)) = &shape.ty else {
+        return false;
+    };
+    let mut i = 0;
+    while i < enum_type.variants.len() {
+        if !enum_type.variants[i].data.fields.is_empty() {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 /// Whether the widget `W` can render a single-value field of this type.

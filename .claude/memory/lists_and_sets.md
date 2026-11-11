@@ -67,3 +67,9 @@ saying `allow_reordering` predates this. Related:
   which is `unsafe` (denied workspace-wide). `sort_by`'s `Custom<T>`
   rebuilds whole `T`s safely with `Partial::alloc::<T>()`. No `unsafe`
   anywhere in formoxus; keep it that way.
+
+**2026-11-11, WIDGETS_PLAN decision O (Todd):** a set of a unit enum has a default
+order, declaration order (`DeclaredOrder` in `set_node.rs`), both at run time
+(`SetOrder::default_for`) and in `form!`'s const check (`items_have_default_order`).
+A newtype over a unit enum still needs `sort_by`. Before this, only scalar sets
+sorted without one.

@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: this set's items have no default order (only strings, numbers and bools have one): give it `sort_by: …`, which for an `Ord` type is `sort_by: Type::cmp`
+error[E0080]: evaluation panicked: this set's items have no default order (only strings, numbers, bools and enums without data have one): give it `sort_by: …`, which for an `Ord` type is `sort_by: Type::cmp`
   --> tests/ui/form_set_without_sort_by.rs:18:13
    |
 18 |             tags => { label: "Tags" },
