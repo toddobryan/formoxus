@@ -32,7 +32,7 @@ use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
 use crate::nodes::{SetEvent, SetFeedback, SetOrder};
-use crate::widgets::Widget;
+use crate::widgets::widget::LeafWidget;
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -465,13 +465,13 @@ const fn is_unit_enum(shape: &Shape) -> bool {
 /// `true` for anything [`is_single_value`] rejects, so a widget on a struct
 /// reports once, from there. `true` for a newtype whose inside is out of reach,
 /// for the reason `Kind::Unknown` gives. Everything else is the field's
-/// `FieldType`, judged by `W`'s own consts: in [`Widget::ACCEPTS`], or any type
-/// at all when it has choices and [`Widget::TAKES_CHOICES`].
+/// `FieldType`, judged by `W`'s own consts: in [`LeafWidget::ACCEPTS`], or any type
+/// at all when it has choices and [`LeafWidget::TAKES_CHOICES`].
 ///
 /// Generic rather than taking a widget value, so `form!` can ask it in a free
 /// `const _` in the dev's crate, where `W`'s consts are visible: a `const fn`
 /// can read a trait's consts but not call its methods.
-pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
+pub const fn renders<LW: LeafWidget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
         Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => return true,
         Kind::Text => FieldType::Text,
@@ -479,7 +479,7 @@ pub const fn renders<W: Widget>(shape: &Shape, has_choices: bool) -> bool {
         Kind::Float => FieldType::Float,
         Kind::Bool => FieldType::Bool,
     };
-    W::ACCEPTS.contains(field_type) || (W::TAKES_CHOICES && has_choices)
+    LW::ACCEPTS.contains(field_type) || (LW::TAKES_CHOICES && has_choices)
 }
 
 pub const fn is_optional(shape: &Shape) -> bool {
@@ -488,10 +488,10 @@ pub const fn is_optional(shape: &Shape) -> bool {
 
 /// Whether the widget `W` can render this field as far as optionality goes:
 /// `true` for a field that is not an `Option`, and for one that is when
-/// [`Widget::ACCEPTS_OPTIONAL`]. `form!` asserts it beside [`renders`], so a
+/// [`LeafWidget::ACCEPTS_OPTIONAL`]. `form!` asserts it beside [`renders`], so a
 /// checkbox or a radio group on an `Option<_>` is refused at compile time.
-pub const fn optional_is_okay<W: Widget>(shape: &Shape) -> bool {
-    !is_optional(shape) || W::ACCEPTS_OPTIONAL
+pub const fn optional_is_okay<LW: LeafWidget>(shape: &Shape) -> bool {
+    !is_optional(shape) || LW::ACCEPTS_OPTIONAL
 }
 
 pub const fn is_enum(shape: &Shape) -> bool {

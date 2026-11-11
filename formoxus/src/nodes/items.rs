@@ -177,12 +177,11 @@ impl Items {
         specs: &SpecsByPath,
         value: Option<&ItemValue>,
     ) -> Result<NodePath, FormAccessError> {
-        if let Some(value) = value
-            && value.shape() != self.shape
+        if let Some(shape) = value.and_then(ItemValue::shape)
+            && shape != self.shape
         {
             return Err(FormAccessError(format!(
-                "cannot add a `{}` item to {my_path}: its items are `{}`",
-                value.shape(),
+                "cannot add a `{shape}` item to {my_path}: its items are `{}`",
                 self.shape,
             )));
         }
@@ -231,10 +230,10 @@ impl Items {
         // in `Populated` mode, so a `None` inside it means "absent" (answered),
         // not "nothing to read" as it does in a blank item.
         let (peek, mode) = match value {
-            Some(value) => (Some(value.peek()), FormMode::Populated),
-            None => (None, FormMode::Blank),
+            Some(value) if value.peek().is_some() => (value.peek(), FormMode::Populated),
+            _ => (None, FormMode::Blank),
         };
-        node_for_shape(
+        let mut node = node_for_shape(
             self.shape,
             name,
             peek,
@@ -246,7 +245,17 @@ impl Items {
             // own shape (`Vec<Option<T>>`), which the walk peels.
             /* optional */
             false,
-        )
+        );
+        // An entry is the string the wire would carry at the item's own path, so the
+        // item takes it the way a rebuild from the wire does: a leaf parses it, a
+        // unit-enum item chooses that variant or remembers an unknown name.
+        if let Some(entry) = value.and_then(ItemValue::entry) {
+            let values = [(my_path.join(name), entry.to_string())]
+                .into_iter()
+                .collect();
+            node.distribute_values(my_path, specs, &values);
+        }
+        node
     }
 
     /// Make `items` exactly `keys`, in that order: an item already here keeps its
@@ -342,7 +351,9 @@ impl Items {
         specs: &SpecsByPath,
         value: &ItemValue,
     ) -> Option<Box<dyn Node>> {
-        (value.shape() == self.shape)
+        value
+            .shape()
+            .is_none_or(|shape| shape == self.shape)
             .then(|| self.new_item(my_path, self.next_key, specs, Some(value)))
     }
 
@@ -434,6 +445,16 @@ impl<'a> IntoIterator for &'a mut Items {
 
 /// The value a new item arrives filled in with: [`Edit::AddItem`]'s `value`.
 ///
+/// **Two kinds.** [`new`](Self::new) wraps a typed value, which the item is
+/// built from as `form_for` would build it. [`raw`](Self::raw) wraps an ENTRY,
+/// the string the wire carries at the item's own path (`tags.#2` = `rust`, or
+/// `days.#2` = `Friday` for a unit-enum item), for a widget that knows its
+/// choices only as strings, such as a `checkbox_multiple` (`WIDGETS_PLAN.md`
+/// decision F). An entry's item is built blank and given the entry the way a
+/// rebuild from the wire gives it one, so it is parsed, not type-checked: an
+/// entry that does not parse is an item holding an error, as typed text would be.
+/// Everything below is about the typed kind.
+///
 /// **Type-erased** because `Edit` is not generic and cannot be. It crosses
 /// the widget boundary as a `Callback<Edit>`, and one `Edit` type serves
 /// every form, whatever its model. A list's item type is known only from its
@@ -452,12 +473,20 @@ impl<'a> IntoIterator for &'a mut Items {
 /// `PartialEq` work without requiring either of `T`. Equality goes through
 /// facet, so two values are equal only if they have the same shape and
 /// facet can compare them. A `T` whose shape has no `PartialEq` is never
-/// equal, not even to itself.
+/// equal, not even to itself. Two entries are equal when their strings are,
+/// and a typed value never equals an entry.
 #[derive(Clone)]
-pub struct ItemValue {
-    value: Rc<dyn Any>,
-    shape: &'static Shape,
-    peek: for<'a> fn(&'a dyn Any) -> Peek<'a, 'static>,
+pub struct ItemValue(ValueType);
+
+/// [`ItemValue`]'s two kinds, private so the public type stays one name.
+#[derive(Clone)]
+enum ValueType {
+    Typed {
+        value: Rc<dyn Any>,
+        shape: &'static Shape,
+        peek: for<'a> fn(&'a dyn Any) -> Peek<'a, 'static>,
+    },
+    Entry(String),
 }
 
 impl ItemValue {
@@ -465,7 +494,7 @@ impl ItemValue {
     /// `Vec<String>` or an `Option<Vec<String>>`, an `Option<String>` for a
     /// `Vec<Option<String>>`.
     pub fn new<T: Facet<'static> + 'static>(value: T) -> Self {
-        Self {
+        Self(ValueType::Typed {
             value: Rc::new(value),
             shape: T::SHAPE,
             peek: |any| {
@@ -474,30 +503,70 @@ impl ItemValue {
                         .expect("an ItemValue holds the T it was made from"),
                 )
             },
-        }
+        })
+    }
+
+    /// Name an item by its entry: the string the wire carries at the item's own
+    /// path. A leaf item's text (`"rust"`), a unit-enum item's variant name
+    /// (`"Friday"`). Parsed when the item is built, never type-checked: see the
+    /// type's docs.
+    pub fn raw(entry: impl Into<String>) -> Self {
+        Self(ValueType::Entry(entry.into()))
     }
 
     /// The shape of the `T` this was made from, which `add_item` checks
-    /// against the collection's items.
-    pub fn shape(&self) -> &'static Shape {
-        self.shape
+    /// against the collection's items. `None` for an entry, which has no
+    /// type to check: it is parsed when the item is built.
+    pub fn shape(&self) -> Option<&'static Shape> {
+        match self.0 {
+            ValueType::Entry(_) => None,
+            ValueType::Typed { shape, .. } => Some(shape),
+        }
     }
 
-    /// The value, readable by reflection: what the item is built from.
-    pub(crate) fn peek(&self) -> Peek<'_, 'static> {
-        (self.peek)(self.value.as_ref())
+    /// The value, readable by reflection: what a typed item is built from.
+    /// `None` for an entry, which is parsed instead.
+    pub(crate) fn peek(&self) -> Option<Peek<'_, 'static>> {
+        match &self.0 {
+            ValueType::Typed { value, peek, .. } => Some(peek(value.as_ref())),
+            ValueType::Entry(_) => None,
+        }
+    }
+
+    /// The entry a [`raw`](Self::raw) value names its item by; `None` for a
+    /// typed value, which is read through [`peek`](Self::peek) instead.
+    pub(crate) fn entry(&self) -> Option<&str> {
+        match &self.0 {
+            ValueType::Typed { .. } => None,
+            ValueType::Entry(entry) => Some(entry),
+        }
     }
 }
 
 impl Debug for ItemValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ItemValue").field(&self.peek()).finish()
+        match &self.0 {
+            ValueType::Typed { value, peek, .. } => f
+                .debug_tuple("ItemValue")
+                .field(&peek(value.as_ref()))
+                .finish(),
+            // Shown as the call that made it, so a log says which kind it was.
+            ValueType::Entry(entry) => f.debug_tuple("ItemValue::raw").field(entry).finish(),
+        }
     }
 }
 
 impl PartialEq for ItemValue {
     fn eq(&self, other: &Self) -> bool {
-        self.shape == other.shape && self.peek() == other.peek()
+        match (&self.0, &other.0) {
+            (ValueType::Entry(a), ValueType::Entry(b)) => a == b,
+            (ValueType::Typed { shape: a, .. }, ValueType::Typed { shape: b, .. }) => {
+                a == b && self.peek() == other.peek()
+            }
+            // A typed value and an entry are never equal, even when they would
+            // build the same item: comparing them would mean parsing the entry.
+            _ => false,
+        }
     }
 }
 

@@ -13,7 +13,7 @@ use formoxus_spec::{
 
 use super::field_row::{LabelSide, field_row};
 use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
-use crate::widgets::{Widget, widget_props::WidgetProps};
+use crate::widgets::{Widget, widget::LeafWidget, widget_props::WidgetProps};
 
 /// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
 ///
@@ -36,7 +36,9 @@ macro_rules! text_like_inputs {
                 const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
 
                 const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::$variant));
+            }
 
+            impl LeafWidget for $widget {
                 /// Never `Bool`: a text box cannot say true or false. A number
                 /// is accepted, since the field parses the text back.
                 const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text).with(FieldType::Int).with(FieldType::Float);
@@ -98,7 +100,9 @@ impl Widget for HiddenInput {
     const EXTENDS: AttrSet = AttrSet::EMPTY;
 
     const PARTS: &'static [Tag] = &[];
+}
 
+impl LeafWidget for HiddenInput {
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
         .with(FieldType::Text)
         .with(FieldType::Int)
@@ -124,7 +128,9 @@ impl Widget for CheckboxInput {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Checkbox));
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Input, Tag::Label];
+}
 
+impl LeafWidget for CheckboxInput {
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);
 
     /// Two states, and an `Option<bool>` has three.
@@ -149,7 +155,9 @@ impl Widget for RangeInput {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Range));
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input, Tag::Output];
+}
 
+impl LeafWidget for RangeInput {
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
         .with(FieldType::Int)
         .with(FieldType::Float);

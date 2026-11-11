@@ -14,7 +14,7 @@ use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
-use formoxus::widgets::{AddItemProps, FieldErrors, Widget, WidgetProps};
+use formoxus::widgets::{AddItemProps, FieldErrors, LeafWidget, Widget, WidgetProps};
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -75,7 +75,9 @@ impl Widget for QuestionItem {
     const NAME: &'static str = "question_item";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
 
+impl LeafWidget for QuestionItem {
     fn render(&self, props: WidgetProps) -> Element {
         let current = props.field_handle().current();
         rsx! {

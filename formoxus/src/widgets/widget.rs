@@ -1,5 +1,13 @@
-//! The `Widget` trait, which built-in and custom widgets alike implement, and
+//! The widget traits, which built-in and custom widgets alike implement, and
 //! `AnyWidget`, the form every holder stores one in.
+//!
+//! **A family, split by who reads what** (`WIDGETS_PLAN.md` decision G′).
+//! [`Widget`] is what every widget has, whatever it renders: a name, its parts
+//! and the attributes it passes through, which are all the class system and
+//! `form!`'s attribute checks read. A second trait says what it renders:
+//! [`LeafWidget`] for one value, which is every built-in today. A widget on a
+//! whole set is to be the next, so that nothing meaningless on one kind is
+//! required of the other.
 
 use std::{any::Any, fmt::Debug};
 
@@ -11,7 +19,12 @@ use formoxus_spec::{AttrSet, FieldTypeSet, Tag};
 use crate::field_attrs::FieldAttrs;
 use crate::widgets::widget_props::WidgetProps;
 
-/// What renders a field: a struct whose `pub` fields are its props, the way a
+/// What every widget is, whatever it renders: its [`NAME`](Self::NAME), its
+/// [`PARTS`](Self::PARTS) and what it [`EXTENDS`](Self::EXTENDS). A widget
+/// also implements the trait for what it renders, which today is always
+/// [`LeafWidget`]; a type with only this one renders nothing.
+///
+/// A widget is a struct whose `pub` fields are its props, the way a
 /// Dioxus component's are. `form!` sets them in the widget's braces
 /// (`widget: MarkdownWidget { preview: true }`) and fills in the rest from
 /// `Default`, so rustc checks every prop's name and type.
@@ -31,7 +44,29 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     /// accepts on a field it renders, beyond the field's own settings. Read
     /// only at compile time, by `form!`'s checks.
     const EXTENDS: AttrSet;
+}
 
+/// A widget that renders one leaf: a single value, handed to it as one
+/// [`WidgetProps`], read and written through its
+/// [`FieldHandle`](crate::widgets::FieldHandle). Every built-in is one.
+///
+/// What `form!`'s type checks read (`ACCEPTS` and the two after it, which is
+/// why they are consts), and what an [`AnyWidget`] holds. A widget of your
+/// own implements both traits:
+///
+/// ```ignore
+/// impl Widget for Stars {
+///     const NAME: &'static str = "stars";
+///     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input];
+///     const EXTENDS: AttrSet = AttrSet::EMPTY;
+/// }
+///
+/// impl LeafWidget for Stars {
+///     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Int);
+///     fn render(&self, props: WidgetProps) -> Element { /* … */ }
+/// }
+/// ```
+pub trait LeafWidget: Widget {
     /// The field types this widget renders without `choices`. It renders a
     /// field of type `t` when `ACCEPTS.contains(t) || (TAKES_CHOICES &&
     /// has_choices)`: a `Select` accepts only `Bool` on its own, but any type
@@ -82,8 +117,8 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     }
 }
 
-/// `Widget` without its consts, which is what lets it be `dyn`; the blanket
-/// impl below makes every `Widget` one. Only `AnyWidget` holds one, so no dev
+/// `LeafWidget` without its consts, which is what lets it be `dyn`; the blanket
+/// impl below makes every `LeafWidget` one. Only `AnyWidget` holds one, so no dev
 /// ever names it.
 pub(crate) trait DynWidget: Debug + Send + Sync {
     fn render(&self, props: WidgetProps) -> Element;
@@ -95,18 +130,18 @@ pub(crate) trait DynWidget: Debug + Send + Sync {
     fn eq_dyn(&self, other: &dyn DynWidget) -> bool;
 }
 
-impl<W: Widget> DynWidget for W {
+impl<LW: LeafWidget> DynWidget for LW {
     fn render(&self, props: WidgetProps) -> Element {
-        Widget::render(self, props)
+        LW::render(self, props)
     }
     fn name(&self) -> &'static str {
-        W::NAME
+        LW::NAME
     }
     fn extends(&self) -> AttrSet {
-        W::EXTENDS
+        LW::EXTENDS
     }
     fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
-        Widget::value_when_empty(self, attrs)
+        LW::value_when_empty(self, attrs)
     }
     fn clone_box(&self) -> Box<dyn DynWidget> {
         Box::new(self.clone())
@@ -115,11 +150,11 @@ impl<W: Widget> DynWidget for W {
         self
     }
     fn eq_dyn(&self, other: &dyn DynWidget) -> bool {
-        other.as_any().downcast_ref::<W>() == Some(self)
+        other.as_any().downcast_ref::<LW>() == Some(self)
     }
 }
 
-/// Any [`Widget`], boxed: what a field node stores, so that one form can hold
+/// Any [`LeafWidget`], boxed: what a field node stores, so that one form can hold
 /// widgets of many types.
 ///
 /// `Clone` and `PartialEq` are written by hand, since neither can be derived
@@ -129,7 +164,7 @@ impl<W: Widget> DynWidget for W {
 pub struct AnyWidget(Box<dyn DynWidget>);
 
 impl AnyWidget {
-    pub fn new(widget: impl Widget) -> Self {
+    pub fn new(widget: impl LeafWidget) -> Self {
         Self(Box::new(widget))
     }
     pub fn render(&self, props: WidgetProps) -> Element {
@@ -142,13 +177,13 @@ impl AnyWidget {
     pub fn extends(&self) -> AttrSet {
         self.0.extends()
     }
-    /// The widget's [`Widget::value_when_empty`].
+    /// The widget's [`LeafWidget::value_when_empty`].
     pub fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
         self.0.value_when_empty(attrs)
     }
 }
-impl<W: Widget> From<W> for AnyWidget {
-    fn from(w: W) -> Self {
+impl<LW: LeafWidget> From<LW> for AnyWidget {
+    fn from(w: LW) -> Self {
         Self::new(w)
     }
 }
@@ -185,6 +220,9 @@ mod tests {
         const NAME: &'static str = "notes";
         const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
         const EXTENDS: AttrSet = AttrSet::EMPTY;
+    }
+
+    impl LeafWidget for Notes {
         fn render(&self, _props: WidgetProps) -> Element {
             rsx! {}
         }
@@ -194,6 +232,9 @@ mod tests {
         const NAME: &'static str = "markdown";
         const PARTS: &'static [Tag] = &[];
         const EXTENDS: AttrSet = AttrSet::EMPTY;
+    }
+
+    impl LeafWidget for Markdown {
         fn render(&self, _props: WidgetProps) -> Element {
             rsx! {}
         }

@@ -169,7 +169,7 @@ fn signals_are_populated_from_the_model() {
 // up.
 
 use formoxus::nodes::ValuesStore;
-use formoxus::widgets::Widget;
+use formoxus::widgets::LeafWidget;
 use formoxus::widgets::WidgetProps;
 
 const ID: &str = "rand0123-name";

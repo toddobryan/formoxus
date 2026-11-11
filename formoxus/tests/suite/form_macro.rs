@@ -900,7 +900,9 @@ impl formoxus::widgets::Widget for ShoutyWidget {
     const NAME: &'static str = "shouty";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [Tag] = &[];
+}
 
+impl formoxus::widgets::LeafWidget for ShoutyWidget {
     /// `render` may not call hooks, so it hands off to a component that does.
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         let label = props.label.unwrap_or_default();

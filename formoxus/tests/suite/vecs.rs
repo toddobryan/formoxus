@@ -1976,7 +1976,9 @@ impl formoxus::widgets::Widget for Shown {
     const NAME: &'static str = "shown";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
 
+impl formoxus::widgets::LeafWidget for Shown {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         let current = props.field_handle().current();
         rsx! {

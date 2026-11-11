@@ -22,8 +22,8 @@ use formoxus::field_kind::field_for;
 use formoxus::nodes::ValuesByPath;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
-use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
+use formoxus::widgets::{LeafWidget, Widget};
 use googletest::prelude::*;
 
 use super::models::Shape;
@@ -174,7 +174,9 @@ impl Widget for Spreading {
     const NAME: &'static str = "spreading";
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Text));
     const PARTS: &'static [Tag] = &[];
+}
 
+impl LeafWidget for Spreading {
     fn render(&self, props: WidgetProps) -> Element {
         let attrs = props.current_attrs().merge_with_attrs(props.extra_attrs);
         rsx! { input { class: "spreading", ..attrs } }

@@ -29,8 +29,8 @@ use formoxus::attrs::FieldType;
 use formoxus::using_fns;
 use formoxus::widgets::{
     AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
-    MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput, TextInput,
-    Textarea, TimeInput, UrlInput, WeekInput, Widget,
+    LeafWidget, MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
+    TextInput, Textarea, TimeInput, UrlInput, WeekInput,
 };
 use formoxus::{FormSpec, ModelPath, empty_form, path, use_form};
 use std::panic;
@@ -65,8 +65,8 @@ fn OneField(path: ModelPath<Sampler>, widget: AnyWidget) -> Element {
 /// `form!` accepts it on a field of each type (no choices, not optional).
 type Entry = (&'static str, AnyWidget, fn(FieldType) -> bool);
 
-fn entry<W: Widget + Default>() -> Entry {
-    (W::NAME, W::default().into(), |t| W::ACCEPTS.contains(t))
+fn entry<LW: LeafWidget + Default>() -> Entry {
+    (LW::NAME, LW::default().into(), |t| LW::ACCEPTS.contains(t))
 }
 
 /// Every built-in widget type, in `WidgetName::ALL`'s order.

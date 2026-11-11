@@ -541,8 +541,8 @@ mod tests {
     use super::{BUILTINS, ClassEdit, Classes, FixedKey, Slot, SlotKey};
     use crate::buttons::ButtonType;
     use crate::widgets::{
-        CheckboxInput, EmailInput, HiddenInput, RadioGroup, Select, TextInput, Textarea, Widget,
-        WidgetProps,
+        CheckboxInput, EmailInput, HiddenInput, LeafWidget, RadioGroup, Select, TextInput,
+        Textarea, Widget, WidgetProps,
     };
     use dioxus::prelude::*;
     use formoxus_spec::{AttrSet, Tag};
@@ -815,6 +815,9 @@ mod tests {
         const NAME: &'static str = "notes";
         const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
         const EXTENDS: AttrSet = AttrSet::EMPTY;
+    }
+
+    impl LeafWidget for Notes {
         fn render(&self, _props: WidgetProps) -> Element {
             rsx! {}
         }

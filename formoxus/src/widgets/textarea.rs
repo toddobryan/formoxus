@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
 use super::field_row::{LabelSide, field_row};
-use crate::widgets::{Widget, widget_props::WidgetProps};
+use crate::widgets::{Widget, widget::LeafWidget, widget_props::WidgetProps};
 
 /// `<textarea>`, a multi-line text input. For a `String` field only.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -16,7 +16,9 @@ impl Widget for Textarea {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Textarea);
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Textarea];
+}
 
+impl LeafWidget for Textarea {
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Text);
 
     const ACCEPTS_OPTIONAL: bool = true;

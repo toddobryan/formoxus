@@ -16,7 +16,7 @@ use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::classes::{FixedKey, Slot};
 use formoxus::widgets::WidgetProps;
-use formoxus::widgets::{Select, TextInput, Textarea, Widget};
+use formoxus::widgets::{LeafWidget, Select, TextInput, Textarea, Widget};
 use formoxus::{Classes, Form, FormSpec, Formoxus, empty_form, form, provide_defaults, use_form};
 use googletest::prelude::*;
 
@@ -199,7 +199,9 @@ impl Widget for ClassProbe {
     const NAME: &'static str = "class_probe";
     const EXTENDS: AttrSet = AttrSet::EMPTY;
     const PARTS: &'static [Tag] = &[];
+}
 
+impl LeafWidget for ClassProbe {
     fn render(&self, props: WidgetProps) -> Element {
         let form = props
             .classes
@@ -249,7 +251,9 @@ impl Widget for Notes {
     const NAME: &'static str = "notes";
     const EXTENDS: AttrSet = AttrSet::EMPTY;
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Textarea];
+}
 
+impl LeafWidget for Notes {
     fn render(&self, props: WidgetProps) -> Element {
         let invalid = props.is_invalid();
         let div = props.classes.part_class::<Notes>(Tag::Div, invalid);

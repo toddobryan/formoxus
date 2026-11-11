@@ -4,8 +4,8 @@
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
-use formoxus::widgets::Widget;
 use formoxus::widgets::WidgetProps;
+use formoxus::widgets::{LeafWidget, Widget};
 use formoxus::{empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -23,6 +23,9 @@ impl Widget for Notes {
     const NAME: &'static str = "notes";
     const PARTS: &'static [Tag] = &[];
     const EXTENDS: AttrSet = AttrSet::EMPTY;
+}
+
+impl LeafWidget for Notes {
     fn render(&self, _props: WidgetProps) -> Element {
         rsx! {}
     }

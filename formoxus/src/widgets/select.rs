@@ -5,6 +5,7 @@ use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, Wi
 
 use super::field_row::{LabelSide, field_row};
 use super::types::bool_choices;
+use crate::widgets::widget::LeafWidget;
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// `<select>`, the default for an optional `bool` and for a field with
@@ -18,7 +19,9 @@ impl Widget for Select {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Select);
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Select];
+}
 
+impl LeafWidget for Select {
     /// `Bool` on its own, offering true and false; any other type only with
     /// `choices`.
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);

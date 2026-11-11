@@ -7,6 +7,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::types::bool_choices;
+use crate::widgets::widget::LeafWidget;
 use crate::widgets::{FieldErrors, Widget, field_help, widget_props::WidgetProps};
 
 /// Radio buttons, one per choice, for a REQUIRED field: a picked radio
@@ -28,7 +29,9 @@ impl Widget for RadioGroup {
     const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Fieldset);
 
     const PARTS: &'static [Tag] = &[Tag::Fieldset, Tag::Legend, Tag::Div, Tag::Input, Tag::Label];
+}
 
+impl LeafWidget for RadioGroup {
     /// `Bool` on its own, offering true and false; any other type only with
     /// `choices`.
     const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Bool);

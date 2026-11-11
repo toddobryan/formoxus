@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
-use formoxus::widgets::{Widget, WidgetProps};
+use formoxus::widgets::{LeafWidget, Widget, WidgetProps};
 use googletest::prelude::*;
 
 use super::Harness;
@@ -354,7 +354,9 @@ impl Widget for Probe {
     const NAME: &'static str = "probe";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
 
+impl LeafWidget for Probe {
     fn render(&self, props: WidgetProps) -> Element {
         rsx! { ProbeView { field: props } }
     }

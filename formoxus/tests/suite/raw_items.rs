@@ -7,10 +7,6 @@
 //! its text (`tags.#2` = `rust`), a unit-enum item's is its variant's name
 //! (`days.#2` = `Friday`). There is no shape to check, so the parse is the
 //! check, and everything after the add is what any other item gets.
-//!
-//! Written first (box 4), so they fail until box 5. `suite.rs` keeps their
-//! `mod` line commented out until then, since `ItemValue::raw` does not exist
-//! yet and the whole suite would stop compiling.
 
 use super::{store_keys, with_store_keys};
 use dioxus::prelude::*;

@@ -118,7 +118,7 @@ impl WidgetProps {
     ///
     /// **Call it from a component.** It reads the field's errors from the
     /// store, and a read subscribes whatever is rendering at that moment.
-    /// [`Widget::render`] runs in the form's scope, so calling it there makes
+    /// [`LeafWidget::render`](super::LeafWidget::render) runs in the form's scope, so calling it there makes
     /// every error re-render the whole form. Have `render` return a
     /// `#[component]` that takes the props and calls this, as the built-in
     /// widgets do (`TextareaView`, `SelectView`). Then an error re-renders only

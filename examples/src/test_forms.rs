@@ -21,6 +21,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::widgets::LeafWidget;
 use formoxus::{nodes::ItemValue, prelude::*};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -957,7 +958,9 @@ impl formoxus::widgets::Widget for HandledText {
     const NAME: &'static str = "handled_text";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
 
+impl LeafWidget for HandledText {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         rsx! { DevText { field: props, with_blur: true } }
     }
@@ -973,7 +976,9 @@ impl formoxus::widgets::Widget for InputOnlyText {
     const NAME: &'static str = "input_only_text";
     const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
     const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
 
+impl LeafWidget for InputOnlyText {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
         rsx! { DevText { field: props, with_blur: false } }
     }

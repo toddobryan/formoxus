@@ -152,7 +152,9 @@ Being explicit, since this is pre-release:
   swap when it becomes so.
 
 A widget of your own is the escape hatch in the meantime: any type
-implementing `formoxus::widgets::Widget`, named by its path after `widget:`.
+implementing `formoxus::widgets::Widget` (its name, parts and the attributes it
+passes through) and `formoxus::widgets::LeafWidget` (what it renders), named by
+its path after `widget:`.
 Props go in its braces and the rest come from `Default`, so
 `widget: ui::Markdown { rows: 8 }` sets one field. The type and the impl are
 both in your crate, so there is no orphan-rule problem, and `form!` checks

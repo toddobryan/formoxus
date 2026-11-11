@@ -69,10 +69,8 @@ mod newtypes;
 mod optional_containers;
 #[path = "suite/range.rs"]
 mod range;
-// WIDGETS_PLAN box 4: written ahead of `ItemValue::raw`, which does not exist
-// yet, so compiling it would stop the whole suite. Uncomment once box 5 is in.
-// #[path = "suite/raw_items.rs"]
-// mod raw_items;
+#[path = "suite/raw_items.rs"]
+mod raw_items;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
 #[path = "suite/set_item_errors.rs"]

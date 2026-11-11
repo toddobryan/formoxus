@@ -483,9 +483,16 @@ several?
   `Invalid` and unknown-variant items are asserted only to have SOME error at the
   returned path; the messages are the field's and the variant node's own.
 
-- [ ] **5.** (Todd) Decision F's runtime: `ItemValue::raw`, and `Items::add_item` and
+- [x] **5.** (Todd) Decision F's runtime: `ItemValue::raw`, and `Items::add_item` and
   `Items::probe` building an item from an entry. `probe` matters because the duplicate
   check builds the would-be item before adding it.
+
+  Done 2026-11-11 (Todd): `ItemValue` holds a private `ValueType`, `Typed` or `Entry`;
+  `shape()` and `peek()` are `Option`s, `None` for an entry; `add_item` and `probe` check
+  the shape of a typed value only; `new_named` builds an entry's item blank and hands it
+  the entry through `distribute_values` at the item's own path, so a leaf parses it and a
+  unit-enum item chooses (or remembers an unknown) variant. All nine `raw_items` tests
+  pass; `just ci` 1295. Docs by Claude.
 
 - [ ] **6.** (Todd) Decision G′'s runtime. First the split: `Widget` keeps `NAME`,
   `PARTS` and `EXTENDS`; the rest moves to `LeafWidget: Widget`; the class helpers bound
@@ -495,6 +502,69 @@ several?
   render branch that replaces the body (decision H), and
   `FormSpec::with_set_widget(&ModelPath<T>, …)`. `build.rs:719`'s assert stays as the
   backstop for a hand-built spec, now naming `with_set_widget` in its message.
+
+  Progress 2026-11-11: the split (steps 1 and 2) is done and green, `just ci` 1295.
+  Todd moved the leaf-only items to `LeafWidget` and re-exported it from `widgets`;
+  Claude split the suite's seven impls and the five goldens' (their `.stderr` changed
+  only in line numbers), fixed six intra-doc links, and wrote the traits' docs, the
+  `widgets` module doc, the README's paragraph and `widget_trait_family.md`.
+
+  **Step 3, written out (Todd asked).** Each piece here is small; the order is the
+  order they depend on each other.
+
+  - **3a. The trait.** `pub trait SetWidget: Widget { fn render(&self, props:
+    SetWidgetProps) -> Element; }` in `widgets/widget.rs`, beside `LeafWidget`,
+    re-exported from `widgets`. No consts of its own: what a set widget accepts
+    (decision E) is checked by `const fn`s in `field_kind`, which box 8 writes, not by a
+    `FieldTypeSet`. The same rule about hooks as `LeafWidget::render`: a plain method,
+    so a widget that reads anything renders a `#[component]` and passes the props on.
+  - **3b. `SetWidgetProps`**, a `#[derive(Clone, PartialEq, Props)]` struct like
+    `WidgetProps`, in its own file `widgets/set_widget_props.rs`. What a multi-pick
+    needs, and nothing it would have to ignore:
+    - `id: String`, the set's page id (`ctx.id(&self.name)`), for the fieldset or the
+      `<select>`, and for `aria-describedby`.
+    - `path: NodePath`, the set's own path, which is where its `AddItem` and
+      `RemoveItem` are addressed (the same one `render` already passes the adder).
+    - `label: Option<String>` and `help_text: Option<String>`, as the set has them.
+    - `choices: Vec<Choice>`: every value the widget offers (3f says where from).
+    - `chosen: Vec<String>`: the ENTRY of each item now in the set, in item order, so
+      position `i` is the index a `RemoveItem` takes. A widget finds whether a choice is
+      chosen, and where, with `chosen.iter().position(|e| *e == choice.value)`.
+    - `required: bool`, `min_items > 0`, for the legend's marker, as `render` decides
+      it today.
+    - `on_edit: Callback<Edit>`, `errors: ErrorsStore` and `classes: Rc<Classes>`, as
+      the adder's props have them.
+    No attributes yet: `form!` takes none on a set, and box 8 decides whether a
+    `select_multiple` may (`size`, `disabled`).
+  - **3c. `AnySetWidget`**, built exactly as `AnyWidget` is: a private `DynSetWidget`
+    trait with the blanket impl, a `Box<dyn DynSetWidget>` inside, `Clone`, `Debug` and
+    `PartialEq` by hand, `From<W: SetWidget>`. It is what the spec and the node hold.
+  - **3d. Where it is written: the spec.** `FieldSpec` gets `set_widget:
+    Option<AnySetWidget>`, and `FormSpec::with_set_widget(path: &ModelPath<T>, widget:
+    impl Into<AnySetWidget>)` sets it, refusing a path that is not a set the way
+    `with_adder` refuses one that is not a list. `build.rs`'s `set_node` copies it onto
+    the node, and its assert at `build.rs:~719` ("a set, which has no single widget")
+    stays as the backstop for a LEAF widget there, its message now naming
+    `with_set_widget`.
+  - **3e. Where it renders: `SetNode`.** A field `widget: Option<AnySetWidget>`, and at
+    the top of `SetNode::render`, `if let Some(widget) = &self.widget { return
+    widget.render(props); }` before the fieldset is built (decision H: the widget
+    renders the whole set, its fieldset, legend, hint and errors included, as
+    `RadioGroup` renders its own). Nothing else in `SetNode` changes: an `AddItem` or a
+    `RemoveItem` from the widget reaches `SetNode::edit` the way the adder's does.
+  - **3f. Where `choices` and `chosen` come from: a `Node` method.** The set's DRAFT is
+    one blank item, so it already knows what an item can be. Add `fn choices(&self,
+    case: LabelCase) -> Option<Vec<Choice>> { None }` to `Node`. A `FieldNode` returns
+    its field's `choices()` (`field.rs:55`). A `VariantNode` over a unit enum returns its
+    variants, `value` the variant name and `display` the name label-cased, as its
+    `<select>` shows it. `SetNode` asks `self.draft.choices(ctx.label_case)`; `None`
+    means box 8's checks let through something they should not have, so panic, naming
+    the path. Each item's entry for `chosen` is what it sends at its own path:
+    `collect_values` it and take the value whose path is the item's.
+  - **3g. Trying it before box 8.** `form!` cannot write `widget:` on a set until box 8,
+    so check 3a–3f with a hand-built spec and a small test widget through
+    `with_set_widget` (it can render `chosen` as text). Box 9's real tests come after
+    box 7's real widgets.
 
 - [ ] **7.** (Todd) `CheckboxMultiple` and `SelectMultiple`. Each change becomes
   `AddItem { value: Some(ItemValue::raw(…)) }` and `RemoveItem`s, highest index first

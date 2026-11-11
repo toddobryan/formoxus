@@ -193,7 +193,7 @@ impl<F: Field> FieldNode<F> {
 
     /// Take `raw` in as this field's value, the way it arrives from an input or
     /// off the wire: what `distribute_values` does with what it finds, and what
-    /// a widget's [`value_when_empty`](crate::widgets::Widget::value_when_empty)
+    /// a widget's [`value_when_empty`](crate::widgets::LeafWidget::value_when_empty)
     /// goes through in [`LeafArgs::node`], so a starting value is read exactly
     /// as a typed one is.
     fn take_raw(&mut self, raw: &str) {

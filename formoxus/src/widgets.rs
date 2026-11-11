@@ -24,8 +24,10 @@
 //! is no `<radiogroup>`, only *n* radios sharing a `name`. Django draws the
 //! line in the same place, and calls the whole range `Widget`.
 //!
-//! **A widget is a struct implementing [`Widget`]**, whose `pub` fields are
-//! its props, and a field holds one as an [`AnyWidget`]. Its `render` is
+//! **A widget is a struct implementing [`Widget`] and [`LeafWidget`]**, whose
+//! `pub` fields are its props, and a field holds one as an [`AnyWidget`].
+//! `Widget` is what every widget has (its name, parts and the attributes it
+//! passes through); `LeafWidget` is what renders one value. Its `render` is
 //! handed one [`WidgetProps`] and is a plain method, so it must not read the
 //! store itself: each built-in passes its props on to a component of its own,
 //! which is where the per-leaf scope above comes from. A dev's widget that
@@ -72,8 +74,9 @@
 //! # Layout
 //!
 //! - [`types`] — [`Choice`], one legal value a chooser offers.
-//! - [`widget`] — the [`Widget`] trait every widget implements, and
-//!   [`AnyWidget`], the form a field holds one in.
+//! - [`widget`] — the [`Widget`] trait every widget implements, the
+//!   [`LeafWidget`] trait for one that renders one value, and [`AnyWidget`],
+//!   the form a field holds one in.
 //! - `widget_props` (re-exported as [`WidgetProps`]) — what a widget is handed
 //!   to render a field.
 //! - [`field_row`](mod@field_row) — the row a one-control widget renders
@@ -129,7 +132,7 @@ pub use types::{Choice, InputType};
 // an `ItemValue`.
 pub use crate::nodes::{Edit, ErrorsStore, ItemValue, ValuesStore};
 pub use variant_select::VariantSelect;
-pub use widget::{AnyWidget, Widget};
+pub use widget::{AnyWidget, LeafWidget, Widget};
 pub use widget_props::WidgetProps;
 
 #[cfg(test)]

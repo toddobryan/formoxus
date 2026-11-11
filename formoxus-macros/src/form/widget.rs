@@ -261,7 +261,7 @@ impl WidgetRef {
         quote_spanned! { key.span()=>
             #[allow(clippy::assertions_on_constants)]
             const _: () = ::core::assert!(
-                <#ty as ::formoxus::widgets::Widget>::TAKES_CHOICES,
+                <#ty as ::formoxus::widgets::LeafWidget>::TAKES_CHOICES,
                 #message
             );
         }
@@ -630,7 +630,7 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                "< :: formoxus :: widgets :: TextInput as :: formoxus :: widgets :: Widget > :: TAKES_CHOICES"
+                "< :: formoxus :: widgets :: TextInput as :: formoxus :: widgets :: LeafWidget > :: TAKES_CHOICES"
             )
         );
         expect_that!(
