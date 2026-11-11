@@ -518,41 +518,63 @@ several?
     (decision E) is checked by `const fn`s in `field_kind`, which box 8 writes, not by a
     `FieldTypeSet`. The same rule about hooks as `LeafWidget::render`: a plain method,
     so a widget that reads anything renders a `#[component]` and passes the props on.
-  - **3b. `SetWidgetProps`**, a `#[derive(Clone, PartialEq, Props)]` struct like
-    `WidgetProps`, in its own file `widgets/set_widget_props.rs`. What a multi-pick
-    needs, and nothing it would have to ignore:
-    - `id: String`, the set's page id (`ctx.id(&self.name)`), for the fieldset or the
-      `<select>`, and for `aria-describedby`.
-    - `path: NodePath`, the set's own path, which is where its `AddItem` and
-      `RemoveItem` are addressed (the same one `render` already passes the adder).
-    - `label: Option<String>` and `help_text: Option<String>`, as the set has them.
-    - `choices: Vec<Choice>`: every value the widget offers (3f says where from).
+  - **3b. `FieldFrame` first, on its own (Todd, 2026-11-11).** The fields every
+    widget's props share, in one struct both props types hold and `Deref` to:
+    `pub struct FieldFrame { id, path, label, help_text, errors, classes }` (the name is
+    a placeholder), with the helpers that read only those: `validity()`,
+    `is_invalid()`, `part_class::<W>()`, and a `described_by()` for the
+    `aria-describedby` value. `WidgetProps` becomes `{ frame: FieldFrame, base_attrs,
+    extra_attrs, values, choices, on_field_event }` plus `impl Deref<Target =
+    FieldFrame>` and `DerefMut`, keeping `current_attrs()`, `control_class()` and
+    `field_handle()`, which read its own fields. Through `Deref`, `props.id`,
+    `props.path` and `props.validity()` keep compiling in every leaf widget, apcsp's
+    `MarkdownWidget` included; what changes is building one (the literal gains
+    `frame: FieldFrame { … }`: `FieldNode::render`, `VariantNode`, `WidgetProps::new`,
+    the suite's `builtin_widgets.rs`) and MOVING a frame field out, which becomes a
+    clone or `props.frame.x`. Do this before `SetWidgetProps` exists and get it green,
+    so the refactor and the new type never share a diff.
+
+    **Why a frame, and why not embed `WidgetProps` itself.** Todd chose a shared struct
+    over repeating six fields: field pass-through is what he wanted from composition,
+    and `Deref` gives it. Embedding the whole `WidgetProps` was considered and refused:
+    it would hand a set widget a `field_handle()` onto the set's own path, so one call
+    could write a structure key into the store (`structure_on_the_wire.md` decision A
+    forbids exactly that), plus a leaf's attributes and an `Option` of choices that a
+    multi-pick must never see as `None`.
+  - **3c. `SetWidgetProps`**, `{ frame: FieldFrame, choices, chosen, required,
+    on_edit }` plus the same `Deref` to the frame, so a set widget reads `props.id`
+    and `props.validity()` exactly as a leaf widget does:
+    - `frame.path` is the SET's own path, which is where its `AddItem` and `RemoveItem`
+      are addressed (the one `render` already passes the adder), and `frame.id` the
+      set's page id, `ctx.id(&self.name)`.
+    - `choices: Vec<Choice>`: every value the widget offers (3g says where from).
     - `chosen: Vec<String>`: the ENTRY of each item now in the set, in item order, so
       position `i` is the index a `RemoveItem` takes. A widget finds whether a choice is
-      chosen, and where, with `chosen.iter().position(|e| *e == choice.value)`.
+      chosen, and where, with `chosen.iter().position(|e| *e == choice.value)`. A
+      snapshot, not a store read: a set's items are structure, which the state owns,
+      and any edit to the set re-renders the form anyway.
     - `required: bool`, `min_items > 0`, for the legend's marker, as `render` decides
       it today.
-    - `on_edit: Callback<Edit>`, `errors: ErrorsStore` and `classes: Rc<Classes>`, as
-      the adder's props have them.
+    - `on_edit: Callback<Edit>`, as the adder's props have it.
     No attributes yet: `form!` takes none on a set, and box 8 decides whether a
-    `select_multiple` may (`size`, `disabled`).
-  - **3c. `AnySetWidget`**, built exactly as `AnyWidget` is: a private `DynSetWidget`
+    `select_multiple` may (`size`, `disabled`). And no `FieldHandle`, deliberately.
+  - **3d. `AnySetWidget`**, built exactly as `AnyWidget` is: a private `DynSetWidget`
     trait with the blanket impl, a `Box<dyn DynSetWidget>` inside, `Clone`, `Debug` and
     `PartialEq` by hand, `From<W: SetWidget>`. It is what the spec and the node hold.
-  - **3d. Where it is written: the spec.** `FieldSpec` gets `set_widget:
+  - **3e. Where it is written: the spec.** `FieldSpec` gets `set_widget:
     Option<AnySetWidget>`, and `FormSpec::with_set_widget(path: &ModelPath<T>, widget:
     impl Into<AnySetWidget>)` sets it, refusing a path that is not a set the way
     `with_adder` refuses one that is not a list. `build.rs`'s `set_node` copies it onto
     the node, and its assert at `build.rs:~719` ("a set, which has no single widget")
     stays as the backstop for a LEAF widget there, its message now naming
     `with_set_widget`.
-  - **3e. Where it renders: `SetNode`.** A field `widget: Option<AnySetWidget>`, and at
+  - **3f. Where it renders: `SetNode`.** A field `widget: Option<AnySetWidget>`, and at
     the top of `SetNode::render`, `if let Some(widget) = &self.widget { return
     widget.render(props); }` before the fieldset is built (decision H: the widget
     renders the whole set, its fieldset, legend, hint and errors included, as
     `RadioGroup` renders its own). Nothing else in `SetNode` changes: an `AddItem` or a
     `RemoveItem` from the widget reaches `SetNode::edit` the way the adder's does.
-  - **3f. Where `choices` and `chosen` come from: a `Node` method.** The set's DRAFT is
+  - **3g. Where `choices` and `chosen` come from: a `Node` method.** The set's DRAFT is
     one blank item, so it already knows what an item can be. Add `fn choices(&self,
     case: LabelCase) -> Option<Vec<Choice>> { None }` to `Node`. A `FieldNode` returns
     its field's `choices()` (`field.rs:55`). A `VariantNode` over a unit enum returns its
@@ -561,8 +583,8 @@ several?
     means box 8's checks let through something they should not have, so panic, naming
     the path. Each item's entry for `chosen` is what it sends at its own path:
     `collect_values` it and take the value whose path is the item's.
-  - **3g. Trying it before box 8.** `form!` cannot write `widget:` on a set until box 8,
-    so check 3a–3f with a hand-built spec and a small test widget through
+  - **3h. Trying it before box 8.** `form!` cannot write `widget:` on a set until box 8,
+    so check 3a–3g with a hand-built spec and a small test widget through
     `with_set_widget` (it can render `chosen` as text). Box 9's real tests come after
     box 7's real widgets.
 
