@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use formoxus_spec::{Attr, AttrType, FieldType, HtmlElement, Owner};
+use formoxus_spec::{Attr, AttrType, FieldType, HtmlElement, Owner, WidgetName};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote, quote_spanned};
@@ -15,7 +15,7 @@ use syn::{
     spanned::Spanned,
 };
 
-use super::{SpecPath, WidgetRef, suggest::edit_distance};
+use super::{SpecPath, WidgetRef, suggest::edit_distance, widget::WidgetKind};
 
 #[derive(Debug)]
 pub(crate) struct FieldSpec {
@@ -57,6 +57,11 @@ pub(crate) struct FieldBody {
     /// like a number's, does not compile. The key, since a flag has nothing
     /// else, is what that error is spanned on.
     pub(crate) no_trim: Option<Ident>,
+    /// The bare flag `omit_value`: a `range` without its `<output>`
+    /// (`WIDGETS_PLAN.md` decision B). Parsed into the widget's own prop,
+    /// `RangeInput { omit_value: true }`, so nothing past the parse reads it;
+    /// kept for the "only on a `range`" check's span.
+    pub(crate) omit_value: Option<Ident>,
     pub(crate) attrs: ParsedAttrs,
     /// `sub.path => { … }` entries written inside this body, each relative to
     /// this body's path. `form!`'s parse flattens them into entries of their
@@ -499,6 +504,7 @@ impl FieldBody {
         checks.push(self.order_checks(&shape, path_span));
         checks.push(self.feedback_checks(&shape));
         checks.push(self.item_checks(&shape));
+        checks.push(self.range_type_checks(&shape));
         if let Some(widget) = &self.widget {
             checks.push(widget.checks(&shape, self.choices.is_some()));
             checks.push(self.extends_checks(widget));
@@ -511,6 +517,30 @@ impl FieldBody {
 }
 
 impl FieldBody {
+    /// The one rule for `widget: range` that needs the field's type, which only
+    /// rustc knows: a float range must be given `step:`, because a range steps
+    /// by 1 unless told otherwise. The rest is `range_checks`, at parse time.
+    /// Spanned on the widget's name.
+    fn range_type_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let Some(WidgetKind::Named {
+            name,
+            widget: WidgetName::RangeInput,
+        }) = self.widget.as_ref().map(|w| &w.kind)
+        else {
+            return quote! {};
+        };
+        if self.attrs.0.contains_key(&AttrId::Std(Attr::Step)) {
+            return quote! {};
+        }
+        quote_spanned! { name.span()=>
+            const _: () = ::core::assert!(
+                !::formoxus::field_kind::is_float(#shape),
+                "a float `range` needs `step:` — a range steps by 1 unless told otherwise, \
+                 so without one it offers only whole numbers"
+            );
+        }
+    }
+
     /// One `const _` assertion per key that only a list or set takes
     /// (`adder`, `min_items`, `max_items`): that the field is one. Spanned on
     /// the key.
@@ -717,6 +747,7 @@ impl Parse for FieldBody {
                 format!("`max_items` is {max}, fewer than `min_items`, {min}"),
             ));
         }
+        fb.range_checks()?;
         if let (Some(_), Some(key)) = (&fb.choices, &fb.no_trim) {
             return Err(syn::Error::new(
                 key.span(),
@@ -779,14 +810,14 @@ impl FieldBody {
                 Ok(())
             }
             // The bare flags: a key alone, kept for the span of what checks it.
-            "set" | "no_trim" => {
+            "set" | "no_trim" | "omit_value" => {
                 if body.peek(Token![:]) {
                     return Err(flag_with_value(&key));
                 }
-                let flag = if name == "set" {
-                    &mut self.set
-                } else {
-                    &mut self.no_trim
+                let flag = match name.as_str() {
+                    "set" => &mut self.set,
+                    "no_trim" => &mut self.no_trim,
+                    _ => &mut self.omit_value,
                 };
                 if flag.is_some() {
                     return Err(syn::Error::new_spanned(
@@ -868,6 +899,61 @@ impl FieldBody {
         Ok(())
     }
 
+    /// What `widget: range` needs and what only it takes (`WIDGETS_PLAN.md`
+    /// decisions A and B), checked at parse time because the macro can see
+    /// both: the widget's name and which keys were written. A float range's
+    /// `step:` is the one rule that needs the field's type, so it is a
+    /// `const _` in `type_checks` instead.
+    ///
+    /// Then `omit_value` goes into the widget's props, where `RangeInput`
+    /// reads it.
+    fn range_checks(&mut self) -> Result<()> {
+        let range_name = match self.widget.as_ref().map(|w| &w.kind) {
+            Some(WidgetKind::Named {
+                name,
+                widget: WidgetName::RangeInput,
+            }) => Some(name.clone()),
+            _ => None,
+        };
+        if let Some(name) = &range_name {
+            let missing: Vec<&str> = [(Attr::Min, "min"), (Attr::Max, "max")]
+                .into_iter()
+                .filter(|(attr, _)| self.attrs.expr(*attr).is_none())
+                .map(|(_, key)| key)
+                .collect();
+            if !missing.is_empty() {
+                let missing = missing
+                    .iter()
+                    .map(|key| format!("`{key}:`"))
+                    .collect::<Vec<_>>()
+                    .join(" or ");
+                return Err(syn::Error::new(
+                    name.span(),
+                    format!(
+                        "`range` needs both `min:` and `max:`, and this has no {missing} — a \
+                         slider cannot show \"empty\", so an empty one starts halfway between \
+                         them, where the browser draws it"
+                    ),
+                ));
+            }
+        }
+        if let Some(key) = &self.omit_value {
+            if range_name.is_none() {
+                return Err(syn::Error::new(
+                    key.span(),
+                    "`omit_value` applies only to `widget: range`, whose `<output>` it leaves out",
+                ));
+            }
+            let prop: syn::FieldValue = syn::parse_quote_spanned! { key.span()=> omit_value: true };
+            self.widget
+                .as_mut()
+                .expect("a range was matched above")
+                .props
+                .push(prop);
+        }
+        Ok(())
+    }
+
     /// Whether the body has no keys of its own. Nested entries are not its
     /// own: they are about other paths.
     pub(crate) fn is_empty(&self) -> bool {
@@ -876,6 +962,7 @@ impl FieldBody {
             && self.help_text.is_none()
             && self.validator.is_none()
             && self.no_trim.is_none()
+            && self.omit_value.is_none()
             && self.min_items.is_none()
             && self.max_items.is_none()
             && self.attrs.0.is_empty()
@@ -1357,6 +1444,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "help_text".to_string(),
         "validator".to_string(),
         "no_trim".to_string(),
+        "omit_value".to_string(),
         "min_items".to_string(),
         "max_items".to_string(),
         "choices".to_string(),
@@ -1668,6 +1756,8 @@ mod tests {
                 "choices" => quote!(#ident: STATES),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" | "no_trim" => quote!(#ident),
+                // Only on a `range`, which needs its bounds.
+                "omit_value" => quote!(widget: range, min: 0, max: 10, #ident),
                 "min_items" | "max_items" => quote!(#ident: 2),
                 "sort_by" => quote!(#ident: String::cmp),
                 "feedback" => quote!(#ident: |_| None),

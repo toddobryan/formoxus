@@ -8,6 +8,7 @@ use std::{any::Any, fmt::Debug};
 use dioxus::prelude::Element;
 use formoxus_spec::{AttrSet, FieldTypeSet, Tag};
 
+use crate::field_attrs::FieldAttrs;
 use crate::widgets::widget_props::WidgetProps;
 
 /// What renders a field: a struct whose `pub` fields are its props, the way a
@@ -63,6 +64,22 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
     /// join that component's hooks. A widget that needs state renders a
     /// `#[component]` of its own and passes `props` on to it.
     fn render(&self, props: WidgetProps) -> Element;
+
+    /// The raw value a field starts with when it would otherwise be empty, for
+    /// a widget that cannot SHOW empty. `None`, the default, for every widget
+    /// that can.
+    ///
+    /// A range is the one built-in that cannot: given `value=""`, the browser
+    /// draws its midpoint, so the store would hold `""` while the user saw 50.
+    /// Asked once, when the field's node is built (`LeafArgs::node`), so
+    /// `empty_form`, `reset` and a server's rebuild all start from the same
+    /// value, and the field parses it as it would anything typed.
+    ///
+    /// `attrs` are what the widget renders from: the field's own (`min`,
+    /// `max`) then the spec's (`step`), bounds resolved to the field's type.
+    fn value_when_empty(&self, _attrs: &FieldAttrs) -> Option<String> {
+        None
+    }
 }
 
 /// `Widget` without its consts, which is what lets it be `dyn`; the blanket
@@ -72,6 +89,7 @@ pub(crate) trait DynWidget: Debug + Send + Sync {
     fn render(&self, props: WidgetProps) -> Element;
     fn name(&self) -> &'static str;
     fn extends(&self) -> AttrSet;
+    fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String>;
     fn clone_box(&self) -> Box<dyn DynWidget>;
     fn as_any(&self) -> &dyn Any;
     fn eq_dyn(&self, other: &dyn DynWidget) -> bool;
@@ -86,6 +104,9 @@ impl<W: Widget> DynWidget for W {
     }
     fn extends(&self) -> AttrSet {
         W::EXTENDS
+    }
+    fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
+        Widget::value_when_empty(self, attrs)
     }
     fn clone_box(&self) -> Box<dyn DynWidget> {
         Box::new(self.clone())
@@ -120,6 +141,10 @@ impl AnyWidget {
     /// The widget's [`Widget::EXTENDS`]: the attributes its element takes.
     pub fn extends(&self) -> AttrSet {
         self.0.extends()
+    }
+    /// The widget's [`Widget::value_when_empty`].
+    pub fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
+        self.0.value_when_empty(attrs)
     }
 }
 impl<W: Widget> From<W> for AnyWidget {

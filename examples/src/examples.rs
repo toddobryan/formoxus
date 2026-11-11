@@ -7,6 +7,7 @@ mod lists;
 mod live;
 mod select;
 mod sets;
+mod sliders;
 
 /// Every example, in the order they appear on the page.
 ///
@@ -32,6 +33,12 @@ pub fn Gallery() -> Element {
             title: "An address form",
             note: "Select for state (which I hate), and some formatting",
             select::AddressForm {},
+        }
+
+        Example {
+            title: "Sliders",
+            note: "A range for a whole number, one for a float in half steps, and one without its number. Each starts where the browser draws an empty slider, so sending the form untouched sends what it shows.",
+            sliders::Sliders {},
         }
 
         Example {

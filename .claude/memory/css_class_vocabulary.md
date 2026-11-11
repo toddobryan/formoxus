@@ -19,6 +19,11 @@ the form title is a `div.fx-form-title` the `<form>` is `aria-labelledby`, not
 an `<h2>`. Stale below: "Each radio's wrapping `<label>` is now `fx-choice`" —
 since P1 a choice is `div.fx-choice > input.fx-radio + label.fx-choice-label`.
 
+**UPDATE 2026-11-11: `range` (WIDGETS_PLAN part 1)** adds two: its `<input>` is
+`fx-control fx-range` and its `<output>` (the value shown beside the slider,
+left out with `omit_value`) is `fx-range-value`. `Tag::Output` and
+`HtmlElement::Output` are new for it, so `output` is a `classes_plus:` part.
+
 **UPDATE 2026-10-10:** the override SYSTEM is now MVP (P3 in
 `formoxus/ATTRIBUTES_PLAN.md`; [[attribute-rules-design]]), and `fx-form-field`
 moves from `<label>` to a `div` with P1 (`<label for>`).

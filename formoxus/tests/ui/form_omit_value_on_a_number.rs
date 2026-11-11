@@ -1,6 +1,5 @@
 //! `omit_value` leaves out a range's `<output>` (decision B), so on any other
-//! widget it would do nothing and should be refused, as `no_trim` on a number
-//! is. Pending: today `omit_value` is an unknown key.
+//! widget it would do nothing, and it is refused, as `no_trim` on a number is.
 use facet::Facet;
 use formoxus::form;
 

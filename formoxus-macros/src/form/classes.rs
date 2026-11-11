@@ -462,7 +462,7 @@ mod tests {
         expect_that!(
             key_err(quote!(select.wrapper)),
             eq("unknown part `wrapper` — a part is one of \
-                 div, fieldset, label, legend, input, textarea, select")
+                 div, fieldset, label, legend, input, textarea, select, output")
         );
     }
 

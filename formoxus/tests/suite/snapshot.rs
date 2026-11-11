@@ -70,6 +70,7 @@ struct Everything {
     datetime_local: String,
     month: String,
     week: String,
+    volume: u8,
     nickname: Option<String>,
     // Checkboxes: plain, and one that must be ticked (it gets the marker).
     subscribed: bool,
@@ -104,6 +105,7 @@ fn spec() -> FormSpec<Everything> {
             datetime_local => { widget: datetime_local },
             month => { widget: month },
             week => { widget: week },
+            volume => { widget: range, min: 0, max: 10 },
             agreed => { required_true },
             bio => { widget: textarea },
             state => { widget: select, choices: STATES },
@@ -137,6 +139,7 @@ fn seeded() -> Everything {
         datetime_local: "2026-10-14T09:30".into(),
         month: "2026-10".into(),
         week: "2026-W42".into(),
+        volume: 7,
         nickname: None,
         subscribed: false,
         agreed: true,

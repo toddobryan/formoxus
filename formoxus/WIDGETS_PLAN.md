@@ -152,11 +152,15 @@ value natively, but a sighted user dragging toward 37 cannot see they are at 37.
   on an `Option<bool>`, and needs a sentence in `optional_refusal` saying so.
 - **No `required` attribute.** HTML does not allow it on a range (the attribute
   table agrees: `Required`'s `on:` leaves out `Range`, `formoxus-spec/src/attrs.rs:545`),
-  and a range always has a value anyway. Today `FieldAttrs::with_owned_attrs`
+  and a range always has a value anyway. `FieldAttrs::with_owned_attrs`
   (`field_attrs.rs:169`) adds `required` to every required field except a checkbox,
-  so a range would get it. The fix is to ask the attribute table whether `required`
-  is valid on the widget's element, instead of passing `is_checkbox`. That also covers
-  the checkbox, which is why the special case can go.
+  and it has to stay there: `Required` in `base_attrs` is also how a widget learns its
+  field is required (`RadioGroup` panics without it and moves it onto each radio;
+  `Select` picks its placeholder by it). So `RangeInput` takes it out of its SPREAD,
+  `current_attrs().without(Attr::Required)`, as `RadioGroup` takes it off its
+  `<fieldset>` (`radio_group.rs:94`). Corrected 2026-11-11: the draft said to decide
+  it in `with_owned_attrs` from the attribute table, which would have stripped it from
+  every radio group, whose `EXTENDS` is the fieldset's.
 
 ## Part 2: `checkbox_multiple` and `select_multiple`
 
@@ -339,7 +343,8 @@ several?
    confirms it in a real browser before decision A's fix is trusted.
 2. **`with_owned_attrs` exempts only a checkbox from `required`**
    (`field_attrs.rs:169`), so a required range would get an attribute HTML does not
-   allow on it (`attrs.rs:545`).
+   allow on it (`attrs.rs:545`). But `Required` there is also the signal every widget
+   reads, so it is removed from the range's spread, not from `base_attrs`.
 3. **On a `<select multiple>`, `FormEvent::value()` is the FIRST selected option
    only.** dioxus-web 0.7.10 reads `HtmlSelectElement::value()` (`events/form.rs:57`).
    `FormEvent::values()` lists every selected option, each as `(name, Text)`
@@ -417,22 +422,49 @@ several?
     The suite's float test now gives a step, and a sixth golden,
     `form_range_float_without_step.rs`, pins the refusal.
 
-- [ ] **2.** (Todd) The runtime. `RangeInput`: a row in `WidgetName`, and its own body
+- [x] **2.** (Todd) The runtime. `RangeInput`: a row in `WidgetName`, and its own body
   in `InputView` rather than a `text_like_inputs!` row, because of the `<output>`. The
   `value_when_empty` hook on `Widget` for now (decision A; box 6 moves it to
   `LeafWidget` with the rest of the leaf-only items), called where a `FieldNode` is built
   with no value. `Output` in `HtmlElement` and `Tag`, and the
   `omit_value` prop (decision B). And
-  `with_owned_attrs` deciding whether to add `required` by asking the attribute table
-  whether `required` is valid on the widget's element, not by `is_checkbox` (trap 2).
+  `required` taken out of the range's spread with `.without(Attr::Required)`, as
+  `RadioGroup` does, leaving it in `base_attrs` as the signal (trap 2; done by Claude
+  2026-11-11, at Todd's request).
 
-- [ ] **3.** (Claude) The `form!` side: `range` in the three exhaustive message
+  Done 2026-11-11 (Todd; Claude wrote the `required` spread and step 9 at his request):
+  `value_when_empty(&self, attrs: &FieldAttrs) -> Option<String>` on `Widget`, forwarded
+  through `DynWidget`/`AnyWidget`, asked in `LeafArgs::node` with the attributes the widget
+  renders from; the parse factored out of `distribute_values` as `FieldNode::take_raw`, so
+  a starting value is read exactly as a typed one. The whole suite passes with
+  `range.rs` in, except `omit_value_leaves_the_output_out`, which cannot compile until
+  box 3 teaches `form!` the flag. `Tag::Output` changed `form!`'s list of parts, so
+  `a_part_that_is_no_element_lists_the_tags` now ends in `output`. Not yet committed.
+
+- [x] **3.** (Claude) The `form!` side: `range` in the three exhaustive message
   matches in `formoxus-macros/src/form/widget.rs` (the compiler lists them), the
   check that `min:` and `max:` are both given (and `step:` on a float), the `omit_value` flag (refused on any
   widget but `range`), and the goldens. An e2e test form
   `/t/range` with its test: an untouched submit sends the midpoint (trap 1), and a
   keyboard change sends the new value. A gallery entry. Docs and memory for the part.
   Then Todd merges `range`.
+
+  Done 2026-11-11:
+  - `form!`: `omit_value` is a bare flag, emitted as the widget prop `omit_value: true`
+    and refused on any widget but `range`; a `range` without `min:` or `max:` is a parse
+    error on the widget's name; a float `range` without `step:` is a `const _` on
+    `field_kind::is_float` (new), since only rustc knows the type. `range`'s optional
+    refusal now says "use `number`", as the checkbox's says "use `select`".
+  - The six goldens moved from `tests/ui-pending/` to `tests/ui/` and were blessed,
+    every message read. `range` on a `String` shows five errors, not one: its `min:`
+    and `max:` are refused too, and a range cannot be written without them.
+  - One more suite test, `a_request_without_the_range_gets_its_midpoint` (14 in all),
+    pinning that a request leaving the range out gets the midpoint, not "required".
+  - e2e: `/t/range` and `e2e/tests/range.rs` (2), passing in a real browser. The form
+    renders bare reference sliders with no value, and the test holds formoxus's
+    starting value to what the browser draws on them (trap 1).
+  - Gallery: "Sliders" (`examples/src/examples/sliders.rs`). README's widget paragraph,
+    `css_class_vocabulary.md` (`fx-range`, `fx-range-value`), `e2e_harness.md`.
 
 ### Part 2: `checkbox_multiple` and `select_multiple` (branch `multi_pick`)
 

@@ -67,11 +67,8 @@ mod live_validation;
 mod newtypes;
 #[path = "suite/optional_containers.rs"]
 mod optional_containers;
-// WIDGETS_PLAN box 1: written ahead of `widget: range`, which `form!` does not
-// know yet, so compiling it would stop the whole suite. Uncomment once boxes 2
-// (the runtime) and 3 (`form!`) are in.
-// #[path = "suite/range.rs"]
-// mod range;
+#[path = "suite/range.rs"]
+mod range;
 #[path = "suite/roundtrip.rs"]
 mod roundtrip;
 #[path = "suite/set_item_errors.rs"]

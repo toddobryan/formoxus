@@ -1,7 +1,6 @@
 //! A slider cannot be unset, so it cannot say `None`: `range` on an
-//! `Option<i32>` should be refused with `optional_refusal`'s sentence for it,
-//! as `checkbox` on an `Option<bool>` is. Pending: today `range` is an unknown
-//! widget.
+//! `Option<i32>` is refused with `optional_refusal`'s sentence for it,
+//! as `checkbox` on an `Option<bool>` is.
 use facet::Facet;
 use formoxus::{empty_form, form};
 

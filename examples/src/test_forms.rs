@@ -35,6 +35,7 @@ pub fn TestForm(slug: String) -> Element {
         "pattern-novalidate" => rsx! { PatternNoValidate {} },
         "lengths" => rsx! { Lengths {} },
         "bounds" => rsx! { Bounds {} },
+        "range" => rsx! { RangeForm {} },
         "checkbox" => rsx! { CheckboxForm {} },
         "must-agree" => rsx! { MustAgree {} },
         "must-agree-novalidate" => rsx! { MustAgreeNoValidate {} },
@@ -245,6 +246,53 @@ fn Bounds() -> Element {
             }
         },
     )
+}
+
+// ── range ────────────────────────────────────────────────────────────────
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Ranges {
+    plain: i32,
+    by_three: i32,
+    by_four: i32,
+    tie: i32,
+}
+
+/// Four sliders, each on an empty form, chosen for where an EMPTY range starts
+/// (`WIDGETS_PLAN.md` decision A): 0–10 at the midpoint, 5; with `step: 3` at 6,
+/// the nearer step; with `step: 4` at 4; and 1–4 at 3, a tie that takes the
+/// larger.
+///
+/// **The bare inputs after the form are the reference.** formoxus renders the
+/// value it computed, so its own sliders agree with the form whatever the
+/// formula says. Each `#ref-…` is a plain `<input type="range">` with the same
+/// bounds and NO value, so what the browser draws there is HTML's own default,
+/// which is what the e2e test holds formoxus to.
+#[component]
+fn RangeForm() -> Element {
+    rsx! {
+        {
+            harness(
+                "range",
+                "Four empty sliders, then bare reference sliders with the same bounds and no value.",
+                form! {
+                    Ranges {
+                        plain => { label: "Plain", widget: range, min: 0, max: 10 },
+                        by_three => { label: "By three", widget: range, min: 0, max: 10, step: 3 },
+                        by_four => { label: "By four", widget: range, min: 0, max: 10, step: 4 },
+                        tie => { label: "Tie", widget: range, min: 1, max: 4 },
+                        buttons: { save: { type: submit } }
+                    }
+                },
+            )
+        }
+        section { id: "reference",
+            input { r#type: "range", id: "ref-plain", min: "0", max: "10" }
+            input { r#type: "range", id: "ref-by_three", min: "0", max: "10", step: "3" }
+            input { r#type: "range", id: "ref-by_four", min: "0", max: "10", step: "4" }
+            input { r#type: "range", id: "ref-tie", min: "1", max: "4" }
+        }
+    }
 }
 
 // ── checkbox ─────────────────────────────────────────────────────────────

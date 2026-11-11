@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `range` cannot render an optional field — a slider always has a value; use `number`
+  --> tests/ui/form_range_on_an_optional_int.rs:15:34
+   |
+15 |             volume? => { widget: range, min: 0, max: 10 },
+   |                                  ^^^^^ evaluation of `main::_` failed here

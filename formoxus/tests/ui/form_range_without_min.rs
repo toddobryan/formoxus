@@ -1,7 +1,7 @@
 //! A range needs both `min:` and `max:` (decision A): an empty range starts at
 //! the midpoint between them, and without them that would be the browser's
-//! 0 to 100, which nobody chose. The error should point at `range` and name
-//! the missing `min:`. Pending: today `range` is an unknown widget.
+//! 0 to 100, which nobody chose. The error points at `range` and names the
+//! missing `min:`.
 use facet::Facet;
 use formoxus::form;
 

@@ -58,6 +58,16 @@ being `"Username *"` was right about `get_by_label` all along.
 the page; it does NOT make an assertion match a whole line the way I claimed when
 recommending it. Substring assertions behave the same either way.
 
+## 2026-11-11: `range` (2), for WIDGETS_PLAN box 3, on `/t/range`
+- **Role `slider`** (`roles::slider`). **Playwright cannot `fill` a range**, so a
+  value is changed by `focus()` + `press("ArrowRight")`.
+- **A rendered value proves nothing about the browser's default.** formoxus
+  renders the starting value it computed, so its own slider always agrees with
+  the form. `/t/range` therefore also renders bare `<input type="range">`s with
+  the same bounds and NO value (`#ref-…`), and the test compares
+  `input_value()`s: what the browser draws on its own is the oracle. Passed for
+  0–10, step 3, step 4 and the 1–4 tie on the first run.
+
 ## 2026-11-03: 52 tests, 11 files: `tags` (11) for SETS_PLAN box 10
 
 On `/t/tags` and `/t/tags-pattern`. The draft is found by role and name

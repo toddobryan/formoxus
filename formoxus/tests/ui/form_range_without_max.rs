@@ -1,5 +1,4 @@
-//! As `form_range_without_min.rs`, for `max:`. Pending: today `range` is an
-//! unknown widget.
+//! As `form_range_without_min.rs`, for `max:`.
 use facet::Facet;
 use formoxus::form;
 

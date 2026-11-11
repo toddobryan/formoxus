@@ -12,6 +12,7 @@ pub enum HtmlElement {
     Textarea,
     Select,
     Input(InputType),
+    Output,
 }
 
 impl HtmlElement {
@@ -24,6 +25,7 @@ impl HtmlElement {
             HtmlElement::Input(_) => "input",
             HtmlElement::Textarea => "textarea",
             HtmlElement::Select => "select",
+            HtmlElement::Output => "output",
         }
     }
 }
@@ -46,6 +48,7 @@ pub enum Tag {
     Input,
     Textarea,
     Select,
+    Output,
 }
 
 impl Tag {
@@ -59,6 +62,7 @@ impl Tag {
         Tag::Input,
         Tag::Textarea,
         Tag::Select,
+        Tag::Output,
     ];
 
     /// The element's tag name, as HTML writes it and `classes_plus:` spells
@@ -72,6 +76,7 @@ impl Tag {
             Tag::Input => "input",
             Tag::Textarea => "textarea",
             Tag::Select => "select",
+            Tag::Output => "output",
         }
     }
 
@@ -93,6 +98,8 @@ impl Tag {
             Some(Tag::Textarea)
         } else if str_eq(tag, "select") {
             Some(Tag::Select)
+        } else if str_eq(tag, "output") {
+            Some(Tag::Output)
         } else {
             None
         }

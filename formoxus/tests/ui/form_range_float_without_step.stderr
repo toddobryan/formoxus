@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a float `range` needs `step:` — a range steps by 1 unless told otherwise, so without one it offers only whole numbers
+  --> tests/ui/form_range_float_without_step.rs:14:47
+   |
+14 |     let _ = form! { Dial { level => { widget: range, min: 0.0, max: 1.0 } } };
+   |                                               ^^^^^ evaluation of `main::_` failed here

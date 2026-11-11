@@ -37,6 +37,11 @@ pub fn spinbutton(s: &Session, name: &str) -> Locator {
     named(s, AriaRole::Spinbutton, name)
 }
 
+/// A range input. `type="range"` has role `slider`.
+pub fn slider(s: &Session, name: &str) -> Locator {
+    named(s, AriaRole::Slider, name)
+}
+
 /// A checkbox, by accessible name.
 pub fn checkbox(s: &Session, name: &str) -> Locator {
     named(s, AriaRole::Checkbox, name)

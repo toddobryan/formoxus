@@ -136,8 +136,11 @@ Being explicit, since this is pre-release:
   `checkbox` goes only on a `bool`, `textarea` only on a string, no
   `<input type=…>` on a `bool`, `select` and `radio_group` on anything but a
   `bool` only with `choices:`, and neither `checkbox` nor `radio_group` on an
-  `Option`. `select_multiple`, `checkbox_multiple` and `file` render nothing
-  yet and are refused by name. Run
+  `Option`. `range` goes only on a number, never on an `Option` (a slider
+  cannot be unset), and needs `min:` and `max:`, plus `step:` on a float; an
+  empty one starts where the browser draws it, halfway between them, and
+  `omit_value` drops the number shown beside it. `select_multiple`,
+  `checkbox_multiple` and `file` render nothing yet and are refused by name. Run
   `cargo run -p formoxus-examples --bin widget_matrix` for the current table.
 - **No file upload**, which is the `file` widget above.
 - **An error that appears as a field loses focus moves what is below it.**

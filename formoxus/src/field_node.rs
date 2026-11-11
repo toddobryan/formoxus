@@ -43,7 +43,7 @@ impl LeafArgs<'_> {
     /// there is nothing for the spec's to merge with.
     pub fn node<F: Field>(self, field: F) -> FieldNode<F> {
         let spec = self.spec;
-        FieldNode {
+        let mut node = FieldNode {
             name: self.name.to_string(),
             label: spec.and_then(|s| s.label.clone()),
             help_text: spec.and_then(|s| s.help_text.clone()),
@@ -56,7 +56,23 @@ impl LeafArgs<'_> {
             wrapper: self.wrapper,
             value: populate::<F::Value>(self.peek),
             field,
+        };
+        // A field with no value whose widget cannot show "empty" starts at what
+        // the widget shows instead (a range's midpoint; `WIDGETS_PLAN.md`
+        // decision A). Here, where every leaf is built, so `empty_form`, `reset`
+        // and a server's rebuild agree without a special case. The attributes
+        // are the ones the widget renders from (`render` below).
+        if matches!(node.value, FieldValue::Empty) {
+            let attrs = node
+                .field
+                .widget_attrs()
+                .then(&node.attrs)
+                .resolve_bounds(node.field_type());
+            if let Some(raw) = node.widget.value_when_empty(&attrs) {
+                node.take_raw(&raw);
+            }
         }
+        node
     }
 }
 
@@ -175,6 +191,39 @@ impl<F: Field> FieldNode<F> {
         matches!(self.value, FieldValue::Empty) && self.is_checkbox()
     }
 
+    /// Take `raw` in as this field's value, the way it arrives from an input or
+    /// off the wire: what `distribute_values` does with what it finds, and what
+    /// a widget's [`value_when_empty`](crate::widgets::Widget::value_when_empty)
+    /// goes through in [`LeafArgs::node`], so a starting value is read exactly
+    /// as a typed one is.
+    fn take_raw(&mut self, raw: &str) {
+        // Trimmed here, where the text becomes a value, and nowhere else: the
+        // store keeps what was typed, so the input never loses a space the
+        // user is still typing past (#16). The server reads the same raw
+        // text through here, so it trims the same way.
+        let text = if self.field.trims(self.is_password()) {
+            raw.trim()
+        } else {
+            raw
+        };
+
+        // An empty input means "unfilled", which is what `Empty` encodes —
+        // that's what lets required-validation still fire on a blanked field.
+        // After trimming, so a field of spaces is unfilled too.
+        if text.is_empty() {
+            self.value = FieldValue::Empty;
+            return;
+        }
+
+        self.value = match self.field.parse(text) {
+            Ok(t) => FieldValue::Valid(t),
+            Err(error) => FieldValue::Invalid {
+                raw: raw.to_string(),
+                error,
+            },
+        };
+    }
+
     /// The raw value `validate` checks: `"false"` for an unticked checkbox,
     /// and [`Node::raw_value`] for everything else.
     ///
@@ -244,32 +293,7 @@ impl<F: Field> Node for FieldNode<F> {
         let Some(raw) = values.get(&prefix.join(&self.name)) else {
             return; // nothing supplied for this field; leave it as it stands
         };
-
-        // Trimmed here, where the text becomes a value, and nowhere else: the
-        // store keeps what was typed, so the input never loses a space the
-        // user is still typing past (#16). The server reads the same raw
-        // text through here, so it trims the same way.
-        let text = if self.field.trims(self.is_password()) {
-            raw.trim()
-        } else {
-            raw.as_str()
-        };
-
-        // An empty input means "unfilled", which is what `Empty` encodes —
-        // that's what lets required-validation still fire on a blanked field.
-        // After trimming, so a field of spaces is unfilled too.
-        if text.is_empty() {
-            self.value = FieldValue::Empty;
-            return;
-        }
-
-        self.value = match self.field.parse(text) {
-            Ok(t) => FieldValue::Valid(t),
-            Err(error) => FieldValue::Invalid {
-                raw: raw.clone(),
-                error,
-            },
-        };
+        self.take_raw(raw);
     }
 
     fn paths(&self, prefix: &NodePath, _drafts: Drafts, out: &mut Vec<NodePath>) {

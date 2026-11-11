@@ -111,7 +111,8 @@ pub use field_row::{LabelSide, field_label, field_row, required_marker};
 pub use help::{described_by, field_help, help_id};
 pub use input::{
     CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
-    NumberInput, PasswordInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput, WeekInput,
+    NumberInput, PasswordInput, RangeInput, SearchInput, TelInput, TextInput, TimeInput, UrlInput,
+    WeekInput,
 };
 pub use item_buttons::{
     AddItemButton, AddItemProps, DraftAdder, EditItemButton, ItemAdder, MoveItemButtons,
@@ -135,8 +136,8 @@ pub use widget_props::WidgetProps;
 mod tests {
     use super::{
         CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
-        MonthInput, NumberInput, PasswordInput, RadioGroup, SearchInput, Select, TelInput,
-        TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
+        MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput, Select,
+        TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
     };
     use formoxus_spec::WidgetName;
     use googletest::prelude::*;
@@ -174,6 +175,7 @@ mod tests {
             row_of::<MonthInput>(),
             row_of::<WeekInput>(),
             row_of::<CheckboxInput>(),
+            row_of::<RangeInput>(),
             row_of::<Textarea>(),
             row_of::<Select>(),
             row_of::<RadioGroup>(),

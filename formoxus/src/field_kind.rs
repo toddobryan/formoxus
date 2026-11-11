@@ -504,6 +504,12 @@ pub const fn is_int(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Int)
 }
 
+/// Whether this field holds a float, `Option` peeled: what makes `step:`
+/// required on a float `range`, which would otherwise step by 1.
+pub const fn is_float(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::Float)
+}
+
 enum Kind {
     Text,
     Int,

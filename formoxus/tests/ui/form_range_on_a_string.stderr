@@ -1,0 +1,33 @@
+error[E0609]: no field `min` on type `&mut StringField`
+  --> tests/ui/form_range_on_a_string.rs:16:60
+   |
+16 |     let _ = form! { Profile { nickname => { widget: range, min: 0, max: 10 } } };
+   |                                                            ^^^ unknown field
+   |
+   = note: available fields are: `min_length`, `max_length`, `pattern`, `no_trim`
+
+error[E0609]: no field `max` on type `&mut StringField`
+  --> tests/ui/form_range_on_a_string.rs:16:68
+   |
+16 |     let _ = form! { Profile { nickname => { widget: range, min: 0, max: 10 } } };
+   |                                                                    ^^^ unknown field
+   |
+   = note: available fields are: `min_length`, `max_length`, `pattern`, `no_trim`
+
+error[E0080]: evaluation panicked: `min` applies only to a number field
+  --> tests/ui/form_range_on_a_string.rs:16:65
+   |
+16 |     let _ = form! { Profile { nickname => { widget: range, min: 0, max: 10 } } };
+   |                                                                 ^ evaluation of `main::_` failed here
+
+error[E0080]: evaluation panicked: `max` applies only to a number field
+  --> tests/ui/form_range_on_a_string.rs:16:73
+   |
+16 |     let _ = form! { Profile { nickname => { widget: range, min: 0, max: 10 } } };
+   |                                                                         ^^ evaluation of `main::_` failed here
+
+error[E0080]: evaluation panicked: `range` can only render an integer or float field
+  --> tests/ui/form_range_on_a_string.rs:16:53
+   |
+16 |     let _ = form! { Profile { nickname => { widget: range, min: 0, max: 10 } } };
+   |                                                     ^^^^^ evaluation of `main::_` failed here

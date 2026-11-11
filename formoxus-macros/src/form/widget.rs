@@ -101,7 +101,17 @@ impl WidgetRef {
             let value = prop_value(&prop.expr);
             quote! { #(#attrs)* #member: #value }
         });
-        quote! { #ty { #(#props,)* ..::core::default::Default::default() } }
+        // In a block, so the `allow` can sit on a `let`: an attribute on an
+        // expression is unstable. Needed when the props written are ALL the
+        // widget's fields (`omit_value` is a `RangeInput`'s only one), where the
+        // `..` updates nothing and clippy says so in the dev's crate.
+        quote! {
+            {
+                #[allow(clippy::needless_update)]
+                let __widget = #ty { #(#props,)* ..::core::default::Default::default() };
+                __widget
+            }
+        }
     }
 }
 
@@ -146,6 +156,9 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
         }
         WidgetName::CheckboxInput => {
             "`checkbox` cannot render an optional field — it has two states and an `Option<bool>` has three; use `select`"
+        }
+        WidgetName::RangeInput => {
+            "`range` cannot render an optional field — a slider always has a value; use `number`"
         }
         // Asserted for every widget, so one that accepts an optional field
         // needs a message too, though its assert always holds. Listed rather
@@ -193,7 +206,8 @@ fn takes_choices(widget_name: WidgetName) -> bool {
         | WidgetName::MonthInput
         | WidgetName::WeekInput
         | WidgetName::CheckboxInput
-        | WidgetName::Textarea => false,
+        | WidgetName::Textarea
+        | WidgetName::RangeInput => false,
     }
 }
 
@@ -204,6 +218,7 @@ fn cannot_render(widget_name: WidgetName) -> &'static str {
         WidgetName::Select | WidgetName::RadioGroup => {
             "this widget needs `choices` unless the field is a bool"
         }
+        WidgetName::RangeInput => "`range` can only render an integer or float field",
         WidgetName::TextInput
         | WidgetName::PasswordInput
         | WidgetName::HiddenInput
@@ -417,7 +432,12 @@ mod tests {
         for widget in WidgetName::ALL {
             let name = widget.form_name();
             let id = Ident::new(name, proc_macro2::Span::call_site());
-            let parsed = parse(quote! { Source { f => { widget: #id } } });
+            // A `range` needs its bounds to parse at all (decision A).
+            let parsed = if *widget == WidgetName::RangeInput {
+                parse(quote! { Source { f => { widget: #id, min: 0, max: 10 } } })
+            } else {
+                parse(quote! { Source { f => { widget: #id } } })
+            };
             let spec = parsed.unwrap_or_else(|e| panic!("`{name}` should parse: {e}"));
             let tokens = widget_of(&spec).type_tokens().to_string();
             expect_that!(
@@ -763,7 +783,15 @@ mod tests {
         let expr = expr_of(&quote!(MarkdownWidget { rows: 5 }));
         expect_that!(
             expr,
-            eq("MarkdownWidget { rows : 5 , .. :: core :: default :: Default :: default () }")
+            contains_substring(
+                "MarkdownWidget { rows : 5 , .. :: core :: default :: Default :: default () }"
+            )
+        );
+        // Every prop written leaves the `..` updating nothing, which clippy
+        // flags in the dev's crate; the block's `let` carries the allow.
+        expect_that!(
+            expr,
+            contains_substring("# [allow (clippy :: needless_update)]")
         );
     }
 
@@ -828,8 +856,12 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                ". with_widget (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , MarkdownWidget { rows : 5 ,"
+                ". with_widget (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , {"
             )
+        );
+        expect_that!(
+            tokens,
+            contains_substring("let __widget = MarkdownWidget { rows : 5 ,")
         );
         expect_that!(tokens, not(contains_substring("with_custom_widget")));
     }

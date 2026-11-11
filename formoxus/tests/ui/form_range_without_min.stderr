@@ -1,0 +1,5 @@
+error: `range` needs both `min:` and `max:`, and this has no `min:` — a slider cannot show "empty", so an empty one starts halfway between them, where the browser draws it
+  --> tests/ui/form_range_without_min.rs:14:49
+   |
+14 |     let _ = form! { Mixer { volume => { widget: range, max: 10 } } };
+   |                                                 ^^^^^

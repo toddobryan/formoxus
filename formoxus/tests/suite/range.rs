@@ -1,10 +1,5 @@
 //! `widget: range`, `<input type="range">` (`WIDGETS_PLAN.md` part 1).
 //!
-//! Written first (box 1), against the API the plan settles on, so they fail
-//! until boxes 2 and 3 land. `suite.rs` keeps their `mod` line commented out
-//! until then, because a `widget: range` the macro does not know yet would stop
-//! the whole suite compiling, not just these.
-//!
 //! **A slider cannot show "no value"** (decision A). Given `value=""` the
 //! browser draws the midpoint of `min` and `max`, so a range field that would
 //! start empty starts at exactly the value the browser would draw, and the
@@ -36,6 +31,18 @@ fn render(app: fn() -> Element) -> String {
     super::render_to_html(app)
 }
 
+/// The range's own `<input …>` tag in `html`, so a test can ask what is on it
+/// without depending on the order its attributes are written in. Panics if
+/// there is none, which is itself the failure.
+fn range_tag(html: &str) -> String {
+    html.split("<input ")
+        .skip(1)
+        .map(|rest| rest.split_once('>').map_or(rest, |(tag, _)| tag))
+        .find(|tag| tag.contains(r#"type="range""#))
+        .unwrap_or_else(|| panic!("no range input in {html}"))
+        .to_string()
+}
+
 /// The model an untouched `empty_form` would give: decision A's starting value,
 /// read through `validate`, so it is the MODEL that is checked and not only
 /// the markup.
@@ -57,14 +64,11 @@ fn a_range_renders_type_range_with_its_bounds_as_written() {
         });
         form.render(using_fns! {})
     }
-    let html = render(App);
-    expect_that!(
-        html,
-        contains_regex(r#"<input [^>]*type="range"[^>]*name="volume""#)
-    );
-    expect_that!(html, contains_substring("min=0"));
-    expect_that!(html, contains_substring("max=10"));
-    expect_that!(html, contains_substring("step=2"));
+    let tag = range_tag(&render(App));
+    expect_that!(tag, contains_substring(r#"name="volume""#));
+    expect_that!(tag, contains_substring("min=0"));
+    expect_that!(tag, contains_substring("max=10"));
+    expect_that!(tag, contains_substring("step=2"));
 }
 
 /// **No `required` attribute, though the field is required.** HTML does not
@@ -80,12 +84,7 @@ fn a_required_range_has_no_required_attribute() {
         });
         form.render(using_fns! {})
     }
-    expect_that!(
-        render(App),
-        not(contains_regex(
-            r#"<input [^>]*type="range"[^>]*\brequired\b"#
-        ))
-    );
+    expect_that!(range_tag(&render(App)), not(contains_substring("required")));
 }
 
 /// The `<output>` (decision B) names the slider with `for`, by its page id,
@@ -139,11 +138,8 @@ fn an_empty_range_starts_at_its_midpoint() {
         form.render(using_fns! {})
     }
     let html = render(App);
-    expect_that!(
-        html,
-        contains_regex(r#"<input [^>]*type="range"[^>]*value="5""#)
-    );
-    expect_that!(html, contains_regex(r#"<output [^>]*>5</output>"#));
+    expect_that!(range_tag(&html), contains_substring(r#"value="5""#));
+    expect_that!(html, contains_regex(r"<output [^>]*>5</output>"));
     expect_that!(
         starting_model(form! { Mixer { volume => { widget: range, min: 0, max: 10 } } }),
         some(eq(&Mixer { volume: 5 }))
@@ -210,10 +206,7 @@ fn a_given_value_is_not_replaced_by_the_midpoint() {
         });
         form.render(using_fns! {})
     }
-    expect_that!(
-        render(App),
-        contains_regex(r#"<input [^>]*type="range"[^>]*value="2""#)
-    );
+    expect_that!(range_tag(&render(App)), contains_substring(r#"value="2""#));
 }
 
 /// `reset` goes back to where the form started, which for an empty range is
@@ -230,10 +223,7 @@ fn reset_returns_an_empty_range_to_its_midpoint() {
         form.reset();
         form.render(using_fns! {})
     }
-    expect_that!(
-        render(App),
-        contains_regex(r#"<input [^>]*type="range"[^>]*value="5""#)
-    );
+    expect_that!(range_tag(&render(App)), contains_substring(r#"value="5""#));
 }
 
 // ── Across the wire ──────────────────────────────────────────────────────
@@ -265,6 +255,22 @@ fn an_untouched_range_sends_its_midpoint() {
     );
 }
 
+/// **A request that leaves the range out entirely gets the midpoint**, not a
+/// "required" error. The server rebuilds from an empty form, which starts at
+/// the midpoint, and a field the request does not mention is left as it stands
+/// (`distribute_values`). Unlike every other required field, which an omitted
+/// value leaves empty. Pinned on purpose: a slider always has a value, so a
+/// browser never sends a range without one, and only a hand-built request can
+/// leave it out.
+#[gtest]
+fn a_request_without_the_range_gets_its_midpoint() {
+    let nothing = std::iter::empty::<(NodePath, String)>().collect();
+    expect_that!(
+        Submission::accept(mixer_spec(), &nothing).map(Submission::into_model),
+        ok(eq(&Mixer { volume: 5 }))
+    );
+}
+
 /// `min` and `max` are checked on the server too, as on a `number` input: a
 /// forged 11 is an error on the field, not a value.
 #[gtest]
@@ -272,8 +278,8 @@ fn a_forged_value_past_max_is_refused() {
     let values = [(NodePath::new("volume"), "11".to_string())]
         .into_iter()
         .collect();
-    let errors = Submission::accept(mixer_spec(), &values)
-        .err()
-        .expect("11 is past max");
+    let Err(errors) = Submission::accept(mixer_spec(), &values) else {
+        panic!("11 is past max");
+    };
     expect_that!(errors.fields.get("volume"), some(anything()));
 }

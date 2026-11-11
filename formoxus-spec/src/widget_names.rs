@@ -66,6 +66,7 @@ widget_names! {
     Textarea => "textarea",
     Select => "select",
     RadioGroup => "radio_group",
+    RangeInput => "range",
 }
 
 impl WidgetName {

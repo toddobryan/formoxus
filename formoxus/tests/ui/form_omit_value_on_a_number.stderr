@@ -1,0 +1,5 @@
+error: `omit_value` applies only to `widget: range`, whose `<output>` it leaves out
+  --> tests/ui/form_omit_value_on_a_number.rs:12:74
+   |
+12 |     let _ = form! { Mixer { volume => { widget: number, min: 0, max: 10, omit_value } } };
+   |                                                                          ^^^^^^^^^^

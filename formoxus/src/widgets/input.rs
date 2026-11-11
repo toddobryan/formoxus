@@ -7,10 +7,12 @@ use std::marker::PhantomData;
 
 use dioxus::prelude::*;
 use formoxus_spec::{
-    Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
+    Attr, AttrSet, AttrValue, Bound, FieldType, FieldTypeSet, HtmlElement, InputType, Step, Tag,
+    WidgetName,
 };
 
 use super::field_row::{LabelSide, field_row};
+use crate::field_attrs::{FieldAttrs, float_bound, int_bound};
 use crate::widgets::{Widget, widget_props::WidgetProps};
 
 /// One [`Widget`] per text-like `<input type=…>`, each a struct with no props.
@@ -135,13 +137,121 @@ impl Widget for CheckboxInput {
     }
 }
 
-/// Which of `InputView`'s three bodies a widget renders. Each widget names
+/// `<input type="range" ...>`
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct RangeInput {
+    pub omit_value: bool,
+}
+
+impl Widget for RangeInput {
+    const NAME: &'static str = WidgetName::RangeInput.form_name();
+
+    const EXTENDS: AttrSet = AttrSet::valid_on(HtmlElement::Input(InputType::Range));
+
+    const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Input, Tag::Output];
+
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY
+        .with(FieldType::Int)
+        .with(FieldType::Float);
+
+    /// A slider can't be unset, so is not optional
+    const ACCEPTS_OPTIONAL: bool = false;
+
+    const TAKES_CHOICES: bool = false;
+
+    fn render(&self, props: WidgetProps) -> Element {
+        render_input::<Self>(
+            InputBody::Range {
+                omit_value: self.omit_value,
+            },
+            props,
+        )
+    }
+
+    /// Where the browser draws an empty range, so the field holds what the user
+    /// sees (`WIDGETS_PLAN.md` decision A).
+    ///
+    /// HTML's rule: the default value is `min + (max − min) / 2`, and a value
+    /// off the step moves to the NEAREST step counted from `min`, the larger of
+    /// two equally near. With `span = max − min` and step `s`, that is
+    /// `min + k·s` for `k = floor((span + s) / (2·s))`. A range's step is 1
+    /// unless given. `None` without both bounds, which `form!` refuses, so only
+    /// a hand-built spec gets an empty field there.
+    fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
+        let (Some(AttrValue::Bound(min)), Some(AttrValue::Bound(max))) =
+            (attrs.get(Attr::Min), attrs.get(Attr::Max))
+        else {
+            return None;
+        };
+        let step = match attrs.get(Attr::Step) {
+            Some(AttrValue::Step(Step::By(step))) => Some(*step),
+            // `any`: no snapping, so the midpoint itself (on an int field,
+            // stepping by 1, since an int cannot hold the half).
+            _ => None,
+        };
+        // `resolve_bounds` has made both bounds the field's kind, so an int
+        // field's are `Int` and a float field's `Float`. A step is not
+        // resolved, so it is converted here.
+        match (*min, *max) {
+            (Bound::Int(min), Bound::Int(max)) => {
+                let s = step.map_or(1, |step| int_bound(step, "step")).max(1);
+                range_start_int(min, max, s).map(|v| v.to_string())
+            }
+            (min, max) => {
+                let (min, max) = (float_bound(min), float_bound(max));
+                let start = match (step, attrs.get(Attr::Step)) {
+                    (Some(step), _) => range_start_float(min, max, float_bound(step)),
+                    (None, Some(AttrValue::Step(Step::Any))) => range_start_any(min, max),
+                    (None, _) => range_start_float(min, max, 1.0),
+                };
+                Some(start.to_string())
+            }
+        }
+    }
+}
+
+/// [`RangeInput::value_when_empty`] for an integer field, exactly. `max < min`
+/// starts at `min`, as HTML does; `None` only if the arithmetic overflows,
+/// which no bound of a Rust integer type can make it do.
+fn range_start_int(min: i128, max: i128, s: i128) -> Option<i128> {
+    let span = max.checked_sub(min)?;
+    if span < 0 {
+        return Some(min);
+    }
+    let k = span.checked_add(s)?.div_euclid(s.checked_mul(2)?);
+    let start = min.checked_add(k.checked_mul(s)?)?;
+    // The nearer step never lies past `max` (it is below the midpoint's
+    // mirror image), but a step past it is never drawn, so guard anyway.
+    Some(if start > max { start - s } else { start })
+}
+
+/// As [`range_start_int`], for a float field with a positive step.
+fn range_start_float(min: f64, max: f64, s: f64) -> f64 {
+    if max < min || s <= 0.0 {
+        return min;
+    }
+    let k = ((max - min + s) / (2.0 * s)).floor();
+    let start = min + k * s;
+    if start > max { start - s } else { start }
+}
+
+/// `step: any` on a float field: the midpoint, unsnapped.
+fn range_start_any(min: f64, max: f64) -> f64 {
+    if max < min {
+        min
+    } else {
+        min + (max - min) / 2.0
+    }
+}
+
+/// Which of `InputView`'s four bodies a widget renders. Each widget names
 /// its own, so a new `<input>` widget is routed where it is declared.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum InputBody {
     Hidden,
     Checkbox,
     TextLike(InputType),
+    Range { omit_value: bool },
 }
 
 /// Every `<input>` widget's `render`: `props` split into what `InputView`
@@ -162,6 +272,7 @@ pub(crate) fn InputView<W: Widget>(
         InputBody::Hidden => hidden(&props),
         InputBody::Checkbox => checkbox(&props),
         InputBody::TextLike(input_type) => text_like::<W>(input_type, &props),
+        InputBody::Range { omit_value } => range(omit_value, &props),
     }
 }
 
@@ -250,4 +361,40 @@ fn checkbox(props: &WidgetProps) -> Element {
     // checkbox on the page; `field_row` is what keeps it in step now.
     let marked = props.base_attrs.contains(Attr::RequiredTrue);
     field_row::<CheckboxInput>(props, marked, LabelSide::After, control)
+}
+
+fn range(omit_value: bool, props: &WidgetProps) -> Element {
+    let handle = props.field_handle();
+    let current = handle.current();
+    // Out of the spread, as `RadioGroup` takes it off its `<fieldset>`: HTML does
+    // not allow `required` on a range, and a slider always has a value, so it
+    // would enforce nothing. It stays in `base_attrs`, where it says the FIELD
+    // is required, which is how every widget learns that.
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .without(Attr::Required)
+        .merge_with_attrs(props.extra_attrs.clone());
+
+    let control = rsx! {
+        input {
+            class: props.control_class::<RangeInput>(Tag::Input),
+            r#type: "range",
+            name: "{props.path}",
+            id: "{props.id}",
+            value: "{current}",
+            oninput: handle.on_input(),
+            onchange: handle.on_change(),
+            ..attrs
+        }
+        if !omit_value {
+            output {
+                class: props.part_class::<RangeInput>(Tag::Output),
+                "for": "{props.id}",
+                "{current}"
+            }
+        }
+    };
+    // Range always has a value, so it's not marked required
+    let marked = false;
+    field_row::<RangeInput>(props, marked, LabelSide::Before, control)
 }
