@@ -399,6 +399,10 @@ J. **`owns` becomes `starts_with`, called on the inner path, true on the root.
 
 - [ ] **10.** (Todd) Merge `paths` to `main`; #21 closes; apcsp follows.
 
+  2026-11-11: merged (fast-forward, `1c130de`) and pushed; branch `paths` deleted
+  locally and on GitHub; #21 closed. #22 got its `NodePath` comment and stays
+  open. Left: apcsp's two one-liners (box 9's note), Todd doing them.
+
 ## Not in this plan
 
 1. ~~**Spec paths as a type.**~~ Taken into the plan 2026-11-10 as decision H:
