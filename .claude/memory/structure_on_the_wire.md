@@ -15,6 +15,9 @@ container's own path:
 | enum (`VariantSet`) | variant name, `""` unchosen | `shape` = `Circle` |
 | list (`ListSet`) | row keys in ROW order, `""` none | `tags` = `#2,#0` |
 
+Every path here (an entry's, a leaf's) is a `NodePath` since 2026-11-10
+(#21), which serializes as a plain string, so the wire format is unchanged.
+
 Row order is why a list sends its keys rather than letting the server infer
 rows from leaf paths: `AddRow { before }` gives a front row the NEWEST key,
 and a row can have no leaves at all (`[[]]`, a `None` row).

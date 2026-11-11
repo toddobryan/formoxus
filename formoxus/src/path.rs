@@ -1,10 +1,23 @@
-//! Compile-checked paths into a model.
+//! Paths: the two kinds, and no third.
 //!
-//! A leaf path (`email`, `venue.city`, `answers[].text`) is the wire format, so
-//! it has to be a string at the boundary. [`ModelPath`] is what keeps it from being a
-//! string in *your* code: it wraps the same string, but the only way to obtain
-//! one is [`path!`](macro@crate::path), which emits a witness borrow of the
-//! field beside it.
+//! - **[`ModelPath<T>`]** names a place in the model's TYPE (`email`,
+//!   `venue.city`, `answers[].text`). A dev writes one, with
+//!   [`path!`](macro@crate::path) or as a field in `form!`, and the compiler
+//!   checks it. It is what a `FormSpec` builder and `reject_field` take.
+//! - **[`NodePath`]** names ONE live node of a form (`answers.#5.text`,
+//!   `footprint.$Circle.size`). The form builds it at run time, so it holds
+//!   item keys and variant segments that no type has. It is what keys the
+//!   value and error stores, what a widget's `name` attribute holds, and what
+//!   crosses the wire.
+//!
+//! Keeping the two apart is the point (#21). A pattern (`answers[]`) and an
+//! instance (`answers.#5`) are both strings in the end, and when they shared a
+//! type, a lookup with one where the other belonged compiled and silently
+//! found nothing. `ModelPath::resolve` is the one bridge, model to live.
+//!
+//! [`ModelPath`] is what keeps a path from being a string in *your* code: it
+//! wraps one, but the only way to obtain it is [`path!`](macro@crate::path),
+//! which emits a witness borrow of the field beside it.
 //!
 //! A path may name ONE item, for an error about it: of a `Vec` by index,
 //! `path!(Quiz.answers[i])`, or of a set by value, `path!(Post.tags[= "rust"])`.
@@ -81,7 +94,7 @@ impl<T> ModelPath<T> {
     /// (`answers.#5`) when it places an error there. See
     /// [`FormState::push_field_error`].
     ///
-    /// [`FormState::push_field_error`]: crate::FormState::push_field_error
+    /// [`FormState::push_field_error`]: crate::form::FormState::push_field_error
     pub fn as_str(&self) -> &str {
         &self.raw
     }
@@ -99,8 +112,8 @@ impl<T> ModelPath<T> {
     /// container.
     ///
     /// `entry` gives an entry by its path, as `collect_values` writes them: a
-    /// container's item keys, a leaf's text, a variant's name. [`crate::FormState`]
-    /// reads its own, and [`crate::WireForm`] the ones it carries.
+    /// container's item keys, a leaf's text, a variant's name. [`FormState`](crate::form::FormState)
+    /// reads its own, and [`WireForm`](crate::wire::WireForm) the ones it carries.
     ///
     /// `None` when an index is past the end of its list, a value is no item's,
     /// or either is applied to something with no item keys at all: an entry is
@@ -173,6 +186,26 @@ pub(crate) fn item_segment(key: usize) -> String {
     format!("{ITEM_SIGIL}{key}")
 }
 
+/// The path of one live node: what its `name` attribute holds, its key in the
+/// value and error stores, and what the server matches a submitted value to.
+///
+/// Segments are joined by `.`: a field's name (`venue.city`), an item's key
+/// (`answers.#5`, an identity that survives a reorder, not a position) and a
+/// chosen variant (`footprint.$Circle`). Neither `#` nor `$` can begin a Rust
+/// identifier, so neither can collide with a field.
+///
+/// **Built by the form, not by a dev.** Each container joins its child's
+/// segment onto its own path as it walks, and a dev naming a place writes a
+/// [`ModelPath`] instead, which the form resolves to a
+/// `NodePath` when it needs one. [`new`](Self::new) exists for a path that
+/// arrived off the wire, and for a test.
+///
+/// **A plain string on the wire** (`#[serde(transparent)]`), alone and as a map
+/// key, so the format did not change when this type arrived. `Borrow<str>`
+/// lets a `&str` look one up in a map, which is how a store is read from a
+/// spelling. Comparing one to a `&str` with `==` is test-only (`__test-util`):
+/// in a dev's code it would bring back the very confusion this type exists to
+/// prevent.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NodePath(String);

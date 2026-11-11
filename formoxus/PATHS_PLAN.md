@@ -363,13 +363,39 @@ J. **`owns` becomes `starts_with`, called on the inner path, true on the root.
     still builds `format!("{path}.#0")`. Making them public is the way to
     finish "uses the methods instead".
 
-- [ ] **9.** (Claude) Docs and memory: `README.md` and `widgets.rs` wherever a
+- [x] **9.** (Claude) Docs and memory: `README.md` and `widgets.rs` wherever a
   live path is called a string; the trait docs on `Node`; the memory files that
   name the free functions (`structure_on_the_wire.md`, `indexed_paths.md`,
   `optional_flag_is_payload_only.md` at least); and a comment on #22 saying its
   view takes `NodePath`. Also the apcsp recount, read only, as for ERRORS_PLAN box
   10: what in apcsp names `ValuesByPath`, `ErrorsByPath`, `RawValue`, `Node`, or a
   `props.path` as a `String`.
+
+  Done 2026-11-11:
+  - `README.md` and `widgets.rs` needed nothing: neither calls a live path a
+    string.
+  - `path.rs`'s module doc now introduces both kinds and why they are apart;
+    `NodePath` has a type doc (built by the form, a plain string on the wire,
+    `==` against `&str` test-only); `Node` has a trait doc (a node does not
+    know its own path, `prefix` is the parent's, a `path` argument is always
+    a `NodePath`) and `name` says why it stays a `String`. Two passages that
+    called a live path a string were fixed (`items.rs`, `distribute_errors`).
+  - Memory: `indexed_paths.md` (`resolve_indices` → `ModelPath::resolve`),
+    a note in `structure_on_the_wire.md`, the two parked "typed paths" notes
+    marked done, and the 2026-11-10 renames in `MEMORY.md`'s line, including
+    `owns`' flipped argument order. `optional_flag_is_payload_only.md` names
+    none of the deleted functions, so it is unchanged. The design-decisions
+    log is history and is left alone; the renames line covers it.
+  - #22's comment is drafted, and posting it waits for Todd.
+  - apcsp recount, by grep and then a `cargo check` of its `origin/main`
+    (`972515c`) against this branch, in a scratch copy: TWO breaks, both
+    one-liners. (1) `crates/web/src/views/form_demo.rs:167`, `sorted` takes
+    `&HashMap<String, String>`; make it `HashMap<NodePath, String>`. (2)
+    `crates/fixtures/tests/change_password.rs:49`, `raw` builds a wire map
+    with `String` keys; wrap the key in `NodePath::new(k)`. The grep found
+    only (1). Nothing in apcsp names `RawValue`, `Node`, a builder with a
+    string path, or `props.path` as a `String`; its Markdown widget
+    interpolates `{props.path}`, which `Display` covers.
 
 - [ ] **10.** (Todd) Merge `paths` to `main`; #21 closes; apcsp follows.
 

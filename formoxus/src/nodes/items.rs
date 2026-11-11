@@ -440,7 +440,7 @@ impl<'a> IntoIterator for &'a mut Items {
 /// shape, at runtime, so the value is a `T` behind `dyn Any`.
 ///
 /// **The shape is kept** because nothing checks the type at compile time.
-/// An edit names its list by a string path, so an `ItemValue` of any type can
+/// An edit names its list by a run-time [`NodePath`], so an `ItemValue` of any type can
 /// be aimed at any list. `add_item` compares [`shape`](Self::shape) with the
 /// list's item shape and refuses a mismatch, rather than building an item from
 /// a value it would misread.

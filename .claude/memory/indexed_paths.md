@@ -1,6 +1,6 @@
 ---
 name: indexed-paths
-description: "2026-11-03 BUILT: path!(M.list[i]) names ONE Vec item, path!(M.set[= v]) ONE set item by value, for an error; FormState resolves to the item key; Path is a Cow, no longer Copy"
+description: "2026-11-03 BUILT: path!(M.list[i]) names ONE Vec item, path!(M.set[= v]) ONE set item by value, for an error; FormState resolves to the item key (`ModelPath::resolve` -> `NodePath` since 2026-11-10); ModelPath is a Cow, no longer Copy"
 metadata:
   type: project
 ---
@@ -12,9 +12,11 @@ metadata:
 
 - **Index, not key.** A validator sees the model, so indices; errors are
   keyed by item KEY (`groups.#3`), which moves and removals decouple from
-  the index. The path is spelled `groups[1]…` and `crate::path::resolve_indices`
-  turns each `[n]` into the nth key, reading each container's structure
-  entry (`"#0,#3"`) by the path resolved so far. `FormState` resolves in
+  the index. The path is spelled `groups[1]…` and `ModelPath::resolve`
+  (pub(crate); the free fn `resolve_indices` until 2026-11-10, #21) turns
+  each `[n]` into the nth key, reading each container's structure entry
+  (`"#0,#3"`) by the path resolved so far, and returns a `NodePath`: the
+  model path goes in, a live path comes out, and that is the only bridge. `FormState` resolves in
   `validate` and `push_field_error`; `WireForm::errors_at` from its values.
   `FormErrors::messages_at` CANNOT (no structure) and says so.
 - **Past the end** falls through to the existing unclaimed fallback, a
@@ -23,8 +25,8 @@ metadata:
   (`on_unimplemented`): a `HashSet` has no order and a `BTreeSet` iterates
   by `Ord`, which `sort_by` can disagree with, so an index could name the
   wrong item. A `Vec` marked `set` is fine: its model order IS the shown order.
-- **`Path` is a `Cow<'static, str>`**, `Clone` not `Copy`, `as_str() -> &str`
-  (not `const`). Three by-value `Path` params carry `#[expect(needless_pass_by_value)]`.
+- **`ModelPath` is a `Cow<'static, str>`**, `Clone` not `Copy`, `as_str() -> &str`
+  (not `const`). Three by-value `ModelPath` params carry `#[expect(needless_pass_by_value)]`.
 - **`form!` still refuses `[0]`** (its settings apply to every item); the
   message now points at `path!`. The shared grammar is `SpecPath::parse`
   (no index) vs `SpecPath::parse_indexed` (path! only), `Suffix::At(Expr)`.

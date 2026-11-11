@@ -47,7 +47,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// The form starts EMPTY, with no variant chosen and no items, so the pairs
     /// have to carry the structure as well as the leaves: each enum's variant
     /// name and each list's item keys at its own path, as
-    /// [`Form::to_wire`](crate::Form::to_wire) sends them (the
+    /// [`Form::to_wire`](crate::form::Form::to_wire) sends them (the
     /// [`wire`](crate::wire) module docs show the spelling). An unknown variant
     /// name or a malformed item list is a field error at that path. An entry
     /// that is simply MISSING leaves that enum unchosen and that list empty,
@@ -111,7 +111,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// input can provoke, and on a server a panic unwinds into a 500 — which
     /// beats dropping the message on the floor.
     ///
-    /// [`FormState::push_field_error`]: crate::FormState::push_field_error
+    /// [`FormState::push_field_error`]: crate::form::FormState::push_field_error
     pub fn reject_field(mut self, path: &ModelPath<T>, message: &str) -> WireForm<T> {
         self.state
             .push_field_error(path, message)

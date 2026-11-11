@@ -42,8 +42,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     ///
     /// `None` means "not stated", not "Title" — resolving it needs the
     /// app-level tier, which lives in Dioxus context and so needs a runtime.
-    /// A `FormState` rebuilt on the server by [`crate::Submission`] has none,
-    /// which is why the resolution is [`crate::Form::label_case`] and not here.
+    /// A `FormState` rebuilt on the server by [`Submission`](crate::submission::Submission) has none,
+    /// which is why the resolution is [`Form::label_case`](crate::form::Form::label_case) and not here.
     pub fn label_case(&self) -> Option<LabelCase> {
         self.spec.label_case
     }
@@ -67,7 +67,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     }
 
     /// The form's `classes_plus:` edits, in source order. Applied by
-    /// [`crate::Form::classes`] over whatever the form starts from.
+    /// [`Form::classes`](crate::form::Form::classes) over whatever the form starts from.
     pub fn class_edits(&self) -> &[crate::classes::ClassEdit] {
         &self.spec.edits
     }

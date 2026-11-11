@@ -9,12 +9,12 @@ use crate::path::ModelPath;
 /// The single error type a form stores, wherever the message came from: a
 /// field that failed to parse or was left empty while required, a field's own
 /// checks, a whole-model validator (by way of [`ValidationError`]), or the
-/// server through [`Form::push_error`](crate::Form::push_error). Whether it
+/// server through [`Form::push_error`](crate::form::Form::push_error). Whether it
 /// shows beside a field or beneath the form depends on which list holds it,
 /// not on the message, which is why there is one type rather than a field
 /// error and a form error.
 ///
-/// It crosses the wire inside [`FormErrors`](crate::FormErrors), and a
+/// It crosses the wire inside [`FormErrors`](crate::form::FormErrors), and a
 /// newtype over a `String` serializes as the bare string. Build one from a
 /// `&str` or `String` with `.into()`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -36,7 +36,7 @@ impl From<String> for ValidationMessage {
 /// the field it belongs beside.
 ///
 /// A validator is the `validator:` entry in [`form!`](macro@crate::form) (or
-/// [`FormSpec::with_validator`](crate::FormSpec::with_validator)), a
+/// [`FormSpec::with_validator`](crate::form::FormSpec::with_validator)), a
 /// `fn(&T) -> Vec<ValidationError<T>>`. It runs last in `validate`, only once
 /// every field has parsed and the model has been built, so it sees a real `T`
 /// and is the place for checks that span fields — "the two passwords match",
@@ -144,7 +144,7 @@ pub struct FieldError(pub String);
 */
 
 /// A caller reached for a form path that doesn't exist, or a variant name that
-/// isn't in the enum — e.g. [`crate::FormState::choose_variant`]. Distinct
+/// isn't in the enum — e.g. [`FormState::choose_variant`](crate::form::FormState::choose_variant). Distinct
 /// from [`ValidationError`]/[`ValidationMessage`], which are *validation* results the user
 /// can fix by typing: this one means either a bug or a hand-crafted request, so
 /// it percolates up to an `ErrorBoundary` rather than rendering beside a field.

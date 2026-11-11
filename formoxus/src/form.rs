@@ -60,7 +60,7 @@ impl FormErrors {
     /// to infer it from at a `None` call site, so this is the ergonomic way
     /// to reach the same branch. Mirrors [`WireForm::form_error_messages`].
     ///
-    /// [`WireForm::form_error_messages`]: crate::WireForm::form_error_messages
+    /// [`WireForm::form_error_messages`]: crate::wire::WireForm::form_error_messages
     pub fn form_messages(&self) -> Vec<String> {
         self.form.iter().map(|e| e.0.clone()).collect()
     }
@@ -69,7 +69,7 @@ impl FormErrors {
     /// up as written: these errors hold no item keys, so a path naming one
     /// item (`path!(Quiz.answers[i])`, `path!(Post.tags[= "rust"])`) finds
     /// nothing here. Look one up through
-    /// [`WireForm::errors_at`](crate::WireForm::errors_at), which has them.
+    /// [`WireForm::errors_at`](crate::wire::WireForm::errors_at), which has them.
     pub fn messages_at<T>(&self, path: Option<ModelPath<T>>) -> Vec<String> {
         match path {
             None => self.form.iter().map(|e| e.0.clone()).collect(),
@@ -557,7 +557,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ///
     /// The counterpart to [`FormState::collect_errors`].
     ///
-    /// Paths arrive as strings because they came off the wire, so this is the
+    /// Its paths are [`NodePath`]s that came off the
+    /// wire, where they are plain strings, so this is the
     /// one error path that a `ModelPath<T>` cannot protect — an `Err` here means the
     /// server (or a malicious user) named a field this form does not have,
     /// which is a mismatch between the two sides' specs rather than anything

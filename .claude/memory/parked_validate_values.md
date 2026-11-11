@@ -52,3 +52,8 @@ Context: the 2026-09-30 rename to `collect_X` / `distribute_X` pairs
    at routing) and to `Path<T>`, whose `&'static str` is exactly why it cannot
    cross the wire today. **Issue #21 (2026-11-08)** is the first step: a string newtype for
    live paths, with `qualify`/`owns`/… as methods.
+   **DONE 2026-11-10 (branch `paths`, PATHS_PLAN):** two kinds, not one.
+   `NodePath` keys the stores and holds the methods (`join`, `starts_with`, …);
+   `ModelPath<T>` is what a dev writes, now for spec builders too. It is still a
+   string newtype rather than a segment structure: the methods are the only way
+   to build one, which is the error-checking Todd wanted.

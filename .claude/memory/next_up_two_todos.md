@@ -197,6 +197,12 @@ a runtime `no_such_path`, and could turn `qualify`/`owns`/`model_path`/
 `variant_segment`/`row_segment` from free functions-on-strings into methods
 with enforced invariants.
 
+**DONE 2026-11-10 as #21 (branch `paths`, `formoxus/PATHS_PLAN.md`).** Two
+types, though not the two guessed here: not `Prefix`/`Path` but `ModelPath<T>`
+(a place in the type, dev-written) and `NodePath` (one live node). A prefix and
+a full path turned out to be the same kind of thing, a live node's path; the
+real split was pattern vs instance. The free functions are methods on `NodePath`.
+
 **Deliberately not started.** It touches every `FormMember` trait method
 (`edit`, `push_field_error`, `collect_leaves`, `apply_leaves`,
 `apply_specs`) plus every free function above, across all five member impl

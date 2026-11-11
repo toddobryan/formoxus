@@ -2,7 +2,7 @@
 //!
 //! The two halves are deliberately apart. A [`ButtonSpec`] is **static
 //! knowledge** — which buttons exist, in what order, how each renders, whether
-//! it validates first — and travels inside the [`FormSpec`](crate::FormSpec)
+//! it validates first — and travels inside the [`FormSpec`](crate::form::FormSpec)
 //! that `form!` builds. A [`ButtonFn`] is the behaviour, supplied at the
 //! `render` call site instead, because a handler needs things (the form handle,
 //! current props, a `Navigator`) that do not exist where the spec is declared.
@@ -55,7 +55,7 @@ impl ButtonSpec {
     ///
     /// Takes the case rather than reading it, because `defaults()` is only the
     /// APP tier — a form stating its own `label_case` would be ignored. The
-    /// whole cascade is resolved once by [`crate::Form::label_case`] and handed
+    /// whole cascade is resolved once by [`Form::label_case`](crate::form::Form::label_case) and handed
     /// down, exactly as `NodeContext` carries it to a field label. It also keeps
     /// `ButtonSpec` plain data: `defaults()` needs a live Dioxus runtime, and a
     /// `ButtonSpec` outlives any render.

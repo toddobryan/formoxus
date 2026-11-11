@@ -29,7 +29,7 @@ use crate::{
 /// its caption between the box and this list — a checkbox reads "☐ I agree",
 /// so the control has to come first there, and adjacency could not survive it.
 ///
-/// A `ul` of `li`, matching [`FormState::render_errors`](crate::FormState).
+/// A `ul` of `li`, matching [`FormState::render_errors`](crate::form::FormState).
 /// This was a `small` for a while, which asserts "fine print" — wrong for an
 /// error, and chosen back when one framework's stylesheet was in mind. A list
 /// element asserts something that is simply true: these are several messages,

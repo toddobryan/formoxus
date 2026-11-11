@@ -30,7 +30,7 @@
 //! tags.#1         = "forms"
 //! ```
 //!
-//! [`Form::to_wire`](crate::Form::to_wire) and [`WireForm::from_model`] write
+//! [`Form::to_wire`](crate::form::Form::to_wire) and [`WireForm::from_model`] write
 //! all of it. A client that builds the map by hand (a script, a test) has to
 //! as well, or the server builds no variants and no items. An unknown variant
 //! name or a malformed item list is a field error at that path, never a panic.
@@ -57,10 +57,10 @@
 //! form.absorb(create_account(form.to_wire()).await?);
 //! ```
 //!
-//! [`Form`]: crate::Form
-//! [`FormState`]: crate::FormState
-//! [`FormSpec`]: crate::FormSpec
-//! [`Submission::accept`]: crate::Submission::accept
+//! [`Form`]: crate::form::Form
+//! [`FormState`]: crate::form::FormState
+//! [`FormSpec`]: crate::form::FormSpec
+//! [`Submission::accept`]: crate::submission::Submission::accept
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -111,7 +111,7 @@ impl<T> WireForm<T> {
     }
 
     /// Errors with no values — the common rejection, since the client already
-    /// holds the values it sent. [`Form::absorb`](crate::Form::absorb) leaves
+    /// holds the values it sent. [`Form::absorb`](crate::form::Form::absorb) leaves
     /// values untouched when this is empty.
     pub fn from_errors(errors: FormErrors) -> Self {
         Self::new(IndexMap::new(), errors)
@@ -123,7 +123,7 @@ impl<T> WireForm<T> {
     }
 
     /// The raw values, keyed by leaf path — what
-    /// [`Submission::accept`](crate::Submission::accept) takes.
+    /// [`Submission::accept`](crate::submission::Submission::accept) takes.
     pub fn values(&self) -> &ValuesByPath {
         &self.values
     }

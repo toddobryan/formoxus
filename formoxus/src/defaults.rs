@@ -33,7 +33,7 @@
 //! A `static` would be simpler to reach but could not express "different here",
 //! and two tests in one binary would fight over it. Context is scoped, needs no
 //! static mutable state, and costs nothing at the call sites — the alternative
-//! considered was threading a parameter through every one of [`crate::Form`]'s
+//! considered was threading a parameter through every one of [`Form`](crate::form::Form)'s
 //! render methods. See `.claude/memory/config_cascade.md`.
 
 use dioxus::prelude::*;
@@ -113,9 +113,9 @@ pub fn provide_defaults(config: Formoxus) {
 /// nothing provided any.
 ///
 /// **Needs a live Dioxus runtime**, so this is a render-side call. That is why
-/// the cascade is resolved on [`crate::Form`] and not on
-/// [`crate::FormState`]: the server rebuilds a `FormState` through
-/// [`crate::Submission`] with no runtime anywhere, and would panic here.
+/// the cascade is resolved on [`Form`](crate::form::Form) and not on
+/// [`FormState`](crate::form::FormState): the server rebuilds a `FormState` through
+/// [`Submission`](crate::submission::Submission) with no runtime anywhere, and would panic here.
 /// It has no labels to render either way.
 pub fn defaults() -> Formoxus {
     try_consume_context::<Formoxus>().unwrap_or_default()

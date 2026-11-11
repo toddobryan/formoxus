@@ -44,7 +44,22 @@ pub enum Drafts {
     Exclude,
 }
 
+/// One part of a form's tree: a leaf ([`FieldNode`](crate::field_node::FieldNode)) or
+/// a container ([`StructNode`], [`ListNode`], [`OptionNode`], [`SetNode`],
+/// [`VariantNode`]).
+///
+/// **A node does not know its own path.** Every method that walks takes a
+/// `prefix: &NodePath`, which is the PARENT's path, and the node's own is that
+/// prefix joined with its segment: its [`name`](Self::name) for a field, `#n`
+/// for a list's item, `$Variant` for the chosen variant. So moving an item, or
+/// switching a variant, renames nothing stored in the nodes; only the walk's
+/// paths change. A `path` argument (as in [`absent_owner`](Self::absent_owner))
+/// is a full [`NodePath`], never a [`ModelPath`](crate::path::ModelPath): by
+/// the time a node sees a path, the form has resolved any model path to the
+/// live node it names.
 pub trait Node: Debug {
+    /// This node's one segment: a field's name, or an item's key (`#3`).
+    /// A `String`, not a [`NodePath`], because it is not a path.
     fn name(&self) -> String;
 
     fn label(&self, case: LabelCase) -> Option<String>;
