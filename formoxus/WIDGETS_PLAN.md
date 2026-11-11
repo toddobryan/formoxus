@@ -468,11 +468,20 @@ several?
 
 ### Part 2: `checkbox_multiple` and `select_multiple` (branch `multi_pick`)
 
-- [ ] **4.** (Claude) Tests first for decision F, failing until box 5: `ItemValue::raw`
+- [x] **4.** (Claude) Tests first for decision F, failing until box 5: `ItemValue::raw`
   adds a `String` item and a unit-enum item; a duplicate is refused as an `ItemValue::new`
   one is; an entry that does not parse becomes an `Invalid` item; one outside `choices:`
   is refused on the item; and removing a raw-added item clears its errors and its store
   keys.
+
+  Done 2026-11-11, on branch `multi_pick` (from `main` after `range` merged):
+  `tests/suite/raw_items.rs`, 9 tests, its `mod` line in `suite.rs` commented out until
+  `ItemValue::raw` exists. Checked by running them once with the typed
+  `ItemValue::new(entry.to_string())` standing in: the six on `String` sets pass (keys,
+  store layout, errors), and the three only a raw entry can satisfy fail, as they should:
+  a `u8` item from `"big"`, and a `Weekday` item from `"Friday"` and from `"Sunday"`.
+  `Invalid` and unknown-variant items are asserted only to have SOME error at the
+  returned path; the messages are the field's and the variant node's own.
 
 - [ ] **5.** (Todd) Decision F's runtime: `ItemValue::raw`, and `Items::add_item` and
   `Items::probe` building an item from an entry. `probe` matters because the duplicate
