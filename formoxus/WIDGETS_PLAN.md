@@ -394,7 +394,7 @@ several?
   a `String`, on an `Option<i32>`, and without `min:` or `max:`.
 
   Done 2026-11-11, on branch `range`:
-  - `tests/suite/range.rs`, 15 tests, with its `mod` line in `suite.rs` COMMENTED OUT:
+  - `tests/suite/range.rs`, 13 tests, with its `mod` line in `suite.rs` COMMENTED OUT:
     a `widget: range` the macro does not know yet would stop the whole suite compiling.
     Uncomment it once boxes 2 and 3 are in. The starting-value cases are 0–10 → 5, step
     3 → 6, step 4 → 4, 1–4 → 3 (a tie takes the larger), and a float 0–1 → 1.0 with no
