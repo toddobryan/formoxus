@@ -65,6 +65,13 @@ branch merged when green, not one long one (decision N).
   the bytes. axum's `Multipart` streams parts, so this is possible; where the bytes go
   is then a dev's choice formoxus has to leave room for. Box 10's spike measures both.
 - **L: one file per field.**
+- **O (found at step 3h, decided by Todd at home 2026-11-11): a set of a unit enum gets a
+  default order, the variants' declaration order.** Until now only a set of scalars had
+  one (SETS_PLAN 4a); a set of a unit enum panicked at build without a `sort_by`, widget
+  or not. A multi-pick over an enum is what `checkbox_multiple` is mostly for, so every
+  dev would have hit it. Declaration order is also the order `choices` lists the
+  variants in, so a widget's ticked items line up with its boxes. A dev who wants
+  another order (alphabetical, say) still writes `sort_by:`.
 
 ### Decision G′: a family of widget traits
 
@@ -509,6 +516,20 @@ several?
   only in line numbers), fixed six intra-doc links, and wrote the traits' docs, the
   `widgets` module doc, the README's paragraph and `widget_trait_family.md`.
 
+  Progress 2026-11-11, at home: step 3b (`WidgetCommon`) is done and green, `just ci`
+  1295, nothing committed yet. Todd wrote the struct, `Deref`/`DerefMut`, the
+  construction sites, `radio_group.rs`'s partial moves (now `take`s, since a read
+  through `Deref` borrows ALL of `props`) and the `widgets` export; Claude the suite's
+  `ShoutyWidget` (clones) and seven intra-doc links that crossed the split. `common`
+  is `pub(crate)`, so outside the crate a moved common field is a clone, never
+  `props.common.x`.
+
+  Progress 2026-11-11, at home, later: 3a, 3c-3g done (Todd; `chosen` in
+  `SetNode::chosen` by Claude), and 3h's four suite tests pass (`sets.rs`, "A set
+  widget, through a hand-built spec"), `just ci` 1305. `SetWidget`/`AnySetWidget` are
+  re-exported from `widgets`, and `build.rs`'s leaf-widget-on-a-set panic now names
+  `with_set_widget`, pinned by a test. 3h found decision O; 3i builds it.
+
   **Step 3, written out (Todd asked).** Each piece here is small; the order is the
   order they depend on each other.
 
@@ -518,34 +539,36 @@ several?
     (decision E) is checked by `const fn`s in `field_kind`, which box 8 writes, not by a
     `FieldTypeSet`. The same rule about hooks as `LeafWidget::render`: a plain method,
     so a widget that reads anything renders a `#[component]` and passes the props on.
-  - **3b. `FieldFrame` first, on its own (Todd, 2026-11-11).** The fields every
+  - **3b. `WidgetCommon` first, on its own (Todd, 2026-11-11).** The fields every
     widget's props share, in one struct both props types hold and `Deref` to:
-    `pub struct FieldFrame { id, path, label, help_text, errors, classes }` (the name is
-    a placeholder), with the helpers that read only those: `validity()`,
+    `pub struct WidgetCommon { id, path, label, help_text, errors, classes }` (the name is
+    Todd's, 2026-11-11), with the helpers that read only those: `validity()`,
     `is_invalid()`, `part_class::<W>()`, and a `described_by()` for the
-    `aria-describedby` value. `WidgetProps` becomes `{ frame: FieldFrame, base_attrs,
+    `aria-describedby` value. `WidgetProps` becomes `{ common: WidgetCommon, base_attrs,
     extra_attrs, values, choices, on_field_event }` plus `impl Deref<Target =
-    FieldFrame>` and `DerefMut`, keeping `current_attrs()`, `control_class()` and
+    WidgetCommon>` and `DerefMut`, keeping `current_attrs()`, `control_class()` and
     `field_handle()`, which read its own fields. Through `Deref`, `props.id`,
     `props.path` and `props.validity()` keep compiling in every leaf widget, apcsp's
     `MarkdownWidget` included; what changes is building one (the literal gains
-    `frame: FieldFrame { … }`: `FieldNode::render`, `VariantNode`, `WidgetProps::new`,
-    the suite's `builtin_widgets.rs`) and MOVING a frame field out, which becomes a
-    clone or `props.frame.x`. Do this before `SetWidgetProps` exists and get it green,
+    `common: WidgetCommon { … }`: `FieldNode::render`, `VariantNode`, `WidgetProps::new`,
+    the suite's `builtin_widgets.rs`) and MOVING a common field out, which becomes a
+    clone or `props.common.x` (two sites, found 2026-11-11: `radio_group.rs:167`'s
+    `if let Some(text) = props.label` and the suite's `form_macro.rs:909` `path: props.path`;
+    `errors: props.errors` keeps compiling, as an `ErrorsStore` is `Copy`). Do this before `SetWidgetProps` exists and get it green,
     so the refactor and the new type never share a diff.
 
-    **Why a frame, and why not embed `WidgetProps` itself.** Todd chose a shared struct
+    **Why a shared struct, and why not embed `WidgetProps` itself.** Todd chose a shared struct
     over repeating six fields: field pass-through is what he wanted from composition,
     and `Deref` gives it. Embedding the whole `WidgetProps` was considered and refused:
     it would hand a set widget a `field_handle()` onto the set's own path, so one call
     could write a structure key into the store (`structure_on_the_wire.md` decision A
     forbids exactly that), plus a leaf's attributes and an `Option` of choices that a
     multi-pick must never see as `None`.
-  - **3c. `SetWidgetProps`**, `{ frame: FieldFrame, choices, chosen, required,
-    on_edit }` plus the same `Deref` to the frame, so a set widget reads `props.id`
+  - **3c. `SetWidgetProps`**, `{ common: WidgetCommon, choices, chosen, required,
+    on_edit }` plus the same `Deref` to the `WidgetCommon`, so a set widget reads `props.id`
     and `props.validity()` exactly as a leaf widget does:
-    - `frame.path` is the SET's own path, which is where its `AddItem` and `RemoveItem`
-      are addressed (the one `render` already passes the adder), and `frame.id` the
+    - `common.path` is the SET's own path, which is where its `AddItem` and `RemoveItem`
+      are addressed (the one `render` already passes the adder), and `common.id` the
       set's page id, `ctx.id(&self.name)`.
     - `choices: Vec<Choice>`: every value the widget offers (3g says where from).
     - `chosen: Vec<String>`: the ENTRY of each item now in the set, in item order, so
@@ -587,6 +610,19 @@ several?
     so check 3a–3g with a hand-built spec and a small test widget through
     `with_set_widget` (it can render `chosen` as text). Box 9's real tests come after
     box 7's real widgets.
+
+  - **3i. Decision O's default order.** `SetOrder::default_for` (`set_node.rs`) gains a
+    second case: when the item shape is an enum whose variants are all unit, a new
+    `ItemHandler`, say `DeclaredOrder`, holding the variant names in declaration order.
+    It compares by each name's position in that list. `sort_peeks` reads a peek's variant
+    (`into_enum()`, then its variant index). `sort_nodes`, `dedup_nodes` and `position`
+    cannot use `peek_value`, which is `None` for a `VariantNode` (that is why there was no
+    default order); they read the item's variant name, the one value it sends at its own
+    path, as `SetNode::chosen` does, and an unchosen item (`""`) sorts last, as an
+    `Empty` leaf does in `DefaultOrder`. The panic stays for every other non-scalar item.
+    Tests: build order, `AddItem` placing an item by declaration order, a duplicate
+    refused, a `HashSet` built the same in two processes' iteration orders, a round
+    trip; and the step 3h tests drop their `declared_order` `sort_by`.
 
 - [ ] **7.** (Todd) `CheckboxMultiple` and `SelectMultiple`. Each change becomes
   `AddItem { value: Some(ItemValue::raw(…)) }` and `RemoveItem`s, highest index first

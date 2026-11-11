@@ -4,15 +4,15 @@ use crate::build::{FormMode, Walk, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
-use crate::label_case::LabelCase;
+use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::{
     Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, no_such_path,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
-use crate::widgets::widget_props::WidgetProps;
-use crate::widgets::{VariantSelect, field_help};
+use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
+use crate::widgets::{Choice, VariantSelect, field_help};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -273,17 +273,19 @@ impl Node for VariantNode {
                     on_edit: ctx.on_edit,
                     label_case: ctx.label_case,
                     props: WidgetProps {
-                        id: id.clone(),
-                        path: ctx.path(&self.name),
-                        // The legend above already names this group; a second copy
-                        // beside the select would just be the same word twice.
-                        label: None,
-                        // Rendered above, under the legend; the select's
-                        // `aria-describedby`, applied to `base_attrs` above,
-                        // names it.
-                        help_text: None,
-                        classes: ctx.classes.clone(),
-                        errors: ctx.errors,
+                        common: WidgetCommon {
+                            id: id.clone(),
+                            path: ctx.path(&self.name),
+                            // The legend above already names this group; a second copy
+                            // beside the select would just be the same word twice.
+                            label: None,
+                            // Rendered above, under the legend; the select's
+                            // `aria-describedby`, applied to `base_attrs` above,
+                            // names it.
+                            help_text: None,
+                            classes: ctx.classes.clone(),
+                            errors: ctx.errors,
+                        },
                         base_attrs,
                         extra_attrs: Vec::new(),
                         // Read by no one: a variant choice is not a value in
@@ -495,5 +497,17 @@ impl Node for VariantNode {
             }
         }
         Ok(partial)
+    }
+
+    fn choices(&self, case: LabelCase) -> Option<Vec<Choice>> {
+        Some(
+            self.variants()
+                .iter()
+                .map(|v| Choice {
+                    value: v.to_string(),
+                    display: v.to_case(case),
+                })
+                .collect(),
+        )
     }
 }

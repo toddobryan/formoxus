@@ -718,8 +718,9 @@ fn set_node(
     if let Some(spec) = spec {
         assert!(
             spec.widget.is_none(),
-            "{prefix} is a set, which has no single widget to override — \
-             write `{name}[]` to give every item a widget, or did you mean `label`?",
+            "{prefix} is a set, which takes a SET widget, not one that renders a \
+             single value — give it one with `with_set_widget`, or write \
+             `{name}[]` to give every item a widget",
         );
     }
     // Never pre-built from `min_items`: blank items in a set would be
@@ -731,6 +732,7 @@ fn set_node(
     let draft = items.new_draft(prefix, walk.specs);
     Box::new(SetNode {
         name: name.to_string(),
+        widget: spec.and_then(|s| s.set_widget.clone()),
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
         validator: spec.and_then(|s| s.validator.clone()),

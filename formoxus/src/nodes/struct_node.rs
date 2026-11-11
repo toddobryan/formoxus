@@ -9,7 +9,7 @@ use crate::nodes::{
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
-use crate::widgets::{FieldErrors, described_by, field_help};
+use crate::widgets::{Choice, FieldErrors, described_by, field_help};
 use dioxus::prelude::*;
 use facet::{Partial, ReflectError};
 use formoxus_spec::FixedKey;
@@ -160,5 +160,9 @@ impl Node for StructNode {
         } else {
             None
         }
+    }
+
+    fn choices(&self, _case: LabelCase) -> Option<Vec<Choice>> {
+        None
     }
 }

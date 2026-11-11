@@ -17,6 +17,7 @@ use dioxus::prelude::Element;
 use formoxus_spec::{AttrSet, FieldTypeSet, Tag};
 
 use crate::field_attrs::FieldAttrs;
+use crate::widgets::SetWidgetProps;
 use crate::widgets::widget_props::WidgetProps;
 
 /// What every widget is, whatever it renders: its [`NAME`](Self::NAME), its
@@ -198,6 +199,71 @@ impl PartialEq for AnyWidget {
     }
 }
 
+pub trait SetWidget: Widget {
+    fn render(&self, props: SetWidgetProps) -> Element;
+}
+
+/// `SetWidget` without its consts, so it can be `dyn`; the blanket impl makes
+/// every `SetWidget` one. Only `AnySetWidget` holds one.
+pub(crate) trait DynSetWidget: Debug + Send + Sync {
+    fn render(&self, props: SetWidgetProps) -> Element;
+    fn name(&self) -> &'static str;
+    fn clone_box(&self) -> Box<dyn DynSetWidget>;
+    fn as_any(&self) -> &dyn Any;
+    fn eq_dyn(&self, other: &dyn DynSetWidget) -> bool;
+}
+
+impl<SW: SetWidget> DynSetWidget for SW {
+    fn render(&self, props: SetWidgetProps) -> Element {
+        SW::render(self, props)
+    }
+    fn name(&self) -> &'static str {
+        SW::NAME
+    }
+    fn clone_box(&self) -> Box<dyn DynSetWidget> {
+        Box::new(self.clone())
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn eq_dyn(&self, other: &dyn DynSetWidget) -> bool {
+        other.as_any().downcast_ref::<SW>() == Some(self)
+    }
+}
+
+#[derive(Debug)]
+pub struct AnySetWidget(Box<dyn DynSetWidget>);
+
+impl AnySetWidget {
+    pub fn new(widget: impl SetWidget) -> Self {
+        Self(Box::new(widget))
+    }
+    pub fn render(&self, props: SetWidgetProps) -> Element {
+        self.0.render(props)
+    }
+    pub fn name(&self) -> &'static str {
+        self.0.name()
+    }
+}
+
+impl Clone for AnySetWidget {
+    fn clone(&self) -> Self {
+        Self(self.0.clone_box())
+    }
+}
+
+impl PartialEq for AnySetWidget {
+    fn eq(&self, o: &Self) -> bool {
+        self.0.eq_dyn(&*o.0)
+    }
+}
+
+impl<SW: SetWidget> From<SW> for AnySetWidget {
+    fn from(value: SW) -> Self {
+        Self(Box::new(value))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +347,82 @@ mod tests {
     #[gtest]
     fn new_and_into_agree() {
         expect_that!(AnyWidget::new(Notes { rows: 4 }), eq(&notes(4)));
+    }
+
+    /// `AnySetWidget` is built as `AnyWidget` is, over its own `DynSetWidget`,
+    /// so it gets the same tests, over two toy set widgets that again differ
+    /// only in type.
+    #[derive(Clone, Debug, Default, PartialEq)]
+    struct Ticks {
+        columns: u32,
+    }
+
+    #[derive(Clone, Debug, Default, PartialEq)]
+    struct Picks {
+        columns: u32,
+    }
+
+    impl Widget for Ticks {
+        const NAME: &'static str = "ticks";
+        const PARTS: &'static [Tag] = &[Tag::Fieldset, Tag::Legend, Tag::Input, Tag::Label];
+        const EXTENDS: AttrSet = AttrSet::EMPTY;
+    }
+
+    impl SetWidget for Ticks {
+        fn render(&self, _props: SetWidgetProps) -> Element {
+            rsx! {}
+        }
+    }
+
+    impl Widget for Picks {
+        const NAME: &'static str = "picks";
+        const PARTS: &'static [Tag] = &[];
+        const EXTENDS: AttrSet = AttrSet::EMPTY;
+    }
+
+    impl SetWidget for Picks {
+        fn render(&self, _props: SetWidgetProps) -> Element {
+            rsx! {}
+        }
+    }
+
+    fn ticks(columns: u32) -> AnySetWidget {
+        Ticks { columns }.into()
+    }
+
+    #[gtest]
+    fn set_widgets_of_one_type_with_equal_props_are_equal() {
+        expect_that!(ticks(2), eq(&ticks(2)));
+    }
+
+    #[gtest]
+    fn set_widgets_of_one_type_with_different_props_are_not() {
+        expect_that!(ticks(2), not(eq(&ticks(3))));
+    }
+
+    #[gtest]
+    fn set_widgets_of_different_types_are_never_equal() {
+        let picks: AnySetWidget = Picks { columns: 2 }.into();
+        expect_that!(ticks(2), not(eq(&picks)));
+        expect_that!(picks, not(eq(&ticks(2))));
+    }
+
+    #[gtest]
+    fn a_set_widget_clone_is_equal_and_keeps_its_type() {
+        let original = ticks(2);
+        let copy = original.clone();
+        expect_that!(copy, eq(&original));
+        expect_that!(copy.name(), eq("ticks"));
+    }
+
+    #[gtest]
+    fn the_name_reaches_through_any_set_widget() {
+        expect_that!(ticks(2).name(), eq("ticks"));
+        expect_that!(AnySetWidget::from(Picks::default()).name(), eq("picks"));
+    }
+
+    #[gtest]
+    fn any_set_widget_new_and_into_agree() {
+        expect_that!(AnySetWidget::new(Ticks { columns: 2 }), eq(&ticks(2)));
     }
 }

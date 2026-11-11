@@ -13,8 +13,8 @@ use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Shown};
 use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
-use crate::widgets::widget_props::WidgetProps;
-use crate::widgets::{AnyWidget, CheckboxInput, Widget};
+use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
+use crate::widgets::{AnyWidget, CheckboxInput, Choice, Widget};
 
 /// Everything the walk knows about a leaf when it builds one.
 ///
@@ -329,18 +329,20 @@ impl<F: Field> Node for FieldNode<F> {
                 .resolve_bounds(self.field_type());
 
         self.widget.render(WidgetProps {
-            id: ctx.id(&self.name),
-            path: ctx.path(&self.name),
-            label: self
-                .label(ctx.label_case)
-                .or_else(|| ctx.label_if_unnamed.clone()),
-            help_text: self.help_text.clone(),
-            classes: ctx.classes.clone(),
+            common: WidgetCommon {
+                id: ctx.id(&self.name),
+                path: ctx.path(&self.name),
+                label: self
+                    .label(ctx.label_case)
+                    .or_else(|| ctx.label_if_unnamed.clone()),
+                help_text: self.help_text.clone(),
+                classes: ctx.classes.clone(),
+                errors: ctx.errors,
+            },
             values: ctx.values,
             choices: self.field.choices(),
             base_attrs,
             extra_attrs: Vec::new(),
-            errors: ctx.errors,
             on_field_event: ctx.on_field_event,
         })
     }
@@ -475,6 +477,10 @@ impl<F: Field> Node for FieldNode<F> {
         } else {
             FormAccessError(format!("{path} is a field, so edits cannot be applied"))
         })
+    }
+
+    fn choices(&self, _case: LabelCase) -> Option<Vec<Choice>> {
+        self.field.choices()
     }
 }
 

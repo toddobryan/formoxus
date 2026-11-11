@@ -33,6 +33,7 @@ use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
+use crate::widgets::Choice;
 use crate::widgets::field_handle::OnFieldEvent;
 use dioxus::stores::Store;
 
@@ -157,6 +158,8 @@ pub trait Node: Debug {
     /// `path` answers `None`, so a container can ask each child in turn and take
     /// the first `Some`.
     fn absent_owner(&self, prefix: &NodePath, path: &NodePath) -> Option<NodePath>;
+
+    fn choices(&self, case: LabelCase) -> Option<Vec<Choice>>;
 }
 
 impl Clone for Box<dyn Node> {

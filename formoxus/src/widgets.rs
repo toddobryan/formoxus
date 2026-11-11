@@ -59,8 +59,8 @@
 //! **Its errors come from the same props.** [`current_attrs`](WidgetProps::current_attrs)
 //! has `aria-invalid` and `aria-describedby` already set from them, so a
 //! widget that spreads it onto its element needs nothing else;
-//! [`validity`](WidgetProps::validity) is the three-way answer under it, and
-//! [`is_invalid`](WidgetProps::is_invalid) the yes-or-no a class wants.
+//! [`validity`](WidgetCommon::validity) is the three-way answer under it, and
+//! [`is_invalid`](WidgetCommon::is_invalid) the yes-or-no a class wants.
 //! [`FieldErrors`] renders the messages, as every built-in does, under the
 //! element. Each of these reads only this field's errors, so another field's
 //! error never wakes it.
@@ -77,8 +77,9 @@
 //! - [`widget`] — the [`Widget`] trait every widget implements, the
 //!   [`LeafWidget`] trait for one that renders one value, and [`AnyWidget`],
 //!   the form a field holds one in.
-//! - `widget_props` (re-exported as [`WidgetProps`]) — what a widget is handed
-//!   to render a field.
+//! - `widget_props` (re-exported as [`WidgetProps`] and [`WidgetCommon`]) —
+//!   what a widget is handed to render a field, and the part of it every
+//!   widget's props share, which `WidgetProps` derefs to.
 //! - [`field_row`](mod@field_row) — the row a one-control widget renders
 //!   around its control: wrapper, caption and required marker, errors. Public
 //!   so a dev's widget can look like a built-in one without copying the layout.
@@ -132,8 +133,8 @@ pub use types::{Choice, InputType};
 // an `ItemValue`.
 pub use crate::nodes::{Edit, ErrorsStore, ItemValue, ValuesStore};
 pub use variant_select::VariantSelect;
-pub use widget::{AnyWidget, LeafWidget, Widget};
-pub use widget_props::WidgetProps;
+pub use widget::{AnySetWidget, AnyWidget, LeafWidget, SetWidget, Widget};
+pub use widget_props::{SetWidgetProps, WidgetCommon, WidgetProps};
 
 #[cfg(test)]
 mod tests {

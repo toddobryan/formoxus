@@ -5,6 +5,7 @@ use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath};
 use crate::path::NodePath;
+use crate::widgets::Choice;
 
 #[derive(Clone, Debug)]
 pub struct OptionNode {
@@ -88,5 +89,9 @@ impl Node for OptionNode {
         } else {
             self.inner.absent_owner(prefix, path)
         }
+    }
+
+    fn choices(&self, _case: LabelCase) -> Option<Vec<Choice>> {
+        None
     }
 }

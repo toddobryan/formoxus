@@ -323,6 +323,150 @@ fn a_set_takes_a_custom_adder() {
     }
 }
 
+// ── A set widget, through a hand-built spec ──────────────────────────────
+//
+// `WIDGETS_PLAN.md` box 6, step 3h: `form!` cannot write `widget:` on a set
+// until box 8, so these reach `with_set_widget` directly, with a widget that
+// prints what it was handed. The real widgets' tests are box 9's.
+
+/// Prints its props as text, so a test reads exactly what `SetNode` built.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct PropsAsText;
+
+impl formoxus::widgets::Widget for PropsAsText {
+    const NAME: &'static str = "props_as_text";
+    const EXTENDS: formoxus::attrs::AttrSet = formoxus::attrs::AttrSet::EMPTY;
+    const PARTS: &'static [formoxus::attrs::Tag] = &[];
+}
+
+impl formoxus::widgets::SetWidget for PropsAsText {
+    fn render(&self, props: formoxus::widgets::SetWidgetProps) -> Element {
+        let choices = props
+            .choices
+            .iter()
+            .map(|c| format!("{}={}", c.value, c.display))
+            .collect::<Vec<_>>()
+            .join(",");
+        let chosen = props.chosen.join(",");
+        let label = props.label.clone().unwrap_or_default();
+        rsx! {
+            div { id: "{props.id}", "data-path": "{props.path}",
+                "choices [{choices}] chosen [{chosen}] required {props.required} label [{label}]"
+            }
+        }
+    }
+}
+
+/// `Priority`'s own order, which is its declaration order. A set of a unit
+/// enum has no default order (4a), so even a set with a widget panics at build
+/// without one.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn declared_order(a: &Priority, b: &Priority) -> Ordering {
+    a.cmp(b)
+}
+
+fn triage_with_props_as_text() -> FormSpec<Triage> {
+    FormSpec::default()
+        .with_sort_by(
+            &path!(Triage.levels),
+            SetOrder::custom(declared_order, "declared_order"),
+        )
+        .with_set_widget(&path!(Triage.levels), PropsAsText)
+}
+
+fn low_and_high() -> Triage {
+    Triage {
+        levels: [Priority::Low, Priority::High].into(),
+    }
+}
+
+#[component]
+fn SetWidgetForm() -> Element {
+    let form = use_form(|| form_for(&low_and_high(), triage_with_props_as_text()));
+    form.render(using_fns! {})
+}
+
+/// The widget renders the whole set (decision H): no fieldset, items, draft or
+/// Add of `SetNode`'s own. Its `choices` are the draft's, every variant;
+/// `chosen` the entry of each item now in the set, in item order.
+#[gtest]
+fn a_set_widget_is_handed_the_choices_and_what_is_chosen() {
+    let html = super::without_form_id(&super::render_to_html(SetWidgetForm));
+    expect_that!(
+        html,
+        contains_substring(
+            r#"<div id="FORMID-levels" data-path="levels">choices [Low=Low,Medium=Medium,High=High] chosen [Low,High] required false label [Levels]</div>"#
+        )
+    );
+    expect_that!(html, not(contains_substring("fx-set")));
+    expect_that!(html, not(contains_substring("fx-button-add-item")));
+}
+
+#[component]
+fn SetWidgetAfterEditsForm() -> Element {
+    let form = use_form(|| form_for(&low_and_high(), triage_with_props_as_text()));
+    use_hook(|| {
+        form.edit(&Edit::RemoveItem {
+            path: NodePath::new("levels"),
+            index: 0,
+        })
+        .expect("item 0 exists");
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("levels"),
+            before: None,
+            value: Some(ItemValue::raw("Medium")),
+        })
+        .expect("Medium is a variant");
+    });
+    form.render(using_fns! {})
+}
+
+/// The edits a real set widget will send, a `RemoveItem` by index and an
+/// `AddItem` by entry, reach `SetNode::edit` as the adder's do, and the next
+/// render's `chosen` follows them. In the set's order, not the order of the
+/// edits: Medium is added last but sorts before High.
+#[gtest]
+fn a_set_widgets_chosen_follows_its_edits() {
+    let html = super::render_to_html(SetWidgetAfterEditsForm);
+    expect_that!(html, contains_substring("chosen [Medium,High]"));
+}
+
+/// The widget changes how the set renders, not what it holds.
+#[gtest]
+fn a_set_with_a_widget_still_round_trips() {
+    let triage = low_and_high();
+    expect_that!(
+        form_for(&triage, triage_with_props_as_text()).validate(),
+        some(eq(&triage))
+    );
+}
+
+/// The build's backstop for a hand-built spec: a leaf widget on a set compiles
+/// (`with_widget` takes any path), so the build refuses it, naming the builder
+/// that was meant.
+#[gtest]
+#[should_panic(
+    expected = "levels is a set, which takes a SET widget, not one that renders a \
+                           single value — give it one with `with_set_widget`"
+)]
+fn a_leaf_widget_on_a_set_names_with_set_widget() {
+    let _ = form_for(
+        &low_and_high(),
+        FormSpec::default()
+            .with_sort_by(
+                &path!(Triage.levels),
+                SetOrder::custom(declared_order, "declared_order"),
+            )
+            .with_widget(&path!(Triage.levels), formoxus::widgets::Textarea),
+    );
+}
+
+#[gtest]
+#[should_panic(expected = "applies only to a set")]
+fn with_set_widget_refuses_a_path_that_is_not_a_set() {
+    let _ = FormSpec::<Post>::default().with_set_widget(&path!(Post.title), PropsAsText);
+}
+
 // ── Order ────────────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

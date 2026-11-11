@@ -22,6 +22,7 @@ use crate::nodes::{SetFeedback, SetOrder};
 use crate::path::ModelPath;
 use crate::widgets::AnyWidget;
 use crate::widgets::item_buttons::ItemAdder;
+use crate::widgets::widget::AnySetWidget;
 
 type ValidationFn<T> = Option<fn(&T) -> Vec<ValidationError<T>>>;
 
@@ -51,6 +52,7 @@ pub struct FieldSpec {
     /// A set's view of each item's text (`item:`), in place of
     /// [`ItemText`](crate::widgets::ItemText).
     pub item_view: Option<crate::widgets::ItemView>,
+    pub set_widget: Option<AnySetWidget>,
 }
 
 #[derive(Clone, Debug)]
@@ -223,6 +225,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     pub fn with_adder(mut self, path: &ModelPath<T>, adder: ItemAdder) -> Self {
         self.collection_field(path, "adder").adder = Some(adder);
+        self
+    }
+
+    pub fn with_set_widget(mut self, path: &ModelPath<T>, widget: impl Into<AnySetWidget>) -> Self {
+        self.set_field(path, "widget").set_widget = Some(widget.into());
         self
     }
 

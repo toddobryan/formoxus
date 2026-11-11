@@ -1,5 +1,7 @@
 //! Radio buttons over a fixed set of choices.
 
+use std::mem::take;
+
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, Tag, WidgetName};
 
@@ -79,12 +81,12 @@ pub(crate) fn reject_if_not_required(attrs: &FieldAttrs, path: &NodePath) {
 pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
-    let props = widget_props;
+    let mut props = widget_props;
     let handle = props.field_handle();
     let is_invalid = props.is_invalid();
     let base_attrs = &props.base_attrs;
     let current_attrs = props.current_attrs();
-    let choices = props.choices.unwrap_or_else(bool_choices);
+    let choices = props.choices.take().unwrap_or_else(bool_choices);
 
     // `required` and `aria-invalid` are both judgments about the GROUP, but each
     // spec puts its own in a different place. HTML has `required` only on an
@@ -95,7 +97,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     let required = base_attrs.contains(Attr::Required);
     let attrs: Vec<Attribute> = current_attrs
         .without(Attr::Required)
-        .merge_with_attrs(props.extra_attrs);
+        .merge_with_attrs(take(&mut props.extra_attrs));
 
     let field_class = base_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
 
@@ -164,7 +166,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                 // means nothing. `aria-hidden` because it is visual only: on a
                 // radio group `required` applies to the whole group and that is
                 // what a screen reader announces.
-                if let Some(text) = props.label {
+                if let Some(text) = props.label.clone() {
                     "{text}"
                     if required {
                         {required_marker(&props.classes)}

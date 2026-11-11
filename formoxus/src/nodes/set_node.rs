@@ -34,8 +34,9 @@ use crate::{
     },
     path::NodePath,
     widgets::{
-        AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
-        RemoveItemButton, SetItemProps, described_by, field_help, field_row::required_marker,
+        AddItemProps, Choice, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
+        RemoveItemButton, SetItemProps, SetWidgetProps, WidgetCommon, described_by, field_help,
+        field_row::required_marker, widget::AnySetWidget,
     },
 };
 
@@ -273,6 +274,7 @@ impl<T: Facet<'static> + 'static + PartialEq> ItemHandler for CustomOrder<T> {
 #[derive(Clone, Debug)]
 pub struct SetNode {
     pub name: String,
+    pub widget: Option<AnySetWidget>,
     pub label: Option<String>,
     /// Its hint (`help_text:`), under the legend.
     pub help_text: Option<String>,
@@ -439,6 +441,44 @@ impl SetMessage {
 }
 
 impl SetNode {
+    /// A set widget's `chosen`: what each item now in the set sends at its own
+    /// path (`colors.#0` → `"Red"`), in item order, so position `i` is the index
+    /// a `RemoveItem` for that item takes. `path` is the set's own.
+    ///
+    /// Each item is asked on its own, not the whole set through
+    /// `collect_values`, which would bring the draft along too. A unit enum item
+    /// sends its variant name as structure and a leaf item its raw value as a
+    /// leaf; either way it is the one value at the item's own path.
+    ///
+    /// Read from the tree, never from the value store: `render` runs in the
+    /// form's scope, so a store read here would make every keystroke anywhere
+    /// re-render the whole form. The tree is current for a set widget's items,
+    /// because they change only by `AddItem`/`RemoveItem`, which write both.
+    fn chosen(&self, path: &NodePath) -> Vec<String> {
+        self.items
+            .iter()
+            .map(|item| {
+                let item_path = path.join(&item.name());
+                let mut values = Vec::new();
+                item.collect_values(path, &mut values);
+                values
+                    .into_iter()
+                    .map(RawValue::into_pair)
+                    .find(|(p, _)| *p == item_path)
+                    .map_or_else(
+                        || {
+                            panic!(
+                                "{item_path}: an item of a set with a widget sends no value \
+                             at its own path; the set's item type should have been \
+                             refused for a set widget"
+                            )
+                        },
+                        |(_, data)| data,
+                    )
+            })
+            .collect()
+    }
+
     /// One item's `<li>`, keyed by its name. Shown, not edited in place
     /// (decision E): its text through the item view, then its own errors (a
     /// dev's validator or a server can still name one), then Edit, where the
@@ -833,6 +873,27 @@ impl Node for SetNode {
     }
 
     fn render(&self, ctx: &NodeContext) -> Element {
+        if let Some(widget) = &self.widget {
+            let path = ctx.path(&self.name);
+            let chosen = self.chosen(&path);
+            return widget.render(SetWidgetProps {
+                common: WidgetCommon {
+                    id: ctx.id(&self.name),
+                    path,
+                    label: self.label(ctx.label_case),
+                    help_text: self.help_text.clone(),
+                    errors: ctx.errors,
+                    classes: ctx.classes.clone(),
+                },
+                choices: self
+                    .choices(ctx.label_case)
+                    .expect("a SetWidget should have had choices"),
+                chosen,
+                required: self.items.min_items().is_some_and(|min| min > 0),
+                on_edit: ctx.on_edit,
+            });
+        }
+
         // A `fieldset` for the same reason `StructNode` and `VariantNode` use one:
         // the items and the widgets that manage them read as one thing, and the
         // legend gives the list's label somewhere to appear.
@@ -965,6 +1026,10 @@ impl Node for SetNode {
         } else {
             None
         }
+    }
+
+    fn choices(&self, case: LabelCase) -> Option<Vec<Choice>> {
+        self.draft.choices(case)
     }
 }
 

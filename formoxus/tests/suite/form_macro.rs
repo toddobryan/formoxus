@@ -905,8 +905,8 @@ impl formoxus::widgets::Widget for ShoutyWidget {
 impl formoxus::widgets::LeafWidget for ShoutyWidget {
     /// `render` may not call hooks, so it hands off to a component that does.
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
-        let label = props.label.unwrap_or_default();
-        rsx! { ShoutyView { path: props.path, label } }
+        let label = props.label.clone().unwrap_or_default();
+        rsx! { ShoutyView { path: props.path.clone(), label } }
     }
 }
 

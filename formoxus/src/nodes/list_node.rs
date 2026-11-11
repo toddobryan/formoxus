@@ -14,7 +14,9 @@ use crate::nodes::{
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
 use crate::widgets::field_row::required_marker;
-use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
+use crate::widgets::{
+    AddItemProps, Choice, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton,
+};
 use crate::widgets::{described_by, field_help};
 use dioxus::core::{DynamicNode, VComponent};
 use dioxus::prelude::*;
@@ -235,5 +237,23 @@ impl Node for ListNode {
         } else {
             None
         }
+    }
+
+    fn choices(&self, _case: LabelCase) -> Option<Vec<Choice>> {
+        None
+    }
+
+    fn shown(&self) -> super::Shown {
+        super::Shown::of_values(self)
+    }
+
+    fn peek_value(&self) -> Option<facet::Peek<'_, 'static>> {
+        None
+    }
+
+    fn write_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
+        let mut partial = partial.begin_field(&self.name())?;
+        partial = self.write_value_into(partial)?;
+        partial.end()
     }
 }
