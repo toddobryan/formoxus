@@ -54,6 +54,18 @@ pub fn Gallery() -> Element {
         }
 
         Example {
+            title: "A set ticked from checkboxes",
+            note: "The same days as checkboxes (widget: checkbox_multiple), at least one and at most three. Tick three and the rest lock; untick the last and the set says so at once.",
+            sets::TickedDays {},
+        }
+
+        Example {
+            title: "A set picked in a multi-select",
+            note: "Cities as a select_multiple, its choices beside the widget. The set holds the codes; ctrl- or shift-click to pick several.",
+            sets::PickedCities {},
+        }
+
+        Example {
             title: "A list the user types into",
             note: "Recipe steps: in the user's order, duplicates allowed (a Vec). Add a step, then move it with ↑/↓.",
             lists::FreeSteps {},

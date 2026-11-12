@@ -3319,3 +3319,134 @@ fn an_optional_set_takes_a_set_widget() {
         contains_regex(r#"value="Medium" checked=true/>"#)
     );
 }
+
+// ── Box 9: what is left after 7i and box 8 ───────────────────────────────
+
+/// Trap 8: an optional set with nothing ticked is `None`, not `Some` of an
+/// empty set, because an empty collection is not present; a plain set with
+/// nothing ticked is empty. Easy to get backwards, so both.
+#[gtest]
+fn unticking_an_optional_sets_last_box_makes_it_none() {
+    let mut form = form_for(
+        &MaybeTriage {
+            levels: Some([Priority::Medium].into()),
+        },
+        form! { MaybeTriage { levels? => { widget: checkbox_multiple } } },
+    );
+    form.edit(&Edit::RemoveItem {
+        path: NodePath::new("levels"),
+        index: 0,
+    })
+    .expect("Medium is item 0");
+    expect_that!(form.validate(), some(eq(&MaybeTriage { levels: None })));
+}
+
+#[gtest]
+fn unticking_a_plain_sets_last_box_leaves_it_empty() {
+    let mut form = form_for(
+        &Triage {
+            levels: [Priority::Medium].into(),
+        },
+        form! { Triage { levels => { widget: checkbox_multiple } } },
+    );
+    form.edit(&Edit::RemoveItem {
+        path: NodePath::new("levels"),
+        index: 0,
+    })
+    .expect("Medium is item 0");
+    expect_that!(
+        form.validate(),
+        some(eq(&Triage {
+            levels: BTreeSet::new()
+        }))
+    );
+}
+
+fn trip_with_checkboxes() -> FormSpec<Trip> {
+    form! { Trip { cities => { widget: checkbox_multiple, choices: EUROPE, min_items: 1 } } }
+}
+
+/// The widget changes how the set renders, never what crosses: the wire is
+/// any set's (`cities` = item keys, `cities.#0` = an entry), and the server
+/// rebuilds the model from it with the same spec.
+#[gtest]
+fn a_set_widgets_form_crosses_the_wire() {
+    let trip = paris_and_oslo();
+    let wire = formoxus::WireForm::from_model(&trip, trip_with_checkboxes());
+    expect_that!(
+        formoxus::Submission::accept(trip_with_checkboxes(), wire.values())
+            .map(formoxus::Submission::into_model),
+        ok(eq(&trip))
+    );
+}
+
+/// And the server holds `min_items` against a forged wire with no items.
+#[gtest]
+fn the_server_holds_a_set_widgets_min_items() {
+    let empty = Trip {
+        cities: BTreeSet::new(),
+    };
+    let wire = formoxus::WireForm::from_model(&empty, FormSpec::default());
+    expect_that!(
+        formoxus::Submission::accept(trip_with_checkboxes(), wire.values()).is_err(),
+        eq(true)
+    );
+}
+
+/// `classes_plus:` reaches each widget's parts by their `Tag` names, as
+/// for any built-in.
+#[component]
+fn ClassedSetWidgets() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            form! {
+                Triage {
+                    levels => { widget: checkbox_multiple },
+                    classes_plus: {
+                        checkbox_multiple.fieldset: + [picks],
+                        checkbox_multiple.input: [tick],
+                    }
+                }
+            },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn classes_plus_reaches_checkbox_multiples_parts() {
+    let html = super::render_to_html(ClassedSetWidgets);
+    expect_that!(
+        html,
+        contains_substring(r#"<fieldset class="fx-form-field fx-checkbox-multiple picks">"#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<input class="tick" type="checkbox""#)
+    );
+}
+
+#[component]
+fn ClassedMultiSelect() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &paris_and_oslo(),
+            form! {
+                Trip {
+                    cities => { widget: select_multiple, choices: EUROPE },
+                    classes_plus: { select_multiple.select: + [many] },
+                }
+            },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn classes_plus_reaches_select_multiples_parts() {
+    expect_that!(
+        super::render_to_html(ClassedMultiSelect),
+        contains_substring(r#"<select class="fx-control fx-select many""#)
+    );
+}

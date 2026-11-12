@@ -87,9 +87,9 @@ fn meeting_spec() -> FormSpec<Meeting> {
     form! {
         Meeting {
             title: "A weekly meeting",
-            // Week order, `Weekday`'s own `Ord`: an enum has no default order
-            // for a set to sort by, so `form!` asks for one.
-            days => { label: "Meets on", sort_by: Weekday::cmp },
+            // Week order with no `sort_by`: a set of an enum without data
+            // keeps its variants' declaration order.
+            days => { label: "Meets on" },
             buttons: { save: { type: submit } }
         }
     }
@@ -105,6 +105,97 @@ pub fn ChosenDays() -> Element {
     rsx! {
         {form.render(using_fns! {
             save: move |model: Meeting| async move {
+                submitted.set(Some(format!("{model:?}")));
+            },
+        })}
+        if let Some(text) = submitted() {
+            article { "Validated model: " code { "{text}" } }
+        }
+    }
+}
+
+// ── Ticked or selected: a set widget ─────────────────────────────────────
+
+fn ticked_spec() -> FormSpec<Meeting> {
+    form! {
+        Meeting {
+            title: "A weekly meeting, ticked",
+            // One box per day, the enum's variants being the choices. At
+            // least one and at most three: at three the rest lock.
+            days => {
+                label: "Meets on",
+                widget: checkbox_multiple,
+                min_items: 1,
+                max_items: 3,
+            },
+            buttons: { save: { type: submit } }
+        }
+    }
+}
+
+/// The same days as a row of checkboxes: one per day, ticked for each day in
+/// the set. A set widget renders the whole set, so there is no Add.
+#[component]
+pub fn TickedDays() -> Element {
+    let mut submitted = use_signal(|| None::<String>);
+    let form = use_form(|| empty_form(ticked_spec()));
+    rsx! {
+        {form.render(using_fns! {
+            save: move |model: Meeting| async move {
+                submitted.set(Some(format!("{model:?}")));
+            },
+        })}
+        if let Some(text) = submitted() {
+            article { "Validated model: " code { "{text}" } }
+        }
+    }
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Tour {
+    cities: BTreeSet<String>,
+}
+
+const CITIES: &[(&str, &str)] = &[
+    ("ams", "Amsterdam"),
+    ("bcn", "Barcelona"),
+    ("lis", "Lisbon"),
+    ("osl", "Oslo"),
+    ("rom", "Rome"),
+];
+
+fn tour_spec() -> FormSpec<Tour> {
+    form! {
+        Tour {
+            title: "A tour",
+            // The choices go beside the widget that shows them. What is
+            // stored is the code; what is shown is the name.
+            cities => {
+                widget: select_multiple,
+                choices: CITIES,
+                help_text: "Ctrl- or shift-click to pick several.",
+            },
+            buttons: { save: { type: submit } }
+        }
+    }
+}
+
+/// Cities picked in a multi-select: the set holds the codes of every
+/// selected option.
+#[component]
+pub fn PickedCities() -> Element {
+    let mut submitted = use_signal(|| None::<String>);
+    let form = use_form(|| {
+        form_for(
+            &Tour {
+                cities: ["lis", "rom"].map(String::from).into(),
+            },
+            tour_spec(),
+        )
+    });
+    rsx! {
+        {form.render(using_fns! {
+            save: move |model: Tour| async move {
                 submitted.set(Some(format!("{model:?}")));
             },
         })}

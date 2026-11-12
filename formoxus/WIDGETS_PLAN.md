@@ -849,12 +849,25 @@ several?
   goldens (`form_leaf_widget_on_a_set`, `form_set_widget_*`, `form_dev_*_widget_on_*`);
   six suite tests through `form!` at the end of `sets.rs`.
 
-- [ ] **9.** (Claude) Suite tests for the two widgets: the markup, ticked and selected
+- [x] **9.** (Claude) Suite tests for the two widgets: the markup, ticked and selected
   state from the model, a toggle and a select change as edits, `min_items` and
   `max_items`, an `Option` set with nothing ticked (trap 8), a wire round trip, and
   `classes_plus:`. e2e test forms `/t/checkbox_multiple` and `/t/select_multiple` with
   their tests (`select_option_multiple` in playwright-rs). Gallery entries. Docs and
   memory for the part. Then Todd merges `multi_pick`.
+
+  **Done 2026-11-11 (Claude), ci 1350, e2e 79.** Most of the suite list was already
+  covered by 7i and box 8; the rest: trap 8 both ways (an optional set unticked to
+  empty is `None`, a plain one is empty), a wire round trip and the server holding
+  `min_items` against a forged empty wire, and `classes_plus:` on each widget's parts.
+  e2e `tests/set_widgets.rs`, 7 tests, on `/t/checkbox-multiple` (unit enum, 1..=2:
+  ticks, unticks, the lock at the limit, `min_items` shown at once on the untick, no
+  `required` on any box) and `/t/select-multiple` (two options in one change, a swap
+  in one change, the browser's `required` blocking an empty submit); a multi-select is
+  role `listbox`. Gallery: "A set ticked from checkboxes" and "A set picked in a
+  multi-select" in `examples/sets.rs`, and the old `ChosenDays` lost the `sort_by`
+  decision O made unnecessary. README's "what isn't done", the `widgets` module doc,
+  `CheckboxMultiple`'s docs, `widget_matrix`'s note; memory: css classes, e2e.
 
 ### Part 3: `file` (branch `file`)
 

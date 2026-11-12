@@ -75,17 +75,21 @@
 //!
 //! - [`types`] — [`Choice`], one legal value a chooser offers.
 //! - [`widget`] — the [`Widget`] trait every widget implements, the
-//!   [`LeafWidget`] trait for one that renders one value, and [`AnyWidget`],
-//!   the form a field holds one in.
-//! - `widget_props` (re-exported as [`WidgetProps`] and [`WidgetCommon`]) —
-//!   what a widget is handed to render a field, and the part of it every
-//!   widget's props share, which `WidgetProps` derefs to.
+//!   [`LeafWidget`] trait for one that renders one value and [`SetWidget`] for
+//!   one that renders a whole set, and [`AnyWidget`] and [`AnySetWidget`], the
+//!   forms a field holds them in.
+//! - `widget_props` (re-exported as [`WidgetProps`], [`SetWidgetProps`] and
+//!   [`WidgetCommon`]) — what each kind of widget is handed, and the part every
+//!   widget's props share, which both deref to.
 //! - [`field_row`](mod@field_row) — the row a one-control widget renders
 //!   around its control: wrapper, caption and required marker, errors. Public
 //!   so a dev's widget can look like a built-in one without copying the layout.
 //! - [`input`] (every `<input>`, the checkbox included), [`textarea`],
 //!   [`select`], [`radio_group`] — the widgets themselves, one module per
 //!   element.
+//! - [`checkbox_multiple`] and [`select_multiple`] — the set widgets: a
+//!   checkbox per choice, or one `<select multiple>`, each item of the set one
+//!   ticked box or selected option.
 //! - [`variant_select`] and [`item_buttons`] — the widgets that change a form's
 //!   SHAPE rather than a value: which variant is chosen, and the items of a list.
 //! - [`errors`] — the error list rendered under every widget.

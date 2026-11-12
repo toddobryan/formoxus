@@ -5,7 +5,16 @@ metadata:
   type: project
 ---
 
-## ▶ 2026-11-11, at home, last: box 6 DONE (b30a177, 6745548, pushed); box 7 written out in the plan (uncommitted), P–S all answered as recommended; Todd builds box 7 next
+## ▶ 2026-11-11, at home, latest: WIDGETS_PLAN part 2 boxes 7-9 DONE on `multi_pick`; Todd merges
+
+Box 7 (Todd's CheckboxMultiple, Claude's SelectMultiple, 7i tests, the live re-check on
+Add/Remove, decision T) 84d52e1; box 8 (`form!` names them, WidgetSlot dispatch,
+see widget_slot_dispatch.md) e8fb66f; box 9 (suite leftovers, e2e /t/checkbox-multiple
+and /t/select-multiple, two gallery entries, README + docs) after that. ci 1350, e2e 79.
+NOT pushed since 6745548 unless Todd said so. Next: Todd merges `multi_pick`; then part 3,
+`file` (box 10 spike, Claude).
+
+## ▶ 2026-11-11, at home, earlier: box 6 DONE (b30a177, 6745548, pushed); box 7 written out in the plan (uncommitted), P–S all answered as recommended; Todd builds box 7 next
 
 3i (decision O, unit enum sets sort in declaration order) built by Claude at Todd's
 request; `just ci` 1313. It also fixed `form!`'s const order check, which had the

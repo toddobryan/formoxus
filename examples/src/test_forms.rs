@@ -54,6 +54,8 @@ pub fn TestForm(slug: String) -> Element {
         "adder" => rsx! { Adder {} },
         "tags" => rsx! { Tags {} },
         "tags-pattern" => rsx! { TagsPattern {} },
+        "checkbox-multiple" => rsx! { CheckboxMultipleForm {} },
+        "select-multiple" => rsx! { SelectMultipleForm {} },
         "live-text" => rsx! { LiveText {} },
         "live-click" => rsx! { LiveClick {} },
         "live-server-error" => rsx! { LiveServerError {} },
@@ -812,6 +814,61 @@ fn TagsPattern() -> Element {
             Tagged {
                 browser_validation: on,
                 tags[] => { pattern: "[a-z]+" },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+// ── set widgets (`WIDGETS_PLAN.md` part 2) ───────────────────────────────
+
+#[derive(Facet, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum Weekday {
+    Mon,
+    Tue,
+    Wed,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Schedule {
+    days: BTreeSet<Weekday>,
+}
+
+/// A set of a unit enum as checkboxes, whose variants are the choices. At
+/// least one and at most two, so the limits can be seen: at two the third box
+/// locks, and with none ticked the set says so.
+#[component]
+fn CheckboxMultipleForm() -> Element {
+    harness(
+        "checkbox-multiple",
+        "Days as checkboxes, at least 1 and at most 2. Tick two: the third locks. Untick them all: the set says so at once. Submit: the model lists the days ticked.",
+        form! {
+            Schedule {
+                days => { widget: checkbox_multiple, min_items: 1, max_items: 2 },
+                buttons: { save: { type: submit } }
+            }
+        },
+    )
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Visit {
+    cities: BTreeSet<String>,
+}
+
+const PLACES: &[(&str, &str)] = &[("paris", "Paris"), ("rome", "Rome"), ("oslo", "Oslo")];
+
+/// A set of strings as a `<select multiple>`, its choices beside the widget.
+/// At least one, which on a multi-select is the browser's own `required`.
+#[component]
+fn SelectMultipleForm() -> Element {
+    harness(
+        "select-multiple",
+        "Cities as a multi-select, at least 1. Ctrl- or shift-click to pick several. Submit with none: the browser blocks it. Submit: the model lists the codes, never the names.",
+        form! {
+            Visit {
+                cities => { widget: select_multiple, choices: PLACES, min_items: 1 },
                 buttons: { save: { type: submit } }
             }
         },

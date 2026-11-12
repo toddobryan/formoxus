@@ -1,3 +1,5 @@
+//! Checkboxes, one per choice, over a set.
+
 use dioxus::prelude::*;
 use formoxus_spec::{AttrSet, HtmlElement, Tag, WidgetName};
 
@@ -8,6 +10,17 @@ use crate::{
     },
 };
 
+/// A fieldset of checkboxes, one per choice, for a set: each ticked box is
+/// one item. Ticking adds the choice's entry and unticking removes it, as the
+/// set's own adder and Remove would.
+///
+/// No box carries `required`, since on a checkbox it means THAT box must be
+/// ticked and HTML has no "at least one of these": `min_items` shows as the
+/// legend's marker and is held by the set's validation, which re-checks on
+/// every tick. At `max_items` the unticked boxes are disabled, as the Add
+/// button is at the limit. No `aria-invalid` on the fieldset, whose role
+/// `group` does not define it, and no `name`, since the set's path is where
+/// the wire puts its item keys.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CheckboxMultiple;
 
@@ -27,6 +40,8 @@ impl SetWidget for CheckboxMultiple {
     }
 }
 
+/// The fieldset `CheckboxMultiple::render` hands its props to, a component
+/// so that reading the set's errors subscribes it and not the whole form.
 #[component]
 pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
     let props = widget_props;

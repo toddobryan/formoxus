@@ -52,6 +52,12 @@ pub fn combobox(s: &Session, name: &str) -> Locator {
     named(s, AriaRole::Combobox, name)
 }
 
+/// A `<select multiple>`, by accessible name. Role is `listbox`, not
+/// `combobox`: a multi-select shows its options rather than dropping them down.
+pub fn listbox(s: &Session, name: &str) -> Locator {
+    named(s, AriaRole::Listbox, name)
+}
+
 /// One radio in a group, by its own accessible name — the choice's display text,
 /// not the group's legend.
 pub fn radio(s: &Session, name: &str) -> Locator {

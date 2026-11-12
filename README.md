@@ -139,9 +139,15 @@ Being explicit, since this is pre-release:
   `Option`. `range` goes only on a number, never on an `Option` (a slider
   cannot be unset), and needs `min:` and `max:`, plus `step:` on a float; an
   empty one starts where the browser draws it, halfway between them, and
-  `omit_value` drops the number shown beside it. `select_multiple`,
-  `checkbox_multiple` and `file` render nothing yet and are refused by name. Run
-  `cargo run -p formoxus-examples --bin widget_matrix` for the current table.
+  `omit_value` drops the number shown beside it. `checkbox_multiple` and
+  `select_multiple` go only on a set (a `BTreeSet`, a `HashSet`, or a `Vec`
+  written with `set`), render the whole set, and need `choices:` on the set's
+  own line unless its items are an enum without data, whose variants are the
+  choices; beside one, `adder:`, `item:` and `feedback:` are refused. A
+  widget for a single value on a set is refused too, and says to write `tags[]`
+  to give every item one. `file` renders nothing yet and is refused by name. Run
+  `cargo run -p formoxus-examples --bin widget_matrix` for the current table of
+  single-value widgets.
 - **No file upload**, which is the `file` widget above.
 - **An error that appears as a field loses focus moves what is below it.**
   Clicking a button just below a field with a bad value blurs the field on
@@ -154,7 +160,9 @@ Being explicit, since this is pre-release:
 A widget of your own is the escape hatch in the meantime: any type
 implementing `formoxus::widgets::Widget` (its name, parts and the attributes it
 passes through) and `formoxus::widgets::LeafWidget` (what it renders), named by
-its path after `widget:`.
+its path after `widget:`. One that renders a whole set implements
+`formoxus::widgets::SetWidget` instead, and goes after `widget:` on the set the
+same way; `form!` sends each kind to the field it fits, and refuses the other.
 Props go in its braces and the rest come from `Default`, so
 `widget: ui::Markdown { rows: 8 }` sets one field. The type and the impl are
 both in your crate, so there is no orphan-rule problem, and `form!` checks

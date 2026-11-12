@@ -282,3 +282,7 @@ kept their names.
 in `classes_plus:`), the `<div id="{field id}-help">` a field's `help_text:`
 renders right after its caption or legend. Its own slot so a theme can mute it
 apart from captions and errors; `bare()` leaves it unclassed but rendered.
+
+## 2026-11-11: the set widgets (WIDGETS_PLAN box 7d)
+
+`checkbox_multiple` takes `radio_group`'s shape: `fx-form-field fx-checkbox-multiple` (+`fx-invalid`) on the fieldset, `fx-legend fx-field-label`, `fx-choice` per box, `fx-control fx-checkbox` on each box (the same class as a single checkbox), `fx-choice-label`. `select_multiple` reuses `select`'s classes, `fx-control fx-select` on the `<select>`: a stylesheet that needs them apart has `select[multiple]`. One new name in all, `fx-checkbox-multiple`.

@@ -191,3 +191,6 @@ On `/t/live-text`, `live-click`, `live-server-error`, `live-select`, `live-off`,
 6. **Pass e2e extra flags after the recipe's own:** `just e2e --test live --no-capture`
    works; `--run-ignored …` clashes with the recipe's `ignored-only`.
 
+
+## 2026-11-11: set widgets (7), for WIDGETS_PLAN box 9, `tests/set_widgets.rs`
+On `/t/checkbox-multiple` (`Schedule.days`, a unit enum, 1..=2) and `/t/select-multiple` (`Visit.cities`, strings with `PLACES`, min 1). **A `<select multiple>` is role `listbox`, not `combobox`**: `roles::listbox`. `select_option_multiple(&[..])` makes ONE change event selecting exactly those, so one call can swap several options; that is what tests the remove-highest-index-first rule. Each box is found by its choice's name (`checkbox(&s, "Mon")`). 79 tests.
