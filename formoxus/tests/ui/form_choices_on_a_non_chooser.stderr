@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: `text` takes no `choices` — they apply to `select`, `radio_group`
+error[E0080]: evaluation panicked: `text` takes no `choices` — they apply to `select`, `radio_group`, `checkbox_multiple`, `select_multiple`
   --> tests/ui/form_choices_on_a_non_chooser.rs:17:38
    |
 17 |             state => { widget: text, choices: STATES },

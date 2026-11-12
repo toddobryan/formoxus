@@ -398,6 +398,7 @@ impl FieldBody {
         place: &TokenStream2,
         key: &str,
         path_span: Span,
+        index: usize,
     ) -> TokenStream2 {
         let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
         let takes = |span: Span, test: TokenStream2, message: &str| {
@@ -506,18 +507,35 @@ impl FieldBody {
         checks.push(self.feedback_checks(&shape));
         checks.push(self.item_checks(&shape));
         checks.push(self.range_type_checks(&shape));
-        if let Some(widget) = &self.widget {
-            checks.push(widget.checks(&shape, self.choices.is_some()));
-            checks.push(self.extends_checks(widget));
-            if let Some((key, _)) = &self.choices {
-                checks.push(widget.choices_check(key));
-            }
-        }
+        checks.push(self.widget_checks(&shape, key, index));
         quote! { #(#checks)* }
     }
 }
 
 impl FieldBody {
+    /// The widget's own checks (`WidgetRef::checks`), whether it passes each
+    /// attribute through (`extends_checks`), and whether it takes the
+    /// `choices` written beside it. Nothing without a `widget:`.
+    fn widget_checks(&self, shape: &TokenStream2, key: &str, index: usize) -> TokenStream2 {
+        let Some(widget) = &self.widget else {
+            return TokenStream2::new();
+        };
+        let mut checks = Vec::new();
+        let marked_set = self.set.is_some();
+        checks.push(widget.checks(
+            shape,
+            self.choices.as_ref().map(|(choices_key, _)| choices_key),
+            marked_set,
+            key,
+            index,
+        ));
+        checks.push(self.extends_checks(widget));
+        if let Some((choices_key, _)) = &self.choices {
+            checks.push(widget.choices_check(choices_key, shape, marked_set));
+        }
+        quote! { #(#checks)* }
+    }
+
     /// The one rule for `widget: range` that needs the field's type, which only
     /// rustc knows: a float range must be given `step:`, because a range steps
     /// by 1 unless told otherwise. The rest is `range_checks`, at parse time.
@@ -800,6 +818,7 @@ impl Parse for FieldBody {
             ));
         }
         fb.range_checks()?;
+        fb.beside_widget_checks()?;
         if let (Some(_), Some(key)) = (&fb.choices, &fb.no_trim) {
             return Err(syn::Error::new(
                 key.span(),
@@ -947,6 +966,39 @@ impl FieldBody {
                 return Err(given_twice());
             }
             self.choices = Some((key.clone(), body.parse()?));
+        }
+        Ok(())
+    }
+
+    /// What a `widget:` leaves nothing for (`WIDGETS_PLAN.md` decision H): a
+    /// widget renders the whole field, so beside one, `adder:`, `item:` and
+    /// `feedback:` would each do nothing. On a set that is because the widget
+    /// replaces the set's body, adder, items and status region all; on any
+    /// other field none of the three applies anyway. Reported at the key.
+    fn beside_widget_checks(&self) -> Result<()> {
+        if self.widget.is_none() {
+            return Ok(());
+        }
+        let refusal = |key: &Ident, what: &str| {
+            Err(syn::Error::new(
+                key.span(),
+                format!(
+                    "`{key}` does nothing beside `widget:` — the widget renders the whole field, \
+                     {what}"
+                ),
+            ))
+        };
+        if let Some((key, _)) = &self.adder {
+            return refusal(key, "so there is no adder to replace");
+        }
+        if let Some((key, _)) = &self.item {
+            return refusal(key, "so no item is shown on its own");
+        }
+        if let Some((key, _)) = &self.feedback {
+            return refusal(
+                key,
+                "and a ticked box or a selected option announces its own change",
+            );
         }
         Ok(())
     }

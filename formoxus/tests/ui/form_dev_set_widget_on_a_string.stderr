@@ -1,0 +1,58 @@
+error[E0277]: `Chips` renders a whole set, and this field is not one
+  --> tests/ui/form_dev_set_widget_on_a_string.rs:33:31
+   |
+33 |             city => { widget: Chips },
+   |                               ^^^^^ a set widget
+   |
+help: the trait `LeafWidget` is not implemented for `Chips`
+  --> tests/ui/form_dev_set_widget_on_a_string.rs:16:1
+   |
+16 | struct Chips;
+   | ^^^^^^^^^^^^
+   = note: a set widget (`checkbox_multiple`, `select_multiple` or a `SetWidget` of your own) goes on a set field: a `BTreeSet`, a `HashSet`, or a `Vec` written with `set`
+   = help: the following other types implement trait `LeafWidget`:
+             CheckboxInput
+             ColorInput
+             DateInput
+             DatetimeLocalInput
+             EmailInput
+             HiddenInput
+             MonthInput
+             NumberInput
+           and $N others
+note: required by a bound in `formoxus::field_kind::WidgetSlot::<false>::add`
+  --> src/field_kind.rs
+   |
+   |     pub fn add<M: Clone + std::fmt::Debug + Facet<'static>>(
+   |            --- required by a bound in this associated function
+...
+   |         widget: impl LeafWidget,
+   |                      ^^^^^^^^^^ required by this bound in `WidgetSlot::<false>::add`
+
+error[E0277]: `Chips` renders a whole set, and this field is not one
+  --> tests/ui/form_dev_set_widget_on_a_string.rs:33:31
+   |
+33 |             city => { widget: Chips },
+   |                               ^^^^^ a set widget
+   |
+help: the trait `LeafWidget` is not implemented for `Chips`
+  --> tests/ui/form_dev_set_widget_on_a_string.rs:16:1
+   |
+16 | struct Chips;
+   | ^^^^^^^^^^^^
+   = note: a set widget (`checkbox_multiple`, `select_multiple` or a `SetWidget` of your own) goes on a set field: a `BTreeSet`, a `HashSet`, or a `Vec` written with `set`
+   = help: the following other types implement trait `LeafWidget`:
+             CheckboxInput
+             ColorInput
+             DateInput
+             DatetimeLocalInput
+             EmailInput
+             HiddenInput
+             MonthInput
+             NumberInput
+           and $N others
+note: required by a bound in `formoxus::field_kind::WidgetSlot::<false>::failure`
+  --> src/field_kind.rs
+   |
+   |     pub const fn failure<LW: LeafWidget>(
+   |                              ^^^^^^^^^^ required by this bound in `WidgetSlot::<false>::failure`

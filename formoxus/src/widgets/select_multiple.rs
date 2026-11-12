@@ -1,7 +1,7 @@
 //! `<select multiple>` over a set's choices.
 
 use dioxus::prelude::*;
-use formoxus_spec::{AttrSet, HtmlElement, Tag};
+use formoxus_spec::{AttrSet, HtmlElement, Tag, WidgetName};
 
 use crate::field_attrs::Validity;
 use crate::nodes::{Edit, ItemValue};
@@ -19,7 +19,7 @@ use crate::widgets::{SetWidget, SetWidgetProps, Widget, described_by};
 pub struct SelectMultiple;
 
 impl Widget for SelectMultiple {
-    const NAME: &'static str = "select_multiple";
+    const NAME: &'static str = WidgetName::SelectMultiple.form_name();
 
     const PARTS: &'static [Tag] = &[Tag::Div, Tag::Label, Tag::Select];
 

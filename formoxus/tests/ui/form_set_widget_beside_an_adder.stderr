@@ -1,0 +1,5 @@
+error: `adder` does nothing beside `widget:` — the widget renders the whole field, so there is no adder to replace
+  --> tests/ui/form_set_widget_beside_an_adder.rs:25:69
+   |
+25 |             cities => { widget: checkbox_multiple, choices: CITIES, adder: Adder },
+   |                                                                     ^^^^^

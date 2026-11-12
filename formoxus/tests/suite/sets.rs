@@ -325,9 +325,9 @@ fn a_set_takes_a_custom_adder() {
 
 // ── A set widget, through a hand-built spec ──────────────────────────────
 //
-// `WIDGETS_PLAN.md` box 6, step 3h: `form!` cannot write `widget:` on a set
-// until box 8, so these reach `with_set_widget` directly, with a widget that
-// prints what it was handed. The real widgets' tests are box 9's.
+// `WIDGETS_PLAN.md` box 6, step 3h, written before `form!` could put a
+// `widget:` on a set (box 8): these reach `with_set_widget` directly, which a
+// hand-built spec still does, with a widget that prints what it was handed.
 
 /// Prints its props as text, so a test reads exactly what `SetNode` built.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -2816,8 +2816,8 @@ fn a_placeholder_reaches_the_draft() {
 // ── The two set widgets, through a hand-built spec ───────────────────────
 //
 // `WIDGETS_PLAN.md` box 7, step 7i: `CheckboxMultiple` and `SelectMultiple`
-// where `PropsAsText` stood above, until box 8 lets `form!` name them. Box 9
-// writes the full suite and the e2e tests.
+// where `PropsAsText` stood above, through the hand-built spec they were
+// written against before box 8. `form!`'s own tests are further down.
 
 fn triage_with(widget: impl Into<formoxus::widgets::AnySetWidget>) -> FormSpec<Triage> {
     FormSpec::default().with_set_widget(&path!(Triage.levels), widget)
@@ -3163,5 +3163,159 @@ fn a_set_of_exactly_two_is_allowed() {
         )
         .validate(),
         some(eq(&pair))
+    );
+}
+
+// ── `form!` names the set widgets (box 8) ────────────────────────────────
+
+/// `form!`'s `widget: checkbox_multiple` builds exactly what the hand-built
+/// spec above does.
+#[component]
+fn CheckboxesThroughFormMacro() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            form! { Triage { levels => { widget: checkbox_multiple } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn form_names_checkbox_multiple() {
+    expect_that!(
+        super::without_form_id(&super::render_to_html(CheckboxesThroughFormMacro)),
+        eq(&super::without_form_id(&super::render_to_html(
+            CheckboxesForm
+        )))
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Trip {
+    cities: BTreeSet<String>,
+}
+
+const EUROPE: &[(&str, &str)] = &[("paris", "Paris"), ("rome", "Rome"), ("oslo", "Oslo")];
+
+fn paris_and_oslo() -> Trip {
+    Trip {
+        cities: ["paris".to_string(), "oslo".to_string()].into(),
+    }
+}
+
+/// Decision D: `choices:` beside the widget, on the set's own line, are the
+/// items' choices, offered in the order written and shown by their labels.
+#[component]
+fn CitiesSelect() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &paris_and_oslo(),
+            form! { Trip { cities => { widget: select_multiple, choices: EUROPE } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_set_widgets_choices_go_beside_it() {
+    expect_that!(
+        super::render_to_html(CitiesSelect),
+        contains_substring(concat!(
+            r#"<option value="paris" selected=true>Paris</option>"#,
+            r#"<option value="rome">Rome</option>"#,
+            r#"<option value="oslo" selected=true>Oslo</option>"#,
+        ))
+    );
+}
+
+#[gtest]
+fn a_set_widget_with_choices_round_trips() {
+    let trip = paris_and_oslo();
+    expect_that!(
+        form_for(
+            &trip,
+            form! { Trip { cities => { widget: checkbox_multiple, choices: EUROPE } } }
+        )
+        .validate(),
+        some(eq(&trip))
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Route {
+    stops: Vec<String>,
+}
+
+/// A `Vec` takes a set widget with `set` beside it, and keeps its order of
+/// first appearance no more than a set does: the set's sort decides.
+#[component]
+fn StopsCheckboxes() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Route {
+                stops: vec!["rome".to_string()],
+            },
+            form! { Route { stops => { set, widget: checkbox_multiple, choices: EUROPE } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_list_marked_set_takes_a_set_widget() {
+    let html = super::render_to_html(StopsCheckboxes);
+    expect_that!(html, contains_regex(r#"value="rome" checked=true/>"#));
+    expect_that!(html, contains_regex(r#"value="paris"/>"#));
+}
+
+/// A dev's own `SetWidget`, named by path: the field's shape sends it to
+/// `with_set_widget`, and its `choices:` to the items.
+#[component]
+fn CitiesAsText() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &paris_and_oslo(),
+            form! { Trip { cities => { widget: PropsAsText, choices: EUROPE } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn form_sends_a_devs_set_widget_and_its_choices_to_the_set() {
+    expect_that!(
+        super::render_to_html(CitiesAsText),
+        contains_substring(
+            "choices [paris=Paris,rome=Rome,oslo=Oslo] chosen [oslo,paris] required false label [Cities]"
+        )
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct MaybeTriage {
+    levels: Option<BTreeSet<Priority>>,
+}
+
+/// An optional set takes a set widget too (decision E), written with its
+/// `?` as every `Option` is in a path.
+#[component]
+fn OptionalCheckboxes() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &MaybeTriage {
+                levels: Some([Priority::Medium].into()),
+            },
+            form! { MaybeTriage { levels? => { widget: checkbox_multiple } } },
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn an_optional_set_takes_a_set_widget() {
+    expect_that!(
+        super::render_to_html(OptionalCheckboxes),
+        contains_regex(r#"value="Medium" checked=true/>"#)
     );
 }

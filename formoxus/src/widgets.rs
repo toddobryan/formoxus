@@ -143,9 +143,10 @@ pub use widget_props::{SetWidgetProps, WidgetCommon, WidgetProps};
 #[cfg(test)]
 mod tests {
     use super::{
-        CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,
-        MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput, Select,
-        TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
+        CheckboxInput, CheckboxMultiple, ColorInput, DateInput, DatetimeLocalInput, EmailInput,
+        HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput,
+        Select, SelectMultiple, TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput,
+        Widget,
     };
     use formoxus_spec::WidgetName;
     use googletest::prelude::*;
@@ -187,6 +188,8 @@ mod tests {
             row_of::<Textarea>(),
             row_of::<Select>(),
             row_of::<RadioGroup>(),
+            row_of::<CheckboxMultiple>(),
+            row_of::<SelectMultiple>(),
         ];
         let mut seen = HashSet::new();
         for (row, type_name) in rows {

@@ -642,7 +642,7 @@ several?
     refused, a `HashSet` built the same in two processes' iteration orders, a round
     trip; and the step 3h tests drop their `declared_order` `sort_by`.
 
-- [ ] **7.** (Todd) `CheckboxMultiple` and `SelectMultiple`. Each change becomes
+- [x] **7.** (Todd) `CheckboxMultiple` and `SelectMultiple`. Each change becomes
   `AddItem { value: Some(ItemValue::raw(…)) }` and `RemoveItem`s, highest index first
   (trap 6). The select reads `FormEvent::values()`, never `value()` (trap 3).
 
@@ -820,11 +820,34 @@ several?
   one pick of a multi-pick can blame the set instead. If it is wanted later,
   `SetWidgetProps` gains each item's key beside its entry.
 
-- [ ] **8.** (Claude) The `form!` side: `widget:` on a set resolves to a `SetWidget`
+- [x] **8.** (Claude) The `form!` side: `widget:` on a set resolves to a `SetWidget`
   (the two built-ins by name; a dev's by path, with an `on_unimplemented` message for
   a leaf `Widget` there, which fixes the bug above); `choices:` on the set's line, and
   on the items' line an error that says to move them (decision D); decision E's checks; decision H's refusals of `adder:`, `item:` and
   `feedback:` beside `widget:`; both names out of `NOT_YET`; goldens.
+
+  **Done 2026-11-11 (Claude), ci 1344, e2e 72.** How `form!` knows a set, since it
+  sees no types: a built-in's name says its kind (`WidgetName::renders_a_set`), and so
+  does `set` beside a dev's widget. A dev's widget on a field without `set` could be
+  either, so the field's SHAPE decides, at compile time: `form!` declares
+  `const __FX_IS_SET_n: bool = is_set(shape)` and calls
+  `field_kind::WidgetSlot::<__FX_IS_SET_n>`, whose two inherent impls take a
+  `LeafWidget` (`false`) or a `SetWidget` (`true`). Inherent impls on the two const
+  instances, not one trait, because each call then type-checks only against the impl
+  picked; two blanket `From` impls would overlap. Its `failure` const returns a
+  `slot_failure` number and `form!`'s own `assert!`s report it, so each message keeps
+  its old span with no note inside `field_kind`. `FormSpec::__then` (hidden) lets the
+  chosen builder sit mid-chain. A set widget's `choices:` go through
+  `WidgetSlot::set_choices`, a no-op on a non-set so rustc's "no `iter` on `String`"
+  never joins the real message. Decision D's error and the refusal of a widget on
+  `key[]` are one cross-entry check in `form.rs` (`check_items_beside_a_widget`):
+  only a list or set has items, and a list takes no widget, so a widget on `key`
+  beside `key[]` is a set's whatever its kind. Decision H refuses `adder:`, `item:`
+  and `feedback:` beside ANY `widget:`, which is right on a leaf too.
+  `on_unimplemented` on `LeafWidget` and `SetWidget`. A dev's widget of the wrong kind
+  is reported twice (the `failure` const and the builder), both on the widget. Ten new
+  goldens (`form_leaf_widget_on_a_set`, `form_set_widget_*`, `form_dev_*_widget_on_*`);
+  six suite tests through `form!` at the end of `sets.rs`.
 
 - [ ] **9.** (Claude) Suite tests for the two widgets: the markup, ticked and selected
   state from the model, a toggle and a select change as edits, `min_items` and

@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use formoxus_spec::{AttrSet, HtmlElement, Tag};
+use formoxus_spec::{AttrSet, HtmlElement, Tag, WidgetName};
 
 use crate::{
     nodes::{Edit, ItemValue},
@@ -12,7 +12,7 @@ use crate::{
 pub struct CheckboxMultiple;
 
 impl Widget for CheckboxMultiple {
-    const NAME: &'static str = "checkbox_multiple";
+    const NAME: &'static str = WidgetName::CheckboxMultiple.form_name();
 
     const PARTS: &'static [Tag] = &[Tag::Fieldset, Tag::Legend, Tag::Div, Tag::Input, Tag::Label];
 

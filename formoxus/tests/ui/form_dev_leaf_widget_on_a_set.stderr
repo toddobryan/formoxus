@@ -1,0 +1,58 @@
+error[E0277]: `Notes` renders a single value, and this field is a set
+  --> tests/ui/form_dev_leaf_widget_on_a_set.rs:34:33
+   |
+34 |             cities => { widget: Notes },
+   |                                 ^^^^^ not a set widget
+   |
+help: the trait `SetWidget` is not implemented for `Notes`
+  --> tests/ui/form_dev_leaf_widget_on_a_set.rs:17:1
+   |
+17 | struct Notes;
+   | ^^^^^^^^^^^^
+   = note: give the set `checkbox_multiple`, `select_multiple` or a `SetWidget` of your own, or write the field's path with `[]` (`tags[] => { widget: … }`) to give every ITEM a widget
+help: the following other types implement trait `SetWidget`
+  --> src/widgets/select_multiple.rs
+   |
+   | impl SetWidget for SelectMultiple {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `SelectMultiple`
+   |
+  ::: src/widgets/checkbox_multiple.rs
+   |
+   | impl SetWidget for CheckboxMultiple {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `CheckboxMultiple`
+note: required by a bound in `formoxus::field_kind::WidgetSlot::<true>::add`
+  --> src/field_kind.rs
+   |
+   |     pub fn add<M: Clone + std::fmt::Debug + Facet<'static>>(
+   |            --- required by a bound in this associated function
+...
+   |         widget: impl SetWidget,
+   |                      ^^^^^^^^^ required by this bound in `WidgetSlot::<true>::add`
+
+error[E0277]: `Notes` renders a single value, and this field is a set
+  --> tests/ui/form_dev_leaf_widget_on_a_set.rs:34:33
+   |
+34 |             cities => { widget: Notes },
+   |                                 ^^^^^ not a set widget
+   |
+help: the trait `SetWidget` is not implemented for `Notes`
+  --> tests/ui/form_dev_leaf_widget_on_a_set.rs:17:1
+   |
+17 | struct Notes;
+   | ^^^^^^^^^^^^
+   = note: give the set `checkbox_multiple`, `select_multiple` or a `SetWidget` of your own, or write the field's path with `[]` (`tags[] => { widget: … }`) to give every ITEM a widget
+help: the following other types implement trait `SetWidget`
+  --> src/widgets/select_multiple.rs
+   |
+   | impl SetWidget for SelectMultiple {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `SelectMultiple`
+   |
+  ::: src/widgets/checkbox_multiple.rs
+   |
+   | impl SetWidget for CheckboxMultiple {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `CheckboxMultiple`
+note: required by a bound in `formoxus::field_kind::WidgetSlot::<true>::failure`
+  --> src/field_kind.rs
+   |
+   |     pub const fn failure<SW: SetWidget>(shape: &Shape, marked_set: bool, has_choices: bool) -> u8 {
+   |                              ^^^^^^^^^ required by this bound in `WidgetSlot::<true>::failure`

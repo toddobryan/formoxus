@@ -39,6 +39,7 @@
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
 - [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code uses full module paths; 2026-11-09: NO new re-exports until publish
 - [Widget is the umbrella word](widget_is_the_umbrella_word.md) — "widget", never "control"; why the 2026-09-19 rename was reversed
+- [WidgetSlot dispatch](widget_slot_dispatch.md) — how `form!` picks leaf vs set widget builder by the field's shape: const-generic `WidgetSlot<IS_SET>`, failure codes
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30, C4 BUILT 2026-11-03; its `ErrorsStore` section is SUPERSEDED by `formoxus/ERRORS_PLAN.md` (errors leave the nodes)
 - [Errors here vs within](errors_here_vs_within.md) — 2026-10-09: `has_errors_here` (own, for rendering) vs `has_errors_within` (subtree, for validate); they can never agree
 - [Config cascade](config_cascade.md) — app → form → field via Dioxus context; RULE: resolve at the `Form` boundary, never call `defaults()` while rendering

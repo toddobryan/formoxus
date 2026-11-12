@@ -1,0 +1,5 @@
+error: `cities` has a widget, which shows these choices: write `choices:` on `cities`, beside the widget, not on `cities[]`
+  --> tests/ui/form_set_widget_choices_on_items.rs:18:27
+   |
+18 |             cities[] => { choices: CITIES },
+   |                           ^^^^^^^

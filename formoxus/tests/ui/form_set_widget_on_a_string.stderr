@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox_multiple` renders a whole set, and this field is not one: a `BTreeSet`, a `HashSet`, or a `Vec` written with `set` beside the widget
+  --> tests/ui/form_set_widget_on_a_string.rs:15:31
+   |
+15 |             city => { widget: checkbox_multiple, choices: CITIES },
+   |                               ^^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here

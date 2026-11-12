@@ -67,6 +67,12 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
 ///     fn render(&self, props: WidgetProps) -> Element { /* … */ }
 /// }
 /// ```
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` renders a whole set, and this field is not one",
+    label = "a set widget",
+    note = "a set widget (`checkbox_multiple`, `select_multiple` or a `SetWidget` of your own) goes on a set \
+            field: a `BTreeSet`, a `HashSet`, or a `Vec` written with `set`"
+)]
 pub trait LeafWidget: Widget {
     /// The field types this widget renders without `choices`. It renders a
     /// field of type `t` when `ACCEPTS.contains(t) || (TAKES_CHOICES &&
@@ -199,6 +205,12 @@ impl PartialEq for AnyWidget {
     }
 }
 
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` renders a single value, and this field is a set",
+    label = "not a set widget",
+    note = "give the set `checkbox_multiple`, `select_multiple` or a `SetWidget` of your own, or write the \
+            field's path with `[]` (`tags[] => {{ widget: … }}`) to give every ITEM a widget"
+)]
 pub trait SetWidget: Widget {
     fn render(&self, props: SetWidgetProps) -> Element;
 }

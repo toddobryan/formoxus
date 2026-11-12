@@ -179,6 +179,10 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
         | WidgetName::WeekInput
         | WidgetName::Textarea
         | WidgetName::Select => "this widget cannot render an optional field",
+        // A set widget is never asked: its checks are `set_checks`'.
+        WidgetName::CheckboxMultiple | WidgetName::SelectMultiple => {
+            "a set widget takes an optional set"
+        }
     }
 }
 
@@ -190,7 +194,10 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
 /// say.
 fn takes_choices(widget_name: WidgetName) -> bool {
     match widget_name {
-        WidgetName::Select | WidgetName::RadioGroup => true,
+        WidgetName::Select
+        | WidgetName::RadioGroup
+        | WidgetName::CheckboxMultiple
+        | WidgetName::SelectMultiple => true,
         WidgetName::TextInput
         | WidgetName::PasswordInput
         | WidgetName::HiddenInput
@@ -219,6 +226,10 @@ fn cannot_render(widget_name: WidgetName) -> &'static str {
             "this widget needs `choices` unless the field is a bool"
         }
         WidgetName::RangeInput => "`range` can only render an integer or float field",
+        // Never asked: a set widget's checks are `set_checks`'.
+        WidgetName::CheckboxMultiple | WidgetName::SelectMultiple => {
+            "a set widget renders a set field"
+        }
         WidgetName::TextInput
         | WidgetName::PasswordInput
         | WidgetName::HiddenInput
@@ -238,30 +249,86 @@ fn cannot_render(widget_name: WidgetName) -> &'static str {
     }
 }
 
+/// Where a field's widget goes, decided from what `form!` can see: a built-in's
+/// name says which kind it is, and so does `set` beside it, since only a set
+/// widget renders a list written with `set`. A dev's widget on a field without
+/// `set` could be either, and the field's shape decides, through
+/// `field_kind::WidgetSlot` and a `const` in the dev's crate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WidgetFit {
+    /// A `LeafWidget`: `with_widget`, the field's own `choices:`.
+    Leaf,
+    /// A `SetWidget`: `with_set_widget`, `choices:` filed under the items.
+    Set,
+    /// A dev's widget whose kind the field's shape decides.
+    ByShape,
+}
+
 impl WidgetRef {
+    /// Which builder this widget takes; see [`WidgetFit`].
+    pub(crate) fn fit(&self, marked_set: bool) -> WidgetFit {
+        match &self.kind {
+            WidgetKind::Named { widget, .. } if widget.renders_a_set() => WidgetFit::Set,
+            WidgetKind::Named { .. } => WidgetFit::Leaf,
+            WidgetKind::Path(_) if marked_set => WidgetFit::Set,
+            WidgetKind::Path(_) => WidgetFit::ByShape,
+        }
+    }
+
+    /// The name of the `const` holding whether field `index` is a set, for a
+    /// [`WidgetFit::ByShape`] widget: emitted by [`checks`](Self::checks) and
+    /// read by the builder call. By index, since two field keys can sanitize
+    /// to the same identifier.
+    pub(crate) fn is_set_const(index: usize) -> Ident {
+        format_ident!("__FX_IS_SET_{index}")
+    }
+
+    pub(crate) fn name_span(&self) -> proc_macro2::Span {
+        match &self.kind {
+            WidgetKind::Named { name, .. } => name.span(),
+            WidgetKind::Path(path) => path
+                .segments
+                .last()
+                .map_or_else(proc_macro2::Span::call_site, |s| s.ident.span()),
+        }
+    }
+
     /// A free `const _` assertion that this widget takes the `choices` written
     /// at `key`, with the caret on the key: `W::TAKES_CHOICES`, read by rustc
     /// in the dev's crate, so a dev's widget that sets it to `false` is
     /// refused like `text` is. A built-in's message names the widgets that do
-    /// take them.
-    pub(crate) fn choices_check(&self, key: &Ident) -> TokenStream2 {
-        let ty = self.type_tokens();
-        let message = match &self.kind {
-            WidgetKind::Named { name, .. } => format!(
-                "`{name}` takes no `choices` — they apply to {}",
-                WidgetName::ALL
-                    .iter()
-                    .filter(|w| takes_choices(**w))
-                    .map(|w| format!("`{}`", w.form_name()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            WidgetKind::Path(_) => format!("`{}` takes no `choices`", self.written()),
+    /// take them. Only for a built-in leaf widget: a set widget takes choices,
+    /// and a [`WidgetFit::ByShape`] widget's check is in `WidgetSlot::check`.
+    /// Not asked on a set, where the set refusal in [`checks`](Self::checks)
+    /// has already said what is wrong.
+    pub(crate) fn choices_check(
+        &self,
+        key: &Ident,
+        shape: &TokenStream2,
+        marked_set: bool,
+    ) -> TokenStream2 {
+        let WidgetKind::Named { name, widget } = &self.kind else {
+            return TokenStream2::new();
         };
+        if widget.renders_a_set() {
+            return TokenStream2::new();
+        }
+        let ty = self.type_tokens();
+        let message = format!(
+            "`{name}` takes no `choices` — they apply to {}",
+            WidgetName::ALL
+                .iter()
+                .filter(|w| takes_choices(**w))
+                .map(|w| format!("`{}`", w.form_name()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         quote_spanned! { key.span()=>
-            #[allow(clippy::assertions_on_constants)]
+            #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
             const _: () = ::core::assert!(
-                <#ty as ::formoxus::widgets::LeafWidget>::TAKES_CHOICES,
+                #marked_set
+                    || ::formoxus::field_kind::is_set(#shape)
+                    || <#ty as ::formoxus::widgets::LeafWidget>::TAKES_CHOICES,
                 #message
             );
         }
@@ -270,50 +337,153 @@ impl WidgetRef {
     /// Free `const _` assertions that the field at `shape` can be rendered by
     /// this widget, with the caret on the widget's name. `shape` is a
     /// `field_kind::shape_of(…)` expression; see `FieldBody::type_checks`.
-    pub(crate) fn checks(&self, shape: &TokenStream2, has_choices: bool) -> TokenStream2 {
+    /// `key` is the field's path as written, for the message that names
+    /// `key[]`; `index` names a [`WidgetFit::ByShape`] widget's `const`.
+    pub(crate) fn checks(
+        &self,
+        shape: &TokenStream2,
+        choices_key: Option<&Ident>,
+        marked_set: bool,
+        key: &str,
+        index: usize,
+    ) -> TokenStream2 {
+        let has_choices = choices_key.is_some();
         let ty = self.type_tokens();
-        let span = match &self.kind {
-            WidgetKind::Named { name, .. } => name.span(),
-            WidgetKind::Path(path) => path
-                .segments
-                .last()
-                .map_or_else(proc_macro2::Span::call_site, |s| s.ident.span()),
-        };
-        let single = quote_spanned! { span =>
-            const _: () = ::core::assert!(
-                ::formoxus::field_kind::is_single_value(#shape),
-                "a widget applies only to a single-value field, not a struct, list or enum"
-            );
-        };
-        // The same asserts for a built-in and a dev's widget: rustc reads
-        // `W`'s consts in the dev's crate. Only the wording differs, since a
-        // built-in's says why and what to use instead.
-        let (cannot_render, optional_refusal) = match &self.kind {
-            WidgetKind::Named {
-                widget: widget_name,
-                ..
-            } => (
-                cannot_render(*widget_name).to_string(),
-                optional_refusal(*widget_name).to_string(),
-            ),
-            WidgetKind::Path(_) => {
-                let written = self.written();
-                (
-                    format!("`{written}` cannot render this field"),
-                    format!("`{written}` cannot render an optional field"),
+        let span = self.name_span();
+        let fk = quote! { ::formoxus::field_kind };
+        let written = self.written();
+        let set_items = format!(
+            "`{written}` offers the set's items as choices, so it needs `choices:` unless the \
+             items are an enum without data"
+        );
+        match (self.fit(marked_set), &self.kind) {
+            (WidgetFit::Leaf, WidgetKind::Named { widget, .. }) => {
+                let on_a_set = format!(
+                    "`{written}` renders a single value, and this field is a set: give the set \
+                     `checkbox_multiple` or `select_multiple`, or write `{key}[]` to give every \
+                     item a widget"
+                );
+                let cannot_render = cannot_render(*widget);
+                let optional_refusal = optional_refusal(*widget);
+                // Each leaf check holds on a set, so a set is told once, by
+                // `on_a_set`, what is wrong.
+                let is_a_set = quote! { (#marked_set || #fk::is_set(#shape)) };
+                quote_spanned! { span=>
+                    #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+                    const _: () = ::core::assert!(!#is_a_set, #on_a_set);
+                    #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+                    const _: () = ::core::assert!(
+                        #is_a_set || #fk::is_single_value(#shape),
+                        "a widget applies only to a single-value field, not a struct, list or enum"
+                    );
+                    #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+                    const _: () = ::core::assert!(
+                        #is_a_set || #fk::optional_is_okay::<#ty>(#shape),
+                        #optional_refusal
+                    );
+                    #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+                    const _: () = ::core::assert!(
+                        #is_a_set || #fk::renders::<#ty>(#shape, #has_choices),
+                        #cannot_render
+                    );
+                }
+            }
+            (WidgetFit::Set, WidgetKind::Named { .. }) => {
+                let not_a_set = format!(
+                    "`{written}` renders a whole set, and this field is not one: a `BTreeSet`, \
+                     a `HashSet`, or a `Vec` written with `set` beside the widget"
+                );
+                let is_set = Self::is_set_const(index);
+                quote_spanned! { span=>
+                    #[allow(clippy::nonminimal_bool)]
+                    const #is_set: bool = #marked_set || #fk::is_set(#shape);
+                    const _: () = ::core::assert!(#is_set, #not_a_set);
+                    const _: () = ::core::assert!(
+                        #fk::set_widget_renders(#shape, #marked_set, #has_choices),
+                        #set_items
+                    );
+                }
+            }
+            // A dev's widget: one `failure` const, whose bound is the kind
+            // check, then an `assert!` per message, each spanned where it
+            // belongs. Beside `set` it is a set widget; otherwise the field's
+            // shape decides, through `is_set_const`.
+            (WidgetFit::Set | WidgetFit::ByShape, WidgetKind::Path(_)) => {
+                self.dev_widget_checks(shape, choices_key, marked_set, index, &set_items)
+            }
+            (WidgetFit::Leaf, WidgetKind::Path(_))
+            | (WidgetFit::ByShape, WidgetKind::Named { .. }) => {
+                unreachable!(
+                    "`fit` gives a path widget `Set` or `ByShape`, and a name `Leaf` or `Set`"
                 )
             }
+        }
+    }
+
+    /// A dev's widget's checks: one `failure` const, whose bound is the kind
+    /// check, then an `assert!` per message, each spanned where it belongs.
+    /// Beside `set` it is a set widget; otherwise the field's shape decides,
+    /// through `is_set_const`.
+    fn dev_widget_checks(
+        &self,
+        shape: &TokenStream2,
+        choices_key: Option<&Ident>,
+        marked_set: bool,
+        index: usize,
+        set_items: &str,
+    ) -> TokenStream2 {
+        let has_choices = choices_key.is_some();
+        let ty = self.type_tokens();
+        let span = self.name_span();
+        let fk = quote! { ::formoxus::field_kind };
+        let written = self.written();
+        let set_items = set_items.to_string();
+        let slot = Self::is_set_const(index);
+        let declare_slot = if self.fit(marked_set) == WidgetFit::Set {
+            quote_spanned! { span=> const #slot: bool = true; }
+        } else {
+            quote_spanned! { span=> const #slot: bool = #fk::is_set(#shape); }
         };
+        let failure = format_ident!("__FX_WIDGET_FAILURE_{index}");
+        let fails = |code: &str, message: String, at: proc_macro2::Span| {
+            let code = format_ident!("{code}");
+            quote_spanned! { at=>
+                const _: () = ::core::assert!(
+                    #failure != #fk::slot_failure::#code,
+                    #message
+                );
+            }
+        };
+        let asserts = [
+            fails(
+                "NOT_A_SINGLE_VALUE",
+                "a widget applies only to a single-value field, not a struct, list or enum"
+                    .to_string(),
+                span,
+            ),
+            fails(
+                "OPTIONAL",
+                format!("`{written}` cannot render an optional field"),
+                span,
+            ),
+            fails(
+                "CANNOT_RENDER",
+                format!("`{written}` cannot render this field"),
+                span,
+            ),
+            fails(
+                "TAKES_NO_CHOICES",
+                format!("`{written}` takes no `choices`"),
+                choices_key.map_or(span, Ident::span),
+            ),
+            fails("SET_ITEMS_NOT_CHOICES", set_items, span),
+        ];
         quote_spanned! { span=>
-            #single
-            const _: () = ::core::assert!(
-                ::formoxus::field_kind::optional_is_okay::<#ty>(#shape),
-                #optional_refusal
+            #declare_slot
+            const #failure: u8 = #fk::WidgetSlot::<#slot>::failure::<#ty>(
+                #shape, #marked_set, #has_choices
             );
-            const _: () = ::core::assert!(
-                ::formoxus::field_kind::renders::<#ty>(#shape, #has_choices),
-                #cannot_render
-            );
+            #(#asserts)*
         }
     }
 }
@@ -574,7 +744,12 @@ mod tests {
             .collect();
         expect_that!(
             choosers,
-            elements_are![eq(&WidgetName::Select), eq(&WidgetName::RadioGroup)]
+            elements_are![
+                eq(&WidgetName::Select),
+                eq(&WidgetName::RadioGroup),
+                eq(&WidgetName::CheckboxMultiple),
+                eq(&WidgetName::SelectMultiple)
+            ]
         );
     }
 
@@ -650,16 +825,44 @@ mod tests {
         );
     }
 
-    /// Choices reach every widget through `WidgetProps`, so a dev's own widget
-    /// may take them.
+    /// Choices reach every widget, so a dev's own widget may take them. Whose
+    /// they are, the field's or its items', is the field's shape's to say, so
+    /// they go through `WidgetSlot` with both paths.
     #[gtest]
     fn a_path_widget_takes_choices() {
         let spec = parse(quote! { Source { notes => { widget: Picker, choices: STATES } } })
             .expect("a dev's widget receives choices like any other");
         expect_that!(
             spec.expand().to_string(),
-            contains_substring("choice_field_for")
+            contains_substring(
+                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: choices (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes[]\") , | __m : & Source | & __m . notes , STATES))"
+            )
         );
+    }
+
+    /// A built-in set widget's choices are its items' (decision D): filed
+    /// under `key[]`, through the slot its checks declared, which does nothing
+    /// on a field that is not a set.
+    #[gtest]
+    fn a_set_widgets_choices_are_filed_under_its_items() {
+        let spec = parse(quote! {
+            Source { cities => { widget: checkbox_multiple, choices: CITIES } }
+        })
+        .unwrap();
+        let tokens = spec.expand().to_string();
+        expect_that!(
+            tokens,
+            contains_substring(
+                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: set_choices (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"cities[]\") , | __m : & Source | & __m . cities , CITIES))"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring(
+                ". with_set_widget (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"cities\") , < :: formoxus :: widgets :: CheckboxMultiple as :: core :: default :: Default > :: default ())"
+            )
+        );
+        expect_that!(tokens, not(contains_substring(". with_widget (")));
     }
 
     /// `choices` is a legal key, so a near miss is pointed at it.
@@ -848,20 +1051,30 @@ mod tests {
         );
     }
 
+    /// A dev's widget could be either kind, so the field's shape picks the
+    /// builder, through the `const` its checks declare.
     #[gtest]
-    fn the_widget_reaches_the_builder_through_with_widget() {
+    fn the_widget_reaches_the_builder_through_its_slot() {
         let spec =
             parse(quote! { Source { notes => { widget: MarkdownWidget { rows: 5 } } } }).unwrap();
         let tokens = spec.expand().to_string();
         expect_that!(
             tokens,
             contains_substring(
-                ". with_widget (& :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , {"
+                "const __FX_IS_SET_0 : bool = :: formoxus :: field_kind :: is_set (:: formoxus :: field_kind :: shape_of (| __m : & Source | & __m . notes)) ;"
             )
         );
         expect_that!(
             tokens,
-            contains_substring("let __widget = MarkdownWidget { rows : 5 ,")
+            contains_substring(
+                ". __then (| __spec | { let __widget = { # [allow (clippy :: needless_update)] let __widget = MarkdownWidget { rows : 5 ,"
+            )
+        );
+        expect_that!(
+            tokens,
+            contains_substring(
+                ":: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: add (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , __widget)"
+            )
         );
         expect_that!(tokens, not(contains_substring("with_custom_widget")));
     }

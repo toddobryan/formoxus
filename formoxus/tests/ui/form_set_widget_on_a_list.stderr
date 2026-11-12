@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `select_multiple` renders a whole set, and this field is not one: a `BTreeSet`, a `HashSet`, or a `Vec` written with `set` beside the widget
+  --> tests/ui/form_set_widget_on_a_list.rs:16:33
+   |
+16 |             cities => { widget: select_multiple, choices: CITIES },
+   |                                 ^^^^^^^^^^^^^^^ evaluation of `main::_` failed here

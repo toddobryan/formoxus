@@ -31,8 +31,10 @@ use formoxus_spec::{Attr, FieldType, HtmlElement};
 use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
+use crate::form::FormSpec;
 use crate::nodes::{SetEvent, SetFeedback, SetOrder};
-use crate::widgets::widget::LeafWidget;
+use crate::path::ModelPath;
+use crate::widgets::widget::{LeafWidget, SetWidget};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
@@ -62,6 +64,17 @@ pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::F
 /// a `StringField`. `form!` refuses `choices` beside a validated key, so the
 /// two constructors never meet on one field.
 pub fn choice_field_for<M, P, C>(_: fn(&M) -> &P, choices: impl IntoIterator<Item = C>) -> NodeCtor
+where
+    P: DefaultField,
+    C: IntoChoice<ValueOf<P>>,
+    ValueOf<P>: Send + Sync,
+{
+    choice_node::<P, C>(choices)
+}
+
+/// [`choice_field_for`]'s constructor, by the field's type rather than a
+/// projection to it: what a set widget's `choices:` builds for the set's ITEMS.
+fn choice_node<P, C>(choices: impl IntoIterator<Item = C>) -> NodeCtor
 where
     P: DefaultField,
     C: IntoChoice<ValueOf<P>>,
@@ -494,6 +507,189 @@ pub const fn renders<LW: LeafWidget>(shape: &Shape, has_choices: bool) -> bool {
         Kind::Bool => FieldType::Bool,
     };
     LW::ACCEPTS.contains(field_type) || (LW::TAKES_CHOICES && has_choices)
+}
+
+/// Whether a set widget can render this set (`WIDGETS_PLAN.md` decision E):
+/// its items are offered as choices, so they must be a leaf given `choices:`
+/// or an enum without data, whose variants are the choices. A newtype over an
+/// enum needs `choices:`, as it needs `sort_by`: nothing looks through it.
+///
+/// `true` for anything that is not a set (or, when `marked_set`, a list
+/// written with `set`), which `form!` reports on its own.
+pub const fn set_widget_renders(shape: &Shape, marked_set: bool, has_choices: bool) -> bool {
+    let shape = match &shape.def {
+        Def::Option(option) => option.t,
+        _ => shape,
+    };
+    let item = match &shape.def {
+        Def::Set(set) => set.t,
+        Def::List(list) if marked_set => list.t,
+        _ => return true,
+    };
+    has_choices || is_bare_unit_enum(item)
+}
+
+/// A widget named by PATH in `form!`, whose kind the macro cannot see: a
+/// `LeafWidget` or a `SetWidget`. `SET` is whether the field is a set, which
+/// a `const` in the dev's crate decides from the field's shape
+/// ([`is_set`]), and each impl takes only its own kind, so a leaf widget on a
+/// set is the trait's own "not a `SetWidget`" error, and the reverse.
+///
+/// Inherent impls on the two instances rather than one trait, so each call
+/// type-checks only against the impl the field picked: the other impl's
+/// bounds, and its projections, are never asked about.
+#[derive(Debug)]
+pub struct WidgetSlot<const SET: bool>;
+
+/// What [`WidgetSlot`]'s `failure` found wrong: which of `form!`'s messages
+/// applies. One number from one `const`, so a widget of the wrong kind is
+/// refused ONCE, by the trait bound on that `const`, and each message is a
+/// plain `assert!` at the call site, spanned where it belongs.
+pub mod slot_failure {
+    pub const NONE: u8 = 0;
+    pub const NOT_A_SINGLE_VALUE: u8 = 1;
+    pub const OPTIONAL: u8 = 2;
+    pub const CANNOT_RENDER: u8 = 3;
+    pub const TAKES_NO_CHOICES: u8 = 4;
+    pub const SET_ITEMS_NOT_CHOICES: u8 = 5;
+}
+
+impl WidgetSlot<false> {
+    /// Every check a leaf widget on a single-value field gets, the first that
+    /// fails as a [`slot_failure`] number. The same parameters as the set
+    /// impl's, since `form!` writes one call for either.
+    pub const fn failure<LW: LeafWidget>(
+        shape: &Shape,
+        _marked_set: bool,
+        has_choices: bool,
+    ) -> u8 {
+        if !is_single_value(shape) {
+            slot_failure::NOT_A_SINGLE_VALUE
+        } else if !optional_is_okay::<LW>(shape) {
+            slot_failure::OPTIONAL
+        } else if !renders::<LW>(shape, has_choices) {
+            slot_failure::CANNOT_RENDER
+        } else if has_choices && !LW::TAKES_CHOICES {
+            slot_failure::TAKES_NO_CHOICES
+        } else {
+            slot_failure::NONE
+        }
+    }
+
+    pub fn add<M: Clone + std::fmt::Debug + Facet<'static>>(
+        spec: FormSpec<M>,
+        path: &ModelPath<M>,
+        widget: impl LeafWidget,
+    ) -> FormSpec<M> {
+        spec.with_widget(path, widget)
+    }
+
+    /// A set widget's `choices:` on a field that is not a set: nothing, since
+    /// the widget's own check has said what is wrong, and reaching for the
+    /// items of a `String` would add rustc's "no `iter`" to it.
+    pub fn set_choices<M: Clone + std::fmt::Debug + Facet<'static>, P, C>(
+        spec: FormSpec<M>,
+        _items: &ModelPath<M>,
+        _: fn(&M) -> &P,
+        _choices: impl IntoIterator<Item = C>,
+    ) -> FormSpec<M> {
+        spec
+    }
+
+    /// `choices:` beside the widget: the field's own, as for any leaf.
+    pub fn choices<M: Clone + std::fmt::Debug + Facet<'static>, P, C>(
+        spec: FormSpec<M>,
+        path: &ModelPath<M>,
+        _items: &ModelPath<M>,
+        _: fn(&M) -> &P,
+        choices: impl IntoIterator<Item = C>,
+    ) -> FormSpec<M>
+    where
+        P: DefaultField,
+        C: IntoChoice<ValueOf<P>>,
+        ValueOf<P>: Send + Sync,
+    {
+        spec.with_node(path, choice_node::<P, C>(choices))
+    }
+}
+
+impl WidgetSlot<true> {
+    /// Decision E's check, as [`set_widget_renders`]; the bound is the kind
+    /// check. The parameters are the leaf impl's.
+    pub const fn failure<SW: SetWidget>(shape: &Shape, marked_set: bool, has_choices: bool) -> u8 {
+        if set_widget_renders(shape, marked_set, has_choices) {
+            slot_failure::NONE
+        } else {
+            slot_failure::SET_ITEMS_NOT_CHOICES
+        }
+    }
+
+    pub fn add<M: Clone + std::fmt::Debug + Facet<'static>>(
+        spec: FormSpec<M>,
+        path: &ModelPath<M>,
+        widget: impl SetWidget,
+    ) -> FormSpec<M> {
+        spec.with_set_widget(path, widget)
+    }
+
+    /// A set widget's `choices:` are its ITEMS' choices (decision D), filed
+    /// under `items` (`cities[]`), where the set's draft reads them.
+    pub fn set_choices<M: Clone + std::fmt::Debug + Facet<'static>, S, C>(
+        spec: FormSpec<M>,
+        items: &ModelPath<M>,
+        _: fn(&M) -> &S,
+        choices: impl IntoIterator<Item = C>,
+    ) -> FormSpec<M>
+    where
+        S: SetItemsOf,
+        S::Item: DefaultField,
+        C: IntoChoice<ValueOf<S::Item>>,
+        ValueOf<S::Item>: Send + Sync,
+    {
+        spec.with_node(items, choice_node::<S::Item, C>(choices))
+    }
+
+    /// `choices:` beside a set's widget are its ITEMS' choices (decision D),
+    /// filed under `items` (`cities[]`), where the set's draft reads them.
+    pub fn choices<M: Clone + std::fmt::Debug + Facet<'static>, S, C>(
+        spec: FormSpec<M>,
+        _path: &ModelPath<M>,
+        items: &ModelPath<M>,
+        _: fn(&M) -> &S,
+        choices: impl IntoIterator<Item = C>,
+    ) -> FormSpec<M>
+    where
+        S: SetItemsOf,
+        S::Item: DefaultField,
+        C: IntoChoice<ValueOf<S::Item>>,
+        ValueOf<S::Item>: Send + Sync,
+    {
+        spec.with_node(items, choice_node::<S::Item, C>(choices))
+    }
+}
+
+/// A set's item type, through an `Option` around the set: what a set
+/// widget's `choices:` are choices of. Separate from [`SetLike`], whose
+/// message is `sort_by`'s.
+pub trait SetItemsOf {
+    type Item;
+}
+
+impl<T, S> SetItemsOf for HashSet<T, S> {
+    type Item = T;
+}
+
+impl<T> SetItemsOf for BTreeSet<T> {
+    type Item = T;
+}
+
+/// A `Vec` written with `set`, which `form!` alone knows is one.
+impl<T> SetItemsOf for Vec<T> {
+    type Item = T;
+}
+
+impl<S: SetItemsOf> SetItemsOf for Option<S> {
+    type Item = S::Item;
 }
 
 pub const fn is_optional(shape: &Shape) -> bool {

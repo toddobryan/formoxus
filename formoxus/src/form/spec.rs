@@ -233,6 +233,15 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
+    /// `f(self)`: how `form!` reaches a builder chosen at compile time from
+    /// the field's shape (`field_kind::WidgetSlot`), in the middle of the
+    /// builder chain. Not API.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __then(self, f: impl FnOnce(Self) -> Self) -> Self {
+        f(self)
+    }
+
     pub fn with_set_widget(mut self, path: &ModelPath<T>, widget: impl Into<AnySetWidget>) -> Self {
         self.set_field(path, "widget").set_widget = Some(widget.into());
         self

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox_multiple` offers the set's items as choices, so it needs `choices:` unless the items are an enum without data
+  --> tests/ui/form_set_widget_without_choices.rs:15:33
+   |
+15 |             cities => { widget: checkbox_multiple },
+   |                                 ^^^^^^^^^^^^^^^^^ evaluation of `main::_` failed here

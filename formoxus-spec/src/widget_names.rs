@@ -67,6 +67,8 @@ widget_names! {
     Select => "select",
     RadioGroup => "radio_group",
     RangeInput => "range",
+    CheckboxMultiple => "checkbox_multiple",
+    SelectMultiple => "select_multiple",
 }
 
 impl WidgetName {
@@ -82,7 +84,15 @@ impl WidgetName {
     /// with "not supported yet" rather than "unknown widget", since they are
     /// coming. Not variants: every exhaustive `match` would need an arm for
     /// a widget that cannot reach it.
-    pub const NOT_YET: &[&str] = &["select_multiple", "checkbox_multiple", "file"];
+    pub const NOT_YET: &[&str] = &["file"];
+
+    /// Whether this widget renders a whole SET (a `SetWidget` in `formoxus`)
+    /// rather than one value (a `LeafWidget`). `form!` reads it to call
+    /// `with_set_widget` rather than `with_widget`, to check the field is a
+    /// set, and to file a set's `choices:` under its items.
+    pub const fn renders_a_set(self) -> bool {
+        matches!(self, Self::CheckboxMultiple | Self::SelectMultiple)
+    }
 
     /// The widget `form!` calls `form_name`, or `None` if no rendered widget
     /// is called that (check [`Self::NOT_YET`] for why not).

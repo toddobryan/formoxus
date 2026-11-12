@@ -14,6 +14,7 @@ pub(crate) use button::ButtonInfo;
 pub(crate) use classes::ClassEntry;
 pub(crate) use field::{FieldBody, FieldSpec};
 pub(crate) use spec_path::{SpecPath, option_checks, probe, project, project_peeled};
+use widget::WidgetFit;
 pub(crate) use widget::WidgetRef;
 
 use std::collections::HashSet;
@@ -169,7 +170,8 @@ impl FormSpecInput {
         let fields: Vec<TokenStream2> = fsm
             .field_specs
             .iter()
-            .map(|f| f.builder_calls(&model_type))
+            .enumerate()
+            .map(|(index, f)| f.builder_calls(&model_type, index))
             .collect();
         let witnesses: Vec<TokenStream2> = fsm
             .field_specs
@@ -179,7 +181,8 @@ impl FormSpecInput {
         let type_checks: Vec<TokenStream2> = fsm
             .field_specs
             .iter()
-            .map(|f| {
+            .enumerate()
+            .map(|(index, f)| {
                 let path_span = f
                     .path
                     .segments
@@ -190,6 +193,7 @@ impl FormSpecInput {
                     &project(&f.path.segments),
                     &f.path.key(),
                     path_span,
+                    index,
                 );
                 let options = option_checks(&f.path.segments, &model_type);
                 quote! { #types #options }
@@ -320,9 +324,55 @@ impl Parse for FormSpecInput {
         for (span, e) in &entries {
             attrs.check_duplicate(*span, e)?;
         }
-        let entries = entries.into_iter().map(|(_, e)| e).collect();
+        let entries: Vec<Entry> = entries.into_iter().map(|(_, e)| e).collect();
+        check_items_beside_a_widget(&entries)?;
         Ok(FormSpecInput { target, entries })
     }
+}
+
+/// What `key[]` may not say when `key` has a widget (`WIDGETS_PLAN.md`
+/// decision D). Only a list or set has items, and a list takes no widget, so
+/// a widget on `key` beside a `key[]` entry is a set's widget, whichever kind
+/// of widget it is. That widget shows the items' choices, so they go on `key`
+/// with it, and it renders every item, so a widget on `key[]` would never
+/// show. Reported at the `key[]` entry's own key.
+fn check_items_beside_a_widget(entries: &[Entry]) -> Result<()> {
+    let fields: Vec<(&SpecPath, &FieldBody)> = entries
+        .iter()
+        .filter_map(|e| match e {
+            Entry::Field { path, body } => Some((path, &**body)),
+            _ => None,
+        })
+        .collect();
+    for (path, body) in &fields {
+        if body.widget.is_none() {
+            continue;
+        }
+        let key = path.key();
+        let items = format!("{key}[]");
+        let Some((_, items_body)) = fields.iter().find(|(p, _)| p.key() == items) else {
+            continue;
+        };
+        if let Some((choices_key, _)) = &items_body.choices {
+            return Err(syn::Error::new(
+                choices_key.span(),
+                format!(
+                    "`{key}` has a widget, which shows these choices: write `choices:` on \
+                     `{key}`, beside the widget, not on `{items}`"
+                ),
+            ));
+        }
+        if let Some(widget) = &items_body.widget {
+            return Err(syn::Error::new(
+                widget.name_span(),
+                format!(
+                    "`{key}`'s widget renders every item, so a widget on `{items}` would never \
+                     show: leave one of them out"
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// `path => { …keys…, sub => { … } }` as one entry per path that has keys of its
@@ -652,12 +702,111 @@ pub(crate) fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
 }
 
 impl FieldSpec {
+    /// The widget's builder call and the field's node (its `choices:` or
+    /// settings), where each goes by the widget's kind (`WidgetFit`): a leaf
+    /// widget's before the node, as always, and a set widget's after `set`,
+    /// returned third, since `with_set_widget` on a `Vec` needs `set` first.
+    /// A widget the field's shape decides goes there too, for symmetry; it is
+    /// never beside `set`.
+    fn widget_and_node_calls(
+        &self,
+        model: &Path,
+        key: &TokenStream2,
+        index: usize,
+    ) -> (
+        Option<TokenStream2>,
+        Option<TokenStream2>,
+        Option<TokenStream2>,
+    ) {
+        let marked_set = self.body.set.is_some();
+        let fit = self.body.widget.as_ref().map(|w| w.fit(marked_set));
+        let items_key = {
+            let items = format!("{}[]", self.path.key());
+            quote! { &::formoxus::path::ModelPath::<#model>::__new(#items) }
+        };
+        let (leaf_widget, set_widget) = match (&self.body.widget, fit) {
+            (Some(w), Some(WidgetFit::Leaf)) => {
+                let w = w.expr();
+                (Some(quote! { .with_widget(#key, #w) }), None)
+            }
+            (Some(w), Some(WidgetFit::Set)) => {
+                let w = w.expr();
+                (None, Some(quote! { .with_set_widget(#key, #w) }))
+            }
+            // Spanned on the widget, so a widget of the wrong kind is refused
+            // there, not across the whole `form!`.
+            (Some(w), Some(WidgetFit::ByShape)) => {
+                let at = w.name_span();
+                let w = w.expr();
+                let is_set = WidgetRef::is_set_const(index);
+                (
+                    None,
+                    // Through a binding spanned on the widget, since the
+                    // widget's expression mixes in call-site tokens, and an
+                    // argument with mixed spans is reported across `form!`.
+                    Some(quote_spanned! { at=>
+                        .__then(|__spec| {
+                            let __widget = #w;
+                            ::formoxus::field_kind::WidgetSlot::<#is_set>::add(__spec, #key, __widget)
+                        })
+                    }),
+                )
+            }
+            _ => (None, None),
+        };
+        // Spanned onto the field's path, so a field with no default
+        // field (a struct, an enum, a newtype) is reported at
+        // `address`, not across the whole `form!`.
+        let span = self
+            .path
+            .segments
+            .last()
+            .map_or_else(Span::call_site, spec_path::Segment::span);
+        let place = respan(project(&self.path.segments), span);
+        // At most one constructor: `FieldBody::parse` refuses `choices` beside a
+        // validated key, so a field never needs both.
+        // A set widget's `choices:` are its items' (decision D), filed under
+        // `key[]`, where the set's draft reads them. A widget the shape decides
+        // files them through `WidgetSlot`, which picks the field or its items.
+        let node = match (&self.body.choices, fit) {
+            // Through the slot the checks declared, which is `false` on a field
+            // that is not a set, where the widget's check reports and this does
+            // nothing.
+            (Some((_, choices)), Some(WidgetFit::Set)) => {
+                let is_set = WidgetRef::is_set_const(index);
+                let peeled = respan(project_peeled(&self.path.segments), span);
+                Some(quote_spanned! { span=>
+                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::set_choices(
+                        __spec, #items_key, |__m: &#model| &#peeled, #choices
+                    ))
+                })
+            }
+            (Some((_, choices)), Some(WidgetFit::ByShape)) => {
+                let is_set = WidgetRef::is_set_const(index);
+                Some(quote_spanned! { span=>
+                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::choices(
+                        __spec, #key, #items_key, |__m: &#model| &#place, #choices
+                    ))
+                })
+            }
+            (Some((_, choices)), _) => Some(quote_spanned! { span=>
+                .with_node(#key, ::formoxus::field_kind::choice_field_for(|__m: &#model| &#place, #choices))
+            }),
+            (None, _) => self.body.settings_tokens(span).map(|set| {
+                quote_spanned! { span=>
+                    .with_node(#key, ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set))
+                }
+            }),
+        };
+        (leaf_widget, node, set_widget)
+    }
+
     /// The `FormSpec` builder calls one field body contributes, in order:
     /// label, widget, choices, the field's settings (`with_node`), the
     /// attributes that only render (`with_attrs`), a list's `adder`, `set`
     /// (`treat_as_set`), `sort_by` and `feedback`.
     /// Each is omitted when the body says nothing about it.
-    fn builder_calls(&self, model: &Path) -> TokenStream2 {
+    fn builder_calls(&self, model: &Path, index: usize) -> TokenStream2 {
         // A `ModelPath`, which the builders take (decision H in `PATHS_PLAN.md`).
         // `__new` is hidden because a `ModelPath` must come from a path rustc
         // has checked against the model, and this one has: `form!` checks each
@@ -705,32 +854,7 @@ impl FieldSpec {
             };
             quote! { .with_field_validator(#key, #typed) }
         });
-        let widget = self.body.widget.as_ref().map(|w| {
-            let w = w.expr();
-            quote! { .with_widget(#key, #w) }
-        });
-        // Spanned onto the field's path, so a field with no default
-        // field (a struct, an enum, a newtype) is reported at
-        // `address`, not across the whole `form!`.
-        let span = self
-            .path
-            .segments
-            .last()
-            .map_or_else(Span::call_site, spec_path::Segment::span);
-        let place = respan(project(&self.path.segments), span);
-        // At most one constructor: `FieldBody::parse` refuses `choices` beside a
-        // validated key, so a field never needs both.
-        let node = match &self.body.choices {
-            Some((_, choices)) => Some(quote_spanned! { span=>
-                ::formoxus::field_kind::choice_field_for(|__m: &#model| &#place, #choices)
-            }),
-            None => self.body.settings_tokens(span).map(|set| {
-                quote_spanned! { span=>
-                    ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set)
-                }
-            }),
-        }
-        .map(|ctor| quote! { .with_node(#key, #ctor) });
+        let (leaf_widget, node, set_widget) = self.widget_and_node_calls(model, &key, index);
         let attrs = self
             .body
             .attrs_tokens()
@@ -786,7 +910,7 @@ impl FieldSpec {
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #help_text #widget #node #attrs #adder #set #sort_by #feedback #item #validator #min_items #max_items }
+        quote! { #label #help_text #leaf_widget #node #attrs #adder #set #set_widget #sort_by #feedback #item #validator #min_items #max_items }
     }
 }
 

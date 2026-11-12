@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `textarea` renders a single value, and this field is a set: give the set `checkbox_multiple` or `select_multiple`, or write `cities[]` to give every item a widget
+  --> tests/ui/form_leaf_widget_on_a_set.rs:16:33
+   |
+16 |             cities => { widget: textarea },
+   |                                 ^^^^^^^^ evaluation of `main::_` failed here
