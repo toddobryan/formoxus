@@ -62,6 +62,7 @@ pub fn TestForm(slug: String) -> Element {
         "live-select" => rsx! { LiveSelect {} },
         "live-off" => rsx! { LiveOff {} },
         "live-custom" => rsx! { LiveCustom {} },
+        "spike-upload" => rsx! { crate::spike_upload::SpikeUpload {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }

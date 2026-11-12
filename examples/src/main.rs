@@ -18,6 +18,7 @@
 use dioxus::prelude::*;
 
 mod examples;
+mod spike_upload;
 mod test_forms;
 
 use test_forms::TestForm;
