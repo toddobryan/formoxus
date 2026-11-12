@@ -5,6 +5,34 @@ metadata:
   type: project
 ---
 
+## ▶ 2026-11-12 (written late 2026-11-11): parts 1 and 2 MERGED; next is part 3, `file`
+
+**Where things are.** `range` (part 1) and `multi_pick` (part 2) are both on `main`,
+fast-forwarded; `multi_pick` is deleted locally and on origin. `main` = `fdee55a` plus
+this note's commit. ci 1350, e2e 79, both green at the merge. Four of the plan's widgets
+are done: `range`, `checkbox_multiple`, `select_multiple` (and decision T, the live
+re-check on Add/Remove, and `form!`'s `WidgetSlot` dispatch, all built on the way).
+
+**Next: `WIDGETS_PLAN.md` part 3, `file`, on a new branch `file`.** Box 10 is Claude's: a
+THROWAWAY spike before anything is built. One server function in the examples app
+taking `MultipartFormData` (trap 13: the examples app has none yet), one file input,
+and an e2e test driving it with `set_input_files`. It must answer trap 14 (can the wire
+values ride in the same multipart request, and how: a hidden input holding the JSON,
+or parts built by hand), confirm a JSON part and a file part arrive in either order,
+and measure what happens past axum's 2 MB default (trap 12). Findings go into the
+plan, and decision J (multipart submit) is revisited if they say so, before box 11.
+Decision K (the model type, `Upload`) is to be revisited AT box 10 too: buffering whole
+files server-side is the worry (150 students x 20 MB), against streaming to disk with
+a handle in the model. Box 11 is Todd's (the runtime), 12-13 Claude's, 14 Todd merges.
+
+**Then, after `file`:** the MVP road (`mvp_scope.md`): #22 + #23, grammar docs, the doc
+pass, `wasm-opt`; see `pre_publish_checklist.md`.
+
+**Loose ends, none blocking:** a stale `paths` branch still exists locally and on
+origin although `paths` was merged 2026-11-11 (left alone; ask before deleting). The
+stale comment in `set_node.rs` near the old "No required marker… #14" note. A dev's
+widget of the wrong kind reports twice (box 8 note in the plan), accepted.
+
 ## ▶ 2026-11-11, at home, latest: WIDGETS_PLAN part 2 boxes 7-9 DONE on `multi_pick`; Todd merges
 
 Box 7 (Todd's CheckboxMultiple, Claude's SelectMultiple, 7i tests, the live re-check on

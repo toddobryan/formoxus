@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-10 end**: `paths` boxes 1–8 DONE, pushed, ci+e2e green; next box 9 (docs/memory, Claude), box 10 merge (Todd)
+- [**START HERE: next session**](next_session.md) — **2026-11-12**: WIDGETS_PLAN parts 1+2 merged to main, `multi_pick` deleted; next part 3 `file`, box 10 spike (Claude, branch `file`)
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
