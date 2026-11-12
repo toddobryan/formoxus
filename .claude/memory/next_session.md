@@ -28,8 +28,7 @@ a handle in the model. Box 11 is Todd's (the runtime), 12-13 Claude's, 14 Todd m
 **Then, after `file`:** the MVP road (`mvp_scope.md`): #22 + #23, grammar docs, the doc
 pass, `wasm-opt`; see `pre_publish_checklist.md`.
 
-**Loose ends, none blocking:** a stale LOCAL `paths` branch remains (origin's is
-gone) although `paths` was merged 2026-11-11 (left alone; ask before deleting). The
+**Loose ends, none blocking:** The
 stale comment in `set_node.rs` near the old "No required marker… #14" note. A dev's
 widget of the wrong kind reports twice (box 8 note in the plan), accepted.
 
