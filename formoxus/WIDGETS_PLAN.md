@@ -1000,8 +1000,55 @@ several?
   sink needs an `abort` that throws away what it has written (for S3, aborting the
   multipart upload); and a sink writing to the final place stores the file before the
   rest of the form is known to be valid, so a later validation failure has to abort
-  it too. (d) yes: Todd, "we have to, if we want to return an error correctly." (a)
-  is still being discussed, and (b) follows from it.
+  it too. (d) yes: Todd, "we have to, if we want to return an error correctly."
+
+  **(a) decided (Todd, 2026-11-12): (b), a payload type formoxus owns.** The comparison
+  that settled it: dioxus's `MultipartFormData` can only be built from a submit event
+  whose target is the `<form>`, so only the submit button could upload, and the event
+  would have to be threaded through `run_button` and `using_fns!`; the wire values
+  would have to live in a hidden input, so what is sent is what the DOM held at the
+  last render rather than `to_wire()` at the moment of the submit; and the file sent
+  is whatever the `<input>` holds, which a re-created element silently empties
+  (trap 11). With formoxus's own type the dev writes
+  `form.absorb(f(form.to_multipart()).await?)`, the same shape as `to_wire()`.
+
+  **And it must work on desktop and mobile Dioxus too (Todd, 2026-11-12),** because
+  nothing formoxus has written so far is web-only, and the native path is small. On
+  wasm the client builds a `web_sys::FormData` and sends it with `send_js_value`, as
+  the spike did. On native (`not(target_arch = "wasm32")`) it builds a
+  `reqwest::multipart::Form` from each `FileData::path()` and sends it with
+  `ClientRequest::new_reqwest_request()`, which is what dioxus's own `send_multipart`
+  does; neither is behind a dioxus-fullstack feature. Caveat, not yet checked:
+  formoxus has never been RUN on desktop or mobile. The code has nothing web-only in
+  it (no `web_sys`, `wasm_bindgen` or `target_arch`; its two `document::eval`s are
+  supported in Dioxus's webview platforms), but that is an expectation, not a test.
+  Box 13 adds a desktop smoke run of an upload form, and checks what `FileData::path()`
+  is on mobile, where a picked file may not be an ordinary path.
+
+  **(b), revisited once (a) and the native path were settled: formoxus needs no
+  features of its own after all,** which replaces the recommendation above. Checked in
+  dioxus-fullstack 0.7.10's manifest and `lib.rs`:
+  1. The server half needs axum's `Multipart`. dioxus-fullstack depends on axum with
+     its `multipart` feature UNCONDITIONALLY, on every target, and re-exports
+     `axum::extract` unconditionally (`pub use axum::{body, extract, response,
+     routing}`; only the whole-`axum` re-export is behind `server`). So
+     `dioxus_fullstack::extract::Multipart` is there in every build, and the
+     spike's web build already compiled against `dioxus::fullstack::extract`.
+  2. The native client half needs `ClientRequest::new_reqwest_request()` and
+     `reqwest`, both ungated.
+  3. Only the wasm client half is gated: `send_js_value` is behind dioxus-fullstack's
+     `web` feature, which is nothing but `dep:web-sys`. formoxus can switch that on
+     itself in a `[target.'cfg(target_arch = "wasm32")'.dependencies]` entry, with its
+     own `web-sys`. That is sound because every wasm Dioxus build is the web platform;
+     desktop and mobile are native.
+
+  So the client code is keyed on `target_arch = "wasm32"`, there is no feature for a dev
+  to forget to forward, and nothing changes in a dev's `Cargo.toml`. The cost: formoxus
+  gains `dioxus-fullstack` as a dependency (it has only `dioxus-fullstack-core` today),
+  which brings axum and reqwest into a dev's build even if the app has no server. A
+  formoxus form without a server already gets little from `WireForm`, so that dev is
+  probably rare; an opt-in `upload` feature is the fallback if one shows up.
+  **Awaiting Todd.**
 
   **(d) The server's `max_size:` check drains past the limit and then answers with a
   form error**, as measured above, rather than stopping. Recommended: yes. Formoxus's
