@@ -201,6 +201,7 @@ pub struct SetWidgetProps {
     pub choices: Vec<Choice>,
     pub chosen: Vec<String>,
     pub required: bool,
+    pub max_items: Option<usize>,
     pub on_edit: Callback<Edit>,
 }
 

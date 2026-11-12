@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a set of exactly one item is one value, not a set: make the field the item's own type, which a `select` or `radio_group` picks
+  --> tests/ui/form_set_of_exactly_one.rs:15:37
+   |
+15 |             tags => { min_items: 1, max_items: 1 },
+   |                                     ^^^^^^^^^ evaluation of `main::_` failed here

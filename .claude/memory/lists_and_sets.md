@@ -73,3 +73,5 @@ order, declaration order (`DeclaredOrder` in `set_node.rs`), both at run time
 (`SetOrder::default_for`) and in `form!`'s const check (`items_have_default_order`).
 A newtype over a unit enum still needs `sort_by`. Before this, only scalar sets
 sorted without one.
+
+**2026-11-11, decision T (WIDGETS_PLAN):** `max_items: 1` is refused on a list or set — exactly one (with `min_items` >= 1) should be a `T`, none or one an `Option<T>`. Compile error for a literal in `form!`, build panic otherwise. Also that day: every Add/Remove re-checks the container's own count live (`check_item_count` in `form.rs`).

@@ -72,6 +72,14 @@ branch merged when green, not one long one (decision N).
   dev would have hit it. Declaration order is also the order `choices` lists the
   variants in, so a widget's ticked items line up with its boxes. A dev who wants
   another order (alphabetical, say) still writes `sort_by:`.
+- **T (Todd, 2026-11-11, from question P's `min_items: 1, max_items: 1` trap): a list or
+  set of at most one item is refused.** Exactly one (`max_items: 1` with `min_items` of
+  1 or more) should be the item's own type `T`; none or one (`max_items: 1` alone)
+  an `Option<T>`. A set's message adds that a `select` or `radio_group` picks it.
+  `form!` refuses a literal `max_items: 1` at compile time (`at_most_one_checks`,
+  goldens `form_{list,set}_of_{exactly,at_most}_one`); the build panics for a
+  hand-built spec or a non-literal limit (`refuse_at_most_one` in `build.rs`). Two
+  (`min = max = 2`) is a real "pick exactly two" and stays allowed.
 
 ### Decision G′: a family of widget traits
 
@@ -637,6 +645,180 @@ several?
 - [ ] **7.** (Todd) `CheckboxMultiple` and `SelectMultiple`. Each change becomes
   `AddItem { value: Some(ItemValue::raw(…)) }` and `RemoveItem`s, highest index first
   (trap 6). The select reads `FormEvent::values()`, never `value()` (trap 3).
+
+  **Written out (Todd asked, 2026-11-11).** Questions P–S, below the steps, are all
+  answered, and the steps already follow the answers. Box 6's hand-built-spec tests are the way to try
+  each widget before box 8 lets `form!` name it: swap `PropsAsText` for the real one.
+
+  - **7a. Two files, two unit structs.** `widgets/checkbox_multiple.rs` with `pub struct
+    CheckboxMultiple;` and `widgets/select_multiple.rs` with `pub struct SelectMultiple;`,
+    each `#[derive(Clone, Debug, Default, PartialEq)]` like `RadioGroup`, each `pub mod`
+    in `widgets.rs` and re-exported from it beside `RadioGroup` and `Select`. Each
+    implements `Widget` and `SetWidget`, and NOT `LeafWidget`: that is what keeps either
+    from type-checking as `widget:` on a `String` (decision G′).
+  - **7b. `NAME` as a string literal for now:** `const NAME: &'static str =
+    "checkbox_multiple";` and `"select_multiple"`. Every other built-in writes
+    `WidgetName::X.form_name()`, but both names are still in `WidgetName::NOT_YET`, and
+    adding them as `WidgetName` rows is box 8's work, because every exhaustive `match` on
+    `WidgetName` in `form!` then needs an arm (the reason `NOT_YET` gives for not being
+    variants). Box 8 adds the rows, takes the names out of `NOT_YET`, and switches these
+    two consts to `WidgetName::…form_name()`; the existing test that each type's `NAME`
+    is its row's `form_name` then covers them.
+  - **7c. `PARTS` and `EXTENDS`.** `CheckboxMultiple` is a fieldset of choices exactly as
+    `RadioGroup` is, so it takes RadioGroup's parts, `[Fieldset, Legend, Div, Input,
+    Label]`, and `EXTENDS = AttrSet::valid_on(HtmlElement::Fieldset)`. `SelectMultiple`
+    is one labelled control, as `Select` is (question R), so `[Div, Label, Select]` and
+    `EXTENDS = valid_on(HtmlElement::Select)`. No attributes reach either
+    yet (step 3c: `form!` takes none on a set), so `EXTENDS` only matters once box 8
+    decides on `size` and `disabled`.
+  - **7d. Their classes, in both presets.** `classes.rs` keeps one table of every
+    built-in's parts (`BUILTINS`, the `parts_of::<W>()` list ending with `RangeInput`), and
+    `fx_part` (and the bare preset's equivalent) panics on a `(NAME, Tag)` pair it was
+    never told about. So add `parts_of::<CheckboxMultiple>()` and
+    `parts_of::<SelectMultiple>()` to `BUILTINS`, and give `fx_part` arms for the
+    checkbox group's five parts, modelled on RadioGroup's: `fx-form-field
+    fx-checkbox-multiple` with `fx-invalid` on the fieldset, `fx-legend fx-field-label`,
+    `fx-choice`, `fx-control fx-checkbox`, `fx-choice-label`. The select's three fall
+    through to the generic `Div`/`Label` arms and need only a `Select` arm if it should
+    differ from `Select`'s. `parts_of` is bounded on `Widget`, not `LeafWidget`, since the
+    split, so it takes a `SetWidget` as it is. Record the new class names in
+    `css_class_vocabulary.md`.
+  - **7e. `max_items` in `SetWidgetProps`** (question P). Add `pub max_items:
+    Option<usize>` beside `required`, filled in `SetNode::render`'s widget branch from
+    `self.items.max_items()`, as `required` is from `min_items()`. Fix `PropsAsText` in
+    `sets.rs` to print it, and one test that a set with `max_items` hands it over.
+  - **7f. `CheckboxMultiple::render`.** As every built-in does, `render` returns a
+    `#[component]` (`CheckboxMultipleView { widget_props: props }`) and does the work
+    there, so the errors read subscribes that component and not the whole form. The
+    view renders, in order:
+    - A `<fieldset>` with the `Fieldset` part's class and `aria-describedby` from
+      `described_by(&props.id, props.help_text.is_some(), props.is_invalid())` (the free
+      function in `widgets/help.rs`, as `SetNode` calls it; the `described_by()` method
+      step 3b listed was not added), but **no `aria-invalid` and no `role`**: a bare fieldset is
+      role `group`, where ARIA leaves `aria-invalid` undefined, which is why `SetNode`
+      leaves it off its own fieldset (`set_node.rs`, the comment at the top of
+      `render`). RadioGroup sets `role="radiogroup"` to be allowed it; there is no
+      checkbox-group role to do the same.
+    - A `<legend>` with the label and, when `props.required`, `required_marker`. This
+      is the only place "pick at least one" shows: **no checkbox gets a `required`
+      attribute**, because on a checkbox `required` means THAT box must be ticked
+      (formoxus's own #6), and HTML has no "at least one of these" for a group.
+      `min_items` is held by the set's validation, as it is for every set.
+    - `field_help(&props.id, props.help_text.as_deref(), &props.classes)`.
+    - One `<div>` per choice, in `props.choices` order, holding `input { type:
+      "checkbox", id: "{props.id}-{index}", value: "{choice.value}", checked, onchange }`
+      and `label { for: "{props.id}-{index}", "{choice.display}" }`, as RadioGroup's
+      radios are built outside the `rsx!` (`radio_group.rs`, the `radios` vec).
+      `checked` is `props.chosen.contains(&choice.value)`. **No `name`** (question Q).
+      `disabled` is `!checked && props.max_items.is_some_and(|max| props.chosen.len() >= max)`
+      (question P): at the limit, only the ticked boxes stay live, so the user can untick
+      and pick another, as the Add button does.
+    - `onchange`: `e.checked()` says which way it went. Ticked:
+      `on_edit.call(Edit::AddItem { path: props.path.clone(), before: None, value:
+      Some(ItemValue::raw(choice.value.clone())) })`. Unticked: `Edit::RemoveItem {
+      path, index }`, where `index` is `props.chosen.iter().position(|e| *e ==
+      choice.value)`, looked up while rendering and moved into the closure. A snapshot
+      index is safe because every edit re-renders the form and so rebuilds `chosen`.
+    - `FieldErrors { field_id: &props.id, paths: vec![props.path.clone()], errors:
+      props.errors, classes }`, the set's own errors only (question S).
+  - **7g. `SelectMultiple::render`**, the same way, through `SelectMultipleView`:
+    `select { multiple: true, id, class, aria-describedby, aria-invalid, onchange }` with
+    one `option { value, selected: props.chosen.contains(&choice.value), display }` per
+    choice. Unlike the fieldset, a `<select multiple>` is role `listbox`, which DOES take
+    `aria-invalid`, so it gets it, from `props.validity()`, as a leaf control does. No
+    `name` (Q). An unselected option is `disabled` at `max_items`, as a box is in 7f
+    (P). It is laid out by `field_row`, as `Select` is (R): a `<label for>`, the marker
+    when `required`, the caption and the set's own errors in their usual places. `onchange` reads **`e.values()`** (trap 3: `value()` is only the
+    first selected option), takes the `Text` of each `(name, FormValue)` pair as the
+    selected entries `now`, and diffs them against the snapshot `props.chosen`:
+    - every index `i` with `chosen[i]` not in `now`, **highest first** (trap 6:
+      removing index 0 first shifts index 2 to 1), each sent as a `RemoveItem`;
+    - then every entry in `now` not in `chosen`, each sent as an `AddItem` with
+      `ItemValue::raw`. Adds after removes, so no add's index is ever shifted, and an
+      add has no index anyway.
+    One change event can deselect several options (shift-click, ctrl-click), which is
+    the whole reason for the diff. Check what `values()` gives for a select with no
+    `name` before relying on it; the pairs' names are not needed, but an empty name must
+    not drop the pair.
+    **Built 2026-11-11 (Claude, Todd asked).** Checked in `dioxus-web` 0.7.10: on a
+    `<select>`, `values()` is one `(select.name(), Text)` pair per selected option, so
+    no `name` gives pairs named `""`, none dropped. `required` IS emitted on the select
+    (unlike a checkbox): on `<select multiple>` it means at least one selected, which is
+    `min_items >= 1`. `field_row` now takes `&WidgetCommon`. The diff is a pure
+    `edits_between` with inline tests; the select shares `fx-control fx-select`.
+  - **7h. The live-check question, settled by reading, not assumed.** A leaf widget's
+    `FieldHandle` reports blur and input to the form for live validation; a set widget
+    has no `FieldHandle` (step 3c, deliberately). Each `AddItem`/`RemoveItem` already
+    goes through `Form::edit`, which updates the set's errors. Confirm that ticking the
+    last box off under `min_items: 1` shows the set's error right away, or that it waits
+    for a submit, and write down which; that is the open question box 9 tests.
+    **Settled 2026-11-11: it waits.** `Form::edit` drops errors on paths the edit
+    removed and checks nothing, and a set widget has no `FieldHandle`. So a tick that
+    meets `min_items` leaves a submit's "Add at least 1 item." showing, and unticking
+    the last box shows nothing until a submit. Pinned by two `_yet` tests in `sets.rs`
+    (`a_ticked_box_leaves_…`, `unticking_the_last_box_…`); box 9 decides.
+    **Fixed the same day (Todd: "do it now", Claude wrote it):** `apply_edit` ends with
+    `check_item_count`, which after any `AddItem`/`RemoveItem` runs `check_live` on the
+    container's path when live validation is on (a tick is a write and a blur at once),
+    and only drops a clean result when it is off. One place, so a dev's set widget and a
+    list's own Add/Remove get it too. `is_live` is resolved in `use_form` and in
+    `Form::edit`. The `_yet` tests became `a_ticked_box_clears_…`,
+    `unticking_the_last_box_says_so_at_once`, and a select one; `item_counts.rs` has the
+    list side. ci 1331.
+  - **7i. Try each through a hand-built spec.** Box 6's `sets.rs` tests, with the real
+    widget in place of `PropsAsText`, and a `render_to_html` check of the markup. Box 9
+    writes the real suite and e2e tests once box 8 lets `form!` name them.
+    **Done 2026-11-11** (ci 1327): markup, no `name`/`aria-invalid`/`role`/`required`
+    on the boxes, locking at `max_items`, tick and untick through `Harness`, the
+    select's markup and `required`, and one select change swapping several options
+    (new `Harness::select`).
+
+  **Answered 2026-11-11: P, Q, R and S all as recommended.** On Q: a native post
+  already cannot round-trip a formoxus form (no `action`, `onsubmit` prevents default,
+  list keys ride only in `collect_values`), so no `name` loses nothing; progressive
+  enhancement, if ever wanted, is its own issue covering lists and variants too. Todd's note on S:
+  the only errors these sets should ever show are `min_items` and `max_items`, plus
+  one rare case: the choices change between when the client loads them and when the
+  submit reaches the server, so an entry that was a valid choice no longer is.
+
+  **Question P: what happens at `max_items`.** `max_items` is checked by validation,
+  not refused by `AddItem` (`items.rs`: `over_max` is only for a forged wire), and the
+  set's Add button stops at the limit itself (`at_most(item_count, max_items)` in
+  `item_buttons.rs`). A checkbox group that lets the user tick past the limit only
+  says so after validation. **Recommended:** give `SetWidgetProps` a `max_items:
+  Option<usize>`, as `AddItemProps` already has, and have `CheckboxMultiple` disable
+  every unticked box once `chosen.len()` reaches it, and `SelectMultiple` every
+  unselected option. That is the adder's own behaviour, so a set says "no more" the
+  same way whichever way it renders. The alternative is to leave both enabled and let
+  the set's "at most N" error show.
+
+  **Question Q: whether the checkboxes and the select carry a `name`.** Every leaf
+  control carries `name: "{path}"`, and `VariantSelect` does too (#17, so a test finds
+  it by name). Here the only path there is, the set's, is where the wire puts the item
+  KEYS (`cities` = `#0,#2`). A native post of the form would send `cities=paris&cities=rome`
+  there, which `Items::distribute_values` would read as keys and reject. Nothing in
+  formoxus reads a native post today (`distribute_form_values` has no caller), so this is
+  harmless now and wrong the day something does. **Recommended: no `name`.** e2e tests
+  find a checkbox by role and label (`get_by_role("checkbox", name)`), which is what
+  `e2e_harness.md` recommends anyway.
+
+  **Question R: what labels `SelectMultiple`.** It is one control, so like `Select` it
+  could be a `<div>` holding a `<label for>` and the `<select>`, built with `field_row`,
+  which also gives it the caption, the required marker and the error list in their
+  usual places. Or it could be a fieldset and legend like the checkbox group. **Recommended:
+  `field_row`**, as `Select`: a `<label>` names one control better than a legend
+  does, and a screen reader then reads the label on focus. Decision H's "the fieldset,
+  legend, hint and the set's own error list stay" was written with the checkbox group
+  in mind; for the select it would become "label, hint and the set's own error list".
+
+  **Question S: where an ITEM's error shows.** Both widgets render the set's own errors.
+  An item can still have one: an entry outside `choices` (only from a forged wire, since
+  the widgets offer nothing else), or a dev's validator naming one item. The widgets do
+  not know item keys (`SetWidgetProps` has entries, not keys), so they cannot point
+  `FieldErrors` at `cities.#2`. **Recommended:** leave it for now and say so in box 9's
+  docs: a forged entry is refused by validation either way, and a validator that blames
+  one pick of a multi-pick can blame the set instead. If it is wanted later,
+  `SetWidgetProps` gains each item's key beside its entry.
 
 - [ ] **8.** (Claude) The `form!` side: `widget:` on a set resolves to a `SetWidget`
   (the two built-ins by name; a dev's by path, with an `on_unimplemented` message for

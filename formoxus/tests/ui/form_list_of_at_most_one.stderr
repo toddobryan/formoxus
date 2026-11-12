@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a list of at most one item is an optional value, not a list: make the field an `Option` of the item's type
+  --> tests/ui/form_list_of_at_most_one.rs:14:26
+   |
+14 |             answers => { max_items: 1 },
+   |                          ^^^^^^^^^ evaluation of `main::_` failed here

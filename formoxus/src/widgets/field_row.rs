@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{FixedKey, Tag};
 
 use crate::classes::Classes;
-use crate::widgets::{FieldErrors, Widget, WidgetProps, field_help};
+use crate::widgets::{FieldErrors, Widget, WidgetCommon, field_help};
 
 /// Which side of its form control a field's caption goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,8 +36,12 @@ pub enum LabelSide {
 /// A dev's own widget calls it the same way the built-ins do, with its own
 /// type as `W`: that keys the wrapper's and caption's classes to the widget's
 /// slots in `Classes`, so a custom widget is styled like any other.
+///
+/// It takes the [`WidgetCommon`] part of the props, so a leaf widget passes
+/// `&props` and the `Deref` hands it over, and a set widget with one control
+/// (`SelectMultiple`) uses it too.
 pub fn field_row<W: Widget>(
-    props: &WidgetProps,
+    props: &WidgetCommon,
     marked: bool,
     side: LabelSide,
     control: Element,

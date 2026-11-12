@@ -90,6 +90,7 @@
 //!   SHAPE rather than a value: which variant is chosen, and the items of a list.
 //! - [`errors`] — the error list rendered under every widget.
 
+pub mod checkbox_multiple;
 pub mod errors;
 pub(crate) mod field_handle;
 pub mod field_row;
@@ -99,6 +100,7 @@ pub mod input;
 pub mod item_buttons;
 pub mod radio_group;
 pub mod select;
+pub mod select_multiple;
 pub mod set_item;
 pub mod textarea;
 pub mod types;
@@ -109,6 +111,7 @@ pub(crate) mod widget_props;
 // Flat, like the crate root: a caller reaching for `Choice` should not
 // have to know which file it happens to live in.
 pub use crate::field_attrs::Validity;
+pub use checkbox_multiple::CheckboxMultiple;
 pub use errors::FieldErrors;
 pub use field_handle::FieldHandle;
 pub use field_row::{LabelSide, field_label, field_row, required_marker};
@@ -124,6 +127,7 @@ pub use item_buttons::{
 };
 pub use radio_group::RadioGroup;
 pub use select::{ABSENT_DISPLAY, Select};
+pub use select_multiple::SelectMultiple;
 pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
 pub use types::{Choice, InputType};

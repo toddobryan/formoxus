@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-## ▶ 2026-11-11, at home, last: box 6 DONE (3a-3h committed b30a177, 3i uncommitted); next box 7
+## ▶ 2026-11-11, at home, last: box 6 DONE (b30a177, 6745548, pushed); box 7 written out in the plan (uncommitted), P–S all answered as recommended; Todd builds box 7 next
 
 3i (decision O, unit enum sets sort in declaration order) built by Claude at Todd's
 request; `just ci` 1313. It also fixed `form!`'s const order check, which had the

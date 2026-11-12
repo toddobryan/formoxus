@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a set of at most one item is an optional value, not a set: make the field an `Option` of the item's type, which a `select` or `radio_group` picks
+  --> tests/ui/form_set_of_at_most_one.rs:15:28
+   |
+15 |             tags => { set, max_items: 1 },
+   |                            ^^^^^^^^^ evaluation of `main::_` failed here

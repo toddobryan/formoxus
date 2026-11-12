@@ -15,9 +15,9 @@ use indexmap::IndexMap;
 
 use crate::buttons::ButtonType;
 use crate::widgets::{
-    CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput, MonthInput,
-    NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput, Select, TelInput, TextInput,
-    Textarea, TimeInput, UrlInput, WeekInput, Widget,
+    CheckboxInput, CheckboxMultiple, ColorInput, DateInput, DatetimeLocalInput, EmailInput,
+    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput,
+    Select, SelectMultiple, TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
 };
 
 /// Which slot a class is for: one part of one widget, by the widget's
@@ -459,7 +459,7 @@ impl Default for Classes {
 /// Every built-in widget's `NAME` and `PARTS`, what [`Classes::fx`] loops
 /// over. Named one by one, since nothing can iterate "every type that
 /// implements `Widget`"; the array's length makes the compiler count.
-const BUILTINS: [(&str, &[Tag]); 19] = [
+const BUILTINS: [(&str, &[Tag]); 21] = [
     parts_of::<TextInput>(),
     parts_of::<PasswordInput>(),
     parts_of::<NumberInput>(),
@@ -479,6 +479,8 @@ const BUILTINS: [(&str, &[Tag]); 19] = [
     parts_of::<Select>(),
     parts_of::<RadioGroup>(),
     parts_of::<RangeInput>(),
+    parts_of::<CheckboxMultiple>(),
+    parts_of::<SelectMultiple>(),
 ];
 
 /// Whether `W` renders a class on `tag`: `tag` is in `W::PARTS`. The one
@@ -515,20 +517,29 @@ fn fx_part(widget_name: &'static str, tag: Tag) -> Slot {
         (RadioGroup::NAME, Tag::Fieldset) => {
             Slot::new("fx-form-field fx-radio-group").with_invalid("fx-invalid")
         }
-        (RadioGroup::NAME, Tag::Legend) => Slot::new("fx-legend fx-field-label"),
-        (RadioGroup::NAME, Tag::Div) => Slot::new("fx-choice"),
+        (RadioGroup::NAME | CheckboxMultiple::NAME, Tag::Legend) => {
+            Slot::new("fx-legend fx-field-label")
+        }
+        (RadioGroup::NAME | CheckboxMultiple::NAME, Tag::Div) => Slot::new("fx-choice"),
         (RadioGroup::NAME, Tag::Input) => Slot::new("fx-control fx-radio"),
-        (RadioGroup::NAME, Tag::Label) => Slot::new("fx-choice-label"),
+        (RadioGroup::NAME | CheckboxMultiple::NAME, Tag::Label) => Slot::new("fx-choice-label"),
         (RangeInput::NAME, Tag::Input) => Slot::new("fx-control fx-range"),
         (RangeInput::NAME, Tag::Output) => Slot::new("fx-range-value"),
+        (CheckboxMultiple::NAME, Tag::Fieldset) => {
+            Slot::new("fx-form-field fx-checkbox-multiple").with_invalid("fx-invalid")
+        }
+        (CheckboxMultiple::NAME | CheckboxInput::NAME, Tag::Input) => {
+            Slot::new("fx-control fx-checkbox")
+        }
         // Every other widget: the wrapper carries the invalid mark, the label
         // and the control do not.
         (_, Tag::Div) => Slot::new("fx-form-field").with_invalid("fx-invalid"),
         (_, Tag::Label) => Slot::new("fx-field-label"),
-        (CheckboxInput::NAME, Tag::Input) => Slot::new("fx-control fx-checkbox"),
         (_, Tag::Input) => Slot::new("fx-control fx-input"),
         (Textarea::NAME, Tag::Textarea) => Slot::new("fx-control fx-textarea"),
-        (Select::NAME, Tag::Select) => Slot::new("fx-control fx-select"),
+        // The same class for one pick and many: a stylesheet that needs
+        // them apart has `select[multiple]`.
+        (Select::NAME | SelectMultiple::NAME, Tag::Select) => Slot::new("fx-control fx-select"),
         (widget, tag) => panic!(
             "`Classes::fx()` has no class for {widget}'s `{}`",
             tag.as_str()

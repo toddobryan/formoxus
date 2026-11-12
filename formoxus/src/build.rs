@@ -618,6 +618,8 @@ fn list_node(
     // than Add and an error (#14). Only a BLANK one: a list read from a
     // model keeps what the model has, and says so if it is short.
     let min_items = spec.and_then(|s| s.min_items);
+    let max_items = spec.and_then(|s| s.max_items);
+    refuse_at_most_one(prefix, "list", shape, min_items, max_items);
     let items = if peek.is_none() && walk.mode == FormMode::Blank {
         (0..min_items.unwrap_or(0))
             .map(|i| {
@@ -642,7 +644,7 @@ fn list_node(
         validator: spec.and_then(|s| s.validator.clone()),
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
-        items: Items::new(shape, items).with_limits(min_items, spec.and_then(|s| s.max_items)),
+        items: Items::new(shape, items).with_limits(min_items, max_items),
     })
 }
 
@@ -656,6 +658,39 @@ pub(crate) fn retain_first<T>(items: &mut Vec<T>, same: impl Fn(&T, &T) -> bool)
         }
     }
     *items = kept;
+}
+
+/// A list or set (`what`) that may hold at most one item is not one: exactly
+/// one is a `T`, and none or one is an `Option<T>`. A `T` is picked by a
+/// `select` or `radio_group` where a set took a `select_multiple` or
+/// `checkbox_multiple`, and a list of structs becomes the struct's own fields.
+/// `form!` refuses a literal `max_items: 1` at compile time; this is the
+/// backstop for a hand-built spec and for limits that are not literals.
+fn refuse_at_most_one(
+    prefix: &NodePath,
+    what: &str,
+    item: &Shape,
+    min_items: Option<usize>,
+    max_items: Option<usize>,
+) {
+    if max_items != Some(1) {
+        return;
+    }
+    let picker = if what == "set" {
+        ", which a `select` or `radio_group` picks"
+    } else {
+        ""
+    };
+    match min_items {
+        None | Some(0) => panic!(
+            "{prefix}: a {what} of at most one `{item}` is an optional value, not a {what}: \
+             make the field an `Option<{item}>`{picker}"
+        ),
+        Some(_) => panic!(
+            "{prefix}: a {what} of exactly one `{item}` is one value, not a {what}: make the \
+             field a `{item}`{picker}"
+        ),
+    }
 }
 
 fn set_node(
@@ -723,12 +758,12 @@ fn set_node(
              `{name}[]` to give every item a widget",
         );
     }
+    let min_items = spec.and_then(|s| s.min_items);
+    let max_items = spec.and_then(|s| s.max_items);
+    refuse_at_most_one(prefix, "set", shape, min_items, max_items);
     // Never pre-built from `min_items`: blank items in a set would be
     // duplicates of each other. Its draft is the way in.
-    let mut items = Items::new(shape, items).with_limits(
-        spec.and_then(|s| s.min_items),
-        spec.and_then(|s| s.max_items),
-    );
+    let mut items = Items::new(shape, items).with_limits(min_items, max_items);
     let draft = items.new_draft(prefix, walk.specs);
     Box::new(SetNode {
         name: name.to_string(),

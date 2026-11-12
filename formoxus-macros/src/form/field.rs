@@ -501,6 +501,7 @@ impl FieldBody {
         }
         checks.push(self.list_checks(&shape, key));
         checks.push(self.set_checks(&shape));
+        checks.push(self.at_most_one_checks(&shape));
         checks.push(self.order_checks(&shape, path_span));
         checks.push(self.feedback_checks(&shape));
         checks.push(self.item_checks(&shape));
@@ -598,6 +599,57 @@ impl FieldBody {
                 "`set` applies only to a list of single values (a string, number, bool, enum \
                  without data, or newtype over one): a set's items are shown, not edited"
             );
+        }
+    }
+
+    /// A literal `max_items: 1` on a list or set, spanned on that key: one
+    /// that holds at most one item is not a collection. Exactly one
+    /// (`min_items` at least 1) is the item type itself, and none or one is an
+    /// `Option` of it. A field marked `set` is a set whatever its type, so it
+    /// gets the set's message and never the list's.
+    ///
+    /// Literals only, as the `min > max` check above is: a `max_items: LIMIT`
+    /// might be any expression, which a `const` cannot read, so a non-literal
+    /// reaches the build's own panic instead (`refuse_at_most_one`).
+    fn at_most_one_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let Some((max_key, max)) = &self.max_items else {
+            return TokenStream2::new();
+        };
+        if int_literal(max) != Some(1) {
+            return TokenStream2::new();
+        }
+        let exactly_one = match &self.min_items {
+            None => false,
+            Some((_, min)) => match int_literal(min) {
+                Some(min) => min >= 1,
+                None => return TokenStream2::new(),
+            },
+        };
+        let message = |what: &str| {
+            if exactly_one {
+                format!(
+                    "a {what} of exactly one item is one value, not a {what}: make the field \
+                     the item's own type"
+                )
+            } else {
+                format!(
+                    "a {what} of at most one item is an optional value, not a {what}: make the \
+                     field an `Option` of the item's type"
+                )
+            }
+        };
+        let set_message = format!(
+            "{}, which a `select` or `radio_group` picks",
+            message("set")
+        );
+        let list_message = message("list");
+        let fk = quote! { ::formoxus::field_kind };
+        let marked_set = self.set.is_some();
+        quote_spanned! { max_key.span()=>
+            #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+            const _: () = ::core::assert!(!(#marked_set || #fk::is_set(#shape)), #set_message);
+            #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
+            const _: () = ::core::assert!(#marked_set || !#fk::is_list(#shape), #list_message);
         }
     }
 

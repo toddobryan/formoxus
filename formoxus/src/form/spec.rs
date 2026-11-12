@@ -210,6 +210,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// The most items the list or set at `path` may have (`max_items:` in
     /// `form!`): checked in `validate`, Add disabled at it, and a submission
     /// listing more refused before any of them are built.
+    ///
+    /// At least 2: a list or set of at most one item is not a collection, so
+    /// building the form panics on `1`, saying to make the field the item's
+    /// own type (with `min_items` of 1 or more) or an `Option` of it (without).
+    /// `form!` refuses a literal `max_items: 1` at compile time.
     pub fn with_max_items(mut self, path: &ModelPath<T>, max: usize) -> Self {
         self.field(path).max_items = Some(max);
         self

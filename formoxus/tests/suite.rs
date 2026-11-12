@@ -343,6 +343,33 @@ impl Harness {
         mutations.edits.len()
     }
 
+    /// Change the `<select multiple>` at `id` so `picked` is what is selected,
+    /// then flush. Returns the edit count, like [`fire`](Self::fire).
+    ///
+    /// Its own method because a multi-select's handler reads `values()`, one
+    /// pair per selected option, where `fire` sends only a `value`. Each pair
+    /// is keyed `""`, as `dioxus-web` keys them by the select's `name` and
+    /// `SelectMultiple` renders none.
+    pub fn select(&mut self, id: ElementId, picked: &[&str]) -> usize {
+        let values = picked
+            .iter()
+            .map(|entry| dioxus_html::SerializedFormObject {
+                key: String::new(),
+                text: Some((*entry).to_string()),
+                file: None,
+            })
+            .collect();
+        let payload = PlatformEventData::new(Box::new(SerializedFormData::new(
+            picked.first().map_or(String::new(), ToString::to_string),
+            values,
+        )));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event("change", dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
     /// Click the element at `id`, then flush. Returns the edit count, like
     /// [`fire`](Self::fire).
     ///

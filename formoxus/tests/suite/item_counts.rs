@@ -347,3 +347,109 @@ fn a_blank_form_renders_its_minimum() {
     expect_that!(html.matches(r#"aria-label="Remove item"#).count(), eq(2));
     expect_that!(html, not(contains_substring(r#"title="At most"#)));
 }
+
+// ── Re-checked on every Add and Remove ───────────────────────────────────
+//
+// An Add or a Remove is finished when it happens, so with live validation on
+// it re-checks the container's own count at once (`check_item_count` in
+// `form.rs`); with it off, the count waits for a submit like everything else.
+
+fn remove_the_first_answer(form: &Form<Poll>) {
+    form.edit(&Edit::RemoveItem {
+        path: NodePath::new("answers"),
+        index: 0,
+    })
+    .expect("answer 0 exists");
+}
+
+#[component]
+fn RemovedBelowTheMinimum() -> Element {
+    let form = use_form(|| form_for(&poll(&["Yes", "No"], &[]), spec()));
+    use_hook(|| remove_the_first_answer(&form));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn a_remove_below_the_minimum_says_so_at_once() {
+    expect_that!(
+        render_to_html(RemovedBelowTheMinimum),
+        contains_substring("Add at least 2 items.")
+    );
+}
+
+#[component]
+fn RemovedBelowTheMinimumNotLive() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &poll(&["Yes", "No"], &[]),
+            spec().with_live_validation(false),
+        )
+    });
+    use_hook(|| remove_the_first_answer(&form));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn without_live_validation_a_remove_waits_for_the_submit() {
+    expect_that!(
+        render_to_html(RemovedBelowTheMinimumNotLive),
+        not(contains_substring("Add at least"))
+    );
+}
+
+#[component]
+fn AddedBackToTheMinimum() -> Element {
+    let form = use_form(|| form_for(&poll(&["Yes"], &[]), spec()));
+    use_hook(|| {
+        let _ = form.validate();
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("answers"),
+            before: None,
+            value: Some(ItemValue::new(String::from("No"))),
+        })
+        .expect("a String is an answer");
+    });
+    form.render(using_fns! {})
+}
+
+/// The submit's "Add at least 2 items." goes with the Add that meets it. Only
+/// the list's own path is re-checked, so the new item shows none of its own.
+#[gtest]
+fn an_add_back_to_the_minimum_clears_the_lists_error() {
+    expect_that!(
+        render_to_html(AddedBackToTheMinimum),
+        not(contains_substring("Add at least"))
+    );
+}
+
+// ── A list of at most one is not a list ──────────────────────────────────
+//
+// `form!` refuses a literal `max_items: 1` at compile time (the
+// `form_list_of_*` goldens); these are the build's backstop, for a hand-built
+// spec or a limit that is not a literal. Sets get the same in `sets.rs`.
+
+const ONE: usize = 1;
+
+#[gtest]
+#[should_panic(
+    expected = "answers: a list of exactly one `String` is one value, not a list: make the \
+                field a `String`"
+)]
+fn a_list_of_exactly_one_is_refused() {
+    let _ = form_for(
+        &poll(&["Yes"], &[]),
+        form! { Poll { answers => { min_items: ONE, max_items: ONE } } },
+    );
+}
+
+#[gtest]
+#[should_panic(
+    expected = "answers: a list of at most one `String` is an optional value, not a list: \
+                make the field an `Option<String>`"
+)]
+fn a_list_of_at_most_one_is_refused() {
+    let _ = form_for(
+        &poll(&["Yes"], &[]),
+        FormSpec::default().with_max_items(&path!(Poll.answers), ONE),
+    );
+}

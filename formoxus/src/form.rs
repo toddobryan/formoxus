@@ -656,6 +656,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.values_store,
             self.errors_store,
             self.changed_paths,
+            self.live_validation(),
             edit,
         )
     }
@@ -863,8 +864,14 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .map(|(path, messages)| (path.clone(), Some(messages.clone())))
             .collect::<HashMap<_, _>>()
     });
+    // Resolved here, at the form's boundary, as `Form::live_validation`
+    // resolves it, so the callback never reads context from inside an event.
+    let is_live = state
+        .peek()
+        .live_validation()
+        .unwrap_or_else(|| crate::defaults::defaults().live_validation);
     let on_edit = use_callback(move |edit: Edit| {
-        match apply_edit(state, values, errors, changed_paths, &edit) {
+        match apply_edit(state, values, errors, changed_paths, is_live, &edit) {
             // Not in a set: its Add made an item from the draft, and focus
             // stays in the draft for the next one (`DraftAdder`).
             Ok(Some(item))
@@ -920,11 +927,16 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 /// leaves the two apart. Shared by `use_form`'s `on_edit`, which formoxus's own
 /// buttons call and which can only log a failure, and [`Form::edit`], which
 /// returns it.
+///
+/// `is_live` is the form's resolved `live_validation`: with it on, an edit
+/// that changes how many items a list or set holds re-checks the container's
+/// own errors (see [`check_item_count`]).
 fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
     mut values: ValuesStore,
     errors: ErrorsStore,
     changed_paths: Signal<HashSet<NodePath>>,
+    is_live: bool,
     edit: &Edit,
 ) -> Result<Option<NodePath>, FormAccessError> {
     // Found before the edit, while the item is still there to look up.
@@ -969,6 +981,10 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
                 FieldHandle::unreported(&path, values).input(raw);
             }
         }
+    }
+    // Last, once the store holds what the edit left: the count check reads it.
+    if matches!(edit, Edit::AddItem { .. } | Edit::RemoveItem { .. }) {
+        check_item_count(state, values, errors, edit.path(), is_live);
     }
     Ok(created)
 }
@@ -1049,6 +1065,42 @@ fn apply_field_event<T>(
                 check_live(state, values, errors, path);
             }
         }
+    }
+}
+
+/// After an edit that added or removed an item, re-check the list's or
+/// set's OWN errors, at `container`: `min_items` and `max_items`.
+///
+/// A leaf is checked on blur, once the user has finished typing. An Add or a
+/// Remove is finished the moment it happens, a tick of a set widget's box
+/// included, so it is a write and a blur at once and is checked right away:
+/// meeting `min_items` clears a submit's "Add at least 1 item.", and going
+/// under it says so then, not at the next submit. Only the container's path is
+/// written, so a blank item just added shows no errors of its own yet.
+///
+/// One place, rather than in each widget, so every set widget a dev writes,
+/// and a list's own Add and Remove buttons, get it without doing anything.
+///
+/// Not live: nothing is checked until submit, but a clean result is dropped,
+/// as a leaf's is on a write, since `aria-invalid="false"` was a claim about a
+/// count that just changed.
+fn check_item_count<T>(
+    state: Signal<FormState<T>>,
+    values: ValuesStore,
+    mut errors: ErrorsStore,
+    container: &NodePath,
+    is_live: bool,
+) where
+    T: Clone + Debug + PartialEq + Facet<'static> + 'static,
+{
+    if is_live {
+        check_live(state, values, errors, container);
+    } else if errors
+        .peek()
+        .get(container)
+        .is_some_and(|messages| messages.as_ref().is_some_and(Vec::is_empty))
+    {
+        errors.insert(container.clone(), None);
     }
 }
 

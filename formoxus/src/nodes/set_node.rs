@@ -982,6 +982,7 @@ impl Node for SetNode {
                     .expect("a SetWidget should have had choices"),
                 chosen,
                 required: self.items.min_items().is_some_and(|min| min > 0),
+                max_items: self.items.max_items(),
                 on_edit: ctx.on_edit,
             });
         }

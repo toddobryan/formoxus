@@ -349,9 +349,12 @@ impl formoxus::widgets::SetWidget for PropsAsText {
             .join(",");
         let chosen = props.chosen.join(",");
         let label = props.label.clone().unwrap_or_default();
+        let max_items = props
+            .max_items
+            .map_or(String::new(), |mi| format!(" max_items {mi}"));
         rsx! {
             div { id: "{props.id}", "data-path": "{props.path}",
-                "choices [{choices}] chosen [{chosen}] required {props.required} label [{label}]"
+                "choices [{choices}] chosen [{chosen}] required {props.required}{max_items} label [{label}]"
             }
         }
     }
@@ -2807,5 +2810,358 @@ fn a_placeholder_reaches_the_draft() {
     expect_that!(
         html,
         contains_regex(r#"<input [^>]*name="tags\.#0"[^>]*placeholder="Add a tag""#)
+    );
+}
+
+// ── The two set widgets, through a hand-built spec ───────────────────────
+//
+// `WIDGETS_PLAN.md` box 7, step 7i: `CheckboxMultiple` and `SelectMultiple`
+// where `PropsAsText` stood above, until box 8 lets `form!` name them. Box 9
+// writes the full suite and the e2e tests.
+
+fn triage_with(widget: impl Into<formoxus::widgets::AnySetWidget>) -> FormSpec<Triage> {
+    FormSpec::default().with_set_widget(&path!(Triage.levels), widget)
+}
+
+/// Low and High of three, at least one and at most two: the limit is reached,
+/// so Medium is the one choice locked.
+fn triage_at_its_limit(widget: impl Into<formoxus::widgets::AnySetWidget>) -> FormSpec<Triage> {
+    triage_with(widget)
+        .with_min_items(&path!(Triage.levels), 1)
+        .with_max_items(&path!(Triage.levels), 2)
+}
+
+#[component]
+fn CheckboxesForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            triage_with(formoxus::widgets::CheckboxMultiple),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn CheckboxesAtTheLimitForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            triage_at_its_limit(formoxus::widgets::CheckboxMultiple),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// A fieldset of one box per choice, ticked for each chosen entry, in place of
+/// `SetNode`'s own items and Add (decision H).
+#[gtest]
+fn checkboxes_tick_what_the_set_holds() {
+    let html = super::without_form_id(&super::render_to_html(CheckboxesForm));
+    expect_that!(
+        html,
+        contains_substring(concat!(
+            r#"<fieldset class="fx-form-field fx-checkbox-multiple">"#,
+            r#"<legend class="fx-legend fx-field-label">Levels</legend>"#,
+            r#"<div class="fx-choice"><input class="fx-control fx-checkbox" type="checkbox" id="FORMID-levels-0" value="Low" checked=true/>"#,
+            r#"<label class="fx-choice-label" for="FORMID-levels-0">Low</label></div>"#,
+            r#"<div class="fx-choice"><input class="fx-control fx-checkbox" type="checkbox" id="FORMID-levels-1" value="Medium"/>"#,
+            r#"<label class="fx-choice-label" for="FORMID-levels-1">Medium</label></div>"#,
+            r#"<div class="fx-choice"><input class="fx-control fx-checkbox" type="checkbox" id="FORMID-levels-2" value="High" checked=true/>"#,
+            r#"<label class="fx-choice-label" for="FORMID-levels-2">High</label></div>"#,
+            r#"</fieldset>"#,
+        ))
+    );
+    expect_that!(html, not(contains_substring("fx-button-add-item")));
+}
+
+/// What the group must NOT carry. No `name` (question Q): the set's path is
+/// where the wire puts item keys. No `aria-invalid` or `role`: a bare fieldset
+/// is role `group`, where ARIA leaves `aria-invalid` undefined. No `required`
+/// on a box, even with `min_items`: on a checkbox it means THAT box must be
+/// ticked, so `min_items` shows only as the legend's marker.
+#[gtest]
+fn checkboxes_carry_no_name_aria_invalid_role_or_required() {
+    let html = super::render_to_html(CheckboxesAtTheLimitForm);
+    expect_that!(html, not(contains_substring("name=")));
+    expect_that!(html, not(contains_substring("aria-invalid")));
+    expect_that!(html, not(contains_substring("role=")));
+    expect_that!(html, not(contains_substring("required=")));
+    expect_that!(
+        html,
+        contains_regex(
+            r#"<legend [^>]*>Levels<span class="fx-required" aria-hidden="true"> \*</span></legend>"#
+        )
+    );
+}
+
+/// At `max_items` (question P) every unticked box is locked and every ticked
+/// one stays live, so the user can untick one and pick another, as the Add
+/// button stops a list.
+#[gtest]
+fn checkboxes_lock_what_is_unticked_at_max_items() {
+    let html = super::render_to_html(CheckboxesAtTheLimitForm);
+    expect_that!(html, contains_regex(r#"value="Medium" disabled=true/>"#));
+    expect_that!(html, contains_regex(r#"value="Low" checked=true/>"#));
+    expect_that!(html, contains_regex(r#"value="High" checked=true/>"#));
+}
+
+/// The change listeners the boxes registered, in choice order.
+fn boxes(app: &super::Harness) -> Vec<dioxus::core::ElementId> {
+    let found = app.listeners("change");
+    assert_eq!(found.len(), 3, "one `change` listener per choice: {app:?}");
+    found
+}
+
+/// Ticking a box adds its entry and unticking one removes it, through the
+/// `AddItem` and `RemoveItem` a real event sends, and the next render ticks
+/// what the set now holds.
+#[gtest]
+fn ticking_and_unticking_a_box_edits_the_set() {
+    let mut app = super::Harness::mount(CheckboxesForm);
+    let medium = boxes(&app)[1];
+    app.fire("change", medium, "true");
+    expect_that!(
+        app.html(),
+        contains_regex(r#"value="Medium" checked=true/>"#)
+    );
+
+    let low = boxes(&app)[0];
+    app.fire("change", low, "false");
+    let html = app.html();
+    expect_that!(html, contains_regex(r#"value="Low"/>"#));
+    expect_that!(html, contains_regex(r#"value="Medium" checked=true/>"#));
+    expect_that!(html, contains_regex(r#"value="High" checked=true/>"#));
+}
+
+/// Unticking one box at the limit unlocks the rest.
+#[gtest]
+fn unticking_at_max_items_unlocks_the_rest() {
+    let mut app = super::Harness::mount(CheckboxesAtTheLimitForm);
+    let high = boxes(&app)[2];
+    app.fire("change", high, "false");
+    expect_that!(app.html(), not(contains_substring("disabled")));
+}
+
+#[component]
+fn SelectForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            triage_with(formoxus::widgets::SelectMultiple),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+#[component]
+fn SelectAtTheLimitForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &low_and_high(),
+            triage_at_its_limit(formoxus::widgets::SelectMultiple),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// One labelled control, laid out as `Select` is (question R): a `<label for>`
+/// names it, and each chosen entry is a selected option. No `name` (Q).
+#[gtest]
+fn a_multi_select_selects_what_the_set_holds() {
+    let html = super::without_form_id(&super::render_to_html(SelectForm));
+    expect_that!(
+        html,
+        contains_substring(concat!(
+            r#"<div class="fx-form-field">"#,
+            r#"<label class="fx-field-label" for="FORMID-levels">Levels</label>"#,
+            r#"<select class="fx-control fx-select" id="FORMID-levels" multiple=true>"#,
+            r#"<option value="Low" selected=true>Low</option>"#,
+            r#"<option value="Medium">Medium</option>"#,
+            r#"<option value="High" selected=true>High</option>"#,
+            r#"</select></div>"#,
+        ))
+    );
+    expect_that!(html, not(contains_substring("name=")));
+}
+
+/// Unlike a checkbox, a `<select multiple>` takes `required` to mean "at
+/// least one selected", which is `min_items >= 1`; at `max_items` the
+/// unselected options are locked, as the boxes are.
+#[gtest]
+fn a_multi_select_is_required_and_locks_at_its_limits() {
+    let html = super::render_to_html(SelectAtTheLimitForm);
+    expect_that!(
+        html,
+        contains_regex(r"<select [^>]*multiple=true required=true>")
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="Medium" disabled=true>"#)
+    );
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="Low" selected=true>"#)
+    );
+}
+
+/// One change can move several options at once. Low and High out, Medium
+/// in, as one event: two `RemoveItem`s, highest index first, then an
+/// `AddItem`, and the set ends holding only Medium.
+#[gtest]
+fn one_change_to_a_multi_select_can_swap_several_options() {
+    let mut app = super::Harness::mount(SelectForm);
+    let select = app.only_listener("change");
+    app.select(select, &["Medium"]);
+    let html = app.html();
+    expect_that!(html, contains_substring(r#"<option value="Low">"#));
+    expect_that!(
+        html,
+        contains_substring(r#"<option value="Medium" selected=true>"#)
+    );
+    expect_that!(html, contains_substring(r#"<option value="High">"#));
+}
+
+// Step 7h: an edit made through a set widget re-checks the set's own count
+// at once, as `apply_edit` does for every Add and Remove (`check_item_count`
+// in `form.rs`): a tick is a finished answer, a write and a blur together.
+
+#[component]
+fn CheckboxesCheckedEmptyForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Triage {
+                levels: BTreeSet::new(),
+            },
+            triage_with(formoxus::widgets::CheckboxMultiple)
+                .with_min_items(&path!(Triage.levels), 1),
+        )
+    });
+    use_hook(|| {
+        let _ = form.validate();
+    });
+    form.render(using_fns! {})
+}
+
+/// A submit says the set needs a pick; ticking one meets `min_items`, and
+/// the error goes then, not at the next submit.
+#[gtest]
+fn a_ticked_box_clears_the_sets_min_items_error() {
+    let mut app = super::Harness::mount(CheckboxesCheckedEmptyForm);
+    expect_that!(app.html(), contains_substring("Add at least 1 item."));
+    let low = boxes(&app)[0];
+    app.fire("change", low, "true");
+    let html = app.html();
+    expect_that!(html, contains_regex(r#"value="Low" checked=true/>"#));
+    expect_that!(html, not(contains_substring("Add at least")));
+}
+
+#[component]
+fn CheckboxesOneTickedForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Triage {
+                levels: [Priority::Low].into(),
+            },
+            triage_with(formoxus::widgets::CheckboxMultiple)
+                .with_min_items(&path!(Triage.levels), 1),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// Unticking the last box under `min_items: 1` says so at once, as leaving
+/// a required text field empty does on blur.
+#[gtest]
+fn unticking_the_last_box_says_so_at_once() {
+    let mut app = super::Harness::mount(CheckboxesOneTickedForm);
+    let low = boxes(&app)[0];
+    app.fire("change", low, "false");
+    let html = app.html();
+    expect_that!(html, contains_regex(r#"value="Low"/>"#));
+    expect_that!(html, contains_substring("Add at least 1 item."));
+}
+
+#[component]
+fn SelectOnePickedForm() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Triage {
+                levels: [Priority::Low].into(),
+            },
+            triage_with(formoxus::widgets::SelectMultiple).with_min_items(&path!(Triage.levels), 1),
+        )
+    });
+    form.render(using_fns! {})
+}
+
+/// The same through the select, where the set's result also reaches the
+/// control as `aria-invalid`, which a listbox takes.
+#[gtest]
+fn deselecting_the_last_option_marks_the_select_invalid_at_once() {
+    let mut app = super::Harness::mount(SelectOnePickedForm);
+    let select = app.only_listener("change");
+    app.select(select, &[]);
+    let html = app.html();
+    expect_that!(html, contains_regex(r#"<select [^>]*aria-invalid="true""#));
+    expect_that!(html, contains_substring("Add at least 1 item."));
+}
+
+// ── A set of at most one is not a set ────────────────────────────────────
+//
+// `form!` refuses a literal `max_items: 1` on a set at compile time (the
+// `form_set_of_*` goldens); these are the build's backstop, for a hand-built
+// spec or a limit that is not a literal.
+
+const ONE: usize = 1;
+
+#[gtest]
+#[should_panic(
+    expected = "levels: a set of exactly one `Priority` is one value, not a set: make the field \
+                a `Priority`, which a `select` or `radio_group` picks"
+)]
+fn a_set_of_exactly_one_is_refused() {
+    let _ = form_for(
+        &low_and_high(),
+        triage_with(formoxus::widgets::SelectMultiple)
+            .with_min_items(&path!(Triage.levels), ONE)
+            .with_max_items(&path!(Triage.levels), ONE),
+    );
+}
+
+#[gtest]
+#[should_panic(
+    expected = "levels: a set of at most one `Priority` is an optional value, not a set: make \
+                the field an `Option<Priority>`, which a `select` or `radio_group` picks"
+)]
+fn a_set_of_at_most_one_is_refused() {
+    let _ = form_for(
+        &low_and_high(),
+        FormSpec::default().with_max_items(&path!(Triage.levels), ONE),
+    );
+}
+
+/// Through `form!` with a limit that is not a literal: no compile-time
+/// check can read it, so the build refuses it instead.
+#[gtest]
+#[should_panic(expected = "levels: a set of at most one `Priority` is an optional value")]
+fn form_leaves_a_non_literal_max_items_to_the_build() {
+    let _ = form_for(
+        &low_and_high(),
+        form! { Triage { levels => { max_items: ONE } } },
+    );
+}
+
+/// Two is a real "pick exactly two", so only one is refused.
+#[gtest]
+fn a_set_of_exactly_two_is_allowed() {
+    let pair = low_and_high();
+    expect_that!(
+        form_for(
+            &pair,
+            form! { Triage { levels => { min_items: 2, max_items: 2 } } }
+        )
+        .validate(),
+        some(eq(&pair))
     );
 }
