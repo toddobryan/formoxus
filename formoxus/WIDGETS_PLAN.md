@@ -879,7 +879,7 @@ several?
   12). Findings go into this plan, and decision J is revisited if they say so, before
   box 11 starts.
 
-  Done 2026-11-12. The spike is commit `0564e46` on a local branch `file-spike`, kept
+  Done 2026-11-12. The spike is commit `0564e46` on branch `file-spike` (pushed, so it can be read from home), kept
   for reference and never to be merged: `examples/src/spike_upload.rs` (the page at
   `/t/spike-upload` and its server functions) and `e2e/tests/spike_upload.rs` (13
   scenarios, run serially, each printing the server's report). It sends one file two

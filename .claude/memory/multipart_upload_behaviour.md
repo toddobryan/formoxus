@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-Found by the box 10 spike (`file-spike` branch, `0564e46`, never merged), on
+Found by the box 10 spike (`file-spike` branch, `0564e46`, pushed, never merged), on
 dioxus 0.7.10 / axum 0.8.9, through `dx serve`. Full numbers in
 `formoxus/WIDGETS_PLAN.md` box 10's note.
 
