@@ -871,13 +871,130 @@ several?
 
 ### Part 3: `file` (branch `file`)
 
-- [ ] **10.** (Claude) A spike, thrown away afterwards, before any of `file` is built:
+- [x] **10.** (Claude) A spike, thrown away afterwards, before any of `file` is built:
   one server function in the examples app taking `MultipartFormData`, one file input,
   and an e2e test driving it with `set_input_files`. It answers trap 14 (can the wire
   values ride in the same request, and how), confirms the server can read a JSON part
   and a file part in either order, and measures what happens past the 2 MB limit (trap
   12). Findings go into this plan, and decision J is revisited if they say so, before
   box 11 starts.
+
+  Done 2026-11-12. The spike is commit `0564e46` on a local branch `file-spike`, kept
+  for reference and never to be merged: `examples/src/spike_upload.rs` (the page at
+  `/t/spike-upload` and its server functions) and `e2e/tests/spike_upload.rs` (13
+  scenarios, run serially, each printing the server's report). It sends one file two
+  ways to server functions that report every part's name, file name, content type,
+  size, chunk sizes, and the server process's resident memory (RSS) before and at its
+  peak:
+  - **(a) "event":** dioxus's own `MultipartFormData::from(FormEvent)`. On the web,
+    this is the browser's `new FormData(form)` built from the submitted `<form>`
+    element, so it carries every input that has a `name`, hidden inputs included.
+  - **(b) "hand-built":** a payload type of the spike's own, `HandBuilt`, that
+    implements dioxus's `IntoRequest` on the client and axum's `FromRequest` on the
+    server. On the client it builds a `web_sys::FormData` one part at a time, in the
+    order the code chooses, and sends it with `ClientRequest::send_js_value`. The
+    file comes from a `FileData` kept from the input's `onchange`:
+    `FileData::inner()` downcasts to the browser's `web_sys::File`, so the browser
+    streams the file from disk itself and wasm never reads its bytes.
+
+  What it found:
+  - **Trap 14: yes, the wire values can ride in the same request, by either route.**
+    In (a), a hidden input holding the JSON arrives as an ordinary text part. In (b),
+    the JSON is appended as a text part. Either way the server reads it back intact.
+    Route (a) also sends every other named input as a text part (the spike's visible
+    text field came through as one). That is harmless, because the JSON already holds
+    everything, but it is a duplicate of every value. The structure entries are only
+    in the JSON, as trap 14 expected.
+  - **Order: parts arrive in exactly the order they were sent, by both routes.** In
+    (a) that order is the DOM's, so the hidden input has to come before the file
+    inputs. In (b) it is the order of the `append` calls, so formoxus would decide it.
+    The server read both orders without trouble (wire then file, and file then wire).
+    Wire first is still the order to send in, because then the server holds the
+    form's values, and could validate them, before it touches any file.
+  - **Trap 12: past axum's 2 MB default, the request is not refused up front.** The
+    handler runs, the parts before the limit are read normally, and the error
+    surfaces in the middle of the file part, as `413 Payload Too Large` from
+    `Field::chunk()`, after about 1.8 to 2.0 MB of the file have been read. So a
+    `from_multipart` has to turn that error into a form error itself; nothing does it
+    for it. The limit is raised for one server function alone with
+    `#[middleware(DefaultBodyLimit::max(…))]` on it, and that worked: with a 64 MiB
+    limit a 20 MB file arrived whole. That is the sentence formoxus's docs need.
+  - **Decision K's memory question, measured.** On a 20 MB file, buffering the file
+    whole with `Field::bytes()` raised the server's RSS by 21 MB, the file's size.
+    Streaming it with `Field::chunk()` and writing each chunk to a temporary file
+    raised it by 0.06 to 0.5 MB across four runs. Chunks were at most about 0.9 MB
+    in every run where they were logged, 0.5 MB or less in most. (One early run
+    whose chunk sizes were not logged stopped at 11.7 MB, which only a single chunk
+    of about 10 MB could explain. It did not happen again, and the likeliest cause is
+    `dx serve`'s development proxy, which sits in front of the server in these runs
+    and would not in production. Not chased further.) Projected to Todd's example of
+    150 students uploading 20 MB at once: about 3 GB at the peak if buffered,
+    against tens of MB if streamed. That is an extrapolation from one upload at a
+    time; concurrent uploads were not measured.
+  - **Checking `max_size:` on the server: read the rest of the request, and only
+    then answer.** A server function that stopped reading a 20 MB file at 1 MiB and
+    answered at once gave the client no answer at all, in three runs out of four:
+    `TypeError: Failed to fetch` twice, and once a 500 from `dx serve`'s proxy saying
+    it could not write the body. The browser was still sending when the server
+    replied and closed the connection. The fourth run's clean answer was luck. A
+    version that, once over the limit, kept reading and throwing away the rest of the
+    body before it answered gave the client the answer in all three of its runs. So
+    the server's `max_size:` check has to drain, and the body limit bounds how much it
+    can be made to drain. That also makes the client-side check (from
+    `FileData::size`, before anything is sent) the one that gives the user a quick
+    message. The server's check is the one that enforces the limit.
+
+  What this means for the decisions, for Todd to answer before box 11 (letters):
+
+  **(a) Decision J stands: a multipart submit.** It works, and it is still one request
+  and one validation. The question the spike opens is **which client route.**
+  Recommended: **(b), a payload type formoxus owns**, say `formoxus::Multipart`,
+  which is `IntoRequest` on the client and `FromRequest` on the server. The reasons:
+  1. It needs nothing from the submit event. Today's `onsubmit` in `Form::render`
+     drops the `FormEvent`, and button functions never see it. Route (a) would have to
+     thread that event through `using_fns!` to the dev's submit function.
+  2. formoxus decides the order, so the wire part always comes first, whatever the
+     dev's own markup contains.
+  3. It sends what the form's file table holds, keyed by `NodePath`, which is how
+     decision J already describes the client side. It does not send whatever happens
+     to be in the DOM at the moment of the submit.
+  4. It sends no duplicate text parts.
+
+  The cost of (b): formoxus calls `ClientRequest::send_js_value`, which dioxus-fullstack
+  compiles only under its own `web` feature. It also needs `web-sys` (`FormData`,
+  `File`, `Blob`) on wasm, and axum's `Multipart` on the server. A library cannot see
+  another crate's features through `cfg`, so formoxus gains features of its own, `web`
+  and `server`. Today it has none and relies on Cargo's feature unification instead
+  (see the comment on `dioxus-fullstack-core` in `formoxus/Cargo.toml`). A dev would
+  write `web = ["dioxus/web", "formoxus/web"]`, the same pattern a Dioxus app already
+  uses for its other dependencies. That pattern is the second question:
+
+  **(b) formoxus gets `web` and `server` features?** Recommended: yes. The
+  alternative is keying the client code on `target_arch = "wasm32"`, and on the server
+  depending on axum directly. That works for a fullstack app today, but it breaks the
+  first time dioxus-fullstack's `web` feature is off on a wasm build. It would also put
+  axum into every dev's server build, whether that dev uploads anything or not.
+
+  **(c) Decision K, revisited: where a streamed file goes.** The measurements favour
+  streaming. Recommended: **formoxus streams each file part to a temporary file,
+  counting its size as it goes**, and `Upload` holds `name`, `content_type`, `size`,
+  and that temporary file, which is deleted when the `Upload` is dropped unless the dev
+  moves it somewhere permanent (`upload.persist_to(path)`, or reads it). This is
+  Django's `TemporaryUploadedFile`. The model stays an ordinary value that a server
+  function receives, and the dev chooses where the file ends up, after validation
+  rather than before it. The alternative is a sink trait the dev implements, which
+  streams straight to object storage and skips the temporary file, but it puts the
+  dev back to writing the part of multipart handling that is worth having in the
+  library. That is the reason K(ii) was turned down in the first place. Still open
+  under either answer: what `Upload` is on the CLIENT, where there is no file on the
+  server's disk, only a `FileData` in the form's file table. Box 11 has to settle that
+  before the model type can be written.
+
+  **(d) The server's `max_size:` check drains past the limit and then answers with a
+  form error**, as measured above, rather than stopping. Recommended: yes. Formoxus's
+  docs then say to set the body limit a little above the sum of the form's
+  `max_size:`s, because the body limit is the most a request can make the server
+  drain.
 
 - [ ] **11.** (Todd) The runtime: `Upload` (decision K), recognized by the build walk
   before the struct case (trap 10); its leaf, holding the file's name in the store; the
