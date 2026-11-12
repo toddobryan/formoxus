@@ -990,6 +990,19 @@ several?
   server's disk, only a `FileData` in the form's file table. Box 11 has to settle that
   before the model type can be written.
 
+  **Decided (Todd, 2026-11-12):** (c) yes, and the destination should not be only a
+  temporary file: a dev should be able to stream a file straight to a regular file
+  of their choosing or to an S3 bucket. That suggests a destination trait (call it
+  `UploadSink` for now) with formoxus's temporary file as the built-in default, and a
+  regular file as a second built-in. S3 would be the dev's own impl, or an example,
+  because formoxus should not depend on an AWS SDK. Two things the trait must allow
+  for: a file's checks (`max_size:`, `accept:`) fail partway through the stream, so a
+  sink needs an `abort` that throws away what it has written (for S3, aborting the
+  multipart upload); and a sink writing to the final place stores the file before the
+  rest of the form is known to be valid, so a later validation failure has to abort
+  it too. (d) yes: Todd, "we have to, if we want to return an error correctly." (a)
+  is still being discussed, and (b) follows from it.
+
   **(d) The server's `max_size:` check drains past the limit and then answers with a
   form error**, as measured above, rather than stopping. Recommended: yes. Formoxus's
   docs then say to set the body limit a little above the sum of the form's
