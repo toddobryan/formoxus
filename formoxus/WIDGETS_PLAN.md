@@ -1383,12 +1383,20 @@ several?
          so is the typo `application/pfd`.
        - **A wildcard** is exactly one of the three strings `audio/*`, `video/*`,
          `image/*` (case-insensitively, so `IMAGE/*` is fine), and nothing else.
-         **Trap:** `*` IS an HTTP token code point, so the MIME rule above would
-         accept `*/*`, `text/*` or `image/pn*` as ordinary MIME types. The parser
-         has to recognize the three wildcards first and then refuse a `*` in any
-         other MIME entry. (An extension is different: HTML allows anything after
-         its dot, `*` included, and `.*` matches only names ending in `.*`
-         literally, so it is harmless.)
+         **`*` is an ordinary HTTP token code point**, so by HTML's grammar
+         `*/*`, `text/*` and `image/pn*` are valid MIME types: LITERAL ones,
+         matching only a content type spelled exactly that way, which never
+         arrives. Only the three strings above are wildcards.
+         **formoxus refuses `*` in any other MIME entry anyway, as its own rule,
+         stricter than HTML on purpose** (like refusing a bare `.`): no
+         registered type can contain `*` (RFC 6838's name rules exclude it), so
+         an entry with one is a dev expecting a wildcard HTML does not have. As
+         a literal it would match nothing and refuse every file with no hint
+         why; refused, it gets "the only wildcards are `audio/*`, `video/*` and
+         `image/*`" at compile time. So the parser recognizes the three
+         wildcards FIRST, then refuses `*` in what is left. (Not for an
+         extension: HTML allows anything after its dot, and `.*` matches only a
+         name ending in `.*` literally, which is harmless.)
        - **The order the parser checks in:** trim; empty is an error; a leading `.`
          makes it an extension; one of the three wildcards makes it `AnyOf`; then
          the MIME rules, refusing `*`.

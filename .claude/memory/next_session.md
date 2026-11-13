@@ -28,7 +28,9 @@ which needs `pub use formoxus_spec::FileType;` in `src/file.rs`.
 **Next (Todd):** finish `FileType` (`FromStr`, `FileTypeError(String)`, `Display`,
 `parse_list`, matching). The character rules, checked against the HTML and MIME
 Sniffing standards, are written out in WIDGETS_PLAN 11e item 3 ("What `accept`
-allows"). Then 11e.2 (`distribute_files`) and 11e.4 (`StoredFile`, `Chosen`/
+allows"). Note: refusing `*` outside the three wildcards is formoxus's OWN
+rule, stricter than HTML (which reads `text/*` as a literal type); the 9622202
+commit message wrongly implied HTML forbids it. Then 11e.2 (`distribute_files`) and 11e.4 (`StoredFile`, `Chosen`/
 `Received`). Claude: inline tests for the parser and matcher once it compiles.
 
 **Open, Claude recommended, Todd to answer:** (a) the two messages ("This file is
