@@ -295,7 +295,8 @@ and box 10 is a spike that checks it before anything is built on it.
 - **(i) Recommended: a multipart submit.** One request carrying the form's wire values
   as one part and each file as a part named by its `NodePath`. On the client,
   `Form::to_multipart()` instead of `to_wire()`. On the server,
-  `WireForm::from_multipart(…).await`, then `Submission::accept` exactly as now. One
+  `WireForm::from_multipart(…).await`, then `Submission::accept` exactly as now. (Since box 11:
+  `Submission::accept_multipart`, which reads the parts itself; see 11h.) One
   request and one validation: the file is checked with the rest of the form, by the
   same spec, on both sides. That is the property formoxus is ahead of Django and
   leptos_form on, and a file is the last place to give it up.
@@ -312,6 +313,10 @@ validation all work through the ordinary store, and the `FileData` itself sits i
 table on `Form` keyed by `NodePath`. `reset` clears both.
 
 ### Decision K: the model type
+
+**Superseded at box 10 and before box 11 (2026-11-12):** files are streamed to a sink,
+not held in memory, and `Upload<S>` is the enum of decision U. See box 10's (c) and
+box 11's decisions. What follows is the original framing.
 
 - **(i) Recommended.** `formoxus::Upload { name: String, content_type: Option<String>,
   bytes: Vec<u8> }`, held in memory. `Option<Upload>` for an optional upload. In memory
@@ -380,7 +385,9 @@ several?
    and `Multiple`'s row already lists `File` (`attrs.rs:495`).
 10. **A struct holding `Vec<u8>` would be walked as a struct with a list of `u8`
     items**: a `ListNode` with one number input per byte. `Upload` has to be
-    recognized by the build walk before it is treated as a struct.
+    recognized by the build walk before it is treated as a struct. (Since box 10,
+    `Upload` is an enum that holds no bytes, and it would be walked as a
+    `VariantNode` instead: the same trap, now at the enum case. See 11d.)
 11. **A script cannot set a file input's value, except to `""`.** So SSR, hydration and
     `reset` must all render it empty, and the widget shows the chosen file's name
     beside it, from the store. Re-rendering the `<input>` as a new element would also
@@ -1048,7 +1055,7 @@ several?
   which brings axum and reqwest into a dev's build even if the app has no server. A
   formoxus form without a server already gets little from `WireForm`, so that dev is
   probably rare; an opt-in `upload` feature is the fallback if one shows up.
-  **Awaiting Todd.**
+  **Decided (Todd, 2026-11-12, at home): as recommended, no features.**
 
   **(d) The server's `max_size:` check drains past the limit and then answers with a
   form error**, as measured above, rather than stopping. Recommended: yes. Formoxus's
@@ -1056,14 +1063,329 @@ several?
   `max_size:`s, because the body limit is the most a request can make the server
   drain.
 
-- [ ] **11.** (Todd) The runtime: `Upload` (decision K), recognized by the build walk
-  before the struct case (trap 10); its leaf, holding the file's name in the store; the
+- [ ] **11.** (Todd) The runtime: `FileUpload` (decision K), recognized by the build walk
+  before the enum case (trap 10); its leaf, holding the file's name in the store; the
   file table on `Form`; `FileInput` (trap 11); `Form::to_multipart` and
-  `WireForm::from_multipart`, per the spike; and the checks in decision M.
+  `Submission::accept_multipart`, per the spike; and the checks in decision M.
+
+  **Decided before box 11 (Todd, 2026-11-12, at home),** on top of box 10's (a)-(d):
+  (The "sink" here was named `FileUploadHandler` by decision X below, and `Upload`
+  became `FileUpload`.)
+  1. **The sink is an argument on the server call, not something `form!` writes.** The
+     spec is compiled into the wasm client too, and an S3 sink is server-only code, so a
+     sink in the spec would need a `cfg` in every dev's form. One sink handles the whole
+     request and is asked once per file, with the field's path, the file's name and its
+     content type, so a dev can still send different fields to different places.
+  2. **`FileUpload` is generic over where its file went: `FileUpload<S = TemporaryUploadedFile>`.** `S` is
+     what the sink produces: formoxus's temporary file, a path, or a dev's own S3 key
+     type. The model's type then says where its files are, and the compiler checks it.
+  3. **"Keep the current file" is in this plan.** A form built with `form_for` from a
+     model that already has its file (a student resubmitting an assignment) shows that
+     file's name, and a submit without picking a new one keeps it, as Django's
+     `ClearableFileInput` does. Decisions U and V below are what that costs.
+
+  **Decided next, from questions found while writing these steps out (Todd,
+  2026-11-12, at home).** The names follow Django where Django has the concept
+  (Django's `FileInput` is a bare input; its `ClearableFileInput` adds "Currently:"
+  and a Clear checkbox; its `FileField.clean(data, initial)` keeps `initial` when no
+  new file came; its `FileUploadHandler` receives a file's chunks as the request is
+  parsed; its `TemporaryUploadedFile` is what the temporary-file handler makes).
+
+  **Decision U: the model type is an enum, `FileUpload<S = TemporaryUploadedFile>`.**
+  Point 3 is what made it one: a kept file has only its name on the server, so a
+  struct would have had every other field optional. Todd's names, which read as a
+  file's life in order:
+  1. `Chosen { name, content_type, size }`: on the client only, a file chosen and not
+     yet sent. It is what `Form::validate()` builds.
+  2. `Received { name, content_type, size, stored: S }`: on the server only, a file
+     that arrived with THIS request, and the handler put it at `stored`.
+  3. `Existing { name }`: the file the record already had when the form was built,
+     kept because no new one was chosen. Django's `initial`. **Only the name**, so the
+     server's location for it (a path, an S3 key) never goes to the browser in an
+     edit form's model; the dev's handler finds the file through its own record.
+
+  `Option<FileUpload>`'s `None` is no file, or one the user removed: Django's `False`
+  from `clean`. A `name()` method reads the name from any variant. A server function
+  `match`es: `Received` is saved, `Existing` leaves the record alone, and `Chosen`
+  can't arrive there (the docs say so).
+
+  **Decision V: the server checks an `Existing` against the record being updated.** An
+  `Existing` from the client is only the client's claim, and on a create form it would
+  pass a required file with no file at all. So `accept_multipart` takes `existing:
+  Option<&T>`, the record being updated, which the server loads anyway (see
+  `WireForm`'s note on `initial`); a create form passes `None`. This is Django's rule
+  too: its server rebuilds the form with `instance=`, so `initial` is the server's own
+  value. An `Existing` at a path where `existing` holds no upload counts as missing: a
+  required error, or `None` for an `Option<FileUpload>`. The parameter is required, not
+  a builder method, so a server function can't forget it
+  ([[feedback-hard-to-misuse]]). **Trap: inside a list item, the item's key (`#3`) is
+  not its index in `existing`** once the user has added, removed or moved items, so
+  there is no reliable way to find the existing upload. In this plan, an upload inside
+  a list or set item can't be kept, and an `Existing` there counts as missing.
+  Decision L's one file per field makes this rare anyway.
+
+  **Decision W: one handler per request means one `S` per model.** Every `FileUpload`
+  field in a model names the same `S`, the handler's output type. A dev who sends two
+  fields to two places writes one handler that routes by path, with an enum as its
+  output if the two places need different handles. The alternative, a handler per
+  field, would put server code back in the spec (point 1). Todd: "Let's not
+  overcomplicate things."
+
+  **Decision X: the handler trait and the one built-in.** The trait is
+  `FileUploadHandler`, with Django's method names (11c). The only built-in, for now and
+  for the MVP, is `TemporaryFileUploadHandler`, making `TemporaryUploadedFile`s. A
+  regular file is a temporary file moved with `move_to` (11b), and S3 is a dev's own
+  impl. A `MemoryFileUploadHandler` for small files (say under 200 KB) is a later
+  addition, in "Not in this plan". `TemporaryFileUploadHandler::in_dir(path)` puts the
+  temporary files in a directory of the dev's choosing (Django's
+  `FILE_UPLOAD_TEMP_DIR`). On the same filesystem as the files' final home, `move_to`
+  is then a `rename`: instant, atomic, and with no copy.
+
+  **The user's file name: only its final segment is ever kept (Todd).** formoxus cleans
+  the name as the part arrives, before any handler sees it, as Django's `UploadedFile`
+  does with `os.path.basename`. It splits on both `/` and `\` and keeps the last piece,
+  since old browsers on Windows sent whole paths. It also drops control characters,
+  and refuses an empty name, `.` or `..` (a form-level error, since only a hand-made
+  request sends one). The cleaned name is what `Received` holds and what the store
+  shows. The docs for `move_to` and `new_file` still say never to build a path from
+  it, because a final segment can still collide with another user's file.
+
+  **Decision Y: `move_to(dest, IfExists) -> io::Result<PathBuf>`** (Claude's
+  recommendation, `Version` Todd's addition, 2026-11-12). One method with a required
+  parameter and no default, so every call site says which it means
+  ([[feedback-one-function-not-two]]):
+  1. `IfExists::Fail`: an error if `dest` exists, as Django's `file_move_safe` does by
+     default.
+  2. `IfExists::Replace`: replaces it atomically, so the old version is there until the
+     moment the new one is. On the same filesystem `rename` does that in one step;
+     across filesystems the file is copied to a temporary name beside `dest` and then
+     renamed over it. This is the resubmission case.
+  3. `IfExists::Version`: keeps both, by adding `-2`, `-3`, … before the extension
+     (`essay.pdf`, `essay-2.pdf`). Django's `Storage.get_available_name` does the same
+     job with a random suffix instead (`essay_a1b2c3d.pdf`).
+
+  It returns the path the file ended at, which is only knowable afterwards under
+  `Version`. **Trap: `std::fs::rename` overwrites without asking on Unix**, so `Fail`
+  and `Version` can't be "check that it doesn't exist, then rename": two moves at once
+  (two students, one name) would both pass the check and one file would be lost. Both
+  need a step that fails atomically if the name is taken. On the same filesystem that
+  is `hard_link(src, dest)`, which fails with `AlreadyExists`, followed by removing
+  `src`. Across filesystems it is a copy into a file opened with
+  `OpenOptions::create_new(true)`. `Version` tries `-2`, `-3`, … until one of those
+  succeeds. A name with two dots versions at the last one (`a.tar.gz` becomes
+  `a.tar-2.gz`), which `Path::file_stem` gives for free and is good enough.
+
+  Todd, on the race: a dev who saves different users' files to one path deserves what
+  they get (apcsp puts the username in each path), but be careful anyway. The atomic
+  step costs no API, and it also covers ONE user's double-clicked submit: two requests
+  from one student, the same path, at once, which a username in the path doesn't
+  separate.
+
+  **Decision Z: the code lives in `src/file.rs`** (Todd, 2026-11-12, at home; he had
+  first suggested `widgets/file.rs`), as `formoxus::file::…`, with `FileInput`
+  re-exported from `widgets` the way `widgets` re-exports `Validity` from
+  `field_attrs`. Most of it is not a widget: `FileUpload` is a MODEL type, named in the
+  dev's model crate beside its `#[derive(Facet)]`, and `FileUploadHandler`,
+  `Multipart<T>` and `accept_multipart` are server and wire code.
+  `UploadNode` and `Submission::accept_multipart` can live in the same file: an
+  inherent `impl Submission<T>` block can be in any module of the crate, and a leaf
+  node at the crate root has a precedent in `field_node.rs`. If the file grows past
+  what reads well, it becomes `file.rs` plus `file/` submodules, as `form.rs` is.
+
+  **The steps, in the order they depend on each other.**
+
+  - [x] **11a. Dependencies.** `dioxus-fullstack` joins `formoxus/Cargo.toml` with no
+    features, at exactly the version `dioxus` is (as `dioxus-fullstack-core` is pinned
+    today, and for the same reason: two copies would mean two `ClientRequest`
+    types). Under `[target.'cfg(target_arch = "wasm32")'.dependencies]`, the same crate
+    again with its `web` feature, plus `web-sys` with the `FormData`, `File` and `Blob`
+    features and `wasm-bindgen` (for `JsCast`). `serde_json` moves from a
+    dev-dependency to a dependency, because the wire part is the `WireForm` as JSON.
+    The comment above the entry says why there are no features of formoxus's own (box
+    10 (b)), so nobody "fixes" it into a feature later.
+
+    Done 2026-11-12, at home (Claude, at Todd's request). `dioxus-fullstack` has
+    `default-features = false` in the workspace, which drops its default `ws`
+    (websockets) so formoxus doesn't force it on a dev; a dev's own
+    `dioxus/fullstack` brings it back if the app uses it. `serde_json` left the
+    dev-dependencies, since a dependency already covers the tests. The lock gained
+    three dependency edges and no new crates. `just ci` passes (1350), and so do
+    `cargo check -p formoxus --target wasm32-unknown-unknown`, `just check-web` and
+    `just check-server`.
+  - [ ] **11b. The model types, in the `file` module** (`formoxus::file::FileUpload`, decision Z; no prelude entries before publishing, per
+    [[prelude-is-the-one-list]]). `FileUpload<S>` as decision U settles it, deriving
+    `Facet`, `Clone`, `Debug` and `PartialEq`, because every model type needs those four
+    (`use_form`, `form_for` and `Submission` all require them). `TemporaryUploadedFile`,
+    the default `S`: a temporary file, deleted when the last clone is dropped. So it
+    holds an `Arc` of a small guard whose `Drop` removes the file, and it compares by
+    path. Its methods:
+    1. `path()`, where the file is now.
+    2. `move_to(dest, IfExists)` (decision Y), which moves the file
+       somewhere permanent and disarms the guard. **It takes `&self`, not `self`:** the
+       model has to be `Clone`, and `Submission::model()` hands out `&T`. Clones share
+       the guard, so after a move no clone deletes the file when dropped, and `path()`
+       gives the new location for all of them; the guard's path is behind a `Mutex`
+       for that. **Trap:** `rename` fails across filesystems (`EXDEV`), and the
+       temporary directory is often a `tmpfs`, so `move_to` falls back to copying,
+       flushing to disk and then removing, as Django's `file_move_safe` does.
+       `in_dir` (decision X) is how a dev avoids the fallback.
+
+    The guard's field is `#[facet(opaque)]`, since facet has no shape for an `Arc` of
+    a guard. No `tempfile` crate: these types exist on wasm too, where it does not
+    build, though nothing there ever creates one. **A crash leaks the temporary
+    file,** since `Drop` never runs; Django has the same gap. The docs suggest that a
+    dev using `in_dir` outside the system's `/tmp` (which the OS cleans) set up a
+    cron job to sweep old files from it.
+  - [ ] **11c. The handler trait, `FileUploadHandler` (decision X).** It has `type Output`
+    (the `S`, with the same four bounds as above, plus `Send + Sync + 'static`) and
+    Django's methods, adapted to a stream that is written to as it arrives:
+    `new_file(path, name, content_type)` starts a file and returns a writer for it;
+    the writer's `receive_data_chunk(chunk)` takes each chunk, `file_complete()`
+    returns the `Output`, and `upload_interrupted()` throws away what has been
+    written, for a file whose checks failed partway (`max_size:`) or a request that
+    broke off. The handler itself has `delete(output)`, for a file that finished
+    storing before a later check failed (Todd's (c)); that is Django's
+    `Storage.delete`. For `TemporaryFileUploadHandler` it is a drop; for S3 a
+    `DeleteObject`. Every method is async and its future `Send`, because a server
+    function's future must be. **Trap: the client chooses the file's name.**
+    `new_file` gets it already cut to its final segment (see "The user's file name"
+    above), but its docs still say not to build a path from it unchecked.
+  - [ ] **11d. The build walk recognizes `FileUpload` (trap 10, corrected).** `FileUpload` is an
+    enum now, so without this it would be walked as a `VariantNode` with a `<select>`
+    of three variants, not as a struct. In `node_for_shape`, after the `Option` peel
+    (so `Option<FileUpload>` works the ordinary way) and before the scalar, newtype and
+    collection cases, a shape whose `decl_id` is `FileUpload`'s builds an upload leaf.
+    `decl_id` is the same for every `S` (box 10 (c)), where `id` would differ. The same
+    test is needed wherever else a walk descends: `field_of` (around `build.rs:160`),
+    so that a path into a `FileUpload`'s fields is refused like a path into a newtype's,
+    and `field_kind::kind`, the compile-time classifier, which is box 12's.
+  - [ ] **11e. The upload leaf, `UploadNode`, a `Node` of its own and not a
+    `FieldNode`.** A `FieldNode` parses a scalar from a string, and an upload is not
+    one. What it holds: its name; the field's settings (`max_size`, `accept`, label,
+    help text, the widget, `optional`, the validator, the same way a `FieldNode` gets
+    them through `LeafArgs`); the file's name, which is its value in the store; and
+    `meta: Option<UploadMeta>`, the file's `content_type` and `size`, plus, on the
+    server, the stored output. Its methods:
+    1. `collect_values`/`distribute_values` carry only the name, so presence,
+       `required`, `to_wire` and `reset` work through the store as for any field.
+    2. **A new `Node` method, `distribute_uploads(prefix, &UploadsByPath)`,** which
+       sets `meta` from a table keyed by path. It has a default body that does
+       nothing, and the five containers (`StructNode`, `OptionNode`, `ListNode`,
+       `SetNode`, `VariantNode`) override it to pass the table to their children.
+       Sizes and content types can't travel in the store, which holds one string per
+       path, and they are what `max_size:` and `accept:` check.
+    3. `validate`: missing (no name) against `required`; then, if there is `meta`,
+       `max_size` against its size and `accept` against the name's extension and the
+       content type, with HTML's rules for `accept` (`.pdf`, `image/*`, `text/plain`).
+    4. `write_value_into` picks the variant. With `meta` and a stored output it is
+       `Received`; with `meta` and none, `Chosen`; with a name and no `meta`, `Existing`.
+       Writing `stored` is the hard part, because the node can't name `S`: the walk
+       has only a shape. So the stored output is kept type-erased, as an
+       `Arc<dyn Any + Send + Sync>` together with a function pointer that writes it
+       into a `Partial`. `accept_multipart` makes the pointer, because it is generic
+       over the handler and so knows `S`. **Trap:** a handler whose `Output` isn't the
+       model's `S` is caught only there, as `Partial::set`'s `WrongShape`. That is a
+       dev bug, not a user's doing, so it panics with both type names, the way
+       `reject_field` panics.
+    5. Populating from a model (`form_for`): the name from whichever variant it is,
+       and no `meta`, since a model loaded on the client has no file to hand. So an
+       untouched upload in an edit form is `Existing`, which is point 3.
+    6. `render` calls its widget like a leaf, with one widget only, `FileInput`
+       (11f). A different widget is refused with the same message a `widget:` of the
+       wrong kind gets today.
+  - [ ] **11f. The file table and `FileInput` (trap 11).** `Form` gains `files:
+    Signal<IndexMap<NodePath, FileData>>`, and `FieldHandle` a way to reach it: one
+    `pick(Option<FileData>)` that writes the name to the store (`""` for none),
+    puts the file in the table or takes it out, and reports the event. **Trap: a pick
+    must be checked at once.** A text field waits for blur, but a pick is finished the
+    moment it happens, like decision T's Add, and a file input's blur means nothing.
+    So it reports a written event and a blur together, or a new event kind. The
+    widget renders an `<input type="file">` and never gives it a value (a script can
+    only set `""`). Beside it, it shows the chosen file's name from the store, so that
+    a re-rendered input (which empties the browser's own display) doesn't make the
+    file look lost. For an `Existing` file it reads "Current file: …", in a string that
+    belongs in the queued strings move ([[emitted-classes-and-strings]]). For an
+    `Option<FileUpload>`, a Remove button, which is `pick(None)`. On `reset`, the table is
+    cleared with the store. **Trap: the input still shows the old file after
+    `reset`**, because the browser keeps its own selection. A key on the `<input>`
+    that `reset` changes (a reset counter on `Form`) makes Dioxus create it again,
+    empty, which is the one time that re-creating it is what we want.
+    `Form::validate` and the live check (`check_live`) both pass the table, as
+    `UploadMeta`s with no stored output, to `distribute_uploads` before they
+    validate. Forget it in `check_live` and `max_size:` is never checked live, while
+    every test that only submits still passes.
+  - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
+    `formoxus::file::Multipart<T>` (named like `WireForm<T>`, which it parallels)
+    holding `to_wire()` and the table's files, and `Multipart<T>` implements dioxus's
+    `IntoRequest`. The first part is the wire JSON, under a reserved name (say
+    `__formoxus_wire`, as a `pub const`), and then each file under its path's string.
+    Wire first, so the server has the form's structure and settings before it touches
+    a file (box 10). On wasm: a `web_sys::FormData`, each file from
+    `FileData::inner()` downcast to a `web_sys::File`, sent by `send_js_value`,
+    exactly as in the spike. On native: a `reqwest::multipart::Form` built with
+    `.file(key, file_data.path())` and sent through `new_reqwest_request()`, as
+    dioxus-fullstack's own `send_multipart` does (`client.rs:197`). **Trap: the table
+    can hold stale files.** One picked inside an item since removed, or under a
+    variant since unchosen, is still in the table. Send only files whose path is in
+    the state's current paths, or drop entries in `apply_edit`. The first is simpler
+    and can't be missed by a new kind of edit.
+
+    **Decision AA: the wire part states each file's size** (Todd, 2026-11-12: yes, now). A multipart part
+    carries no size, so the server learns one only by reading the whole file. But the
+    first part is formoxus's own, so `to_multipart` can list each file's path with its
+    `FileData::size` there, while the format is new. Two uses:
+    (1) a stated size over `max_size:` is refused before `new_file` is called, so
+    nothing is stored, though the part is still drained (box 10 (d)); (2) a later
+    `MemoryFileUploadHandler` can choose memory or disk from it, with no format change
+    then. The stated size is the client's claim, so the counted size stays the one
+    that's enforced: a file that turns out larger than stated fails `max_size:` as
+    usual (or, under a memory handler, spills to disk).
+  - [ ] **11h. `Multipart<T>` on the server, and `Submission::accept_multipart`.** On the
+    server, `Multipart<T>` implements axum's `FromRequest` by wrapping axum's
+    `Multipart` and reading nothing yet. Then `Submission::accept_multipart(spec,
+    multipart, &handler, existing).await` replaces box 11's earlier
+    `WireForm::from_multipart`. The reason: a stream can only be read once, and the
+    limits for a file part come from the spec, so the spec has to be in hand before
+    the files are read. In order:
+    1. The first part has to be the wire JSON. If it isn't, the request didn't come
+       from `to_multipart`, and it is a form-level error with nothing stored.
+    2. An empty form from the spec; `distribute_values` with the wire's values, which
+       builds the structure, so every upload leaf's path now exists.
+    3. Each further part: find the upload leaf at its path. A part at no leaf's path,
+       or at a leaf whose name in the wire is empty, is drained and ignored, since
+       only a hand-made request sends one. Cut the file name to its final segment ("The user's
+       file name" above). Refuse a size stated in the wire part (decision AA) that
+       is over `max_size:`, and check `accept`, both before calling `new_file`,
+       from the file name and the content type, so a wrong type is never stored.
+       Stream it in chunks into the writer (`receive_data_chunk`), counting. Past
+       `max_size:`, call `upload_interrupted`, drain the rest of the part and the request (box 10 (d)), and record the
+       error. A `413` from `chunk()` (the body limit, trap 12) interrupts every open writer and
+       becomes a form-level error naming the limit. **Trap, not yet measured:**
+       whether the client still gets an answer after a 413. Box 13 tests it in a
+       browser.
+    4. `distribute_uploads` with each finished file's `UploadMeta`, with its output
+       type-erased (11e.4), and decision V's check of each `Existing` against `existing`.
+    5. `validate`, exactly as `accept` does. On `Err`, the handler's `delete` takes every output that
+       finished storing, then return the errors. On `Ok`, the `Submission` holds a
+       model whose files are `Received`.
+
+    The dev's server function is then `async fn submit(form: Multipart<Essay>) ->
+    Result<WireForm<Essay>, ServerFnError>`, under
+    `#[middleware(DefaultBodyLimit::max(…))]` when its files exceed 2 MB, and the
+    client calls `form.absorb(submit(form.to_multipart()).await?)`.
+  - [ ] **11i. Green before box 12.** `just ci` passes with no `form!` changes, an upload
+    field reachable only through a hand-built spec. Box 13 tests `accept_multipart`
+    without a server or a browser. Checked 2026-11-12 in axum 0.8.9: the extractor
+    (`extract/multipart.rs:68`) needs only a request whose content type has a
+    boundary, wraps the body in `multer` and uses no tokio. So a test builds an
+    `http::Request` with a multipart body in memory, extracts `Multipart<T>` from it,
+    and runs it under `futures::executor::block_on` (a new dev-dependency; the suite
+    has no executor today). The 2 MB default applies there too, so the 413 path is
+    testable without a browser as well.
 
 - [ ] **12.** (Claude) The `form!` side: `file` out of `NOT_YET`, the `accept` row in
   the attribute table (trap 9), `max_size:`, and goldens (`file` on a `String`, on a
-  non-`Upload` struct, `max_size:` on a non-file field).
+  non-`FileUpload` struct, `max_size:` on a non-file field).
 
 - [ ] **13.** (Claude) Suite tests (the server-side checks: missing, too large, wrong
   type; a form with a file and ordinary fields, from the multipart into the model), the
@@ -1075,10 +1397,16 @@ several?
 
 ## Not in this plan
 
-- **Several files in one field** (`Vec<Upload>`), unless decision L says otherwise.
-- **Streaming uploads** past what fits in memory: decision K keeps the bytes in the
-  model. A dev who needs gigabytes needs (ii) of decision J, which they can build
-  beside formoxus today.
+- **Several files in one field** (`Vec<FileUpload>`), unless decision L says otherwise.
+- **A `MemoryFileUploadHandler`** for small files (say under 200 KB; decision X).
+  Todd's design: choose memory or disk from the file's STATED size, watch the stream,
+  and spill to a temporary file (or refuse) once it passes the limit. A multipart part
+  carries no size of its own (browsers send one `Content-Length` for the whole
+  request, which is what Django decides by), but formoxus writes the client half, so
+  `to_multipart` can state each file's size (`FileData::size`) in the wire part, which
+  arrives before every file. That is decision AA in 11g, built now.
+- **Keeping an upload inside a list or set item** (decision V's trap): an `Existing` there
+  counts as missing.
 - **A searchable multi-pick (a combobox).** That is a dev's own `SetWidget` once
   decision G lands, or a later built-in.
 - **`datalist`** (`list:` is already an attribute), and **`<optgroup>`** grouping

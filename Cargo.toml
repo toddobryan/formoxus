@@ -79,6 +79,11 @@ dioxus = { version = "0.7.10" }
 # Same version as `dioxus`, always: a half-internal crate whose API can move
 # between minors.
 dioxus-fullstack-core = { version = "0.7.10" }
+# Same version as `dioxus`, always, or a dev's build holds two copies and two
+# `ClientRequest` types. `default-features = false` drops its `ws` (websockets),
+# which formoxus never uses; a dev's `dioxus/fullstack` asks for it if the app
+# does. Uploads only: see the comment on it in `formoxus/Cargo.toml`.
+dioxus-fullstack = { version = "0.7.10", default-features = false }
 dioxus-ssr = { version = "0.7" }
 # dev-only: the `serialize` feature ships SerializedHtmlEventConverter, which is
 # what lets a bare VirtualDom dispatch a real DOM event in a test.
@@ -94,15 +99,21 @@ heck = { version = "0.5.0" }
 # not compile `serde` for nothing.
 indexmap = { version = "2" }
 serde = { version = "1", features = ["derive"] }
-# dev-only: `WireForm` is what crosses a server-fn boundary, so a test has to
-# prove it survives a real serializer rather than just deriving the impls.
 regress = { version = "0.12.0" }
+# `formoxus`'s upload request carries its `WireForm` as a JSON part, so this is
+# a real dependency there, not only the tests' proof that `WireForm` survives a
+# real serializer.
 serde_json = { version = "1" }
 trybuild = { version = "1.0.116" }
 # Case-insensitive set orders (`unicode_case_insensitive`,
 # `ascii_case_insensitive`). Already in the lock through `mime_guess`, which is
 # server-only, so this is new to the wasm bundle; measure it before publishing.
 unicase = { version = "2.9.0" }
+# wasm only, for an upload's request: the browser's `FormData` and `File`
+# (`web-sys`), and `JsCast` to get a `File` out of a `FileData` (`wasm-bindgen`).
+# Both already in the lock through `dioxus-web`.
+wasm-bindgen = { version = "0.2" }
+web-sys = { version = "0.3" }
 
 # workspace. The `version` is required as well as the `path`: on publish cargo
 # strips the path and the released crate resolves its macros from crates.io, so

@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-12**: part 3 box 10 spike DONE (findings in WIDGETS_PLAN, branch `file`); Todd answers (a)-(d) before box 11
+- [**START HERE: next session**](next_session.md) — **2026-11-12 home**: on branch `file`, box 11 written out, 11a done, U-AA all decided, no open questions; Todd builds 11b next
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
