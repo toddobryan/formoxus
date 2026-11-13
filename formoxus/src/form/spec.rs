@@ -6,6 +6,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use facet::Facet;
 use facet::Shape;
+use formoxus_spec::file_type::FileType;
 use heck::ToSnakeCase;
 use indexmap::IndexMap;
 
@@ -53,6 +54,8 @@ pub struct FieldSpec {
     /// [`ItemText`](crate::widgets::ItemText).
     pub item_view: Option<crate::widgets::ItemView>,
     pub set_widget: Option<AnySetWidget>,
+    pub max_size: Option<u64>,
+    pub accept: Vec<FileType>,
 }
 
 #[derive(Clone, Debug)]
@@ -204,6 +207,18 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// built with that many blank items.
     pub fn with_min_items(mut self, path: &ModelPath<T>, min: usize) -> Self {
         self.field(path).min_items = Some(min);
+        self
+    }
+
+    /// The max size of an uploaded file.
+    pub fn with_max_size(mut self, path: &ModelPath<T>, max_size: u64) -> Self {
+        self.field(path).max_size = Some(max_size);
+        self
+    }
+
+    /// Which kinds of files a file upload accepts
+    pub fn with_accept(mut self, path: &ModelPath<T>, accept: Vec<FileType>) -> Self {
+        self.field(path).accept = accept;
         self
     }
 

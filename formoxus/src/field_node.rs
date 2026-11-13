@@ -10,7 +10,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Shown};
+use crate::nodes::{Drafts, FieldValidator, Shown};
 use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
 use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
@@ -117,9 +117,12 @@ pub struct FieldNode<F: Field> {
     pub label: Option<String>,
     pub help_text: Option<String>,
     /// The spec's `validator:`, run once the field's own checks pass.
-    pub validator: Option<crate::nodes::FieldValidator>,
+    pub validator: Option<FieldValidator>,
     pub optional: bool,
-    /// Moves into the fields that validate them in Step 4 of `FIELDS_PLAN.md`.
+    /// The attributes that only render (`placeholder`, `autocomplete`, `class`,
+    /// a quoted key). What formoxus checks is a setting of `field` instead, and
+    /// `FormSpec::with_attrs` refuses it. They stay on the node rather than the
+    /// widget (decision A-1, `FIELDS_PLAN.md` Step 4).
     pub attrs: FieldAttrs,
     pub widget: AnyWidget,
     /// The newtype this field's value is wrapped in — `Markdown` for a

@@ -1187,7 +1187,7 @@ several?
   `field_attrs`. Most of it is not a widget: `FileUpload` is a MODEL type, named in the
   dev's model crate beside its `#[derive(Facet)]`, and `FileUploadHandler`,
   `Multipart<T>` and `accept_multipart` are server and wire code.
-  `UploadNode` and `Submission::accept_multipart` can live in the same file: an
+  `FileNode` and `Submission::accept_multipart` can live in the same file: an
   inherent `impl Submission<T>` block can be in any module of the crate, and a leaf
   node at the crate root has a precedent in `field_node.rs`. If the file grows past
   what reads well, it becomes `file.rs` plus `file/` submodules, as `form.rs` is.
@@ -1299,25 +1299,45 @@ several?
        a ~0.5 MB chunk usually lands in the page cache and returns at once.
        `tokio::fs` would add a native-only dependency to save little; revisit only
        if a profile says so.
-  - [ ] **11d. The build walk recognizes `FileUpload` (trap 10, corrected).** `FileUpload` is an
+  - [x] **11d. The build walk recognizes `FileUpload` (trap 10, corrected).** (Done 2026-11-13: Todd built it with 11e's first slice, `is_file_upload` in `nodes/file_node.rs`; Claude's tests are inline in `build.rs` and `file_node.rs` and in the suite's `files.rs`; ci 1379.) `FileUpload` is an
     enum now, so without this it would be walked as a `VariantNode` with a `<select>`
     of three variants, not as a struct. In `node_for_shape`, after the `Option` peel
     (so `Option<FileUpload>` works the ordinary way) and before the scalar, newtype and
-    collection cases, a shape whose `decl_id` is `FileUpload`'s builds an upload leaf.
-    `decl_id` is the same for every `S` (box 10 (c)), where `id` would differ. The same
-    test is needed wherever else a walk descends: `field_of` (around `build.rs:160`),
-    so that a path into a `FileUpload`'s fields is refused like a path into a newtype's,
-    and `field_kind::kind`, the compile-time classifier, which is box 12's.
-  - [ ] **11e. The upload leaf, `UploadNode`, a `Node` of its own and not a
+    collection cases, a shape whose `decl_id` is `FileUpload`'s builds a file leaf.
+    `decl_id` is the same for every `S` (box 10 (c)), where `id` would differ; the test
+    compares against `<FileUpload as Facet>::SHAPE.decl_id`, in type position so the
+    default `S` applies. The same test is needed wherever else a walk descends:
+    1. `field_named` (`build.rs:167`), in the newtype's arm and before the enum arms,
+       so that a path into a `FileUpload`'s fields (`resume.name`) is refused like a
+       path into a newtype's, with the same "one input" message.
+    2. `variant_named` (`build.rs:131`), after its `peel`: `FileUpload` really is an
+       enum, so without the test `resume.$Chosen` would be accepted as a spec key and
+       never looked up.
+    3. `field_kind::kind`, the compile-time classifier, which is box 12's.
+
+    `items_of` needs nothing: a `FileUpload`'s `def` is not a list or a set, so
+    `resume[]` is already refused. The spec-key tests go in an inline `mod tests` in
+    `build.rs`, since `spec_key_shape` is a pure function of a shape and a string.
+
+    **Order (Todd, 2026-11-13):** 11d and the first slice of 11e are built together,
+    so the new branch in `node_for_shape` returns a real `FileNode` instead of a
+    panic. That slice holds the file's name in the store and nothing more:
+    `collect_values`/`distribute_values`, the "required" check, populating the name
+    from any variant (11e.5), `write_value_into` writing `Existing { name }` (which is
+    11e.4's answer when there is no `meta`, so it stays), and a `render` that returns
+    an empty `VNode` until `FileInput` arrives in 11f. `meta`, `distribute_files`,
+    `max_size`/`accept`, the type-erased `stored` and the widget follow in 11e as
+    written below.
+  - [ ] **11e. The file leaf, `FileNode`, a `Node` of its own and not a
     `FieldNode`.** A `FieldNode` parses a scalar from a string, and an upload is not
     one. What it holds: its name; the field's settings (`max_size`, `accept`, label,
     help text, the widget, `optional`, the validator, the same way a `FieldNode` gets
     them through `LeafArgs`); the file's name, which is its value in the store; and
-    `meta: Option<UploadMeta>`, the file's `content_type` and `size`, plus, on the
+    `meta: Option<FileMeta>`, the file's `content_type` and `size`, plus, on the
     server, the stored output. Its methods:
     1. `collect_values`/`distribute_values` carry only the name, so presence,
        `required`, `to_wire` and `reset` work through the store as for any field.
-    2. **A new `Node` method, `distribute_uploads(prefix, &UploadsByPath)`,** which
+    2. **A new `Node` method, `distribute_files(prefix, &FilesByPath)`,** which
        sets `meta` from a table keyed by path. It has a default body that does
        nothing, and the five containers (`StructNode`, `OptionNode`, `ListNode`,
        `SetNode`, `VariantNode`) override it to pass the table to their children.
@@ -1326,6 +1346,63 @@ several?
     3. `validate`: missing (no name) against `required`; then, if there is `meta`,
        `max_size` against its size and `accept` against the name's extension and the
        content type, with HTML's rules for `accept` (`.pdf`, `image/*`, `text/plain`).
+
+       **What `accept` allows, character by character** (checked 2026-11-13 against
+       the HTML Standard's File Upload state and the MIME Sniffing Standard).
+       `FileType` and its `FromStr` live in `formoxus-spec/src/file_type.rs`, so
+       box 12's `form!` can run the same parser at expansion; `formoxus::file`
+       re-exports it.
+       - **The whole value** is comma-separated: the browser "must split the
+         attribute value on commas", trimming ASCII whitespace around each entry.
+         So a comma can never be inside an entry. An empty entry (`.pdf,,.doc`) is
+         not one of the three forms below, so it is an error. **Duplicates are not
+         allowed either**, compared ASCII case-insensitively (`.pdf, .PDF` is
+         invalid HTML), so `parse_list` should refuse them.
+       - **Every entry is ASCII case-insensitive.** Lowercase with
+         `to_ascii_lowercase`, not `to_lowercase`: HTML folds A-Z only, and
+         `to_lowercase` would also fold non-ASCII letters, which HTML does not.
+       - **An extension** is, in HTML's words, "a string whose first character is a
+         U+002E FULL STOP character (.)". HTML restricts NOTHING after the dot. So
+         `.tar.gz`, `.c++` and `.ñ` are all valid. formoxus adds one rule of its
+         own: at least one character after the dot, because a bare `.` would match
+         every name that ends in a dot, which no dev means. (Further rules, such as
+         refusing whitespace or `/` inside an extension, would be formoxus's own
+         too; HTML has none. Recommended: refuse whitespace, since an entry is
+         trimmed and an inner space is surely a typo, and leave the rest alone.)
+       - **A MIME type** must be "a valid MIME type string with no parameters":
+         `type/subtype`, exactly one `/`, both halves non-empty, and no `;` (which
+         is what starts a parameter, as in `text/plain; charset=utf-8`). Each half
+         is one or more **HTTP token code points**, which are exactly the ASCII
+         letters `A-Z` `a-z`, the digits `0-9`, and these 15 symbols:
+         `!` `#` `$` `%` `&` `'` `*` `+` `-` `.` `^` `_` `` ` `` `|` `~`.
+         Not allowed: whitespace, `/` (except the one separator), `;`, `,`, `"`,
+         `(` `)` `<` `>` `@` `:` `\` `[` `]` `?` `=` `{` `}`, and anything outside
+         ASCII. Registration-grade names (RFC 6838) are stricter, but HTML checks
+         only these token characters, so formoxus does too. It does not check
+         that a type is registered: `application/x-zip-compressed` is valid, and
+         so is the typo `application/pfd`.
+       - **A wildcard** is exactly one of the three strings `audio/*`, `video/*`,
+         `image/*` (case-insensitively, so `IMAGE/*` is fine), and nothing else.
+         **Trap:** `*` IS an HTTP token code point, so the MIME rule above would
+         accept `*/*`, `text/*` or `image/pn*` as ordinary MIME types. The parser
+         has to recognize the three wildcards first and then refuse a `*` in any
+         other MIME entry. (An extension is different: HTML allows anything after
+         its dot, `*` included, and `.*` matches only names ending in `.*`
+         literally, so it is harmless.)
+       - **The order the parser checks in:** trim; empty is an error; a leading `.`
+         makes it an extension; one of the three wildcards makes it `AnyOf`; then
+         the MIME rules, refusing `*`.
+       - **Matching a file against an entry:** an extension matches when the
+         file's name, ASCII-lowercased, ends with it (so `.tar.gz` works); a MIME
+         entry matches the file's content type cut at any `;`, trimmed and
+         ASCII-lowercased; `AnyOf` matches when the content type's half before
+         the `/` is the same word. A file with no content type can match only an
+         extension. A file passes when any entry matches; an empty list accepts
+         everything.
+       - **The error:** `FileTypeError(String)` (`Display` + `std::error::Error`),
+         one message, "`{entry}` is not a file type: {reason}". Not an enum, since
+         nothing branches on the reason: `form!` turns it into a `compile_error!`
+         and a runtime caller panics with it.
     4. `write_value_into` picks the variant. With `meta` and a stored output it is
        `Received`; with `meta` and none, `Chosen`; with a name and no `meta`, `Existing`.
        Writing `stored` is the hard part, because the node can't name `S`: the walk
@@ -1360,7 +1437,7 @@ several?
     that `reset` changes (a reset counter on `Form`) makes Dioxus create it again,
     empty, which is the one time that re-creating it is what we want.
     `Form::validate` and the live check (`check_live`) both pass the table, as
-    `UploadMeta`s with no stored output, to `distribute_uploads` before they
+    `FileMeta`s with no stored output, to `distribute_files` before they
     validate. Forget it in `check_live` and `max_size:` is never checked live, while
     every test that only submits still passes.
   - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
@@ -1399,8 +1476,8 @@ several?
     1. The first part has to be the wire JSON. If it isn't, the request didn't come
        from `to_multipart`, and it is a form-level error with nothing stored.
     2. An empty form from the spec; `distribute_values` with the wire's values, which
-       builds the structure, so every upload leaf's path now exists.
-    3. Each further part: find the upload leaf at its path. A part at no leaf's path,
+       builds the structure, so every file leaf's path now exists.
+    3. Each further part: find the file leaf at its path. A part at no leaf's path,
        or at a leaf whose name in the wire is empty, is drained and ignored, since
        only a hand-made request sends one. Cut the file name to its final segment ("The user's
        file name" above). Refuse a size stated in the wire part (decision AA) that
@@ -1412,7 +1489,7 @@ several?
        becomes a form-level error naming the limit. **Trap, not yet measured:**
        whether the client still gets an answer after a 413. Box 13 tests it in a
        browser.
-    4. `distribute_uploads` with each finished file's `UploadMeta`, with its output
+    4. `distribute_files` with each finished file's `FileMeta`, with its output
        type-erased (11e.4), and decision V's check of each `Existing` against `existing`.
     5. `validate`, exactly as `accept` does. On `Err`, the handler's `delete` takes every output that
        finished storing, then return the errors. On `Ok`, the `Submission` holds a

@@ -47,6 +47,8 @@ mod errors;
 mod errors_by_path;
 #[path = "suite/field_validators.rs"]
 mod field_validators;
+#[path = "suite/files.rs"]
+mod files;
 #[path = "suite/form_macro.rs"]
 mod form_macro;
 #[path = "suite/forms.rs"]

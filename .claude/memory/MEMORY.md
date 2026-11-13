@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-12 END**: branch `file`, 11a-11c done (`src/file.rs`), ci 1361, pushed; next 11d (Todd), give its size first
+- [**START HERE: next session**](next_session.md) — **2026-11-13 END**: branch `file`, 11d done + FileNode first slice, tests in; WIP pushed, does NOT compile (`file_type.rs` mid-edit, two import paths); next: Todd finishes `FileType`, then 11e.2-11e.4; (a)-(c) open
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
@@ -79,3 +79,4 @@
 - [Scratch copies need their own target](scratch_copies_need_their_own_target.md) — a `git archive` copy on the repo's `target` reads stale builds as fresh, both ways
 - [Plans spell out the why](feedback_plans_spell_out_the_why.md) — steps Todd implements get full plain sentences, not telegraphic shorthand
 - [Widget trait family](widget_trait_family.md) — DECIDED 2026-11-11: `Widget` = NAME/PARTS/EXTENDS only; `LeafWidget: Widget` renders one value; `SetWidget: Widget` next; why not one trait
+- [Move field_node.rs into nodes/](todo_move_field_node.md) — REMINDER for Todd once WIDGETS_PLAN is done, not before

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
+mod file_node;
 mod items;
 mod list_node;
 mod option_node;
@@ -15,6 +16,8 @@ mod set_node;
 mod struct_node;
 mod variant_node;
 
+pub use file_node::FileNode;
+pub(crate) use file_node::is_file_upload;
 pub use items::ItemValue;
 pub(crate) use items::Items;
 pub use list_node::ListNode;

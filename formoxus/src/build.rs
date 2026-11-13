@@ -11,8 +11,8 @@ use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::{
-    Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode, VariantChoice,
-    VariantNode,
+    FileNode, Items, ListNode, Node, OptionNode, SetNode, SetOrder, SpecsByPath, StructNode,
+    VariantChoice, VariantNode, is_file_upload,
 };
 use crate::path::{ITEM_SIGIL, NodePath, item_segment};
 
@@ -135,6 +135,11 @@ fn variant_named(at: At, name: &str, walked: &str) -> Result<&'static Variant, S
         ));
     };
     let shape = peel(shape);
+    if is_file_upload(shape) {
+        return Err(format!(
+            "`{walked}` is a `FileUpload`, one input, so it has no variant `{name}`"
+        ));
+    }
     let Type::User(UserType::Enum(enum_type)) = &shape.ty else {
         return Err(format!(
             "`{walked}` is a `{shape}`, not an enum, so it has no variant `{name}`"
@@ -175,7 +180,7 @@ fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, 
         At::Shape(shape) => peel(shape),
     };
     match &shape.ty {
-        _ if newtype_inner(shape).is_some() => Err(format!(
+        _ if newtype_inner(shape).is_some() || is_file_upload(shape) => Err(format!(
             "`{walked}` is a `{shape}`, one input, which has no field `{name}`"
         )),
         Type::User(UserType::Struct(st)) => {
@@ -375,6 +380,8 @@ pub(crate) fn node_for_shape(
 ) -> Box<dyn Node> {
     if let Ok(option_def) = shape.def.into_option() {
         return option_node(option_def, name, peek, walk, prefix);
+    } else if is_file_upload(shape) {
+        return Box::new(file_node(name, peek, walk, prefix, optional));
     } else if let Some(scalar) = shape.scalar_type() {
         return scalar_node(
             scalar, name, peek, walk, prefix, optional, /* wrapper */ None,
@@ -860,4 +867,109 @@ fn enum_node(
             })
             .unwrap_or_default(),
     })
+}
+
+/// The leaf for a `FileUpload`, whatever its `S` (`WIDGETS_PLAN.md` 11d-11e).
+///
+/// Populated from a model, it holds only the file's name, whichever variant
+/// the model has, and no `meta`: a model has no file to hand, so an untouched
+/// upload in an edit form writes back as `Existing` (11e.5).
+fn file_node(
+    name: &str,
+    peek: Option<Peek<'_, 'static>>,
+    walk: Walk<'_>,
+    prefix: &NodePath,
+    optional: bool,
+) -> FileNode {
+    let spec = walk.spec_for(prefix);
+    // Every variant has a `name`, so the active one's is read the same way.
+    // No peek (an empty form) is no file, which `FileNode` holds as "".
+    let file_name = peek.map_or_else(String::new, |p| {
+        p.into_enum()
+            .expect("shape is FileUpload's, so the value peeks as an enum")
+            .field_by_name("name")
+            .expect("field belongs to the active variant, so access can't error")
+            .expect("every FileUpload variant has a `name`")
+            .get::<String>()
+            .expect("FileUpload's `name` is a String")
+            .clone()
+    });
+    FileNode {
+        name: name.to_string(),
+        label: spec.and_then(|s| s.label.clone()),
+        help_text: spec.and_then(|s| s.help_text.clone()),
+        validator: spec.and_then(|s| s.validator.clone()),
+        optional,
+        // TODO: A stand-in until `FileInput` (11f), which becomes the default and the
+        // only widget allowed (11e.6). `render` draws nothing until then.
+        widget: spec
+            .and_then(|s| s.widget.clone())
+            .unwrap_or_else(|| crate::widgets::AnyWidget::new(crate::widgets::input::TextInput)),
+        attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
+        file_name,
+        // `form!` has no `max_size:` or `accept:` until box 12, and `FieldSpec`
+        // no place for them, so neither can be set yet.
+        max_size: spec.and_then(|s| s.max_size),
+        accept: spec.map_or_else(Vec::new, |s| s.accept.clone()),
+        meta: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use facet::Facet;
+    use googletest::prelude::*;
+
+    use super::spec_key_shape;
+    use crate::file::FileUpload;
+
+    // A `FileUpload` is one input (`WIDGETS_PLAN.md` 11d), so a spec key stops
+    // at it, as at a newtype. It is an enum underneath, and without the check a
+    // key could walk into a variant and name a field no node ever looks up.
+    #[derive(Facet)]
+    struct Coursework {
+        essay: Option<FileUpload>,
+        drafts: Vec<FileUpload>,
+        /// A dev's own `S`: the check must hold for every `FileUpload<S>`.
+        report: FileUpload<String>,
+    }
+
+    fn key(key: &str) -> std::result::Result<(), String> {
+        spec_key_shape(Coursework::SHAPE, key).map(|_| ())
+    }
+
+    #[gtest]
+    fn a_file_is_a_spec_key_of_its_own() {
+        expect_that!(key("essay"), ok(anything()));
+        expect_that!(key("drafts[]"), ok(anything()));
+        expect_that!(key("report"), ok(anything()));
+    }
+
+    #[gtest]
+    fn a_files_fields_are_not_spec_keys() {
+        for path in ["essay.name", "drafts[].name", "report.stored"] {
+            expect_that!(
+                key(path),
+                err(contains_substring("one input, which has no field")),
+                "{path}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn a_files_variants_are_not_spec_keys() {
+        // `essay.$Chosen.name` is the one that got through before 11d: both
+        // steps succeeded, and the spec was stored where nothing reads it.
+        for path in [
+            "essay.$Chosen",
+            "essay.$Chosen.name",
+            "report.$Received.stored",
+        ] {
+            expect_that!(
+                key(path),
+                err(contains_substring("one input, so it has no variant")),
+                "{path}"
+            );
+        }
+    }
 }
