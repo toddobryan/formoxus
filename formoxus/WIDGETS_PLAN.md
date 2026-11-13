@@ -1132,7 +1132,7 @@ several?
   overcomplicate things."
 
   **Decision X: the handler trait and the one built-in.** The trait is
-  `FileUploadHandler`, with Django's method names (11c). The only built-in, for now and
+  `FileUploadHandler`, with Django's method names where Django has the method (11c). The only built-in, for now and
   for the MVP, is `TemporaryFileUploadHandler`, making `TemporaryUploadedFile`s. A
   regular file is a temporary file moved with `move_to` (11b), and S3 is a dev's own
   impl. A `MemoryFileUploadHandler` for small files (say under 200 KB) is a later
@@ -1212,13 +1212,13 @@ several?
     three dependency edges and no new crates. `just ci` passes (1350), and so do
     `cargo check -p formoxus --target wasm32-unknown-unknown`, `just check-web` and
     `just check-server`.
-  - [ ] **11b. The model types, in the `file` module** (`formoxus::file::FileUpload`, decision Z; no prelude entries before publishing, per
+  - [x] **11b. The model types, in the `file` module** (`formoxus::file::FileUpload`, decision Z; no prelude entries before publishing, per
     [[prelude-is-the-one-list]]). `FileUpload<S>` as decision U settles it, deriving
     `Facet`, `Clone`, `Debug` and `PartialEq`, because every model type needs those four
     (`use_form`, `form_for` and `Submission` all require them). `TemporaryUploadedFile`,
     the default `S`: a temporary file, deleted when the last clone is dropped. So it
     holds an `Arc` of a small guard whose `Drop` removes the file, and it compares by
-    path. Its methods:
+    `Arc::ptr_eq` (not by path: `x == x` would lock one `Mutex` twice and deadlock). Its methods:
     1. `path()`, where the file is now.
     2. `move_to(dest, IfExists)` (decision Y), which moves the file
        somewhere permanent and disarms the guard. **It takes `&self`, not `self`:** the
@@ -1236,20 +1236,69 @@ several?
     file,** since `Drop` never runs; Django has the same gap. The docs suggest that a
     dev using `in_dir` outside the system's `/tmp` (which the OS cleans) set up a
     cron job to sweep old files from it.
-  - [ ] **11c. The handler trait, `FileUploadHandler` (decision X).** It has `type Output`
-    (the `S`, with the same four bounds as above, plus `Send + Sync + 'static`) and
-    Django's methods, adapted to a stream that is written to as it arrives:
+  - [x] **11c. The handler trait, `FileUploadHandler` (decision X).** It has `type Stored`
+    (the `S`, with the same four bounds as above, plus `Send + Sync + 'static`).
+    (`Stored`, not `Output`, Todd 2026-11-12: it is the handle to where the file was
+    put, and it becomes `FileUpload::Received`'s `stored`. The writer's associated
+    type is `Stored` too.)
     `new_file(path, name, content_type)` starts a file and returns a writer for it;
-    the writer's `receive_data_chunk(chunk)` takes each chunk, `file_complete()`
-    returns the `Output`, and `upload_interrupted()` throws away what has been
-    written, for a file whose checks failed partway (`max_size:`) or a request that
-    broke off. The handler itself has `delete(output)`, for a file that finished
+    the writer's `write_chunk(chunk)` takes each chunk, `finish()` returns the
+    `Stored`, and `abort()` throws away what has been written, for a file whose
+    checks failed partway (`max_size:`) or a request that broke off. **The writer's
+    names are verbs, not Django's** (Todd and Claude, 2026-11-12). Django's handler
+    methods are callbacks for events (`receive_data_chunk`, `file_complete`,
+    `upload_interrupted`), told to one stateful handler as things happen. The writer
+    has no Django counterpart; it is an object formoxus tells what to do, so it
+    takes plain commands, the usual Rust stream vocabulary. `abort`, not
+    `interrupt_upload`: by the time it's called the upload has already stopped, and
+    what is asked is to discard what was stored (S3's `AbortMultipartUpload`). The
+    handler keeps Django's `new_file` and `delete`, which are already verbs and are
+    what a dev coming from Django looks for. The handler itself has `delete(output)`, for a file that finished
     storing before a later check failed (Todd's (c)); that is Django's
     `Storage.delete`. For `TemporaryFileUploadHandler` it is a drop; for S3 a
     `DeleteObject`. Every method is async and its future `Send`, because a server
     function's future must be. **Trap: the client chooses the file's name.**
     `new_file` gets it already cut to its final segment (see "The user's file name"
     above), but its docs still say not to build a path from it unchecked.
+
+    **Size (written before Todd started it, 2026-11-12):** about 120-150 lines, in
+    four pieces:
+    1. The `FileUploadHandler` trait (`type Stored`, `type Writer`, `new_file`,
+       `delete`): about 30 lines, mostly docs.
+    2. A second trait for the writer, `FileUploadWriter` (`write_chunk`, `finish`,
+       `abort`). Django has one stateful handler
+       object, but here one handler serves a whole request and each file needs its
+       own state (the open file, the count), so a per-file writer is what
+       `new_file` returns. About 25 lines.
+    3. `TemporaryFileUploadHandler` with `new()` (the system temp dir) and
+       `in_dir(dir: impl Into<PathBuf>)`, and its `new_file`, which creates the
+       file with `create_new` under a name of formoxus's own (the process id and
+       a counter, like `staging_path`), never the user's. About 40 lines.
+    4. Its writer: holds the `File` and its path, writes each chunk,
+       `finish` flushes and returns `TemporaryUploadedFile::new(path)` (which
+       ends 11b's dead-code warnings), and `abort` removes the file.
+       About 30 lines.
+
+    Three choices inside it, with the recommendation Todd can just take:
+    1. **Methods return `impl Future<Output = …> + Send`, not `async fn`.** An
+       `async fn` in a public trait can't promise its future is `Send`, and a
+       server function's future must be (rustc's `async_fn_in_trait` lint says
+       exactly this). **The built-in's impls return `std::future::ready(result)`**
+       (found when Todd built 11c). Two pedantic clippy lints meet here:
+       `manual_async_fn` refuses `fn … -> impl Future { async move { … } }`, and
+       `unused_async_trait_impl` refuses an `async fn` with no `.await` in it. The
+       temporary-file handler never awaits anything, since its I/O is blocking
+       `std::fs` (choice 3), so it does the work when called and returns a future
+       that is already finished. `Ready<T>` is `Send` when `T` is. A dev's S3
+       handler, which does await, writes `async fn` and meets neither lint.
+    2. **Errors are `io::Error`.** It's std, and an S3 handler wraps its own with
+       `io::Error::other(e)`. A generic error type would ride into
+       `accept_multipart`'s signature for little gain.
+    3. **A chunk is `&[u8]`, and the built-in writes with blocking `std::fs`.**
+       `&[u8]` needs no `bytes` dependency (axum's `Bytes` derefs to it). Writing
+       a ~0.5 MB chunk usually lands in the page cache and returns at once.
+       `tokio::fs` would add a native-only dependency to save little; revisit only
+       if a profile says so.
   - [ ] **11d. The build walk recognizes `FileUpload` (trap 10, corrected).** `FileUpload` is an
     enum now, so without this it would be walked as a `VariantNode` with a `<select>`
     of three variants, not as a struct. In `node_for_shape`, after the `Option` peel
@@ -1283,7 +1332,7 @@ several?
        has only a shape. So the stored output is kept type-erased, as an
        `Arc<dyn Any + Send + Sync>` together with a function pointer that writes it
        into a `Partial`. `accept_multipart` makes the pointer, because it is generic
-       over the handler and so knows `S`. **Trap:** a handler whose `Output` isn't the
+       over the handler and so knows `S`. **Trap:** a handler whose `Stored` isn't the
        model's `S` is caught only there, as `Partial::set`'s `WrongShape`. That is a
        dev bug, not a user's doing, so it panics with both type names, the way
        `reject_field` panics.
@@ -1357,9 +1406,9 @@ several?
        file name" above). Refuse a size stated in the wire part (decision AA) that
        is over `max_size:`, and check `accept`, both before calling `new_file`,
        from the file name and the content type, so a wrong type is never stored.
-       Stream it in chunks into the writer (`receive_data_chunk`), counting. Past
-       `max_size:`, call `upload_interrupted`, drain the rest of the part and the request (box 10 (d)), and record the
-       error. A `413` from `chunk()` (the body limit, trap 12) interrupts every open writer and
+       Stream it in chunks into the writer (`write_chunk`), counting. Past
+       `max_size:`, call `abort`, drain the rest of the part and the request (box 10 (d)), and record the
+       error. A `413` from `chunk()` (the body limit, trap 12) aborts every open writer and
        becomes a form-level error naming the limit. **Trap, not yet measured:**
        whether the client still gets an answer after a 413. Box 13 tests it in a
        browser.

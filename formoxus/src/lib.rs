@@ -75,6 +75,7 @@ pub mod field_attrs;
 pub mod field_kind;
 pub mod field_node;
 pub mod fields;
+pub mod file;
 pub mod form;
 pub mod label_case;
 pub mod nodes;

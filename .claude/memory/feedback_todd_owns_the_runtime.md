@@ -25,3 +25,10 @@ and proved, which saved me nothing and cost him the working-out.
 3. "Expand this a bit" means more explanation, not a prototype.
 4. Review what he writes; that is where I earn my keep. Tests, plans, memory and docs stay
    mine: [[user-role]].
+
+**Code he asks for: hand it over, don't compile or run it first** (Todd, 2026-11-12:
+"In the future, you don't need to compile and run. If I get errors, I can try to fix
+them or come back to you if there's a problem."). I had built `TemporaryUploadedFile`
+in a scratch crate with tests before giving it to him. Point 2's "measured, not assumed"
+still applies to CLAIMS about behaviour (what facet or axum does), not to code he will
+compile himself.

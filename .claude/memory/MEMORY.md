@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-12 home**: on branch `file`, box 11 written out, 11a done, U-AA all decided, no open questions; Todd builds 11b next
+- [**START HERE: next session**](next_session.md) — **2026-11-12 END**: branch `file`, 11a-11c done (`src/file.rs`), ci 1361, pushed; next 11d (Todd), give its size first
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; he must be able to answer issues without me
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
@@ -38,6 +38,7 @@
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
 - [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code uses full module paths; 2026-11-09: NO new re-exports until publish
+- [No shared string type](no_shared_string_type.md) — DECIDED 2026-11-12: no imstr/Arc<str> swap, it would leak into the public API; only `NodePath`'s private field could change
 - [Widget is the umbrella word](widget_is_the_umbrella_word.md) — "widget", never "control"; why the 2026-09-19 rename was reversed
 - [WidgetSlot dispatch](widget_slot_dispatch.md) — how `form!` picks leaf vs set widget builder by the field's shape: const-generic `WidgetSlot<IS_SET>`, failure codes
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30, C4 BUILT 2026-11-03; its `ErrorsStore` section is SUPERSEDED by `formoxus/ERRORS_PLAN.md` (errors leave the nodes)
