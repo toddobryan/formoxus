@@ -35,7 +35,7 @@ pub use attrs::{
 pub use bound::{Bound, Step};
 pub use buttons::{ButtonType, Invocation};
 pub use elements::{HtmlElement, Tag};
-pub use file_type::FileType;
+pub use file_type::{FileType, FileTypeError};
 pub use fixed_keys::FixedKey;
 pub use input_types::InputType;
 pub use widget_names::WidgetName;

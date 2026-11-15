@@ -6,7 +6,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use facet::Facet;
 use facet::Shape;
-use formoxus_spec::file_type::FileType;
+use formoxus_spec::FileType;
 use heck::ToSnakeCase;
 use indexmap::IndexMap;
 

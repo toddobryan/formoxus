@@ -32,3 +32,13 @@ them or come back to you if there's a problem."). I had built `TemporaryUploaded
 in a scratch crate with tests before giving it to him. Point 2's "measured, not assumed"
 still applies to CLAIMS about behaviour (what facet or axum does), not to code he will
 compile himself.
+
+**Tests written ahead of his code: NO implementation, not even a throwaway one to check
+the tests** (Todd, 2026-11-14, after I ran the `FileType` `FromStr` tests against a
+scratch implementation: "I was more interested in what you thought were good error
+messages than in how easy it was to implement. Plus, what's the point of me implementing
+it if you already have a good implementation?"). Two harms: (1) it bends the SPEC toward
+what is easy to code, when the tests' job is to say what a dev SHOULD see, error wording
+above all; (2) it is point 2 again, the working-out done and thrown away. So write the
+tests from the plan and from the dev reading the message, and let his implementation be
+their first run. If a test is wrong, he finds it, which he likes.
