@@ -32,6 +32,19 @@ impl FileTypeError {
     fn error(entry: &str, reason: &str) -> Self {
         Self(format!("`{entry}` is not a file type: {reason}"))
     }
+
+    /// The same file type twice in one list, which HTML forbids. `first` and
+    /// `second` are the two entries as written, so a dev who typed them in two
+    /// cases is told why they count as one.
+    fn duplicate(list: &str, first: &str, second: &str) -> Self {
+        if first == second {
+            Self(format!("`{list}` lists `{first}` twice"))
+        } else {
+            Self(format!(
+                "`{list}` lists `{first}` and `{second}`, which are the same file type"
+            ))
+        }
+    }
 }
 
 impl Display for FileTypeError {
@@ -166,6 +179,31 @@ impl FileType {
         }
     }
 
+    /// Parses a whole `accept` value: file types separated by commas, each
+    /// trimmed, as HTML splits it. Refuses an empty entry (`.pdf,,.doc`, or a
+    /// trailing comma), which HTML does too, and the same file type twice,
+    /// compared ASCII case-insensitively, as HTML compares them. The first
+    /// problem, reading left to right, is the error.
+    ///
+    /// # Errors
+    ///
+    /// The first entry that is not a [`FileType`], or the first that repeats
+    /// an earlier one.
+    pub fn parse_list(list: &str) -> Result<Vec<FileType>, FileTypeError> {
+        // Each entry as written beside what it parsed to, so a duplicate's
+        // error can quote both spellings.
+        let mut parsed: Vec<(FileType, &str)> = Vec::new();
+        for entry in list.split(',') {
+            let entry = entry.trim_ascii();
+            let file_type = entry.parse::<FileType>()?;
+            if let Some((_, first)) = parsed.iter().find(|(earlier, _)| *earlier == file_type) {
+                return Err(FileTypeError::duplicate(list.trim_ascii(), first, entry));
+            }
+            parsed.push((file_type, entry));
+        }
+        Ok(parsed.into_iter().map(|(file_type, _)| file_type).collect())
+    }
+
     fn did_you_mean(entry: &str, meant: &str) -> FileTypeError {
         FileTypeError::error(entry, &format!("did you mean `{meant}`?"))
     }
@@ -199,8 +237,8 @@ impl FromStr for FileType {
 
 #[cfg(test)]
 mod tests {
-    //! `FromStr` for ONE `accept` entry; `parse_list` (commas, duplicates) and
-    //! matching get their own tests once they exist. The rules are
+    //! `FromStr` for ONE `accept` entry, then `parse_list` for a whole value
+    //! (commas, duplicates); matching gets its own once it exists. The rules are
     //! `WIDGETS_PLAN.md` 11e item 3, "What `accept` allows". Every error but the empty one is
     //! "`{entry}` is not a file type: {reason}", with the entry trimmed.
     //!
@@ -227,11 +265,11 @@ mod tests {
         FileType(Kind::AnyOf(s.to_string()))
     }
 
-    fn error(entry: &str, reason: &str) -> std::result::Result<FileType, String> {
+    fn error<T>(entry: &str, reason: &str) -> std::result::Result<T, String> {
         Err(format!("`{entry}` is not a file type: {reason}"))
     }
 
-    fn did_you_mean(entry: &str, meant: &str) -> std::result::Result<FileType, String> {
+    fn did_you_mean<T>(entry: &str, meant: &str) -> std::result::Result<T, String> {
         error(entry, &format!("did you mean `{meant}`?"))
     }
 
@@ -542,6 +580,135 @@ mod tests {
         ] {
             expect_that!(parse(entry), eq(&error(entry, A_LIST)), "{entry}");
         }
+    }
+
+    // ---- parse_list ----
+
+    fn list(list: &str) -> std::result::Result<Vec<FileType>, String> {
+        FileType::parse_list(list).map_err(|e| e.to_string())
+    }
+
+    #[gtest]
+    fn a_list_of_one_is_that_file_type() {
+        expect_that!(list(".pdf"), eq(&Ok(vec![extension(".pdf")])));
+        expect_that!(list("image/*"), eq(&Ok(vec![any_of("image")])));
+    }
+
+    /// In the dev's order, each entry trimmed and lowercased as `FromStr` does.
+    #[gtest]
+    fn a_list_parses_each_entry_in_order() {
+        expect_that!(
+            list(".PDF, .docx ,image/*,\tText/Plain\n"),
+            eq(&Ok(vec![
+                extension(".pdf"),
+                extension(".docx"),
+                any_of("image"),
+                mime("text/plain"),
+            ]))
+        );
+    }
+
+    /// An empty `accept:` is refused rather than read as "anything": leaving
+    /// `accept:` off already means that.
+    #[gtest]
+    fn an_empty_list_is_refused() {
+        for value in ["", "   "] {
+            expect_that!(
+                list(value),
+                eq(&Err("an empty string is not a legal file type".to_string())),
+                "{value:?}"
+            );
+        }
+    }
+
+    /// HTML refuses these too: splitting on commas gives an empty token, and an
+    /// empty token is none of the three forms. The message is `FromStr`'s own
+    /// (Todd, 2026-11-14, H).
+    #[gtest]
+    fn an_empty_entry_is_refused() {
+        for value in [".pdf,,.doc", ".pdf,", ",.pdf", ".pdf, ,.doc", ","] {
+            expect_that!(
+                list(value),
+                eq(&Err("an empty string is not a legal file type".to_string())),
+                "{value:?}"
+            );
+        }
+    }
+
+    /// An entry's error is `FromStr`'s, naming that entry, not the list: the
+    /// suggestion is about the entry, and `form!` points at the whole string.
+    #[gtest]
+    fn a_bad_entry_gives_its_own_error() {
+        expect_that!(list(".pdf, docx"), eq(&did_you_mean("docx", ".docx")));
+        expect_that!(
+            list("image/*, text/*"),
+            eq(&error(
+                "text/*",
+                "`*` is a wildcard only in `audio/*`, `video/*` and `image/*`; \
+                 list the `text/` types you want, or their extensions"
+            ))
+        );
+    }
+
+    #[gtest]
+    fn the_first_problem_is_the_one_reported() {
+        expect_that!(list("pdf, docx"), eq(&did_you_mean("pdf", ".pdf")));
+        // The duplicate comes before the bad entry, so it is what's reported.
+        expect_that!(
+            list(".pdf, .pdf, docx"),
+            eq(&Err("`.pdf, .pdf, docx` lists `.pdf` twice".to_string()))
+        );
+        expect_that!(list(".pdf, docx, .pdf"), eq(&did_you_mean("docx", ".docx")));
+    }
+
+    /// HTML: the tokens "must not contain duplicates", and the list is shown
+    /// trimmed, as an entry is.
+    #[gtest]
+    fn the_same_entry_twice_is_refused() {
+        expect_that!(
+            list(".pdf, .doc, .pdf"),
+            eq(&Err("`.pdf, .doc, .pdf` lists `.pdf` twice".to_string()))
+        );
+        expect_that!(
+            list("  image/*,image/*  "),
+            eq(&Err("`image/*,image/*` lists `image/*` twice".to_string()))
+        );
+    }
+
+    /// Compared ASCII case-insensitively, as HTML compares them. The message
+    /// quotes both spellings, so the dev sees why two different-looking
+    /// entries are one.
+    #[gtest]
+    fn the_same_file_type_in_two_cases_is_refused() {
+        for (value, first, second) in [
+            (".pdf, .PDF", ".pdf", ".PDF"),
+            ("image/*, IMAGE/*", "image/*", "IMAGE/*"),
+            ("text/plain, .csv, Text/Plain", "text/plain", "Text/Plain"),
+        ] {
+            expect_that!(
+                list(value),
+                eq(&Err(format!(
+                    "`{value}` lists `{first}` and `{second}`, which are the same file type"
+                ))),
+                "{value}"
+            );
+        }
+    }
+
+    /// Duplicates are the same TOKEN, not overlapping ones. `.pdf` and
+    /// `application/pdf` usually admit the same files, and `image/*` admits
+    /// every `image/png`, but HTML allows both pairs, and listing both is how
+    /// a dev covers a browser that knows only one.
+    #[gtest]
+    fn overlapping_file_types_are_not_duplicates() {
+        expect_that!(
+            list(".pdf, application/pdf"),
+            eq(&Ok(vec![extension(".pdf"), mime("application/pdf")]))
+        );
+        expect_that!(
+            list("image/*, image/png"),
+            eq(&Ok(vec![any_of("image"), mime("image/png")]))
+        );
     }
 
     #[gtest]
