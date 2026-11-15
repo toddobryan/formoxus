@@ -204,8 +204,66 @@ impl FileType {
         Ok(parsed.into_iter().map(|(file_type, _)| file_type).collect())
     }
 
+    /// Whether `accept` allows a file with this `name` and `content_type`:
+    /// when any entry matches it, or when `accept` is empty, which allows every
+    /// file, as an `<input type=file>` with no `accept` does.
+    ///
+    /// - An extension matches when `name`, ASCII-lowercased, ends with it, so
+    ///   `.tar.gz` works. The content type plays no part.
+    /// - A MIME type matches `content_type` cut at any `;`, trimmed and
+    ///   ASCII-lowercased, so `Text/Plain; charset=utf-8` is `text/plain`.
+    /// - A wildcard matches when the content type's half before its `/` is the
+    ///   wildcard's type: `image/*` matches `image/svg+xml`.
+    ///
+    /// A file with no content type, or an empty one (what a browser's
+    /// `File.type` gives for a type it doesn't know), matches only an extension.
+    #[must_use]
+    pub fn accepts(accept: &[FileType], name: &str, content_type: Option<&str>) -> bool {
+        if accept.is_empty() {
+            return true;
+        }
+        let name = name.to_ascii_lowercase();
+        let content_type = content_type
+            .map(|ct| {
+                ct.split_once(';')
+                    .map_or(ct, |(before, _)| before)
+                    .trim_ascii()
+                    .to_ascii_lowercase()
+            })
+            .filter(|ct| !ct.is_empty());
+        accept
+            .iter()
+            .any(|file_type| file_type.matches(&name, content_type.as_deref()))
+    }
+
+    /// One entry against a file, `name` and `content_type` already normalized
+    /// by [`accepts`](Self::accepts). Private, so the empty-list rule and the
+    /// normalizing can't be skipped.
+    fn matches(&self, name: &str, content_type: Option<&str>) -> bool {
+        match &self.0 {
+            Kind::Extension(extension) => name.ends_with(extension.as_str()),
+            Kind::Mime(mime) => content_type == Some(mime.as_str()),
+            Kind::AnyOf(ty) => content_type
+                .and_then(|ct| ct.split_once('/'))
+                .is_some_and(|(ct_type, _)| ct_type == ty),
+        }
+    }
+
     fn did_you_mean(entry: &str, meant: &str) -> FileTypeError {
         FileTypeError::error(entry, &format!("did you mean `{meant}`?"))
+    }
+}
+
+/// The entry as `accept` writes it, in its lowercase form: `.pdf`,
+/// `application/pdf`, `image/*`. What an `accept` attribute is built from, and
+/// what "Allowed: …" lists in a wrong-type error.
+impl Display for FileType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        match &self.0 {
+            Kind::Extension(extension) => f.write_str(extension),
+            Kind::Mime(mime) => f.write_str(mime),
+            Kind::AnyOf(ty) => write!(f, "{ty}/*"),
+        }
     }
 }
 
@@ -238,7 +296,7 @@ impl FromStr for FileType {
 #[cfg(test)]
 mod tests {
     //! `FromStr` for ONE `accept` entry, then `parse_list` for a whole value
-    //! (commas, duplicates); matching gets its own once it exists. The rules are
+    //! (commas, duplicates), then `accepts` for matching a file. The rules are
     //! `WIDGETS_PLAN.md` 11e item 3, "What `accept` allows". Every error but the empty one is
     //! "`{entry}` is not a file type: {reason}", with the entry trimmed.
     //!
@@ -708,6 +766,230 @@ mod tests {
         expect_that!(
             list("image/*, image/png"),
             eq(&Ok(vec![any_of("image"), mime("image/png")]))
+        );
+    }
+
+    // ---- Display ----
+
+    /// Each entry back as the dev wrote it, lowercased: what `accept=` and the
+    /// wrong-type error both show.
+    #[gtest]
+    fn a_file_type_displays_as_its_lowercase_entry() {
+        for (entry, shown) in [
+            (".pdf", ".pdf"),
+            (".TAR.GZ", ".tar.gz"),
+            ("Application/PDF", "application/pdf"),
+            ("image/*", "image/*"),
+            ("VIDEO/*", "video/*"),
+            ("  text/plain\t", "text/plain"),
+        ] {
+            let file_type: FileType = entry.parse().expect("a valid entry");
+            expect_that!(file_type.to_string(), eq(shown), "{entry:?}");
+        }
+    }
+
+    /// Displayed, an entry parses back to itself, so an `accept` attribute
+    /// built from parsed entries says what the dev's string said.
+    #[gtest]
+    fn a_displayed_file_type_parses_back_to_itself() {
+        for entry in [
+            ".pdf",
+            ".C++",
+            "application/vnd.ms-excel",
+            "audio/*",
+            "Image/*",
+        ] {
+            let file_type: FileType = entry.parse().expect("a valid entry");
+            expect_that!(
+                file_type.to_string().parse::<FileType>().ok(),
+                some(eq(&file_type)),
+                "{entry}"
+            );
+        }
+    }
+
+    // ---- accepts ----
+
+    /// Whether `accept`, written as a dev writes it, allows this file.
+    fn accepts(accept: &str, name: &str, content_type: Option<&str>) -> bool {
+        let accept = FileType::parse_list(accept).expect("the test's `accept` should parse");
+        FileType::accepts(&accept, name, content_type)
+    }
+
+    /// No `accept` is no restriction, as in HTML: even a file with no content
+    /// type and no extension.
+    #[gtest]
+    fn no_file_types_accept_every_file() {
+        expect_that!(
+            FileType::accepts(&[], "essay.pdf", Some("application/pdf")),
+            eq(true)
+        );
+        expect_that!(FileType::accepts(&[], "README", None), eq(true));
+    }
+
+    #[gtest]
+    fn an_extension_matches_the_end_of_the_name_in_any_case() {
+        for name in ["essay.pdf", "ESSAY.PDF", "Essay.Pdf", "my.essay.pdf"] {
+            expect_that!(accepts(".pdf", name, None), eq(true), "{name}");
+        }
+        for name in ["essay.pdf.txt", "essaypdf", "essay.pd", "essay"] {
+            expect_that!(accepts(".pdf", name, None), eq(false), "{name}");
+        }
+    }
+
+    #[gtest]
+    fn a_two_part_extension_matches_both_parts() {
+        expect_that!(accepts(".tar.gz", "backup.tar.gz", None), eq(true));
+        expect_that!(accepts(".tar.gz", "backup.gz", None), eq(false));
+        expect_that!(accepts(".tar.gz", "backup.tgz", None), eq(false));
+    }
+
+    /// The case folding is ASCII on both sides, as in `FromStr`: `É` stays `É`
+    /// and still ends in `.pdf`, while `.ñ` does not match `Ñ`.
+    #[gtest]
+    fn an_extension_folds_only_ascii_letters_in_the_name() {
+        expect_that!(accepts(".pdf", "RÉSUMÉ.PDF", None), eq(true));
+        expect_that!(accepts(".ñ", "notes.ñ", None), eq(true));
+        expect_that!(accepts(".ñ", "notes.Ñ", None), eq(false));
+    }
+
+    /// An extension is about the name alone, as a browser's picker filters by
+    /// it: a content type that disagrees doesn't stop it matching.
+    #[gtest]
+    fn an_extension_ignores_the_content_type() {
+        expect_that!(accepts(".pdf", "essay.pdf", Some("text/plain")), eq(true));
+        expect_that!(
+            accepts(".pdf", "essay.txt", Some("application/pdf")),
+            eq(false)
+        );
+    }
+
+    #[gtest]
+    fn a_mime_type_matches_the_content_type_in_any_case() {
+        for content_type in ["application/pdf", "Application/PDF", " application/pdf "] {
+            expect_that!(
+                accepts("application/pdf", "essay", Some(content_type)),
+                eq(true),
+                "{content_type:?}"
+            );
+        }
+        for content_type in [
+            "application/pdfx",
+            "application/x-pdf",
+            "text/pdf",
+            "application",
+        ] {
+            expect_that!(
+                accepts("application/pdf", "essay.pdf", Some(content_type)),
+                eq(false),
+                "{content_type}"
+            );
+        }
+    }
+
+    /// `accept` can't hold parameters (`FromStr` refuses them), but a content
+    /// type can, so they are cut off before comparing.
+    #[gtest]
+    fn a_mime_type_ignores_the_content_types_parameters() {
+        for content_type in [
+            "text/plain; charset=utf-8",
+            "text/plain;charset=utf-8",
+            "Text/Plain ; charset=UTF-8",
+        ] {
+            expect_that!(
+                accepts("text/plain", "notes", Some(content_type)),
+                eq(true),
+                "{content_type}"
+            );
+        }
+    }
+
+    /// The name plays no part: a MIME entry is about the content type alone.
+    #[gtest]
+    fn a_mime_type_ignores_the_name() {
+        expect_that!(
+            accepts("application/pdf", "notes.txt", Some("application/pdf")),
+            eq(true)
+        );
+    }
+
+    #[gtest]
+    fn a_wildcard_matches_every_subtype_of_its_type() {
+        for content_type in ["image/png", "IMAGE/JPEG", "image/svg+xml; charset=utf-8"] {
+            expect_that!(
+                accepts("image/*", "photo", Some(content_type)),
+                eq(true),
+                "{content_type}"
+            );
+        }
+        for content_type in ["text/plain", "imagex/png", "application/image", "image"] {
+            expect_that!(
+                accepts("image/*", "photo.png", Some(content_type)),
+                eq(false),
+                "{content_type}"
+            );
+        }
+    }
+
+    /// No content type, or an empty one (a browser's `File.type` for a type it
+    /// doesn't know), can match only an extension.
+    #[gtest]
+    fn a_file_with_no_content_type_matches_only_an_extension() {
+        for content_type in [None, Some(""), Some("  "), Some(";charset=utf-8")] {
+            expect_that!(
+                accepts("image/*", "photo.png", content_type),
+                eq(false),
+                "{content_type:?}"
+            );
+            expect_that!(
+                accepts("image/png", "photo.png", content_type),
+                eq(false),
+                "{content_type:?}"
+            );
+            expect_that!(
+                accepts(".png", "photo.png", content_type),
+                eq(true),
+                "{content_type:?}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn any_matching_entry_is_enough() {
+        let accept = ".pdf, .docx, image/*";
+        expect_that!(accepts(accept, "essay.pdf", None), eq(true));
+        expect_that!(
+            accepts(accept, "essay.DOCX", Some("application/octet-stream")),
+            eq(true)
+        );
+        expect_that!(accepts(accept, "photo", Some("image/heic")), eq(true));
+        expect_that!(
+            accepts(accept, "essay.doc", Some("application/msword")),
+            eq(false)
+        );
+    }
+
+    /// Why a dev should list extensions too: a browser that doesn't know a
+    /// file's type sends `application/octet-stream`, which no MIME entry but
+    /// that one matches. The extension still does.
+    #[gtest]
+    fn an_unknown_content_type_is_matched_only_by_extension() {
+        let unknown = Some("application/octet-stream");
+        expect_that!(
+            accepts(
+                "application/vnd.oasis.opendocument.text",
+                "essay.odt",
+                unknown
+            ),
+            eq(false)
+        );
+        expect_that!(
+            accepts(
+                "application/vnd.oasis.opendocument.text, .odt",
+                "essay.odt",
+                unknown
+            ),
+            eq(true)
         );
     }
 

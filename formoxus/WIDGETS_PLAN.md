@@ -1335,17 +1335,86 @@ several?
     them through `LeafArgs`); the file's name, which is its value in the store; and
     `meta: Option<FileMeta>`, the file's `content_type` and `size`, plus, on the
     server, the stored output. Its methods:
+    **Size of what is left (2026-11-15):** about 170 lines of runtime, in three
+    pieces, 11e.2, 11e.3's checks and 11e.4, in that order, since each needs the one
+    before. 11e.1 and 11e.5 are done, and so is 11e.3's `FileType`. Claude writes the
+    tests for each piece ahead of it, from this text, with no implementation.
+
     1. `collect_values`/`distribute_values` carry only the name, so presence,
        `required`, `to_wire` and `reset` work through the store as for any field.
+       (Done 2026-11-13, Todd, with 11d.)
     2. **A new `Node` method, `distribute_files(prefix, &FilesByPath)`,** which
-       sets `meta` from a table keyed by path. It has a default body that does
-       nothing, and the five containers (`StructNode`, `OptionNode`, `ListNode`,
-       `SetNode`, `VariantNode`) override it to pass the table to their children.
-       Sizes and content types can't travel in the store, which holds one string per
-       path, and they are what `max_size:` and `accept:` check.
+       sets `meta` from a table keyed by path. Sizes and content types can't travel
+       in the store, which holds one string per path, and they are what `max_size:`
+       and `accept:` check. About 60 lines.
+       - **`FilesByPath`** is `IndexMap<NodePath, FileMeta>`, declared beside
+         `ValuesByPath` in `nodes.rs`. `FileMeta` gains `stored: Option<StoredFile>`
+         in 11e.4; until then it is the content type and size.
+       - **The default body does nothing**, which is right for every leaf but
+         `FileNode`. The five containers (`StructNode`, `OptionNode`, `ListNode`,
+         `SetNode`, `VariantNode`) override it to pass the table on, and **they
+         reach exactly the children their `distribute_values` reaches, with the same
+         prefixes**: the current variant's nodes only, list and set items under their
+         item keys (`#3`), an `Option`'s inner node always and under the same prefix
+         (`OptionNode` adds no path segment of its own). Copy each
+         container's `distribute_values` for the shape of it. If the two walks
+         disagree, a file can sit at a path `validate` looks at but no
+         `distribute_files` reached, and its checks silently don't run.
+       - **`FormState::distribute_files(&FilesByPath)`** at the root, the way
+         `FormState::distribute_values` (`form/state.rs:322`) starts its walk.
+       - **`FileNode` REPLACES its `meta`** with what the table has at its path, so
+         a path missing from the table sets it to `None` (decision 2026-11-15, Todd
+         agreeing to Claude's recommendation). This is the opposite of
+         `distribute_values`, and on purpose. The value map can be partial: a set's
+         Add passes only its draft's values (`form.rs:955`), so there a missing path
+         has to mean "leave it". The file table is always whole: `Form::validate`, the
+         live check and the server each pass all of it, so a missing path means "no
+         file is picked here". Leaving `meta` alone instead would let a dropped file's
+         size and type outlive it whenever the name doesn't change. The case: an edit
+         form loads `Existing { name: "report.pdf" }`; the user picks a new 10 MB
+         file that is also called `report.pdf` and sees "too large"; then Reset clears
+         the table and puts the store back to `report.pdf`. The name never changed,
+         so `distribute_values` keeps `meta`, and only replacing it here gets the
+         node back to `Existing`.
+       - **Trap: never pass part of the table.** Under the replace rule, an
+         optimization that sends `distribute_files` only the file that just changed
+         would set every other file's `meta` to `None`, and a too-large file elsewhere
+         in the form would pass. The doc comment on the `Node` method says so.
+       - **Trap: values first, files second, every time.** `distribute_values`
+         builds the structure (it chooses variants and makes list items), so a file
+         inside an item added in this same pass has no node to land on until it has
+         run. And `FileNode::distribute_values` clears `meta` when the name changes,
+         which would wipe a `meta` that `distribute_files` had just set.
     3. `validate`: missing (no name) against `required`; then, if there is `meta`,
        `max_size` against its size and `accept` against the name's extension and the
        content type, with HTML's rules for `accept` (`.pdf`, `image/*`, `text/plain`).
+
+       **`FileType` is DONE (2026-11-15)**: `FromStr` for one entry,
+       `FileType::parse_list` for a whole value and `FileType::accepts` for matching,
+       and `Display`, in `formoxus-spec/src/file_type.rs`, with 49 inline tests. Both its types have
+       private fields, so parsing is the only way to make one. The rules it follows
+       are below, kept as the record of why.
+
+       **The checks in `FileNode::validate`** (about 40 lines). Both run only when
+       there is `meta`, since an `Existing` file has no size or type to check:
+       - **Too large:** `meta.size > max_size`. The message (Todd, 2026-11-15) is
+         "This file is too large. The largest allowed is 2 MB." The size is written
+         by a small pure function with an inline test, in decimal units (1 kB is
+         1,000 bytes, as browsers and operating systems show sizes now), with at
+         most one decimal place and no trailing `.0`: `2 MB`, `1.5 MB`, `500 kB`,
+         `999 bytes`. **Trap: round the limit DOWN, never to nearest.** A limit of
+         2,050,000 bytes shown as "2.1 MB" would let a user believe a 2.08 MB file
+         fits and then see it refused; "2 MB" understates it, which is safe.
+       - **Wrong type:** `!FileType::accepts(&self.accept, &self.file_name,
+         meta.content_type.as_deref())`. The message (Todd, 2026-11-15) is "This file
+         type isn't allowed. Allowed: .pdf, .docx, image/*." The list is the
+         `accept` entries in the dev's order, joined with ", ". **That needs
+         `Display` on `FileType`**, writing each entry's lowercase form (`.pdf`,
+         `application/pdf`, `image/*`), which was planned for 11f and is needed here
+         first. (Done 2026-11-15, Claude, with two tests, one a parse-display round
+         trip.)
+       - Both messages can appear together, and both come after the "required" one,
+         the way a `FieldNode` gathers its own.
 
        **What `accept` allows, character by character** (checked 2026-11-13 against
        the HTML Standard's File Upload state and the MIME Sniffing Standard).
@@ -1411,23 +1480,69 @@ several?
          one message, "`{entry}` is not a file type: {reason}". Not an enum, since
          nothing branches on the reason: `form!` turns it into a `compile_error!`
          and a runtime caller panics with it.
-    4. `write_value_into` picks the variant. With `meta` and a stored output it is
-       `Received`; with `meta` and none, `Chosen`; with a name and no `meta`, `Existing`.
-       Writing `stored` is the hard part, because the node can't name `S`: the walk
-       has only a shape. So the stored output is kept type-erased, as an
-       `Arc<dyn Any + Send + Sync>` together with a function pointer that writes it
-       into a `Partial`. `accept_multipart` makes the pointer, because it is generic
-       over the handler and so knows `S`. **Trap:** a handler whose `Stored` isn't the
-       model's `S` is caught only there, as `Partial::set`'s `WrongShape`. That is a
-       dev bug, not a user's doing, so it panics with both type names, the way
-       `reject_field` panics.
+    4. **`write_value_into` picks the variant, and `stored` is type-erased.**
+       About 70 lines.
+       - **Which variant:** with `meta` whose `stored` is `Some`, `Received { name,
+         content_type, size, stored }`; with `meta` and no `stored`, `Chosen { name,
+         content_type, size }`; with no `meta`, `Existing { name }`, which is what it
+         writes today. On the client there is never a `stored`, so a picked file is
+         `Chosen`; only `accept_multipart` (11h) makes `Received`.
+       - **Why `stored` has to be type-erased:** `FileNode` is built by walking a
+         shape, so it never has the type `S` in hand, but `Partial::set` needs a value
+         of type `S`. `accept_multipart` does have it, because it is generic over the
+         handler, whose `Stored` is `S`. So it wraps each finished output as a
+         **`StoredFile`**, in `src/file.rs`, holding three things:
+         1. `value: Arc<dyn Any + Send + Sync>`: the output itself. An `Arc` so that
+            cloning a `FileNode` (`clone_box`) shares it rather than needing `S:
+            Clone` at that point; `Send + Sync` because a server function's future
+            holds the form state across `.await`s.
+         2. `type_name: &'static str`, from `std::any::type_name::<S>()`, for the
+            panic below and for a hand-written `Debug` (which `FileMeta`'s derived
+            `Debug` needs, and `dyn Any` doesn't give).
+         3. `write: for<'p> fn(&(dyn Any + Send + Sync), Partial<'p>) ->
+            Result<Partial<'p>, ReflectError>`: a plain function pointer, one copy per
+            `S`, which downcasts the value to `S`, clones it and `set`s it.
+       - **`StoredFile::new::<S>(stored: S)`** is the only way to make one,
+         `pub(crate)`, with `S: Facet + Clone + Send + Sync + 'static`, and it fills
+         in all three, so the pointer can never disagree with the value. **Not yet
+         checked:** which `Facet` lifetime the bound needs for `Partial<'p>::set` to
+         accept an `S`. `set<U>` asks for `U: Facet<'facet>`, and a derived type
+         implements `Facet<'a>` for every `'a`, so `for<'a> Facet<'a>` should do. Let
+         the compiler say.
+       - **Writing it:** `select_variant_named("Received")`, the three plain fields
+         with `set_field` as `Existing`'s name is written today, then
+         `begin_field("stored")`, `(stored.write)(&*stored.value, partial)` and
+         `end()`.
+       - **Trap: a handler whose `Stored` isn't the model's `S`.** A dev's model says
+         `FileUpload<S3Object>` and the call passes a `TemporaryFileUploadHandler`.
+         `Partial::set` would refuse it with `WrongShape`. That is a dev bug, not a
+         user's doing, so formoxus panics, naming both types, the way `reject_field`
+         panics. **See decision BB below for where to catch it**: at
+         `write_value_into` is too late.
+
+       **Decision BB (Todd, 2026-11-15, agreeing to Claude's recommendation): check
+       the handler's type before any file is stored.** Caught at `write_value_into`, the mismatch comes after
+       `accept_multipart` has stored every file, and a panic there skips the
+       handler's `delete`, so with an S3 handler each failed request leaves its files
+       in the bucket for good. Instead, at build time `FileNode` records the shape of
+       its `FileUpload`'s `S` (`stored_shape: &'static Shape`, read from the
+       `Received` variant's `stored` field in the shape `is_file_upload` already
+       matched). Then `accept_multipart`, before it reads its first file part, compares
+       `<H::Stored as Facet>::SHAPE` against every file leaf's `stored_shape` and
+       panics on the first that differs, with both names, before anything is
+       stored. About 20 more lines (a `Node` walk like `paths`, or a field on the
+       state built with the leaves). The check in `write` stays, as an assert that
+       can no longer fire.
     5. Populating from a model (`form_for`): the name from whichever variant it is,
        and no `meta`, since a model loaded on the client has no file to hand. So an
-       untouched upload in an edit form is `Existing`, which is point 3.
-    6. `render` calls its widget like a leaf, with one widget only, `FileInput`
-       (11f). A different widget is refused with the same message a `widget:` of the
-       wrong kind gets today.
-  - [ ] **11f. The file table and `FileInput` (trap 11).** `Form` gains `files:
+       untouched upload in an edit form is `Existing`, which is point 3. (Done
+       2026-11-13, Todd, with 11d.)
+    6. **Moved to 11f** (Todd, 2026-11-15): `render` calling `FileInput`, and refusing
+       any other widget, belong with the widget itself.
+  - [ ] **11f. The file table and `FileInput` (trap 11).** (Includes what was
+    11e.6: `FileNode::render` calls its widget like a leaf, with one widget only,
+    `FileInput`. A different widget is refused with the same message a `widget:` of
+    the wrong kind gets today.) `Form` gains `files:
     Signal<IndexMap<NodePath, FileData>>`, and `FieldHandle` a way to reach it: one
     `pick(Option<FileData>)` that writes the name to the store (`""` for none),
     puts the file in the table or takes it out, and reports the event. **Trap: a pick

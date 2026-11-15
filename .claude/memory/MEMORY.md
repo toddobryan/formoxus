@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-13 END**: branch `file`, 11d done + FileNode first slice, tests in; WIP pushed, does NOT compile (`file_type.rs` mid-edit, two import paths); next: Todd finishes `FileType`, then 11e.2-11e.4; (a)-(c) open
+- [**START HERE: next session**](next_session.md) — **2026-11-15**: `file`, FileType FromStr + parse_list done, ci 1414, pushed; next matching, then (a)-(c), then plan 11e.2/11e.4
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
