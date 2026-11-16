@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-16 later**: `file`, f.6 (`Contents`) DONE, next f.6b `FormWide`; 26 f.12 tests in, 22 failing as expected; uncommitted
+- [**START HERE: next session**](next_session.md) — **2026-11-16 latest**: `file`, f.6 + f.6b (`FormWide`) DONE, next f.7 `pick`; 22 f.12 tests failing as expected; f.6b uncommitted
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait

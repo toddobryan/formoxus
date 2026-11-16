@@ -17,7 +17,7 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, FilesSignal, NodeContext, no_such_path};
+use crate::nodes::{Edit, ErrorsStore, FilesSignal, FormWide, NodeContext, no_such_path};
 use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
@@ -499,18 +499,18 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     fn root_ctx(&self) -> NodeContext {
-        NodeContext::root(
-            self.id.peek().clone(),
-            self.contents,
-            self.on_edit,
-            OnFieldEvent {
+        NodeContext::root(FormWide {
+            form_id: self.id.peek().clone(),
+            contents: self.contents,
+            on_edit: self.on_edit,
+            on_field_event: OnFieldEvent {
                 callback: Some(self.on_field_event),
                 is_live: self.live_validation(),
             },
-            self.label_case(),
-            self.classes(),
-            self.errors_store,
-        )
+            label_case: self.label_case(),
+            classes: Rc::new(self.classes()),
+            errors: self.errors_store,
+        })
     }
 
     /// Add a form-level error — one that belongs to the form as a whole rather

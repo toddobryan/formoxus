@@ -36,7 +36,8 @@ pub struct WidgetCommon {
     /// The form's resolved classes, for the widget to look up its parts' slots
     /// (`classes.part_class::<Widget>(Tag::Label, invalid)`). A custom widget gets
     /// them too, so it can borrow a built-in slot and follow the app's preset.
-    /// An `Rc` from `NodeContext`; see the rule on `NodeContext::classes`.
+    /// An `Rc` from [`FormWide::classes`](crate::nodes::FormWide::classes); see the
+    /// rule there.
     pub classes: Rc<Classes>,
 }
 

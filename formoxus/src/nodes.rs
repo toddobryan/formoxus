@@ -7,6 +7,7 @@ use facet::{Partial, Peek, ReflectError};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::ops::Deref;
 use std::rc::Rc;
 
 mod file_node;
@@ -437,27 +438,30 @@ impl ErrorsStoreExt for ErrorsStore {
     }
 }
 
-/// What a node needs in order to render: where it sits in the path tree,
-/// where the live values are, and whether the browser should treat its leaves
-/// as required.
+/// What every node of one render shares: the form's id, where its values,
+/// files and errors live, where edits and field events go, and its resolved
+/// label case and classes. `Form::root_ctx` builds one per render, since
+/// `label_case`, `classes` and whether checks are live are resolved from the
+/// cascade each time (`.claude/memory/config_cascade.md`), and
+/// `NodeContext::root` puts it behind an `Rc`.
 ///
-/// A struct rather than three parameters because this only grows — the variant
-/// `<select>` and the add/remove-item buttons will each need a way to signal a
-/// structural edit back up.
+/// **Split from [`NodeContext`] by lifetime.** These fields are the same at
+/// every node; `NodeContext`'s own fields (`prefix`, `required`,
+/// `label_if_unnamed`, `in_draft`) are the ones a descent changes. So
+/// [`nested`](NodeContext::nested) and [`optional`](NodeContext::optional)
+/// copy one `Rc` for all of these, and a new form-wide field goes HERE, and is
+/// set where `Form::root_ctx` builds this, never in `descend_to` or `optional`.
+/// Before the split, each form-wide field was written in four places and
+/// `form_id` was cloned at every node.
 ///
-/// **`required` is a presentation hint, not the authority.** HTML5 `required`
-/// is per-input, so it cannot express the all-or-nothing rule an optional
-/// struct follows (absent means EVERY leaf empty; a partly filled one is an
-/// error). Marking those leaves required would block a deliberately blank
-/// address; leaving them unmarked lets the browser accept a half-filled one.
-/// The second is the lesser evil, and `validate()` remains where the real rule
-/// lives — see the optional-container tests.
-#[derive(Clone, Debug)]
-pub struct NodeContext {
+/// **No `Clone`,** on purpose: every copy should be an `Rc::clone`, and
+/// without `Clone` a deep copy (a `String` and an `Rc` bump) can't be written
+/// by accident, as through `NodeContext`'s `Deref`.
+#[derive(Debug)]
+pub struct FormWide {
     pub form_id: String,
-    pub prefix: NodePath,
     pub(crate) contents: Contents,
-    pub required: bool,
+    pub errors: ErrorsStore,
     pub on_edit: Callback<Edit>,
     pub(crate) on_field_event: OnFieldEvent,
     /// Already resolved — the cascade is settled once, where the ctx is built,
@@ -468,13 +472,42 @@ pub struct NodeContext {
     /// then the form's `classes:` and `classes_plus:`), shared by every node
     /// and widget of one render.
     ///
-    /// **`Rc`, and only here and in `WidgetProps`.** Dioxus renders on one
-    /// thread, so `Arc` would only add an atomic count. But an `Rc` must never
-    /// go into `FormSpec` or `FormState`: both reach the server, where
-    /// `Submission` rebuilds a `FormState` and a handler's future must be
-    /// `Send`. They hold `Classes` by value. See
-    /// `.claude/memory/config_cascade.md`.
+    /// **An `Rc` of its own, inside the `Rc<FormWide>`,** because a node hands
+    /// it on to [`WidgetCommon`](crate::widgets::WidgetCommon), which holds
+    /// `classes` and must not hold the whole `FormWide`: that would give every
+    /// widget the form's callbacks.
+    ///
+    /// **`Rc` only in render-side types:** this one, the `Rc<FormWide>` in
+    /// [`NodeContext`], and `WidgetCommon`'s. Dioxus renders on one thread, so
+    /// `Arc` would only add an atomic count. But an `Rc` must never go into
+    /// `FormSpec` or `FormState`: both reach the server, where `Submission`
+    /// rebuilds a `FormState` and a handler's future must be `Send`. They hold
+    /// `Classes` by value. See `.claude/memory/config_cascade.md`.
     pub classes: Rc<Classes>,
+}
+
+/// What a node needs in order to render: what the whole form shares, in
+/// [`form`](Self::form), and what is particular to this node: where it sits in
+/// the path tree, whether the browser should treat its leaves as required, and
+/// two per-node settings that a descent drops.
+///
+/// It derefs to [`FormWide`], so `ctx.classes` or `ctx.on_edit` reads the
+/// form-wide field directly. See there for why the two are split.
+///
+/// **`required` is a presentation hint, not the authority.** HTML5 `required`
+/// is per-input, so it cannot express the all-or-nothing rule an optional
+/// struct follows (absent means EVERY leaf empty; a partly filled one is an
+/// error). Marking those leaves required would block a deliberately blank
+/// address; leaving them unmarked lets the browser accept a half-filled one.
+/// The second is the lesser evil, and `validate()` remains where the real rule
+/// lives — see the optional-container tests.
+#[derive(Clone, Debug)]
+pub struct NodeContext {
+    /// Shared by every node of this render, and copied as one `Rc` on each
+    /// descent. Read through `Deref` (`ctx.classes`) rather than `ctx.form`.
+    pub form: Rc<FormWide>,
+    pub prefix: NodePath,
+    pub required: bool,
     /// The label for a leaf that has none of its own, given only to a set's
     /// draft ("Add to Tags"): a set's items go unlabelled, but the draft is a
     /// box the user types into, so it needs a name. A leaf's own label, from
@@ -491,33 +524,18 @@ pub struct NodeContext {
     /// validates the draft. Dropped by [`nested`](Self::nested) and
     /// [`optional`](Self::optional), like `label_if_unnamed`.
     pub in_draft: bool,
-    pub errors: ErrorsStore,
 }
 
 impl NodeContext {
     /// The context a whole form starts from: at the root, and required until
     /// some `OptionNode` says otherwise.
-    pub(crate) fn root(
-        form_id: String,
-        contents: Contents,
-        on_edit: Callback<Edit>,
-        on_field_event: OnFieldEvent,
-        label_case: LabelCase,
-        classes: Classes,
-        errors: ErrorsStore,
-    ) -> Self {
+    pub(crate) fn root(form: FormWide) -> Self {
         Self {
-            form_id,
+            form: Rc::new(form),
             prefix: NodePath::root(),
-            contents,
             required: true,
-            on_edit,
-            on_field_event,
-            label_case,
-            classes: Rc::new(classes),
             label_if_unnamed: None,
             in_draft: false,
-            errors,
         }
     }
 
@@ -536,17 +554,11 @@ impl NodeContext {
     /// path, and the per-node settings (`label_if_unnamed`, `in_draft`) reset.
     fn descend_to(&self, prefix: NodePath) -> Self {
         Self {
-            form_id: self.form_id.clone(),
+            form: self.form.clone(),
             prefix,
-            contents: self.contents,
             required: self.required,
-            on_edit: self.on_edit,
-            on_field_event: self.on_field_event,
-            label_case: self.label_case,
-            classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
-            errors: self.errors,
         }
     }
 
@@ -555,17 +567,11 @@ impl NodeContext {
     /// an empty box must not block a submit for.
     pub fn optional(&self) -> Self {
         Self {
-            form_id: self.form_id.clone(),
+            form: self.form.clone(),
             prefix: self.prefix.clone(),
-            contents: self.contents,
             required: false,
-            on_edit: self.on_edit,
-            on_field_event: self.on_field_event,
-            label_case: self.label_case,
-            classes: self.classes.clone(),
             label_if_unnamed: None,
             in_draft: false,
-            errors: self.errors,
         }
     }
 
@@ -584,6 +590,14 @@ impl NodeContext {
     /// can contain `--`, since a path is identifiers joined by `.`.
     pub fn title_id(&self) -> String {
         format!("{}--title", self.form_id)
+    }
+}
+
+impl Deref for NodeContext {
+    type Target = FormWide;
+
+    fn deref(&self) -> &FormWide {
+        &self.form
     }
 }
 

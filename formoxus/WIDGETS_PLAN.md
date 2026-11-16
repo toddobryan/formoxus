@@ -1633,6 +1633,9 @@ several?
     because they check for something absent; recheck them after f.9). Clippy:
     only f.9's `todo!()`. FF-HH decided as recommended (Todd). Next: f.6b.
     `apply_field_event` takes the whole `Contents` too (Todd), ready for f.11.
+    f.6b DONE (Todd; docs Claude): `FormWide` derives `Debug` only (no `Clone`, so
+    every copy is an `Rc::clone`), `NodeContext::root(FormWide)` built in
+    `Form::root_ctx`, `Deref<Target = FormWide>`. Next: f.7, `pick`.
 
     Done:
 
@@ -1685,7 +1688,7 @@ several?
       use it), so it can't take a `pub(crate)` type: it takes the two halves and
       builds the `Contents` itself. See decision CC.
 
-    - [ ] **f.6b. `NodeContext` split by lifetime: `FormWide`** (Todd, 2026-11-16, on
+    - [x] **f.6b. `NodeContext` split by lifetime: `FormWide`** (Todd, 2026-11-16, on
       Claude's recommendation; its own commit, after f.6 and before f.7, so the
       file-widget diffs aren't buried in it). `NodeContext` holds two kinds of field.
       Some are the same for every node of one render: `form_id`, `contents`,
