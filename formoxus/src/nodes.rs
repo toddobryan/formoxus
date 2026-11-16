@@ -394,7 +394,19 @@ pub type FilesByPath = IndexMap<NodePath, FileMeta>;
 /// [`std::collections::HashMap`] and a few others.
 pub type ValuesStore = Store<HashMap<NodePath, String>>;
 
-pub type FilesSignal = Signal<IndexMap<NodePath, FileData>>;
+/// The form's file table: each file the user picked, keyed by its file
+/// leaf's qualified path. Only [`FieldHandle::pick_file`] writes it, and
+/// [`FieldHandle::picked_file`] reads one entry.
+///
+/// One `Signal`, not a `Store`, so a pick re-renders every file widget in
+/// the form (`WIDGETS_PLAN.md` decision KK). A store's `remove` and `clear` wake
+/// only readers of the map's shape, not of the removed key, so per-widget
+/// re-rendering would need `Option` values set to `None` instead. Crate-
+/// private, so that choice can change without breaking anyone.
+///
+/// [`FieldHandle::pick_file`]: crate::widgets::FieldHandle::pick_file
+/// [`FieldHandle::picked_file`]: crate::widgets::FieldHandle::picked_file
+pub(crate) type FilesSignal = Signal<IndexMap<NodePath, FileData>>;
 
 /// Client home for field errors. Held in a store so that an error on one
 /// field only redraws that field, not the whole page. This is a three-way

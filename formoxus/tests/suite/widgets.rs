@@ -11,7 +11,6 @@ use dioxus_html::{
 };
 use facet::Facet;
 use formoxus::field_attrs::FieldAttrs;
-use formoxus::nodes::FilesSignal;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{
@@ -184,7 +183,6 @@ fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetPr
         NodePath::new(path),
         FieldAttrs::default(),
         values,
-        FilesSignal::default(),
         use_store(HashMap::new),
         Rc::new(Classes::default()),
     );

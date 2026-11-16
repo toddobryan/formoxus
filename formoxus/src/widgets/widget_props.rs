@@ -110,12 +110,17 @@ impl WidgetProps {
     /// tells nobody: no check on blur, and a clean result is not made stale. A
     /// widget that renders another should pass on a clone of its own props, not
     /// build new ones, or the inner widget loses its live check.
+    ///
+    /// They also get a file table of their own, empty, so a file widget built
+    /// from them starts with no file picked. That makes new signals each time
+    /// this runs, kept until the calling component unmounts: called in a
+    /// component's body, that is a few more per render, which a test of one
+    /// widget can afford. Call it inside `use_hook` if it ever matters.
     pub fn new(
         id: impl Into<String>,
         path: NodePath,
         attrs: FieldAttrs,
         values: ValuesStore,
-        files: FilesSignal,
         errors: ErrorsStore,
         classes: Rc<Classes>,
     ) -> Self {
@@ -130,7 +135,10 @@ impl WidgetProps {
             },
             base_attrs: attrs,
             extra_attrs: Vec::new(),
-            contents: Contents { values, files },
+            contents: Contents {
+                values,
+                files: FilesSignal::default(),
+            },
             choices: None,
             on_field_event: OnFieldEvent::unreported(),
         }
