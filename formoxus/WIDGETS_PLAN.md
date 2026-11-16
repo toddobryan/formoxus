@@ -1328,7 +1328,7 @@ several?
     an empty `VNode` until `FileInput` arrives in 11f. `meta`, `distribute_files`,
     `max_size`/`accept`, the type-erased `stored` and the widget follow in 11e as
     written below.
-  - [ ] **11e. The file leaf, `FileNode`, a `Node` of its own and not a
+  - [x] **11e. The file leaf, `FileNode`, a `Node` of its own and not a
     `FieldNode`.** A `FieldNode` parses a scalar from a string, and an upload is not
     one. What it holds: its name; the field's settings (`max_size`, `accept`, label,
     help text, the widget, `optional`, the validator, the same way a `FieldNode` gets
@@ -1336,10 +1336,12 @@ several?
     `meta: Option<FileMeta>`, the file's `content_type` and `size`, plus, on the
     server, the stored output.
 
-    **Where it stands (2026-11-15, later):** 11e.1, 11e.2, 11e.3 and 11e.5 are DONE;
-    11e.6 moved to 11f. What is left is 11e.4, about 90 lines in four pieces (below).
-    Claude writes the tests for each piece ahead of it, from this text, with no
-    implementation.
+    **Where it stands (2026-11-15, end of day): DONE.** 11e.1 through 11e.5 are
+    built and tested (Todd's code, Claude's tests ahead of it); 11e.6 moved to 11f,
+    and 11e.4's fourth piece, decision BB's check, moved to the first step of 11h,
+    the only place that can call it. Both "not yet checked" questions in 11e.4 are
+    settled: the bound is `for<'a> Facet<'a>`, and `set_field` sets an
+    `Option<String>` whole, `None` included.
 
     Its methods:
 
@@ -1503,9 +1505,8 @@ several?
           tests.
        3. **`FileNode::write_value_into`** writing all three variants. About 20
           lines.
-       4. **Decision BB's check** in `accept_multipart`'s first step. About 25
-          lines, but it can't be called until 11h, so it can wait for 11h if that
-          reads better; its tests can be written now either way.
+       4. **Decision BB's check.** Moved to 11h, step 0 (2026-11-15): nothing
+          before `accept_multipart` can call it.
        - **Which variant:** with `meta` whose `stored` is `Some`, `Received { name,
          content_type, size, stored }`; with `meta` and no `stored`, `Chosen { name,
          content_type, size }`; with no `meta`, `Existing { name }`, which is what it
@@ -1528,20 +1529,17 @@ several?
             `S`, which downcasts the value to `S`, clones it and `set`s it.
        - **`StoredFile::new::<S>(stored: S)`** is the only way to make one,
          `pub(crate)`, with `S: Facet + Clone + Send + Sync + 'static`, and it fills
-         in all three, so the pointer can never disagree with the value. **Not yet
-         checked:** which `Facet` lifetime the bound needs for `Partial<'p>::set` to
-         accept an `S`. `set<U>` asks for `U: Facet<'facet>`, and a derived type
-         implements `Facet<'a>` for every `'a`, so `for<'a> Facet<'a>` should do. Let
-         the compiler say.
+         in all three, so the pointer can never disagree with the value. The bound
+         is `S: for<'a> Facet<'a>`: `set<U>` asks for `U: Facet<'facet>`, and a
+         derived type implements `Facet<'a>` for every `'a`. (Checked when built.)
        - **Writing it:** `select_variant_named("Received")`, the three plain fields
          with `set_field` as `Existing`'s name is written today, then
          `begin_field("stored")`, `(stored.write)(&*stored.value, partial)` and
          `end()`. `Chosen` is the same without the last three steps.
          `content_type` is an `Option<String>` in the model as in `FileMeta`, so
          `set_field("content_type", meta.content_type.clone())` should set it whole,
-         `None` included, with no `begin_some`. **Not yet checked**, like the bound
-         above: if facet wants `Option` written through `begin_some`/`set_default`,
-         the test for a file with no content type is the one that says so.
+         `None` included, with no `begin_some`. It does: the suite's test for a file
+         with no content type passes.
        - **The panic inside `write`** checks `partial.shape()` against `S::SHAPE`
          before it downcasts, and names both: "this form's `FileUpload` holds
          `{partial.shape()}`, but the upload handler stores `{type_name}`; give
@@ -1576,8 +1574,9 @@ several?
        panics on the first that differs, with both names, before anything is
        stored. The check in `write` stays, as an assert that can no longer fire.
 
-       **BB's HOW, refined (open, Claude recommends, 2026-11-15): walk `T`'s shape,
-       not the nodes.** The `S` in each `FileUpload<S>` is a fact about the model
+       **BB's HOW (DECIDED, Todd, 2026-11-15, on Claude's recommendation): walk
+       `T`'s shape, not the nodes.** This replaces the `stored_shape` field the
+       paragraph above describes. The `S` in each `FileUpload<S>` is a fact about the model
        TYPE, and `accept_multipart` is generic over `T`, so a pure function over
        `T::SHAPE` can collect every `FileUpload`'s `S` with no help from the
        state: struct fields, every variant of an enum (not only the chosen one),
@@ -1653,6 +1652,14 @@ several?
     `WireForm::from_multipart`. The reason: a stream can only be read once, and the
     limits for a file part come from the spec, so the spec has to be in hand before
     the files are read. In order:
+    0. **Decision BB's check** (moved here from 11e.4), before reading any part:
+       walk `T::SHAPE` for every `FileUpload`'s `S`, keeping a set of shapes
+       already visited so a recursive model ends, and panic on the first `S` that
+       isn't `<H::Stored as Facet>::SHAPE`, naming both, with nothing stored. See
+       "BB's HOW" in 11e.4. About 25 lines, beside `is_file_upload`; Claude writes
+       its tests first: a match, a mismatch at the top level, one inside an
+       unchosen variant and one inside a list item, a model with no upload, and a
+       recursive model that ends.
     1. The first part has to be the wire JSON. If it isn't, the request didn't come
        from `to_multipart`, and it is a form-level error with nothing stored.
     2. An empty form from the spec; `distribute_values` with the wire's values, which

@@ -16,8 +16,8 @@
 
 use super::across_the_wire;
 use facet::Facet;
-use formoxus::file::{FileType, FileUpload};
-use formoxus::nodes::{FieldValidator, FileMeta, FilesByPath};
+use formoxus::file::{FileMeta, FileType, FileUpload};
+use formoxus::nodes::{FieldValidator, FilesByPath};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
@@ -263,6 +263,7 @@ fn meta(content_type: Option<&str>, size: u64) -> FileMeta {
     FileMeta {
         content_type: content_type.map(str::to_string),
         size,
+        stored: None,
     }
 }
 
@@ -613,6 +614,138 @@ fn a_file_under_an_unchosen_variant_is_ignored() {
             work: Work::Link {
                 url: "https://example.com".to_string()
             }
+        }))
+    );
+}
+
+// ── Which variant comes back (11e.4) ────────────────────────────────────
+
+/// What the client's `validate` makes of a picked file: its name from the
+/// store, and its size and content type from the table. `Received` needs a
+/// stored output, which only `accept_multipart` (11h) makes, so it is tested
+/// inline in `file_node.rs`.
+fn chosen(name: &str, content_type: Option<&str>, size: u64) -> FileUpload {
+    FileUpload::Chosen {
+        name: name.to_string(),
+        content_type: content_type.map(str::to_string),
+        size,
+    }
+}
+
+#[gtest]
+fn a_picked_file_is_chosen_with_its_size_and_content_type() {
+    let mut form = form_for(
+        &assignment(existing("essay.pdf"), None),
+        FormSpec::default(),
+    );
+    form.distribute_files(&files([("essay", pdf(1_234))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(
+            chosen("essay.pdf", Some("application/pdf"), 1_234),
+            None
+        )))
+    );
+}
+
+/// The `Option` is written whole, `None` included: a type the browser didn't
+/// know is no content type, not a missing field.
+#[gtest]
+fn a_picked_file_with_no_content_type_is_chosen_with_none() {
+    let mut form = form_for(
+        &assignment(existing("essay.pdf"), None),
+        FormSpec::default(),
+    );
+    form.distribute_files(&files([("essay", meta(None, 1_234))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(chosen("essay.pdf", None, 1_234), None)))
+    );
+}
+
+/// As reported: formoxus's `accepts` reads `""` as no type, but the model
+/// keeps what the browser said.
+#[gtest]
+fn an_empty_content_type_is_kept_as_reported() {
+    let mut form = form_for(
+        &assignment(existing("essay.pdf"), None),
+        FormSpec::default(),
+    );
+    form.distribute_files(&files([("essay", meta(Some(""), 1_234))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(chosen("essay.pdf", Some(""), 1_234), None)))
+    );
+}
+
+/// The name is the store's, not something the table carries: a new name
+/// distributed first is the one the `Chosen` gets.
+#[gtest]
+fn a_chosen_files_name_is_the_one_in_the_store() {
+    let mut form = form_for(&assignment(existing("old.pdf"), None), FormSpec::default());
+    form.distribute_values(
+        &[(NodePath::new("essay"), "new.pdf".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    form.distribute_files(&files([("essay", pdf(1_234))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(
+            chosen("new.pdf", Some("application/pdf"), 1_234),
+            None
+        )))
+    );
+}
+
+#[gtest]
+fn an_optional_picked_file_is_some_chosen() {
+    let model = assignment(existing("essay.pdf"), Some(existing("notes.txt")));
+    let mut form = form_for(&model, FormSpec::default());
+    form.distribute_files(&files([("notes", meta(Some("text/plain"), 99))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(
+            existing("essay.pdf"),
+            Some(chosen("notes.txt", Some("text/plain"), 99))
+        )))
+    );
+}
+
+/// Each item on its own: only the one with a table entry is `Chosen`.
+#[gtest]
+fn a_picked_file_in_a_list_item_is_chosen_and_the_rest_stay_existing() {
+    let model = Portfolio {
+        drafts: vec![existing("draft-1.pdf"), existing("draft-2.pdf")],
+    };
+    let mut form = form_for(&model, FormSpec::default());
+    form.distribute_files(&files([("drafts.#1", pdf(5_000))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&Portfolio {
+            drafts: vec![
+                existing("draft-1.pdf"),
+                chosen("draft-2.pdf", Some("application/pdf"), 5_000)
+            ],
+        }))
+    );
+}
+
+#[gtest]
+fn a_picked_file_in_a_variant_is_chosen() {
+    let model = Coursework {
+        work: Work::Upload {
+            file: existing("work.pdf"),
+        },
+    };
+    let mut form = form_for(&model, FormSpec::default());
+    form.distribute_files(&files([("work.$Upload.file", pdf(5_000))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&Coursework {
+            work: Work::Upload {
+                file: chosen("work.pdf", Some("application/pdf"), 5_000)
+            },
         }))
     );
 }

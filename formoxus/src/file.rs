@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::future::ready;
@@ -7,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::{env, io};
 
-use facet::Facet;
+use facet::{Facet, Partial, ReflectError};
 
 use crate::path::NodePath;
 
@@ -16,6 +17,101 @@ use crate::path::NodePath;
 pub use formoxus_spec::{FileType, FileTypeError};
 
 static UNIQUE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone)]
+pub struct StoredFile {
+    value: Arc<dyn Any + Send + Sync>,
+    type_name: &'static str,
+    write: for<'p> fn(&(dyn Any + Send + Sync), Partial<'p>) -> Result<Partial<'p>, ReflectError>,
+}
+
+impl StoredFile {
+    /// Erase `stored`'s type, keeping what's needed to write it back: the value,
+    /// its type's name, and `write_stored` made for exactly this `S`. All three
+    /// come from the one `S`, so the function can never be paired with a value
+    /// of another type.
+    ///
+    /// `for<'a> Facet<'a>`, not `Facet<'static>`: `Partial<'p>::set` needs
+    /// `S: Facet<'p>` for whatever `'p` the write happens at, and a derived
+    /// type implements `Facet<'a>` for every `'a`, which this bound says.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "accept_multipart (11h) is the caller")
+    )]
+    pub(crate) fn new<S>(stored: S) -> Self
+    where
+        S: for<'a> Facet<'a> + Clone + Send + Sync + 'static,
+    {
+        Self {
+            value: Arc::new(stored),
+            type_name: std::any::type_name::<S>(),
+            // Naming `S` here makes the compiler build one copy of
+            // `write_stored` for this type; the pointer is that copy.
+            write: write_stored::<S>,
+        }
+    }
+
+    pub(crate) fn write_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
+        (self.write)(&*self.value, partial)
+    }
+}
+
+/// The type's name is all there is to show: the value is a `dyn Any`, and the
+/// function pointer's address means nothing to a reader.
+impl Debug for StoredFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredFile")
+            .field("type_name", &self.type_name)
+            .finish_non_exhaustive()
+    }
+}
+
+/// `StoredFile::write` for one `S`: get the `S` back out of the `dyn Any`,
+/// clone it (the `StoredFile` keeps its own) and set it into `partial`, which
+/// `FileNode` has opened at `Received`'s `stored` field.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "accept_multipart (11h) is the caller, through `new`"
+    )
+)]
+fn write_stored<'p, S>(
+    value: &(dyn Any + Send + Sync),
+    partial: Partial<'p>,
+) -> Result<Partial<'p>, ReflectError>
+where
+    S: for<'a> Facet<'a> + Clone + Send + Sync + 'static,
+{
+    // A dev bug, not a user's doing: the model's `FileUpload<S>` and the
+    // handler's `Stored` differ. Decision BB catches it before anything is
+    // stored; this is the assert that BB's check was not skipped.
+    assert!(
+        partial.shape() == <S as Facet<'static>>::SHAPE,
+        "this form's `FileUpload` holds `{}`, but the upload handler stores `{}`; \
+         give `accept_multipart` a handler whose `Stored` is the model's `S`",
+        partial.shape(),
+        std::any::type_name::<S>(),
+    );
+    let stored = value
+        .downcast_ref::<S>()
+        .expect("`StoredFile::new` pairs each value with the `write_stored` for its type");
+    partial.set(stored.clone())
+}
+
+/// What a [`FileNode`](crate::nodes::FileNode) knows about a file beyond its name: what `max_size` and
+/// `accept` check. Present only for a file picked in this form or received by
+/// the server; an `Existing` file has none.
+#[derive(Clone, Debug)]
+pub struct FileMeta {
+    /// As the browser or the request reported it, which may be `None` or `""`
+    /// for a type it didn't know.
+    pub content_type: Option<String>,
+    /// In bytes. On the client the browser's figure; on the server the count
+    /// of bytes actually received, which is the one enforced.
+    pub size: u64,
+    pub stored: Option<StoredFile>,
+}
 
 /// `prefix`, this process's id and a counter: never the same twice in one
 /// process, and different processes on one host have different ids.

@@ -5,7 +5,7 @@ use formoxus_spec::FileType;
 use crate::{
     error::{FormAccessError, ValidationMessage},
     field_attrs::FieldAttrs,
-    file::{FileUpload, format_size},
+    file::{FileMeta, FileUpload, format_size},
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
@@ -29,19 +29,6 @@ pub struct FileNode {
     pub max_size: Option<u64>,
     pub accept: Vec<FileType>,
     pub meta: Option<FileMeta>,
-}
-
-/// What a [`FileNode`] knows about a file beyond its name: what `max_size` and
-/// `accept` check. Present only for a file picked in this form or received by
-/// the server; an `Existing` file has none.
-#[derive(Clone, Debug)]
-pub struct FileMeta {
-    /// As the browser or the request reported it, which may be `None` or `""`
-    /// for a type it didn't know.
-    pub content_type: Option<String>,
-    /// In bytes. On the client the browser's figure; on the server the count
-    /// of bytes actually received, which is the one enforced.
-    pub size: u64,
 }
 
 pub(crate) fn is_file_upload(shape: &Shape) -> bool {
@@ -145,10 +132,26 @@ impl Node for FileNode {
     }
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
-        // TODO: handle chosen and Received when we handle meta
-        partial
-            .select_variant_named("Existing")?
-            .set_field("name", self.file_name.clone())
+        match &self.meta {
+            None => partial
+                .select_variant_named("Existing")?
+                .set_field("name", self.file_name.clone()),
+            Some(meta) => match &meta.stored {
+                None => partial
+                    .select_variant_named("Chosen")?
+                    .set_field("name", self.file_name.clone())?
+                    .set_field("content_type", meta.content_type.clone())?
+                    .set_field("size", meta.size),
+                Some(stored) => partial
+                    .select_variant_named("Received")?
+                    .set_field("name", self.file_name.clone())?
+                    .set_field("content_type", meta.content_type.clone())?
+                    .set_field("size", meta.size)?
+                    .begin_field("stored")
+                    .and_then(|p| stored.write_into(p))?
+                    .end(),
+            },
+        }
     }
 
     fn is_present(&self) -> bool {
@@ -230,5 +233,117 @@ mod tests {
         // `decl_id` comes from where a type is declared, not what it is called.
         expect_that!(is_file_upload(lookalike::FileUpload::SHAPE), eq(false));
         expect_that!(is_file_upload(String::SHAPE), eq(false));
+    }
+
+    // ── `Received`, which only a `StoredFile` makes (11e.4) ─────────────
+    //
+    // Here and not in the suite: `StoredFile::new` is `pub(crate)`, since only
+    // `accept_multipart` (11h) stores files, so a test outside the crate can't
+    // make one until 11h does it for real.
+
+    use crate::file::{FileMeta, StoredFile};
+    use crate::form::{FormSpec, form_for};
+    use crate::nodes::FilesByPath;
+    use crate::path::NodePath;
+
+    /// A dev's own `S`, standing in for an S3 key, as in the suite's `Report`.
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Report {
+        file: FileUpload<String>,
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Essay {
+        essay: FileUpload,
+    }
+
+    fn received_table(path: &str, stored: StoredFile) -> FilesByPath {
+        [(
+            NodePath::new(path),
+            FileMeta {
+                content_type: Some("application/pdf".to_string()),
+                size: 99,
+                stored: Some(stored),
+            },
+        )]
+        .into_iter()
+        .collect()
+    }
+
+    fn existing_report() -> Report {
+        Report {
+            file: FileUpload::Existing {
+                name: "report.pdf".to_string(),
+            },
+        }
+    }
+
+    #[gtest]
+    fn a_stored_file_is_received_with_the_handlers_output() {
+        let mut form = form_for(&existing_report(), FormSpec::default());
+        form.distribute_files(&received_table(
+            "file",
+            StoredFile::new("uploads/7f3a".to_string()),
+        ));
+        expect_that!(
+            form.validate(),
+            some(eq(&Report {
+                file: FileUpload::Received {
+                    name: "report.pdf".to_string(),
+                    content_type: Some("application/pdf".to_string()),
+                    size: 99,
+                    stored: "uploads/7f3a".to_string(),
+                },
+            }))
+        );
+    }
+
+    /// With the default `S`: the model gets a clone of the handler's
+    /// `TemporaryUploadedFile`, which shares its guard, so it IS the stored
+    /// file (`PartialEq` compares by `Arc::ptr_eq`), not a copy of the bytes.
+    #[gtest]
+    fn a_received_temporary_file_is_the_handlers_own() {
+        let path =
+            std::env::temp_dir().join(format!("formoxus-received-test-{}", std::process::id()));
+        let temporary = TemporaryUploadedFile::new(path);
+        let model = Essay {
+            essay: FileUpload::Existing {
+                name: "essay.pdf".to_string(),
+            },
+        };
+        let mut form = form_for(&model, FormSpec::default());
+        form.distribute_files(&received_table("essay", StoredFile::new(temporary.clone())));
+        let received = form.validate();
+        expect_that!(
+            received,
+            some(eq(&Essay {
+                essay: FileUpload::Received {
+                    name: "essay.pdf".to_string(),
+                    content_type: Some("application/pdf".to_string()),
+                    size: 99,
+                    stored: temporary,
+                },
+            }))
+        );
+    }
+
+    /// The mismatch decision BB catches first, met here as the assert that
+    /// backs it: a dev bug, so a panic naming the handler's type.
+    #[gtest]
+    #[should_panic(expected = "but the upload handler stores `u64`")]
+    fn a_stored_file_of_the_wrong_type_panics_naming_it() {
+        let mut form = form_for(&existing_report(), FormSpec::default());
+        form.distribute_files(&received_table("file", StoredFile::new(42_u64)));
+        let _ = form.validate();
+    }
+
+    /// The value is a `dyn Any` and the pointer an address, so the type's name
+    /// is what `Debug` shows.
+    #[gtest]
+    fn a_stored_file_debugs_as_its_type_name() {
+        expect_that!(
+            format!("{:?}", StoredFile::new("key".to_string())),
+            eq(r#"StoredFile { type_name: "alloc::string::String", .. }"#)
+        );
     }
 }

@@ -16,8 +16,8 @@ mod set_node;
 mod struct_node;
 mod variant_node;
 
+pub use file_node::FileNode;
 pub(crate) use file_node::is_file_upload;
-pub use file_node::{FileMeta, FileNode};
 pub use items::ItemValue;
 pub(crate) use items::Items;
 pub use list_node::ListNode;
@@ -32,6 +32,7 @@ pub use variant_node::{VariantChoice, VariantNode};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::Validity;
+use crate::file::FileMeta;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
