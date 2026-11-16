@@ -1600,7 +1600,7 @@ several?
     `FileInput`. A different widget is refused with the same message a `widget:` of
     the wrong kind gets today.) `Form` gains `files:
     Signal<IndexMap<NodePath, FileData>>`, and `FieldHandle` a way to reach it: one
-    `pick(Option<FileData>)` that writes the name to the store (`""` for none),
+    `pick_file(Option<FileData>)` that writes the name to the store (`""` for none),
     puts the file in the table or takes it out, and reports the event. **Trap: a pick
     must be checked at once.** A text field waits for blur, but a pick is finished the
     moment it happens, like decision T's Add, and a file input's blur means nothing.
@@ -1610,7 +1610,7 @@ several?
     a re-rendered input (which empties the browser's own display) doesn't make the
     file look lost. For an `Existing` file it reads "Current file: …", in a string that
     belongs in the queued strings move ([[emitted-classes-and-strings]]). For an
-    `Option<FileUpload>`, a Remove button, which is `pick(None)`. On `reset`, the table is
+    `Option<FileUpload>`, a Remove button, which is `pick_file(None)`. On `reset`, the table is
     cleared with the store. **Trap: the input still shows the old file after
     `reset`**, because the browser keeps its own selection. A key on the `<input>`
     that `reset` changes (a reset counter on `Form`) makes Dioxus create it again,
@@ -1635,7 +1635,9 @@ several?
     `apply_field_event` takes the whole `Contents` too (Todd), ready for f.11.
     f.6b DONE (Todd; docs Claude): `FormWide` derives `Debug` only (no `Clone`, so
     every copy is an `Rc::clone`), `NodeContext::root(FormWide)` built in
-    `Form::root_ctx`, `Deref<Target = FormWide>`. Next: f.7, `pick`.
+    `Form::root_ctx`, `Deref<Target = FormWide>`. f.7 DONE (Todd; docs Claude):
+    `pick_file(Option<&FileData>)` writes store, then table, then reports; `on_pick_file`
+    takes the first file and ignores an empty `change` (HH). Next: f.8.
 
     Done:
 
@@ -1728,10 +1730,21 @@ several?
         `classes`. Inside `FormWide` each pair is already together;
         `label_if_unnamed` is per node, so it stays out.
 
-    - [ ] **f.7. `FieldHandle::pick(Option<FileData>)`,** the one method that does
+    - [x] **f.7. `FieldHandle::pick_file(Option<&FileData>)`,** the one method that does
       every step: write the name to the store (`file.name()`, or `""` for none), put
       the file in the table or take it out, and report the event as checked at once
-      (the trap above).
+      (the trap above). That last part is what `change` already does: `Written`,
+      then `Blurred`, so the live check runs without waiting for a blur.
+
+      **With `on_pick_file()`** (Todd, 2026-11-16), the `onchange` handler, paired
+      the way `input`/`on_input`, `change`/`on_change` and `blur`/`on_blur` are. It
+      reads `evt.files()` and calls `pick_file(Some(first))`, and it does NOTHING
+      when the event carries no file (decision HH: a cancelled dialog is not a
+      Remove). So `pick_file(None)` means only "drop the file", which is Remove's
+      job, and the widget never reads `evt.files()` itself. A custom file widget
+      gets HH for free and can't get it wrong ([[feedback-hard-to-misuse]]). Never
+      `evt.value()`: a browser gives a file input `C:\fakepath\` and the name
+      (the suite's `a_pick_writes_the_files_name_to_the_store` pins it).
 
     - [ ] **f.8. `FileNode::render`,** like `FieldNode::render`
       (`src/field_node.rs`, `fn render`): `WidgetProps` from `ctx` (id, path, label,
@@ -1741,11 +1754,11 @@ several?
       `FormSpec` can still give one, so the builder panics with the message a
       wrong-kind widget gets today.
 
-    - [ ] **f.9. `FileInputView`:** `type: "file"`, never a `value`; `onchange`
-      reads `evt.files()` and calls `pick`; `<output for="{id}">` with the name from
+    - [ ] **f.9. `FileInputView`:** `type: "file"`, never a `value`; `onchange:
+      handle.on_pick_file()`; `<output for="{id}">` with the name from
       `handle.current()`, as "Current file: …" when the table has nothing at the
       path (decision EE); on an optional field, a Remove button
-      (`FixedKey::RemoveFileButton`) calling `pick(None)`; `..attrs` last.
+      (`FixedKey::RemoveFileButton`) calling `pick_file(None)`; `..attrs` last.
 
     - [ ] **f.10. `reset`** clears the table and bumps a new reset counter on `Form`,
       which is the `<input>`'s `key`, so Dioxus makes it again, empty. **Trap: a
@@ -1765,23 +1778,23 @@ several?
     - [ ] **f.12. Tests (Claude, each ahead of its step).** WRITTEN 2026-11-16, ahead
       of f.6-f.11, in `tests/suite/file_input.rs` (26 tests, through the page only:
       a Check button showing what `validate` returned, the wire, the errors, the
-      markup), with two `Harness` helpers in `tests/suite.rs`: `pick` (a `change`
+      markup), with two `Harness` helpers in `tests/suite.rs`: `pick_files` (a `change`
       carrying dioxus-html's `SerializedFileData`, with the browser's
       `C:\fakepath\` `value`) and `times_registered` (listener registrations ever
       seen, which is how `reset` re-making the input shows, since dioxus recycles
       element ids). They compile and fail until the steps land. Four of them
       assume answers to open questions FF-HH below. The original list: the markup
       (`type="file"`, no `value`, the `<output>`, "Current file:" for an `Existing`
-      file, Remove only when optional); `pick` writing store and table; `reset`
+      file, Remove only when optional); `pick_file` writing store and table; `reset`
       emptying the table; `validate` and the live check both catching an oversized
       pick. No browser needed: `FileData::new` takes any `NativeFileData`, so a test
       makes a fake file with a name, size and type. The e2e pair waits for box 13.
 
     Decided (Todd, 2026-11-16, all three as Claude recommended):
 
-    **CC. The widget reaches the table only through `FieldHandle::pick`.**
+    **CC. The widget reaches the table only through `FieldHandle::pick_file`.**
     `WidgetProps` holds the signal as a `pub(crate)` field, so a custom widget gets
-    `pick` but can never write the table itself (the reason `StoredFile`'s fields are
+    `pick_file` but can never write the table itself (the reason `StoredFile`'s fields are
     private).
 
     **DD. No `accept` attribute on the `<input>` until box 12** adds its row to the
@@ -1805,7 +1818,7 @@ several?
 
     **HH. A `change` with no file changes nothing.** A browser may send one when
     the user cancels the dialog (older Chrome cleared the selection on cancel), and
-    `pick(None)` there would turn an edit form's kept file into no file, or a
+    `pick_file(None)` there would turn an edit form's kept file into no file, or a
     required error. Remove is the only way to drop a file
     (`a_change_with_no_file_keeps_the_file`). With two files, the first is taken
     (`a_change_with_two_files_takes_the_first`).

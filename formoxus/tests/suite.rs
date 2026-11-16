@@ -393,7 +393,11 @@ impl Harness {
     ///
     /// **Never pass `SerializedFileData::empty()`:** its `name()` unwraps the
     /// file name of an empty path, and panics.
-    pub fn pick(&mut self, id: ElementId, files: &[dioxus_html::SerializedFileData]) -> usize {
+    pub fn pick_files(
+        &mut self,
+        id: ElementId,
+        files: &[dioxus_html::SerializedFileData],
+    ) -> usize {
         let values = files
             .iter()
             .map(|file| dioxus_html::SerializedFormObject {

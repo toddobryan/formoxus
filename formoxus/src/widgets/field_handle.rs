@@ -1,4 +1,5 @@
 use dioxus::core::Callback;
+use dioxus::html::FileData;
 use dioxus::prelude::{FocusEvent, FormEvent};
 use dioxus::signals::{ReadableExt, WritableExt};
 
@@ -194,6 +195,50 @@ impl FieldHandle {
     pub fn on_blur(&self) -> impl FnMut(FocusEvent) + 'static {
         let handle = self.clone();
         move |_| handle.blur()
+    }
+
+    /// The user picked a file, or removed one: write its name to the store
+    /// (`""` for `None`), put the file in the form's file table at this path
+    /// or take it out, then check it at once, as [`change`](Self::change)
+    /// does. A pick is finished the moment it happens, and a file input's blur
+    /// means nothing, so there is no typing to wait out.
+    ///
+    /// The name goes in the store like any leaf's value, which is what the
+    /// widget shows and what `validate` reads as the file's name. The file
+    /// itself goes only in the table, which `validate` and the live check read
+    /// for its size and type, and which the form sends with the wire. A widget
+    /// reaches the table only through here, never directly.
+    ///
+    /// **`None` drops the file:** call it with `None` only for a Remove
+    /// button. A browser may send a `change` with no file when the user
+    /// cancels the dialog, and that must keep the file, which is why
+    /// [`on_pick_file`](Self::on_pick_file) never calls this with `None`.
+    pub fn pick_file(&self, file_data: Option<&FileData>) {
+        let mut files = self.contents.files;
+        self.write_value(file_data.map_or(String::new(), FileData::name));
+        match file_data {
+            Some(file) => files.write().insert(self.path.clone(), file.clone()),
+            None => files.write().shift_remove(&self.path),
+        };
+        self.handler.send(&self.path, FieldEventKind::Written);
+        self.handler.send(&self.path, FieldEventKind::Blurred);
+    }
+
+    /// [`pick_file`](Self::pick_file) as an `onchange` handler, for an
+    /// `<input type="file">`. Needs no `onblur`.
+    ///
+    /// It takes the first of the event's `files()`, and does nothing when
+    /// there are none, which is what a cancelled dialog can send: so the file
+    /// already chosen, or kept from before, stays. Only a Remove button, with
+    /// `pick_file(None)`, drops it. It never reads the event's `value()`,
+    /// which for a file input is `C:\fakepath\` and the name.
+    pub fn on_pick_file(&self) -> impl FnMut(FormEvent) + 'static {
+        let handle = self.clone();
+        move |event| {
+            if let Some(file) = event.files().first() {
+                handle.pick_file(Some(file));
+            }
+        }
     }
 
     /// Put `raw` in the store, and nothing else: reporting it is the caller's

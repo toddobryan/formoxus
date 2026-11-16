@@ -315,7 +315,7 @@ fn an_empty_optional_file_has_no_remove_button() {
 #[gtest]
 fn a_pick_shows_the_files_name() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 1_000)]);
     let html = app.html();
     expect_that!(output_text(&html), eq("essay.pdf"));
 }
@@ -325,14 +325,14 @@ fn a_pick_shows_the_files_name() {
 #[gtest]
 fn a_pick_writes_the_files_name_to_the_store() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 1_000)]);
     expect_that!(wire(&app.html()), eq("essay=essay.pdf"));
 }
 
 #[gtest]
 fn a_pick_replaces_the_kept_file() {
     let mut app = Harness::mount(EditEssay);
-    app.pick(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
     let html = app.html();
     expect_that!(output_text(&html), eq("new.pdf"));
     expect_that!(wire(&html), eq("essay=new.pdf"));
@@ -343,14 +343,14 @@ fn a_pick_replaces_the_kept_file() {
 #[gtest]
 fn a_pick_is_checked_at_once() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 3_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 3_000_000)]);
     expect_that!(app.html(), contains_substring(TOO_LARGE_2_MB));
 }
 
 #[gtest]
 fn a_pick_within_the_limit_shows_no_error() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 2_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 2_000_000)]);
     let html = app.html();
     expect_that!(html, not(contains_substring(TOO_LARGE_2_MB)));
     expect_that!(html, not(contains_substring(r#"aria-invalid="true""#)));
@@ -360,8 +360,8 @@ fn a_pick_within_the_limit_shows_no_error() {
 #[gtest]
 fn a_smaller_pick_clears_the_error() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(the_input(&app), &[pdf("big.pdf", 3_000_000)]);
-    app.pick(the_input(&app), &[pdf("small.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("big.pdf", 3_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("small.pdf", 1_000)]);
     expect_that!(app.html(), not(contains_substring(TOO_LARGE_2_MB)));
 }
 
@@ -371,7 +371,7 @@ fn a_smaller_pick_clears_the_error() {
 fn a_pick_keeps_the_same_input() {
     let mut app = Harness::mount(NewEssay);
     let before = app.times_registered("change");
-    app.pick(the_input(&app), &[pdf("essay.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 1_000)]);
     expect_that!(app.times_registered("change"), eq(before));
 }
 
@@ -380,7 +380,7 @@ fn a_pick_keeps_the_same_input() {
 #[gtest]
 fn a_change_with_no_file_keeps_the_file() {
     let mut app = Harness::mount(EditEssay);
-    app.pick(the_input(&app), &[]);
+    app.pick_files(the_input(&app), &[]);
     let html = app.html();
     expect_that!(output_text(&html), eq("Current file: old.pdf"));
     expect_that!(wire(&html), eq("essay=old.pdf"));
@@ -391,7 +391,7 @@ fn a_change_with_no_file_keeps_the_file() {
 #[gtest]
 fn a_change_with_two_files_takes_the_first() {
     let mut app = Harness::mount(NewEssay);
-    app.pick(
+    app.pick_files(
         the_input(&app),
         &[pdf("first.pdf", 1_000), pdf("second.pdf", 1_000)],
     );
@@ -403,7 +403,7 @@ fn a_change_with_two_files_takes_the_first() {
 #[gtest]
 fn validate_sees_the_picked_file() {
     let mut app = Harness::mount(NewEssayNotLive);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 1_000)]);
     check(&mut app);
     expect_that!(checked(&app.html()), eq("valid: Chosen essay.pdf 1000"));
 }
@@ -413,7 +413,7 @@ fn validate_sees_the_picked_file() {
 #[gtest]
 fn validate_refuses_an_oversized_pick() {
     let mut app = Harness::mount(NewEssayNotLive);
-    app.pick(the_input(&app), &[pdf("essay.pdf", 3_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 3_000_000)]);
     expect_that!(app.html(), not(contains_substring(TOO_LARGE_2_MB)));
     check(&mut app);
     let html = app.html();
@@ -447,7 +447,7 @@ fn remove_empties_an_optional_file() {
 #[gtest]
 fn remove_after_a_pick_drops_the_file() {
     let mut app = Harness::mount(NewNotes);
-    app.pick(the_input(&app), &[pdf("big.pdf", 3_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("big.pdf", 3_000_000)]);
     expect_that!(app.html(), contains_substring(TOO_LARGE_2_MB));
     app.click(app.labelled("click", "Remove “big.pdf”"));
     expect_that!(app.html(), not(contains_substring(TOO_LARGE_2_MB)));
@@ -462,7 +462,7 @@ fn remove_after_a_pick_drops_the_file() {
 #[gtest]
 fn reset_empties_the_table() {
     let mut app = Harness::mount(EditEssay);
-    app.pick(the_input(&app), &[pdf("new.pdf", 3_000_000)]);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 3_000_000)]);
     reset(&mut app);
     check(&mut app);
     expect_that!(checked(&app.html()), eq("valid: Existing old.pdf"));
@@ -471,7 +471,7 @@ fn reset_empties_the_table() {
 #[gtest]
 fn reset_shows_the_kept_file_again() {
     let mut app = Harness::mount(EditEssay);
-    app.pick(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
     reset(&mut app);
     expect_that!(output_text(&app.html()), eq("Current file: old.pdf"));
 }
@@ -486,7 +486,7 @@ fn reset_shows_the_kept_file_again() {
 #[gtest]
 fn reset_makes_the_input_again() {
     let mut app = Harness::mount(EditEssay);
-    app.pick(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
     let before = app.times_registered("change");
     reset(&mut app);
     expect_that!(app.times_registered("change"), eq(before + 1));
