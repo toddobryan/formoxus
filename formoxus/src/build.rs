@@ -6,6 +6,7 @@ use facet::{
     Def, EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind,
     StructType, Type, UserType, Variant,
 };
+use formoxus_spec::FieldType;
 
 use crate::field_node::LeafArgs;
 use crate::fields::{BoolField, NumberField, StringField};
@@ -894,17 +895,27 @@ fn file_node(
             .expect("FileUpload's `name` is a String")
             .clone()
     });
+    // `FileInput` unless the spec names another, which must take files.
+    // `form!` refuses any other widget at compile time (`field_kind::renders`);
+    // a hand-built `FormSpec` reaches this instead (WIDGETS_PLAN 11f.8). Any
+    // widget whose `ACCEPTS` has `File` will do, not only `FileInput`, so a
+    // dev's own file widget passes here as it passes `form!`.
+    let widget = spec
+        .and_then(|s| s.widget.clone())
+        .unwrap_or_else(|| crate::widgets::AnyWidget::new(crate::widgets::file_input::FileInput));
+    assert!(
+        widget.accepts().contains(FieldType::File),
+        "{prefix}: a `FileUpload` field needs a widget that takes files, such as \
+         `file`, not `{}`",
+        widget.name()
+    );
     FileNode {
         name: name.to_string(),
         label: spec.and_then(|s| s.label.clone()),
         help_text: spec.and_then(|s| s.help_text.clone()),
         validator: spec.and_then(|s| s.validator.clone()),
         optional,
-        // TODO: A stand-in until `FileInput` (11f), which becomes the default and the
-        // only widget allowed (11e.6). `render` draws nothing until then.
-        widget: spec
-            .and_then(|s| s.widget.clone())
-            .unwrap_or_else(|| crate::widgets::AnyWidget::new(crate::widgets::input::TextInput)),
+        widget,
         attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         file_name,
         // `form!` has no `max_size:` or `accept:` until box 12, and `FieldSpec`

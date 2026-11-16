@@ -131,6 +131,7 @@ pub(crate) trait DynWidget: Debug + Send + Sync {
     fn render(&self, props: WidgetProps) -> Element;
     fn name(&self) -> &'static str;
     fn extends(&self) -> AttrSet;
+    fn accepts(&self) -> FieldTypeSet;
     fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String>;
     fn clone_box(&self) -> Box<dyn DynWidget>;
     fn as_any(&self) -> &dyn Any;
@@ -146,6 +147,9 @@ impl<LW: LeafWidget> DynWidget for LW {
     }
     fn extends(&self) -> AttrSet {
         LW::EXTENDS
+    }
+    fn accepts(&self) -> FieldTypeSet {
+        LW::ACCEPTS
     }
     fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
         LW::value_when_empty(self, attrs)
@@ -187,6 +191,12 @@ impl AnyWidget {
     /// The widget's [`LeafWidget::value_when_empty`].
     pub fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
         self.0.value_when_empty(attrs)
+    }
+    /// The widget's [`LeafWidget::ACCEPTS`], for a check `form!` makes at
+    /// compile time but a hand-built `FormSpec` reaches only at build time:
+    /// that a `FileUpload` field's widget takes files (`file_node`).
+    pub(crate) fn accepts(&self) -> FieldTypeSet {
+        self.0.accepts()
     }
 }
 impl<LW: LeafWidget> From<LW> for AnyWidget {

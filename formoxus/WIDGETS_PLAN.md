@@ -1637,7 +1637,13 @@ several?
     every copy is an `Rc::clone`), `NodeContext::root(FormWide)` built in
     `Form::root_ctx`, `Deref<Target = FormWide>`. f.7 DONE (Todd; docs Claude):
     `pick_file(Option<&FileData>)` writes store, then table, then reports; `on_pick_file`
-    takes the first file and ignores an empty `change` (HH). Next: f.8.
+    takes the first file and ignores an empty `change` (HH). f.8 DONE (Claude, at
+    Todd's request): `render` builds `WidgetProps` like `FieldNode`, no choices, attrs
+    `required` + the dev's own; `file_node` defaults to `FileInput` and panics at build
+    when the spec's widget's `ACCEPTS` lacks `File` (any such widget passes, as in
+    `form!`, so a dev's own file widget works), via a new `pub(crate)
+    AnyWidget::accepts()`. Two suite tests pin it. 23 failing now: rendering reaches
+    f.9's `todo!()`. Next: f.9.
 
     Done:
 
@@ -1746,7 +1752,7 @@ several?
       `evt.value()`: a browser gives a file input `C:\fakepath\` and the name
       (the suite's `a_pick_writes_the_files_name_to_the_store` pins it).
 
-    - [ ] **f.8. `FileNode::render`,** like `FieldNode::render`
+    - [x] **f.8. `FileNode::render`,** like `FieldNode::render`
       (`src/field_node.rs`, `fn render`): `WidgetProps` from `ctx` (id, path, label,
       help, classes, errors), no choices, `base_attrs` from
       `FieldAttrs::with_owned_attrs(false, ctx.required, …)` kept to `extends`, then

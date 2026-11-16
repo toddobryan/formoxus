@@ -310,6 +310,27 @@ fn an_empty_optional_file_has_no_remove_button() {
     expect_that!(html, not(contains_substring("fx-button-remove-file")));
 }
 
+/// `form!` refuses any other widget on a file at compile time; a hand-built
+/// `FormSpec` can still give one, and the walk refuses it (f.8).
+#[gtest]
+#[should_panic(
+    expected = "essay: a `FileUpload` field needs a widget that takes files, such as `file`, not `text`"
+)]
+fn a_hand_built_spec_with_a_widget_that_takes_no_files_panics() {
+    let spec = FormSpec::<Essay>::default()
+        .with_widget(&path!(Essay.essay), formoxus::widgets::input::TextInput);
+    let _ = empty_form(spec);
+}
+
+#[gtest]
+fn a_hand_built_spec_may_name_file_input() {
+    let spec = FormSpec::<Essay>::default().with_widget(
+        &path!(Essay.essay),
+        formoxus::widgets::file_input::FileInput,
+    );
+    let _ = empty_form(spec);
+}
+
 // ── A pick (f.7) ────────────────────────────────────────────────────────
 
 #[gtest]

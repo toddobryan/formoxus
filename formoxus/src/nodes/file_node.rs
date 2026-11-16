@@ -13,7 +13,7 @@ use crate::{
         ValuesByPath, default_label,
     },
     path::NodePath,
-    widgets::{AnyWidget, Choice},
+    widgets::{AnyWidget, Choice, WidgetCommon, WidgetProps},
 };
 
 #[derive(Clone, Debug)]
@@ -49,8 +49,34 @@ impl Node for FileNode {
             .or_else(|| default_label(&self.name, case))
     }
 
-    fn render(&self, _ctx: &NodeContext) -> Element {
-        rsx! {}
+    /// As `FieldNode::render` does for a leaf, with two differences. No
+    /// choices, since no value is a file. And no attributes of the field's own
+    /// yet: `accept` waits for box 12's row in the attribute table (decision
+    /// DD), and `validate` checks the type either way. So the attributes are
+    /// `required`, when the field is, and the dev's own, which `form!` has
+    /// already kept to what the widget takes.
+    ///
+    /// `required` is how the widget tells an optional file, which gets a
+    /// Remove button, from a required one: `OptionNode` renders an
+    /// `Option<FileUpload>` with `ctx.optional()`.
+    fn render(&self, ctx: &NodeContext) -> Element {
+        self.widget.render(WidgetProps {
+            common: WidgetCommon {
+                id: ctx.id(&self.name),
+                path: ctx.path(&self.name),
+                label: self
+                    .label(ctx.label_case)
+                    .or_else(|| ctx.label_if_unnamed.clone()),
+                help_text: self.help_text.clone(),
+                classes: ctx.classes.clone(),
+                errors: ctx.errors,
+            },
+            contents: ctx.contents,
+            choices: None,
+            base_attrs: FieldAttrs::with_owned_attrs(false, ctx.required, &self.attrs),
+            extra_attrs: Vec::new(),
+            on_field_event: ctx.on_field_event,
+        })
     }
 
     fn raw_value(&self) -> String {
