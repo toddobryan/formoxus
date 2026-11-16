@@ -530,11 +530,11 @@ impl SetMessage {
     pub fn text(&self, case: LabelCase) -> String {
         match &self.words {
             Words::Said(text) => text.clone(),
-            Words::Added(item) => format!("“{}” was added successfully.", item.in_case(case)),
-            Words::Removed(item) => format!("“{}” was removed successfully.", item.in_case(case)),
-            Words::Duplicate(item) => format!("“{}” is already there.", item.in_case(case)),
+            Words::Added(item) => format!("\"{}\" was added successfully.", item.in_case(case)),
+            Words::Removed(item) => format!("\"{}\" was removed successfully.", item.in_case(case)),
+            Words::Duplicate(item) => format!("\"{}\" is already there.", item.in_case(case)),
             Words::Changed { from, to } => format!(
-                "“{}” was changed to “{}” successfully.",
+                "\"{}\" was changed to \"{}\" successfully.",
                 from.in_case(case),
                 to.in_case(case)
             ),

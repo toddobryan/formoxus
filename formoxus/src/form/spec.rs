@@ -286,7 +286,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     }
 
     /// Replace formoxus's words for what an edit to the set at `path` did
-    /// ("“rust” was added successfully.") with the dev's.
+    /// (`"rust" was added successfully.`) with the dev's.
     pub fn with_feedback(mut self, path: &ModelPath<T>, feedback: SetFeedback) -> Self {
         self.set_field(path, "feedback").feedback = Some(feedback);
         self

@@ -1313,7 +1313,11 @@ fn a_wrong_type_is_still_an_error_not_a_duplicate() {
 // ── The set's live region ────────────────────────────────────────────────
 
 /// The region's whole `<div>`, as the set renders it after its adder.
+/// The live region as rendered, with `text` escaped the way the renderer
+/// escapes it (`"` as `&#34;`), so a test can write the message as the user
+/// reads it.
 fn region(class: &str, text: &str) -> String {
+    let text = text.replace('"', "&#34;");
     format!(r#"<div class="{class}" role="status">{text}</div>"#)
 }
 
@@ -1374,15 +1378,15 @@ fn DuplicateAddProbe() -> Element {
 fn each_edit_says_what_it_did() {
     expect_that!(
         super::render_to_html(AddProbe),
-        contains_substring(done("“web” was added successfully."))
+        contains_substring(done("\"web\" was added successfully."))
     );
     expect_that!(
         super::render_to_html(RemoveProbe),
-        contains_substring(done("“rust” was removed successfully."))
+        contains_substring(done("\"rust\" was removed successfully."))
     );
     expect_that!(
         super::render_to_html(DuplicateAddProbe),
-        contains_substring(refused("“rust” is already there."))
+        contains_substring(refused("\"rust\" is already there."))
     );
 }
 
@@ -1415,7 +1419,7 @@ fn the_next_edit_replaces_the_message() {
     expect_that!(html, not(contains_substring("is already there")));
     expect_that!(
         html,
-        contains_substring(done("“web” was added successfully."))
+        contains_substring(done("\"web\" was added successfully."))
     );
 }
 
@@ -1460,11 +1464,11 @@ fn AddPriorityProbe() -> Element {
 fn an_item_is_named_as_the_user_sees_it() {
     expect_that!(
         super::render_to_html(DuplicateTagProbe),
-        contains_substring(refused("“go” is already there."))
+        contains_substring(refused("\"go\" is already there."))
     );
     expect_that!(
         super::render_to_html(AddPriorityProbe),
-        contains_substring(done("“High” was added successfully."))
+        contains_substring(done("\"High\" was added successfully."))
     );
 }
 
@@ -1489,7 +1493,7 @@ fn a_custom_adder_still_has_the_sets_message() {
     let html = super::render_to_html(DuplicateCustomAdderProbe);
     let adder = html.find(r#"id="tag-adder""#).expect("the custom adder");
     let message = html
-        .find(&refused("“rust” is already there."))
+        .find(&refused("\"rust\" is already there."))
         .expect("the refusal is shown");
     expect_that!(message, gt(adder));
 }
@@ -1818,7 +1822,7 @@ fn add_makes_the_draft_an_item() {
     expect_that!(html, contains_substring(wire("tags=#0 tags.#0=web")));
     expect_that!(
         html,
-        contains_substring(done("“web” was added successfully."))
+        contains_substring(done("\"web\" was added successfully."))
     );
     expect_that!(html, contains_substring(draft_value("tags.#1", "")));
 }
@@ -1872,7 +1876,7 @@ fn a_duplicate_draft_is_refused_and_keeps_its_text() {
     expect_that!(html, contains_substring(wire("tags=#0 tags.#0=rust")));
     expect_that!(
         html,
-        contains_substring(refused("“rust” is already there."))
+        contains_substring(refused("\"rust\" is already there."))
     );
     expect_that!(html, contains_substring(draft_value("tags.#1", "rust")));
 }
@@ -2015,7 +2019,7 @@ fn a_unit_enum_draft_chosen_in_its_select_is_added() {
     expect_that!(html, contains_substring(wire("levels=#0 levels.#0=High")));
     expect_that!(
         html,
-        contains_substring(done("“High” was added successfully."))
+        contains_substring(done("\"High\" was added successfully."))
     );
 }
 
@@ -2047,11 +2051,11 @@ fn mounted_tags() -> super::Harness {
 /// Replace, while `rust` is being edited: Add, named for the item it would
 /// replace.
 fn replace(app: &super::Harness) -> dioxus::core::ElementId {
-    app.labelled("click", "Replace “rust”")
+    app.labelled("click", "Replace \"rust\"")
 }
 
 fn edit_rust(app: &mut super::Harness) {
-    app.click(app.labelled("click", "Edit “rust”"));
+    app.click(app.labelled("click", "Edit \"rust\""));
 }
 
 const POST_WIRE: &str = "tags=#0,#1 tags.#0=dioxus tags.#1=rust";
@@ -2064,7 +2068,7 @@ fn an_item_is_shown_with_edit_and_remove() {
     expect_that!(html, not(contains_substring(r#"name="tags.#1""#)));
     expect_that!(
         html,
-        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+        contains_substring(r#"aria-label="Edit &#34;rust&#34;" aria-pressed="false""#)
     );
     expect_that!(html, contains_substring("fx-button fx-button-edit-item"));
 }
@@ -2077,9 +2081,12 @@ fn edit_puts_the_item_into_the_draft() {
     expect_that!(html, contains_substring(draft_value("tags.#2", "rust")));
     expect_that!(
         html,
-        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="true""#)
+        contains_substring(r#"aria-label="Edit &#34;rust&#34;" aria-pressed="true""#)
     );
-    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Replace &#34;rust&#34;""#)
+    );
     expect_that!(html, contains_substring("Cancel</button>"));
     expect_that!(
         html,
@@ -2102,7 +2109,7 @@ fn replace_swaps_in_the_draft_for_the_item_being_edited() {
     );
     expect_that!(
         html,
-        contains_substring(done("“rust” was changed to “go” successfully."))
+        contains_substring(done("\"rust\" was changed to \"go\" successfully."))
     );
     expect_that!(html, contains_substring(draft_value("tags.#3", "")));
     expect_that!(html, contains_substring("Add</button>"));
@@ -2135,9 +2142,12 @@ fn replacing_with_another_items_value_is_refused() {
     expect_that!(html, contains_substring(wire(POST_WIRE)));
     expect_that!(
         html,
-        contains_substring(refused("“dioxus” is already there."))
+        contains_substring(refused("\"dioxus\" is already there."))
     );
-    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Replace &#34;rust&#34;""#)
+    );
 }
 
 #[gtest]
@@ -2153,7 +2163,7 @@ fn cancel_leaves_the_item_as_it_was() {
     expect_that!(html, contains_substring(draft_value("tags.#2", "")));
     expect_that!(
         html,
-        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+        contains_substring(r#"aria-label="Edit &#34;rust&#34;" aria-pressed="false""#)
     );
 }
 
@@ -2193,12 +2203,12 @@ fn pressing_edit_again_cancels() {
 fn editing_another_item_moves_the_edit() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
-    app.click(app.labelled("click", "Edit “dioxus”"));
+    app.click(app.labelled("click", "Edit \"dioxus\""));
     let html = app.html();
     expect_that!(html, contains_substring(draft_value("tags.#2", "dioxus")));
     expect_that!(
         html,
-        contains_substring(r#"aria-label="Edit “rust”" aria-pressed="false""#)
+        contains_substring(r#"aria-label="Edit &#34;rust&#34;" aria-pressed="false""#)
     );
 }
 
@@ -2364,7 +2374,7 @@ fn a_list_refuses_an_item_edit() {
 fn removing_the_item_being_edited_restores_add() {
     let mut app = mounted_tags();
     edit_rust(&mut app);
-    app.click(app.labelled("click", "Remove “rust”"));
+    app.click(app.labelled("click", "Remove \"rust\""));
     let html = app.html();
     expect_that!(html, contains_substring("Add</button>"));
     expect_that!(html, not(contains_substring("Cancel</button>")));
@@ -2379,7 +2389,10 @@ fn removing_the_item_being_edited_restores_add() {
 #[gtest]
 fn a_sets_remove_is_named_by_its_item() {
     let html = super::render_to_html(PostForm);
-    expect_that!(html, contains_substring(r#"aria-label="Remove “rust”""#));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Remove &#34;rust&#34;""#)
+    );
     expect_that!(html, not(contains_substring("Remove item")));
 }
 
@@ -2487,8 +2500,14 @@ fn a_dev_item_view_shows_each_item() {
                 r#"<li class="fx-set-item"><span class="chip">rust at tags.#1 #1 editing=false stored=rust</span><button"#
             )
         );
-        expect_that!(html, contains_substring(r#"aria-label="Edit “rust”""#));
-        expect_that!(html, contains_substring(r#"aria-label="Remove “rust”""#));
+        expect_that!(
+            html,
+            contains_substring(r#"aria-label="Edit &#34;rust&#34;""#)
+        );
+        expect_that!(
+            html,
+            contains_substring(r#"aria-label="Remove &#34;rust&#34;""#)
+        );
     }
 }
 
@@ -2557,7 +2576,10 @@ fn replace_is_named_for_the_item_it_replaces() {
     edit_rust(&mut app);
     app.fire("input", app.only_listener("input"), "go");
     let html = app.html();
-    expect_that!(html, contains_substring(r#"aria-label="Replace “rust”""#));
+    expect_that!(
+        html,
+        contains_substring(r#"aria-label="Replace &#34;rust&#34;""#)
+    );
     expect_that!(html, contains_substring("Replace</button>"));
     expect_that!(html, not(contains_substring("Save")));
 }
@@ -2667,8 +2689,8 @@ fn an_item_over_choices_shows_its_label() {
         all![
             contains_substring(r#"<li class="fx-set-item">Boston<"#),
             contains_substring(r#"<li class="fx-set-item">Chicago<"#),
-            contains_substring(r#"aria-label="Edit “Boston”""#),
-            contains_substring(r#"aria-label="Remove “Chicago”""#),
+            contains_substring(r#"aria-label="Edit &#34;Boston&#34;""#),
+            contains_substring(r#"aria-label="Remove &#34;Chicago&#34;""#),
             not(contains_substring(r#"<li class="fx-set-item">BOS<"#)),
         ]
     );
@@ -2701,7 +2723,7 @@ fn AddCityProbe() -> Element {
 fn a_message_names_an_item_by_its_label() {
     expect_that!(
         super::render_to_html(AddCityProbe),
-        contains_substring(done("“Chicago” was added successfully."))
+        contains_substring(done("\"Chicago\" was added successfully."))
     );
 }
 
@@ -2749,8 +2771,8 @@ fn a_unit_enum_item_is_shown_label_cased() {
         html,
         all![
             contains_substring(r#"<li class="fx-set-item">New England<"#),
-            contains_substring(r#"aria-label="Remove “Pacific Northwest”""#),
-            contains_substring(done("“Pacific Northwest” was added successfully.")),
+            contains_substring(r#"aria-label="Remove &#34;Pacific Northwest&#34;""#),
+            contains_substring(done("\"Pacific Northwest\" was added successfully.")),
             // The select it was chosen in, for comparison.
             contains_substring(r#"<option value="NewEngland">New England</option>"#),
             not(contains_substring(">NewEngland<")),
@@ -2788,7 +2810,7 @@ fn the_forms_label_case_reaches_items_and_messages() {
         html,
         all![
             contains_substring(r#"<li class="fx-set-item">new england<"#),
-            contains_substring(done("“pacific northwest” was added successfully.")),
+            contains_substring(done("\"pacific northwest\" was added successfully.")),
         ]
     );
 }

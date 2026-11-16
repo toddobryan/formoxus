@@ -61,7 +61,7 @@ pub struct AddItemProps {
     pub draft: Option<Element>,
     /// The text of the item being edited (box 8), whose value the draft
     /// holds, so Add would replace it: [`DraftAdder`] then says Replace,
-    /// named "Replace “rust”", and offers Cancel. `None` when nothing is
+    /// named `Replace "rust"`, and offers Cancel. `None` when nothing is
     /// being edited, and always for a list.
     pub editing: Option<String>,
 }
@@ -149,7 +149,7 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
 /// clicks it, so a wrapper around both would add twice.
 ///
 /// While an item is being edited (box 8), Add is Replace, named for the item
-/// it replaces ("Replace “rust”"), and Cancel, or Escape in the draft, stops
+/// it replaces (`Replace "rust"`), and Cancel, or Escape in the draft, stops
 /// the edit and leaves the item as it was. Not "Save": a form's own submit
 /// button is often `save`, and two buttons would then share a name. Named by
 /// the item being replaced, not by the draft's text, so the name stays true
@@ -194,7 +194,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         ));
     };
     let after_cancel = focus_draft.clone();
-    let replacing = editing.as_ref().map(|text| format!("Replace “{text}”"));
+    let replacing = editing.as_ref().map(|text| format!("Replace \"{text}\""));
     let is_editing = editing.is_some();
     // Full only for adding: a replacement leaves the count as it is.
     let full = at_most(item_count, max_items).filter(|_| !is_editing);
@@ -270,7 +270,7 @@ pub fn EditItemButton(
         button {
             r#type: "button",
             class: classes.fixed_class(FixedKey::EditItemButton, false),
-            aria_label: "Edit “{text}”",
+            aria_label: "Edit \"{text}\"",
             aria_pressed: if editing { "true" } else { "false" },
             onclick: move |_| {
                 on_edit.call(Edit::EditItem {
@@ -290,7 +290,7 @@ pub fn EditItemButton(
 /// directly. Keys identify an item across edits; a position locates one at an
 /// instant, which is all a click needs to say.
 ///
-/// Named by `text` when there is one, "Remove “rust”", as a set's is: a set
+/// Named by `text` when there is one, `Remove "rust"`, as a set's is: a set
 /// is sorted, so "Remove item 2" names nothing a user can see. A list's item
 /// has no one text to name it by, so it is named by its position, which an
 /// `<ol>` numbers on screen by default and a screen reader announces.
@@ -309,7 +309,7 @@ pub fn RemoveItemButton(
     // 1-based for humans: this is the only place an item's position is spoken
     // aloud, and it is never used as a path segment.
     let label = match text {
-        Some(text) => format!("Remove “{text}”"),
+        Some(text) => format!("Remove \"{text}\""),
         None => format!("Remove item {}", index + 1),
     };
     rsx! {

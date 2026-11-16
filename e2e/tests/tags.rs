@@ -42,7 +42,7 @@ async fn add_makes_the_draft_an_item_and_says_so() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
     expect(message(&s))
-        .to_have_text("“rust” was added successfully.")
+        .to_have_text("\"rust\" was added successfully.")
         .await?;
     expect(draft(&s)).to_have_value("").await?;
     expect_focused(&draft(&s)).await?;
@@ -74,7 +74,7 @@ async fn a_duplicate_is_refused_with_a_message() -> Result<()> {
     draft(&s).fill("rust", None).await?;
     button(&s, "Add").click(None).await?;
     expect(s.page.locator(".fx-set-message.fx-invalid"))
-        .to_have_text("“rust” is already there.")
+        .to_have_text("\"rust\" is already there.")
         .await?;
     expect(items(&s)).to_have_count(1).await?;
     expect(draft(&s)).to_have_value("rust").await?;
@@ -121,15 +121,15 @@ async fn text_left_in_the_draft_is_not_submitted() -> Result<()> {
 async fn edit_then_save_replaces_the_item() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
-    button(&s, "Edit “rust”").click(None).await?;
+    button(&s, "Edit \"rust\"").click(None).await?;
     expect(draft(&s)).to_have_value("rust").await?;
     expect_focused(&draft(&s))
         .await
         .map_err(|e| e.context("after Edit"))?;
     draft(&s).fill("go", None).await?;
-    button(&s, "Replace “rust”").click(None).await?;
+    button(&s, "Replace \"rust\"").click(None).await?;
     expect(message(&s))
-        .to_have_text("“rust” was changed to “go” successfully.")
+        .to_have_text("\"rust\" was changed to \"go\" successfully.")
         .await?;
     expect(items(&s)).to_have_count(1).await?;
     expect(items(&s)).to_contain_text("go").await?;
@@ -145,7 +145,7 @@ async fn edit_then_save_replaces_the_item() -> Result<()> {
 async fn edit_then_cancel_leaves_the_item() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
-    button(&s, "Edit “rust”").click(None).await?;
+    button(&s, "Edit \"rust\"").click(None).await?;
     draft(&s).fill("go", None).await?;
     button(&s, "Cancel").click(None).await?;
     expect(items(&s)).to_contain_text("rust").await?;
@@ -160,7 +160,7 @@ async fn edit_then_cancel_leaves_the_item() -> Result<()> {
 async fn escape_in_the_draft_cancels_an_edit() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
-    button(&s, "Edit “rust”").click(None).await?;
+    button(&s, "Edit \"rust\"").click(None).await?;
     draft(&s).fill("go", None).await?;
     draft(&s).press("Escape", None).await?;
     expect(items(&s)).to_contain_text("rust").await?;
@@ -176,7 +176,7 @@ async fn escape_in_the_draft_cancels_an_edit() -> Result<()> {
 async fn a_submit_while_editing_keeps_the_item() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
-    button(&s, "Edit “rust”").click(None).await?;
+    button(&s, "Edit \"rust\"").click(None).await?;
     draft(&s).fill("go", None).await?;
     submit(&s).click(None).await?;
     expect(s.page.locator("#submitted"))
@@ -190,10 +190,10 @@ async fn a_submit_while_editing_keeps_the_item() -> Result<()> {
 async fn remove_is_named_by_its_item() -> Result<()> {
     let s = Session::open("/t/tags").await?;
     add(&s, "rust").await?;
-    button(&s, "Remove “rust”").click(None).await?;
+    button(&s, "Remove \"rust\"").click(None).await?;
     expect(items(&s)).to_have_count(0).await?;
     expect(message(&s))
-        .to_have_text("“rust” was removed successfully.")
+        .to_have_text("\"rust\" was removed successfully.")
         .await?;
     s.close().await
 }

@@ -3,7 +3,7 @@
 //!
 //! It shows the item's TEXT only. The set still renders the `<li>` around it,
 //! the item's own errors, and Edit and Remove, so a dev's chip can neither
-//! drop the buttons nor lose their names ("Edit “rust”").
+//! drop the buttons nor lose their names (`Edit "rust"`).
 
 use std::rc::Rc;
 use std::{fmt::Debug, ptr::fn_addr_eq};

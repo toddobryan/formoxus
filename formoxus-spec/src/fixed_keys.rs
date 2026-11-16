@@ -67,8 +67,8 @@ pub enum FixedKey {
     /// The `<div>` around a set's default adder, its draft and its buttons,
     /// so they can be laid out as one row: `fx-set-adder`.
     SetAdder,
-    /// The set's live region, after its adder: what its last edit did ("“rust”
-    /// was added successfully."), or why it was refused: `fx-set-message`,
+    /// The set's live region, after its adder: what its last edit did (`"rust"
+    /// was added successfully.`), or why it was refused: `fx-set-message`,
     /// plus `fx-invalid` for a refusal.
     SetMessage,
     /// The `<fieldset>` around a nested struct: `fx-group fx-struct`.

@@ -203,7 +203,7 @@ fn at_its_limits_add_and_remove_are_disabled() {
     );
     expect_that!(
         html,
-        contains_regex(r#"aria-label="Remove “a”" disabled=true"#)
+        contains_regex(r#"aria-label="Remove &#34;a&#34;" disabled=true"#)
     );
     for legend in ["Answers", "Tags"] {
         expect_that!(
@@ -231,10 +231,15 @@ fn with_room_nothing_is_disabled() {
     expect_that!(html, contains_substring("Tags</legend>"));
     // `answers` is at its minimum of 2, so its Removes are disabled; the
     // set's one tag has no minimum.
-    expect_that!(html, contains_regex(r#"aria-label="Remove “a”"[^>]*>"#));
     expect_that!(
         html,
-        not(contains_regex(r#"aria-label="Remove “a”" disabled=true"#))
+        contains_regex(r#"aria-label="Remove &#34;a&#34;"[^>]*>"#)
+    );
+    expect_that!(
+        html,
+        not(contains_regex(
+            r#"aria-label="Remove &#34;a&#34;" disabled=true"#
+        ))
     );
 }
 
