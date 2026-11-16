@@ -1760,11 +1760,93 @@ several?
       `FormSpec` can still give one, so the builder panics with the message a
       wrong-kind widget gets today.
 
-    - [ ] **f.9. `FileInputView`:** `type: "file"`, never a `value`; `onchange:
-      handle.on_pick_file()`; `<output for="{id}">` with the name from
-      `handle.current()`, as "Current file: …" when the table has nothing at the
-      path (decision EE); on an optional field, a Remove button
-      (`FixedKey::RemoveFileButton`) calling `pick_file(None)`; `..attrs` last.
+    - [x] **f.9. `FileInputView`,** in `src/widgets/file_input.rs`, replacing the
+      `todo!()`. **Done 2026-11-16 (Todd); decision II went to `picked_file`.**
+      Of f.12's tests, the render and Remove ones pass; two `reset_*` wait on
+      f.10 and four on f.11 (`remove_after_a_pick_drops_the_file` among them,
+      which now gets as far as its live size check). It renders like `range` in `src/widgets/input.rs` (an `<input>`,
+      then an `<output for>` beside it, the two together passed to `field_row`),
+      with a Remove button after them. Four parts, then three things it needs
+      that don't exist yet.
+
+      **(a) The `<input>`.** `type: "file"`, `id: "{props.id}"`, `name:
+      "{props.path}"`, `class: props.control_class::<FileInput>(Tag::Input)`,
+      `onchange: handle.on_pick_file()`, then `..attrs` LAST, where `attrs` is
+      `props.current_attrs().merge_with_attrs(props.extra_attrs.clone())`, as every
+      leaf widget spreads them (`text_like` in `input.rs`). **Never a `value`:** a
+      script can only set a file input's value to `""`, and a kept file has nothing
+      in the browser to show; the `<output>` is where the name goes. No `onblur`,
+      because `pick_file` already reports a blur. No `multiple`: one field holds
+      one file, and the attribute table's `for:` already leaves `Multiple` off
+      `File`, so a dev can't add it either.
+
+      **(b) The `<output for="{props.id}">`,** classed `props.part_class::<FileInput>
+      (Tag::Output)`, ALWAYS rendered, even empty (the suite's
+      `the_output_is_for_the_file_input` reads it on an empty form). What it says
+      comes from two reads: `name = handle.current()`, the store's value, and
+      whether the table has a file at the path (see (e)). Three cases:
+
+      - `name` empty: nothing.
+      - a file in the table: `name` alone, since the user just picked it.
+      - no file in the table (decision EE): `Current file: {name}`, the file kept
+        from before, which `form_for` loaded. The English string belongs in the
+        queued strings move ([[emitted-classes-and-strings]]); leave a comment
+        saying so.
+
+      An `<output>` is a live region (implicit `role="status"`), so a screen
+      reader announces the new name after a pick or a Remove without any `aria-live`.
+
+      **(c) Remove,** only when the field is optional AND `name` is not empty
+      (decision FF). Optional is `!props.base_attrs.contains(Attr::Required)`:
+      `FileNode::render` leaves `required` off exactly then (f.8). Model it on
+      `RemoveItemButton` in `src/widgets/item_buttons.rs`: `r#type: "button"`,
+      `class: props.classes.fixed_class(FixedKey::RemoveFileButton, false)`,
+      `aria_label: "Remove \"{name}\""` (decision GG), `onclick` calling
+      `handle.pick_file(None)`, and `{icon(X)}` as its content, like the item
+      Remove. **Trap: `r#type: "button"` is not optional.** A `<button>` inside a
+      `<form>` defaults to `type="submit"`, so without it Remove submits the form.
+      The `aria_label` must be FORMATTED (it is, it holds the name): the suite's
+      `Harness::labelled` sees only an attribute that crosses as a mutation, not a
+      static one in the template.
+
+      **(d) The row.** `field_row::<FileInput>(&props, marked, LabelSide::Before,
+      control)`, where `marked = props.base_attrs.contains(Attr::Required)` (the
+      caption's required marker) and `control` is the `<input>`, the `<output>`
+      and the Remove `if`, in that order, in one `rsx!`. Keep the `<input>` OUT of
+      any `if`: a pick changes what the `<output>` and the Remove `if` show, and the
+      input must stay the same element across that (`a_pick_keeps_the_same_input`;
+      only f.10's `reset` makes it again).
+
+      **(e) A way for a widget to READ the table (decision II below).** The
+      view needs "is there a file at my path?" for (b), and `contents` is
+      `pub(crate)`, so a dev's own file widget couldn't ask at all. Recommended:
+      `FieldHandle::picked_file(&self) -> Option<FileData>`, a clone of the table's
+      entry at the handle's path (cheap: `FileData` is an `Arc`). Reading is not
+      what CC guards against, so this keeps CC: writes still go only through
+      `pick_file`. A custom widget can show the size or type from it too. Read it
+      in the component (`FileInputView`), never in `LeafWidget::render`, for the
+      reason `current_attrs` gives: the read subscribes whatever is rendering. One
+      trade-off, accepted: the table is one `Signal`, not a store, so a pick in one
+      file field re-renders every file widget on the page. Forms have few.
+
+      **(f) Classes, or `Classes::fx()` breaks.** `FileInput` is not in `BUILTINS`
+      in `src/classes.rs` (21 entries, `range` last), so today every
+      `part_class::<FileInput>` is `None` and the widget renders unclassed. Add
+      `parts_of::<FileInput>()` (making it 22), and give `fx_part` the two slots
+      the catch-all arms don't cover, or `Classes::fx()` PANICS at its
+      `(widget, tag) => panic!` arm, which runs for every form: `(FileInput::NAME,
+      Tag::Input) => "fx-control fx-file"` (like `fx-range`; the catch-all would
+      give `fx-input`, and a stylesheet sizing text inputs would size this too) and
+      `(FileInput::NAME, Tag::Output) => "fx-file-name"` (like `fx-range-value`).
+      `Div` and `Label` take the catch-alls (`fx-form-field`, `fx-field-label`).
+      Claude adds both to [[css-class-vocabulary]] once built.
+
+      **(g) Imports and the clippy warnings.** `Attr`, `LabelSide` and `field_row`
+      are imported and unused today; this step uses all three. `icon` and `X` come
+      from `crate::widgets::icons`, `FixedKey` from `formoxus_spec`.
+
+      What f.9 turns green: the markup tests, the pick tests, Remove, and the
+      `validate` tests once f.11 lands. `reset` is f.10's.
 
     - [ ] **f.10. `reset`** clears the table and bumps a new reset counter on `Form`,
       which is the `<input>`'s `key`, so Dioxus makes it again, empty. **Trap: a
@@ -1817,10 +1899,12 @@ several?
     empty optional field has no button that does nothing
     (`an_empty_optional_file_has_no_remove_button`).
 
-    **GG. Remove is labelled by what it removes, `Remove “notes.txt”`**, like a
+    **GG. Remove is labelled by what it removes, `Remove "notes.txt"`**, like a
     list item's Remove (`item_buttons.rs`), as an `aria-label` so it crosses as a
     mutation (`remove_empties_an_optional_file`,
-    `remove_after_a_pick_drops_the_file`).
+    `remove_after_a_pick_drops_the_file`). Straight quotes, not curly
+    (2026-11-16, Todd), which for now differs from the item buttons'
+    `Remove “rust”`.
 
     **HH. A `change` with no file changes nothing.** A browser may send one when
     the user cancels the dialog (older Chrome cleared the selection on cancel), and
@@ -1828,6 +1912,14 @@ several?
     required error. Remove is the only way to drop a file
     (`a_change_with_no_file_keeps_the_file`). With two files, the first is taken
     (`a_change_with_two_files_takes_the_first`).
+
+    **II (DECIDED 2026-11-16, Todd). How a widget reads the table:
+    `FieldHandle::picked_file() -> Option<FileData>`** (Claude's recommendation; f.9
+    (e)). The alternative, a `bool` (`has_picked_file()`), answers only the
+    "Current file:" question, and a dev's own widget showing a size or a preview
+    would need the file. The name pairs with `pick_file`; `chosen_file` would match
+    `FileUpload::Chosen` instead.
+
   - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
     `formoxus::file::Multipart<T>` (named like `WireForm<T>`, which it parallels)
     holding `to_wire()` and the table's files, and `Multipart<T>` implements dioxus's

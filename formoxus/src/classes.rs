@@ -16,8 +16,9 @@ use indexmap::IndexMap;
 use crate::buttons::ButtonType;
 use crate::widgets::{
     CheckboxInput, CheckboxMultiple, ColorInput, DateInput, DatetimeLocalInput, EmailInput,
-    HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput, SearchInput,
-    Select, SelectMultiple, TelInput, TextInput, Textarea, TimeInput, UrlInput, WeekInput, Widget,
+    FileInput, HiddenInput, MonthInput, NumberInput, PasswordInput, RadioGroup, RangeInput,
+    SearchInput, Select, SelectMultiple, TelInput, TextInput, Textarea, TimeInput, UrlInput,
+    WeekInput, Widget,
 };
 
 /// Which slot a class is for: one part of one widget, by the widget's
@@ -463,7 +464,7 @@ impl Default for Classes {
 /// Every built-in widget's `NAME` and `PARTS`, what [`Classes::fx`] loops
 /// over. Named one by one, since nothing can iterate "every type that
 /// implements `Widget`"; the array's length makes the compiler count.
-const BUILTINS: [(&str, &[Tag]); 21] = [
+const BUILTINS: [(&str, &[Tag]); 22] = [
     parts_of::<TextInput>(),
     parts_of::<PasswordInput>(),
     parts_of::<NumberInput>(),
@@ -479,6 +480,7 @@ const BUILTINS: [(&str, &[Tag]); 21] = [
     parts_of::<WeekInput>(),
     parts_of::<HiddenInput>(),
     parts_of::<CheckboxInput>(),
+    parts_of::<FileInput>(),
     parts_of::<Textarea>(),
     parts_of::<Select>(),
     parts_of::<RadioGroup>(),
@@ -535,6 +537,8 @@ fn fx_part(widget_name: &'static str, tag: Tag) -> Slot {
         (CheckboxMultiple::NAME | CheckboxInput::NAME, Tag::Input) => {
             Slot::new("fx-control fx-checkbox")
         }
+        (FileInput::NAME, Tag::Input) => Slot::new("fx-control fx-file"),
+        (FileInput::NAME, Tag::Output) => Slot::new("fx-file-name"),
         // Every other widget: the wrapper carries the invalid mark, the label
         // and the control do not.
         (_, Tag::Div) => Slot::new("fx-form-field").with_invalid("fx-invalid"),

@@ -241,6 +241,24 @@ impl FieldHandle {
         }
     }
 
+    /// The file the user picked for this field, from the form's file table,
+    /// or `None` if they have picked none since the form was filled. Reading
+    /// it while rendering subscribes the reader to the whole table, so any
+    /// pick in the form re-renders it.
+    ///
+    /// **`None` with a name in the store is a kept file, not a missing one.**
+    /// An edit form filled from a model starts with the name of the file it
+    /// already has (`FileUpload::Existing`) and no file in the table, because
+    /// that file is on the server. So a widget tells the two apart by the
+    /// table, not the name: [`current`](Self::current) is the name either
+    /// way, and this is `Some` only for a file picked here.
+    ///
+    /// The result is a copy, and changing it changes nothing in the form.
+    /// The only way in is [`pick_file`](Self::pick_file).
+    pub fn picked_file(&self) -> Option<FileData> {
+        self.contents.files.read().get(&self.path).cloned()
+    }
+
     /// Put `raw` in the store, and nothing else: reporting it is the caller's
     /// job, which is why this is private and [`input`](Self::input) and
     /// [`change`](Self::change) are not.

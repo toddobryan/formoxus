@@ -11,7 +11,13 @@ Todd delegated f.8. `FileNode::render` like `FieldNode::render` (no choices; att
 `required` + dev's own); `file_node` defaults to `FileInput`, asserts the widget's
 `ACCEPTS` has `File` (new `pub(crate) AnyWidget::accepts`), message
 "{path}: a `FileUpload` field needs a widget that takes files, such as `file`, not `…`".
-Suite 1465 + 23 expected failures (render now hits f.9's `todo!()`). Next f.9.
+Suite: f.8 committed 0cb4b91.
+**f.9 DONE 2026-11-16 (Todd; Claude wrote `picked_file`'s doc).** II decided:
+`FieldHandle::picked_file() -> Option<FileData>`, which `read()`s (subscribes to
+the whole table). Remove labels use STRAIGHT quotes (`Remove "big.pdf"`; Todd
+hates curly ones), and the item buttons and set messages are being switched to
+match. 6 suite failures left, all expected: 2 `reset_*` (f.10), 4 live/validate
+(f.11). Next f.10 (Todd).
 
 ## ▶ 2026-11-16, end (earlier): f.7 DONE, committed; next f.8
 
@@ -56,7 +62,7 @@ only on the two `WidgetProps::new` callers (`builtin_widgets.rs:87`,
 **Claude, uncommitted:** `tests/suite/file_input.rs`, 26 tests ahead of f.6-f.11,
 seen through the page only; `Harness::pick` + `times_registered` in `tests/suite.rs`;
 plan f.10 trap (a `key` on a lone element is ignored by dioxus-core; use a one-item
-`for`), f.12 status, open FF (Remove only with a file), GG (`Remove “name”`
+`for`), f.12 status, open FF (Remove only with a file), GG (`Remove "name"`
 aria-label), HH (a no-file `change` changes nothing; two files take the first).
 
 **Also decided:** f.6b, `NodeContext` split by lifetime: form-wide fields into `FormWide` behind an `Rc` (Deref, like `WidgetProps`→`WidgetCommon`), per-node `prefix`/`required`/`label_if_unnamed`/`in_draft` stay; its own commit after f.6.

@@ -455,7 +455,7 @@ fn with_nothing_picked_a_kept_file_stays_existing() {
 #[gtest]
 fn remove_empties_an_optional_file() {
     let mut app = Harness::mount(EditNotes);
-    app.click(app.labelled("click", "Remove “notes.txt”"));
+    app.click(app.labelled("click", "Remove \"notes.txt\""));
     check(&mut app);
     let html = app.html();
     expect_that!(checked(&html), eq("valid: no notes"));
@@ -470,7 +470,7 @@ fn remove_after_a_pick_drops_the_file() {
     let mut app = Harness::mount(NewNotes);
     app.pick_files(the_input(&app), &[pdf("big.pdf", 3_000_000)]);
     expect_that!(app.html(), contains_substring(TOO_LARGE_2_MB));
-    app.click(app.labelled("click", "Remove “big.pdf”"));
+    app.click(app.labelled("click", "Remove \"big.pdf\""));
     expect_that!(app.html(), not(contains_substring(TOO_LARGE_2_MB)));
     check(&mut app);
     expect_that!(checked(&app.html()), eq("valid: no notes"));

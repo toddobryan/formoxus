@@ -1,7 +1,12 @@
 use dioxus::prelude::*;
-use formoxus_spec::{AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName};
+use formoxus_spec::{
+    Attr, AttrSet, FieldType, FieldTypeSet, FixedKey, HtmlElement, InputType, Tag, WidgetName,
+};
 
-use crate::widgets::{LeafWidget, Widget, WidgetProps};
+use crate::widgets::{
+    LabelSide, LeafWidget, Widget, WidgetProps, field_row,
+    icons::{X, icon},
+};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct FileInput;
@@ -30,5 +35,50 @@ impl LeafWidget for FileInput {
 
 #[component]
 pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
-    todo!()
+    let props = widget_props;
+    let handle = props.field_handle();
+    let remover = handle.clone();
+    let file_name = &handle.current();
+    let output = if file_name.is_empty() {
+        ""
+    } else {
+        match handle.picked_file() {
+            Some(_) => file_name,
+            None => &format!("Current file: {file_name}"),
+        }
+    };
+    let required = props.base_attrs.contains(Attr::Required);
+
+    let attrs: Vec<Attribute> = props
+        .current_attrs()
+        .merge_with_attrs(props.extra_attrs.clone());
+
+    let control = rsx! {
+        input {
+            class: props.control_class::<FileInput>(Tag::Input),
+            r#type: "file",
+            name: "{props.path}",
+            id: "{props.id}",
+            onchange: handle.on_pick_file(),
+            ..attrs,
+        }
+        output {
+            class: props.part_class::<FileInput>(Tag::Output),
+            "for": "{props.id}",
+            "{output}"
+        }
+        if !required && !file_name.is_empty() {
+            button {
+                r#type: "button",
+                class: props.classes.fixed_class(FixedKey::RemoveFileButton, false),
+                aria_label: "Remove \"{file_name}\"",
+                onclick: move |_| {
+                    remover.pick_file(None);
+                },
+                {icon(X)}
+            }
+        }
+    };
+
+    field_row::<FileInput>(&props, required, LabelSide::Before, control)
 }
