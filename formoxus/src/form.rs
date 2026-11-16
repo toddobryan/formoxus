@@ -232,8 +232,14 @@ pub(crate) struct Contents {
     /// Live raw values by qualified path. Changes on every keystroke, and
     /// survives a schema rebuild because paths are stable under one.
     pub(crate) values: ValuesStore,
-    /// A map from qualified path to files
+    /// The files the user picked, by qualified path; the store holds only
+    /// their names. A kept file from the server (`FileUpload::Existing`) is
+    /// never here, which is how a widget tells it from a pick.
     pub(crate) files: FilesSignal,
+    /// How many times the form has been reset, which every file input uses
+    /// as its `key`, so a reset makes a fresh element that has forgotten the
+    /// user's pick. Read through [`FieldHandle::resets`].
+    pub(crate) resets: Signal<u32>,
 }
 
 /// A live form: the state, the values beside it, and where a structural edit
@@ -688,6 +694,11 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// formoxus input is controlled — its value comes from the store on the
     /// next render — so the old values would reappear immediately. The state
     /// is the thing that has to change.
+    ///
+    /// **Picked files go too,** and every file input is made again. An edit
+    /// form shows the server's file once more (`Current file: …`), and the
+    /// browser's file input forgets the user's pick, which a script cannot
+    /// clear any other way.
     pub fn reset(&self) {
         let fresh = self.initial_signal.peek().clone();
         let leaves = fresh.leaf_values();
@@ -705,6 +716,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         for (path, raw) in leaves {
             FieldHandle::unreported(&path, self.contents).input(raw);
         }
+        // The whole table, not path by path: after a reset nothing is picked
+        // anywhere, and a stale pick under a removed item goes with the rest.
+        let mut files = self.contents.files;
+        files.write().clear();
+        // A new number is a new `key` on every file input, so Dioxus drops
+        // each one and makes it again, empty.
+        let mut resets = self.contents.resets;
+        resets.with_mut(|n| *n = n.wrapping_add(1));
     }
 
     pub fn validate(&self) -> Option<T> {
@@ -873,6 +892,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
                 .collect::<HashMap<_, _>>()
         }),
         files: use_signal(IndexMap::new),
+        resets: use_signal(|| 0),
     };
     let errors = use_store(move || {
         initial

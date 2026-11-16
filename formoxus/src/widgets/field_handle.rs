@@ -259,6 +259,33 @@ impl FieldHandle {
         self.contents.files.read().get(&self.path).cloned()
     }
 
+    /// How many times the form has been reset. Reading it while rendering
+    /// subscribes the reader, so it re-renders on every reset.
+    ///
+    /// **For a file widget's `key`.** A script cannot clear what an
+    /// `<input type="file">` shows, so after a reset the only way to make the
+    /// browser forget the user's pick is a new element, and a new key is what
+    /// makes Dioxus build one. Any other widget can ignore this: its input
+    /// shows the store's value, which `reset` has already put back.
+    ///
+    /// **A `key` is easy to put where Dioxus ignores it.** Dioxus reads one only
+    /// on a node it diffs among siblings: an iterator's child, or the first
+    /// root of an `rsx!` whose `Element` is placed with `{…}`. On an element
+    /// nested inside a template, it does nothing. A loop of one always works,
+    /// and makes only the input again:
+    ///
+    /// ```ignore
+    /// let resets = field.resets();
+    /// rsx! {
+    ///     for n in [resets] {
+    ///         input { key: "{n}", r#type: "file", onchange: field.on_pick_file() }
+    ///     }
+    /// }
+    /// ```
+    pub fn resets(&self) -> u32 {
+        *self.contents.resets.read()
+    }
+
     /// Put `raw` in the store, and nothing else: reporting it is the caller's
     /// job, which is why this is private and [`input`](Self::input) and
     /// [`change`](Self::change) are not.

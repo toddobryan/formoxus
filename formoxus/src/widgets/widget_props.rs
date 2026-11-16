@@ -4,6 +4,7 @@ use std::{
 };
 
 use dioxus::core::{Attribute, Callback};
+use dioxus::signals::Signal;
 use formoxus_spec::Tag;
 
 use crate::{
@@ -138,6 +139,7 @@ impl WidgetProps {
             contents: Contents {
                 values,
                 files: FilesSignal::default(),
+                resets: Signal::default(),
             },
             choices: None,
             on_field_event: OnFieldEvent::unreported(),

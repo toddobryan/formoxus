@@ -1848,15 +1848,132 @@ several?
       What f.9 turns green: the markup tests, the pick tests, Remove, and the
       `validate` tests once f.11 lands. `reset` is f.10's.
 
-    - [ ] **f.10. `reset`** clears the table and bumps a new reset counter on `Form`,
-      which is the `<input>`'s `key`, so Dioxus makes it again, empty. **Trap: a
-      `key` on a lone element does nothing.** dioxus-core 0.7.10 compares keys
-      only among an iterator's children (`diff_keyed_children` in
-      `diff/iterator.rs`; `diff/node.rs` never reads a key), so `input { key:
-      "{resets}", … }` written on its own is silently ignored and the browser keeps
-      showing the file `reset` threw away. Render it from a one-item iterator,
-      `for n in [resets] { input { key: "{n}", … } }`. The suite's
-      `reset_makes_the_input_again` catches the mistake.
+    - [x] **f.9b. `FilesSignal` goes crate-private** (decision KK). **Done 2026-11-16 (Claude).** Today the
+      table's type is public: `WidgetProps::new` (`src/widgets/widget_props.rs`)
+      is `pub` and takes `files: FilesSignal`, and `FilesSignal` is a `pub type`
+      in `src/nodes.rs`. So swapping the `Signal` for something else later would
+      break every caller. Drop the `files` parameter, and have `new` build
+      `Contents { values, files: FilesSignal::default() }` itself: props made by
+      `new` are not connected to a form, so their table always starts empty,
+      and nothing outside could have a table to hand in anyway. Then make
+      `FilesSignal` `pub(crate)`. Two suite tests change with it, and Claude
+      updates them: `through_widget` in `tests/suite/builtin_widgets.rs` and
+      `plain_props` in `tests/suite/widgets.rs` each pass `FilesSignal::default()`
+      and import `formoxus::nodes::FilesSignal`; both lose the argument and the
+      import. Add a line to `new`'s doc saying the props get an empty file
+      table. **Note: `FilesSignal::default()` is `Signal::new`, which makes a
+      new signal each time it runs.** Called in a component's body, as both
+      tests do, that is one more signal per render, kept until the component
+      unmounts. It is what the tests do already, and `new` is for a test of a
+      widget on its own, so it is fine, but it is worth one sentence in the doc.
+      Breaking, so before publishing; easiest now, with only these two callers.
+
+    - [x] **f.10. `reset`** clears the table and re-creates every file input, so
+      an edit form shows the server's file again and the browser forgets the
+      user's pick. Four parts. **Done 2026-11-16 (Claude).** The suite's
+      `Harness` also had to drop listeners on `ReplaceWith`, which is how a keyed
+      swap tears down the old input; it handled only `Remove`. Of f.12's tests,
+      only the four f.11 ones still fail.
+
+      **Where reset lives.** `Form::reset`, in `src/form.rs` (search `pub fn
+      reset`). Nothing in formoxus calls it: a dev does, usually from the handler
+      of a `type: reset` button in `form!`'s `buttons:` (`undo: move || async move
+      { form.reset() }` in `Buttons`, `examples/src/test_forms.rs`), but also
+      from an `Action` button or any code of theirs. Today it does three things: it clones
+      `initial_signal`, the snapshot `use_form` took of the state it was given;
+      it swaps that clone in as the state, inside `with_errors` so the errors go
+      too; and it writes each of the snapshot's leaf values into the store
+      through `FieldHandle::unreported`, one path at a time, so each input's own
+      subscription fires. For a form built with `form_for`, the snapshot is the
+      model as it came from the server, so for a file field the store gets back
+      the kept file's name (`old.pdf`), but nothing touches the table.
+
+      **Why that is not enough for a file.** Two things are left over. First,
+      the user's pick is still in the table. The view sees a picked file and
+      shows `old.pdf` as if it had just been picked, instead of `Current file:
+      old.pdf` (`reset_shows_the_kept_file_again`), and once f.11 makes
+      `validate` read the table, the kept file would be checked as the
+      discarded pick (`reset_empties_the_table`, which passes today only
+      because nothing reads the table yet). Second, the browser's
+      `<input type="file">` still shows the picked file's name. A script can
+      set a file input's value only to `""`, so the one way to clear it is to
+      throw the element away and make a new one
+      (`reset_makes_the_input_again`). A `type: reset` button happens to clear
+      it already, because it renders `type="reset"` and the browser's own reset
+      empties a file input, but `reset` called from anywhere else does not, so
+      the re-creation cannot rely on it.
+
+      **(a) A reset counter, in `Contents`** (decision JJ). Add `resets:
+      Signal<u32>` to `Contents` in `src/form.rs`, and give it `use_signal(||
+      0)` in `use_form` beside `files`. `Contents` stays `Copy`. It goes there
+      rather than on `Form` because `Contents` already reaches every widget, in
+      `WidgetProps`, and every `FieldHandle`, so nothing new has to be threaded
+      down the tree. Then, in `reset`, after the existing writes: `let mut files
+      = self.contents.files; files.write().clear();` and `let mut resets =
+      self.contents.resets; resets.with_mut(|n| *n = n.wrapping_add(1));`. The
+      local copies are needed for the same reason as in `pick_file`: `write()`
+      takes `&mut self`. Clear the whole table, not path by path: after a reset
+      no file is picked anywhere, and stale entries from removed items or
+      unchosen variants go with it. Add a sentence to `reset`'s doc saying a
+      picked file goes too, and that file inputs are re-created.
+
+      **(b) A reader on `FieldHandle`** (decision JJ): `pub fn resets(&self) ->
+      u32`, reading the counter with `read()`, not `peek()`, so the view
+      re-renders when it changes. It is public because a dev's own file widget
+      has the same problem and needs the same key. Its doc should carry the
+      trap below, since that is where a dev writing a file widget will look.
+
+      **(c) The key, in `FileInputView`.** Read `let resets = handle.resets();`
+      before the `rsx!`, and wrap the `<input>` in a one-item loop, `for n in
+      [resets] { input { key: "{n}", … } }`, leaving everything inside the
+      `input` as it is. A new number is a new key, so Dioxus drops the old
+      element and makes a fresh, empty one. **Trap: a `key` is easy to put
+      where Dioxus ignores it.** dioxus-core 0.7.10 reads keys only in
+      `diff_non_empty_fragment` (`diff/iterator.rs`; `diff/node.rs` never reads
+      one), that is, among siblings in a fragment: an iterator's children, or
+      an `Element` placed with `{…}`, which is a fragment of one whose key is
+      the one on its `rsx!`'s first root. A key on an element nested inside a
+      template is silently ignored, and the browser keeps showing the file
+      `reset` threw away. **Corrected 2026-11-16 while building this:** the
+      plan first said any lone key is ignored, but a mutant with `key:
+      "{resets}"` on the input at the root of `control` passed, because
+      `field_row` places `control` with `{…}`. It re-made the whole control
+      (input, output, Remove), and would stop working if anything came before
+      the input. The loop of one works wherever the input sits and re-makes
+      only it. The `for` must stay outside any `if`, as the input itself must
+      (f.9 (d)). `reset_makes_the_input_again` catches a missing key or an
+      ignored one (mutation-checked), by counting `change` listeners
+      registered, which go up by one only if the input really was made again,
+      but not the root-key version, which works.
+
+      **(d) Nothing else re-renders that shouldn't.** Every file widget reads
+      the counter, so a reset re-renders all of them, but a reset re-renders
+      the whole form anyway. Other widgets never read it: their inputs are
+      controlled, so the store write is enough to clear them.
+
+      **KK (decided 2026-11-16, Todd). The table stays one `Signal`, not a
+      `Store`.** A `Store<HashMap<…>>` looked like it would let one pick
+      re-render only its own widget, but dioxus-stores 0.7.10's `remove` and
+      `clear` mark only the map's shape dirty (`mark_dirty_shallow`,
+      `impls/hashmap.rs`), not the removed key's own readers; only `insert`
+      wakes those. So a view subscribed to its own key would miss Remove and
+      reset, and the tests would not notice, because Remove also writes `""`
+      to the name, which re-renders the view anyway. Subscribing to the shape
+      instead (`get()` does) wakes every file widget on any pick, which is
+      what the `Signal` does now. True isolation needs `Option<FileData>`
+      values written to `None` rather than removed, leaving `None` entries that
+      f.11 and 11g would have to skip. For one or two file widgets a form
+      rarely exceeds, not worth it. f.9b keeps the choice private, so it can
+      be revisited without breaking anyone.
+
+      **JJ (decided 2026-11-16, Todd). The counter is `Contents::resets`, read through
+      `FieldHandle::resets() -> u32`.** The other
+      place it could live is `Form`, beside `initial_signal`, but then it has to
+      be threaded through `FormWide` and `WidgetProps` separately, which is
+      what `Contents` exists to avoid. The other name considered is
+      `generation`, which says what it is for but not when it changes. #25
+      will bump it too, on a successful `absorb`, which is a reset onto a new
+      snapshot, so `resets` still reads right.
 
     - [ ] **f.11. `validate` and `check_live`** turn the table into a `FilesByPath`
       (`FileMeta { content_type, size, stored: None }`) and pass it to
@@ -2027,4 +2144,8 @@ several?
   decision G lands, or a later built-in.
 - **`datalist`** (`list:` is already an attribute), and **`<optgroup>`** grouping
   inside `select_multiple`.
+- **#25: a successful `absorb` moves the reset snapshot** (decided 2026-11-16: a
+  reply with no errors counts as success). Every form has the gap, so it is an issue,
+  but it waits for this plan: on success each picked file becomes `Existing` and the
+  table clears and the input is re-created, reusing f.10's counter.
 - **#22 and #23**, which come next on the road to publish.

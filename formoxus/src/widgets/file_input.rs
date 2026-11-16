@@ -53,14 +53,25 @@ pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
 
+    // The reset count as the input's key, so a reset makes a new, empty
+    // element: the only way to clear what a file input shows. From a loop of
+    // one, because Dioxus ignores a key on an element nested in a template.
+    // (On this block's first root it would be read, since `field_row` places
+    // `control` with `{…}`, but it would make the output and Remove again too,
+    // and break if the input stopped being first.)
+    let resets = handle.resets();
+
     let control = rsx! {
-        input {
-            class: props.control_class::<FileInput>(Tag::Input),
-            r#type: "file",
-            name: "{props.path}",
-            id: "{props.id}",
-            onchange: handle.on_pick_file(),
-            ..attrs,
+        for n in [resets] {
+            input {
+                key: "{n}",
+                class: props.control_class::<FileInput>(Tag::Input),
+                r#type: "file",
+                name: "{props.path}",
+                id: "{props.id}",
+                onchange: handle.on_pick_file(),
+                ..attrs.clone(),
+            }
         }
         output {
             class: props.part_class::<FileInput>(Tag::Output),

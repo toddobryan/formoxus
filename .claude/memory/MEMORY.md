@@ -3,9 +3,10 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-16 end+**: `file`, f.6-f.9 DONE; next f.10 (reset); 6 f.12 tests failing as expected (f.10, f.11)
+- [**START HERE: next session**](next_session.md) — **2026-11-16 end+**: `file`, f.6-f.10 DONE (f.9b/f.10 Claude); next f.11 (validate reads the table); 4 f.11 tests failing as expected
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
+- [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
 - [Show scope before writing code](feedback_show_scope_before_writing_code.md) — RECURRING: a "yeah" is not approval to write code; say what would change, then wait
 - [Reply format](feedback_numbered_not_bulleted.md) — replies: NUMBERS for him to act on, LETTERS to respond to, no bullets
 - [Plan task-list format](feedback_plan_task_list_format.md) — plans render in VS Code preview: `- [ ] **N.** …` + blank line before lists; `N. [ ]` hides numbers
@@ -44,6 +45,7 @@
 - [Error model design](error_model_design.md) — `ValidationError<T>`/`ValidationMessage` BUILT 2026-09-30, C4 BUILT 2026-11-03; its `ErrorsStore` section is SUPERSEDED by `formoxus/ERRORS_PLAN.md` (errors leave the nodes)
 - [Errors here vs within](errors_here_vs_within.md) — 2026-10-09: `has_errors_here` (own, for rendering) vs `has_errors_within` (subtree, for validate); they can never agree
 - [Config cascade](config_cascade.md) — app → form → field via Dioxus context; RULE: resolve at the `Form` boundary, never call `defaults()` while rendering
+- [File table: Signal, not Store](files_table_signal_not_store.md) — DECIDED 2026-11-16: store `remove`/`clear` don't wake a key's readers, so per-widget isolation needs `Option` + `None`
 - [IndexMap store: not worth it](indexmap_store_not_worth_it.md) — ASKED TWICE: feasible (~150 lines, extension trait) but `ordered_values` stays; upstream PR if ever
 - [Const shape walk blocked](const_shape_walk_blocked.md) — compile-time checks are FREE `const _` items with `shape_of`, not `const {}` in a generic fn
 - [Facet newtypes & custom widgets](facet_newtypes_and_custom_widgets.md) — newtypes are leaves; `WidgetType::Custom` is a fn pointer; `wrapper` side-channel
@@ -71,7 +73,7 @@
 - [`optional` is payload-only](optional_flag_is_payload_only.md) — the walk's `optional` = "this node IS an Option's payload"; never pass a container's down to rebuilt children; test with `bool`, not `String`
 - [Toolchain pin & goldens](toolchain_pin_and_goldens.md) — 1.99.1 + rust-src pinned 2026-10-21; a golden flips on another stable OR missing rust-src; check both before re-blessing
 - [Test-only impls need a feature](test_only_impls_need_a_feature.md) — suite-only impls: `cfg(any(test, feature = "__test-util"))` + self dev-dep; not `cfg(test)` (off for tests/), not in the suite (orphan rule)
-- [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element
+- [Hand-written rsx gotchas](hand_written_rsx_gotchas.md) — no statements in an rsx `for`; missing `rsx!` reads as struct literals; spread goes LAST; `extends` names an element; a `key` counts only on an iterator child or a `{…}` block's root
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
 - [Dioxus Signal is not Sync](dioxus_signal_not_sync.md) — a spec-held hook is `Send + Sync`: capture `use_signal_sync`, not `use_signal`; `let _ = s;` captures nothing

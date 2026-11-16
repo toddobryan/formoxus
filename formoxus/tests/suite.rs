@@ -262,8 +262,10 @@ impl Harness {
                 // A torn-down element takes its listeners with it, and dioxus
                 // recycles the id — so dropping these matters for correctness,
                 // not tidiness: a stale entry could name an element that is now
-                // something else entirely.
-                Mutation::Remove { id } => {
+                // something else entirely. A keyed swap (a file input made
+                // again on reset) tears its old element down with
+                // `ReplaceWith`, not `Remove`.
+                Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } => {
                     self.listeners.retain(|(_, i)| i != id);
                     self.labels.retain(|(i, _)| i != id);
                 }

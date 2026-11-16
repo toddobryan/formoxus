@@ -501,9 +501,11 @@ fn reset_shows_the_kept_file_again() {
 /// showing the file `reset` threw away. Counted by registrations, not by
 /// element id: dioxus recycles ids, so the new input can have the old one's.
 ///
-/// **A `key` on a lone element is ignored** (dioxus-core 0.7.10 compares keys
-/// only among an iterator's children), so this fails if the key isn't on a
-/// node from an iterator.
+/// Fails when the input has no key, or one on an element nested in a
+/// template, which dioxus-core 0.7.10 ignores. It does NOT fail for a key on
+/// the root of the view's `control` block: `field_row` places that with
+/// `{…}`, so the key is read and the whole control, output and Remove too,
+/// is made again (mutation-checked 2026-11-16).
 #[gtest]
 fn reset_makes_the_input_again() {
     let mut app = Harness::mount(EditEssay);

@@ -127,3 +127,13 @@ property on change, and content can't move a typed-in textarea. A plain
 `dioxus_ssr::render` shows none of the markers; test with `pre_render`.
 
 **`dx fmt --check --file X` WRITES the file** (dx 0.7.10, found 2026-11-07): `--file` wins and `--check` is ignored. To preview, run it in a scratch copy. The repo is not `dx fmt`-clean, and nothing enforces it: a full run changes 29 files.
+
+**Where a `key` counts (dioxus-core 0.7.10, verified 2026-11-16 by mutation).** Keys
+are read only in `diff_non_empty_fragment` (`diff/iterator.rs`), i.e. among
+fragment siblings: an iterator's children, or an `Element` placed with `{…}` (a
+fragment of one, keyed by its `rsx!`'s FIRST ROOT). A key on an element nested
+inside a template is silently ignored. To force one element to be re-made (a
+file input on reset), use a loop of one: `for n in [resets] { input { key: "{n}", … } }`
+— works wherever it sits and re-makes only that element. A key on a `{…}`-placed
+block's root also works but re-makes the whole block. A keyed swap tears down
+the old element with `Mutation::ReplaceWith`, not `Remove`.
