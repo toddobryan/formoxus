@@ -346,7 +346,7 @@ impl<F: Field> Node for FieldNode<F> {
                 classes: ctx.classes.clone(),
                 errors: ctx.errors,
             },
-            values: ctx.values,
+            contents: ctx.contents,
             choices: self.field.choices(),
             base_attrs,
             extra_attrs: Vec::new(),

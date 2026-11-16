@@ -1,6 +1,7 @@
 //! The `Node` trait every part of a form implements, and the container
 //! kinds that make a form a tree rather than a flat list.
 
+use dioxus::html::FileData;
 use dioxus::prelude::*;
 use facet::{Partial, Peek, ReflectError};
 use indexmap::IndexMap;
@@ -33,8 +34,8 @@ use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::Validity;
 use crate::file::FileMeta;
-use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
+use crate::form::{Contents, ErrorsByPath};
 use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
 use crate::widgets::Choice;
@@ -392,6 +393,8 @@ pub type FilesByPath = IndexMap<NodePath, FileMeta>;
 /// [`std::collections::HashMap`] and a few others.
 pub type ValuesStore = Store<HashMap<NodePath, String>>;
 
+pub type FilesSignal = Signal<IndexMap<NodePath, FileData>>;
+
 /// Client home for field errors. Held in a store so that an error on one
 /// field only redraws that field, not the whole page. This is a three-way
 /// distinction, for each path:
@@ -453,7 +456,7 @@ impl ErrorsStoreExt for ErrorsStore {
 pub struct NodeContext {
     pub form_id: String,
     pub prefix: NodePath,
-    pub values: ValuesStore,
+    pub(crate) contents: Contents,
     pub required: bool,
     pub on_edit: Callback<Edit>,
     pub(crate) on_field_event: OnFieldEvent,
@@ -496,7 +499,7 @@ impl NodeContext {
     /// some `OptionNode` says otherwise.
     pub(crate) fn root(
         form_id: String,
-        values: ValuesStore,
+        contents: Contents,
         on_edit: Callback<Edit>,
         on_field_event: OnFieldEvent,
         label_case: LabelCase,
@@ -506,7 +509,7 @@ impl NodeContext {
         Self {
             form_id,
             prefix: NodePath::root(),
-            values,
+            contents,
             required: true,
             on_edit,
             on_field_event,
@@ -535,7 +538,7 @@ impl NodeContext {
         Self {
             form_id: self.form_id.clone(),
             prefix,
-            values: self.values,
+            contents: self.contents,
             required: self.required,
             on_edit: self.on_edit,
             on_field_event: self.on_field_event,
@@ -554,7 +557,7 @@ impl NodeContext {
         Self {
             form_id: self.form_id.clone(),
             prefix: self.prefix.clone(),
-            values: self.values,
+            contents: self.contents,
             required: false,
             on_edit: self.on_edit,
             on_field_event: self.on_field_event,

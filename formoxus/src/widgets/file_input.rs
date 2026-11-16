@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
-use formoxus_spec::{
-    Attr, AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName,
-};
+use formoxus_spec::{AttrSet, FieldType, FieldTypeSet, HtmlElement, InputType, Tag, WidgetName};
 
-use crate::widgets::{LabelSide, LeafWidget, Widget, WidgetProps, field_row};
+use crate::widgets::{LeafWidget, Widget, WidgetProps};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct FileInput;
@@ -32,20 +30,5 @@ impl LeafWidget for FileInput {
 
 #[component]
 pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
-    let props = widget_props;
-    let handle = props.field_handle();
-    let current = handle.current();
-    let attrs: Vec<Attribute> = props
-        .current_attrs()
-        .merge_with_attrs(props.extra_attrs.clone());
-
-    let control = rsx! {
-        input {
-            class: props.control_class::<FileInput>(Tag::Input),
-            id: "{props.id}",
-            name: "{props.path}",
-        }
-    };
-    let marked = props.base_attrs.contains(Attr::Required);
-    field_row::<FileInput>(&props, marked, LabelSide::Before, control)
+    todo!()
 }

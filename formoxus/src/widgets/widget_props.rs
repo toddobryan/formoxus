@@ -9,7 +9,8 @@ use formoxus_spec::Tag;
 use crate::{
     classes::Classes,
     field_attrs::{FieldAttrs, Validity},
-    nodes::{Edit, ErrorsStore, ErrorsStoreExt, ValuesStore},
+    form::Contents,
+    nodes::{Edit, ErrorsStore, ErrorsStoreExt, FilesSignal, ValuesStore},
     path::NodePath,
     widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent},
 };
@@ -90,7 +91,7 @@ pub struct WidgetProps {
     /// so a field whose choices change is shown with the new ones. `None` for
     /// a field without any; a chooser over a `bool` then offers true/false.
     pub choices: Option<Vec<Choice>>,
-    pub(crate) values: ValuesStore,
+    pub(crate) contents: Contents,
     pub(crate) on_field_event: OnFieldEvent,
 }
 
@@ -113,6 +114,7 @@ impl WidgetProps {
         path: NodePath,
         attrs: FieldAttrs,
         values: ValuesStore,
+        files: FilesSignal,
         errors: ErrorsStore,
         classes: Rc<Classes>,
     ) -> Self {
@@ -127,8 +129,7 @@ impl WidgetProps {
             },
             base_attrs: attrs,
             extra_attrs: Vec::new(),
-            values,
-
+            contents: Contents { values, files },
             choices: None,
             on_field_event: OnFieldEvent::unreported(),
         }
@@ -177,7 +178,7 @@ impl WidgetProps {
     /// return into the element's event attributes. Each closure owns a clone
     /// of the handle, so nothing borrows the props.
     pub fn field_handle(&self) -> FieldHandle {
-        FieldHandle::new(&self.path, self.values, self.on_field_event)
+        FieldHandle::new(&self.path, self.contents, self.on_field_event)
     }
 }
 

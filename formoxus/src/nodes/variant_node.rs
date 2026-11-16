@@ -291,7 +291,7 @@ impl Node for VariantNode {
                         extra_attrs: Vec::new(),
                         // Read by no one: a variant choice is not a value in
                         // the store, and its variants arrive as `variants`.
-                        values: ctx.values,
+                        contents: ctx.contents,
                         choices: None,
                         on_field_event: ctx.on_field_event,
                     }

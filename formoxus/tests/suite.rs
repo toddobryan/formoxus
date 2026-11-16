@@ -47,6 +47,8 @@ mod errors;
 mod errors_by_path;
 #[path = "suite/field_validators.rs"]
 mod field_validators;
+#[path = "suite/file_input.rs"]
+mod file_input;
 #[path = "suite/files.rs"]
 mod files;
 #[path = "suite/form_macro.rs"]
@@ -208,6 +210,11 @@ pub struct Harness {
     /// formatted string, as every item button's is). A static attribute lives
     /// in the template and never crosses as a mutation, so it is not here.
     labels: Vec<(ElementId, String)>,
+    /// Every listener ever registered, by event name, never pruned: how a test
+    /// sees that an element was made again, since dioxus recycles element ids
+    /// and the new one can have the old one's. See
+    /// [`times_registered`](Self::times_registered).
+    registered: Vec<String>,
 }
 
 // `VirtualDom` is not `Debug`, so it is left out rather than the whole impl
@@ -218,6 +225,7 @@ impl std::fmt::Debug for Harness {
         f.debug_struct("Harness")
             .field("listeners", &self.listeners)
             .field("labels", &self.labels)
+            .field("registered", &self.registered)
             .finish_non_exhaustive()
     }
 }
@@ -235,6 +243,7 @@ impl Harness {
             dom,
             listeners: Vec::new(),
             labels: Vec::new(),
+            registered: Vec::new(),
         };
         harness.absorb(&mutations);
         harness
@@ -245,6 +254,7 @@ impl Harness {
             match edit {
                 Mutation::NewEventListener { name, id } => {
                     self.listeners.push((name.clone(), *id));
+                    self.registered.push(name.clone());
                 }
                 Mutation::RemoveEventListener { name, id } => {
                     self.listeners.retain(|(n, i)| !(n == name && i == id));
@@ -370,6 +380,45 @@ impl Harness {
         let mutations = self.dom.render_immediate_to_vec();
         self.absorb(&mutations);
         mutations.edits.len()
+    }
+
+    /// Pick `files` in the file input at `id`, as its `change`, then flush.
+    /// Returns the edit count, like [`fire`](Self::fire). An empty `files` is
+    /// the event a browser may send when the user cancels the dialog.
+    ///
+    /// The files ride in `values`, which is where the serialized event's
+    /// `files()` reads them. The `value` is what a browser gives a file input,
+    /// `C:\fakepath\` and the first file's name, so a widget that read it
+    /// instead of `files()` would write the fake path to the store.
+    ///
+    /// **Never pass `SerializedFileData::empty()`:** its `name()` unwraps the
+    /// file name of an empty path, and panics.
+    pub fn pick(&mut self, id: ElementId, files: &[dioxus_html::SerializedFileData]) -> usize {
+        let values = files
+            .iter()
+            .map(|file| dioxus_html::SerializedFormObject {
+                key: String::new(),
+                text: None,
+                file: Some(file.clone()),
+            })
+            .collect();
+        let value = files.first().map_or(String::new(), |file| {
+            format!(r"C:\fakepath\{}", file.path.display())
+        });
+        let payload = PlatformEventData::new(Box::new(SerializedFormData::new(value, values)));
+        let dom_event: Event<dyn Any> = Event::new(Rc::new(payload), true);
+        self.dom.runtime().handle_event("change", dom_event, id);
+        let mutations = self.dom.render_immediate_to_vec();
+        self.absorb(&mutations);
+        mutations.edits.len()
+    }
+
+    /// How many listeners for `event` have ever been registered, counting
+    /// removed ones. When it goes up, an element listening for `event` was
+    /// made (or made again): what an element's id cannot say, since dioxus
+    /// recycles ids.
+    pub fn times_registered(&self, event: &str) -> usize {
+        self.registered.iter().filter(|name| *name == event).count()
     }
 
     /// Click the element at `id`, then flush. Returns the edit count, like

@@ -128,7 +128,7 @@ impl Node for ListNode {
                         AddItemProps {
                             path: path.clone(),
                             id: id.clone(),
-                            values: ctx.values,
+                            values: ctx.contents.values,
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),

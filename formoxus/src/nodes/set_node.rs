@@ -599,7 +599,7 @@ impl SetNode {
                             path: path.join(&name),
                             index,
                             editing,
-                            values: ctx.values,
+                            values: ctx.contents.values,
                             classes: ctx.classes.clone(),
                         },
                         "ItemView",
@@ -1076,7 +1076,7 @@ impl Node for SetNode {
                         AddItemProps {
                             path: path.clone(),
                             id: id.clone(),
-                            values: ctx.values,
+                            values: ctx.contents.values,
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),

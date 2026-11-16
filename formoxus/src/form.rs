@@ -17,12 +17,11 @@ use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, NodeContext, no_such_path};
+use crate::nodes::{Edit, ErrorsStore, FilesSignal, NodeContext, no_such_path};
 use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
-use dioxus::html::FileData;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus_spec::FixedKey;
@@ -228,6 +227,15 @@ where
     use_store(move || leaves.into_iter().collect())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Contents {
+    /// Live raw values by qualified path. Changes on every keystroke, and
+    /// survives a schema rebuild because paths are stable under one.
+    pub(crate) values: ValuesStore,
+    /// A map from qualified path to files
+    pub(crate) files: FilesSignal,
+}
+
 /// A live form: the state, the values beside it, and where a structural edit
 /// goes.
 ///
@@ -241,11 +249,15 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// why it's `FormState` and not `FormSchema`, and why it's a `Signal`: a
     /// structural edit rebuilds it and the page has to re-render.
     state_signal: Signal<FormState<T>>,
-    /// Live raw values by qualified path. Changes on every keystroke, and
-    /// survives a schema rebuild because paths are stable under one.
-    values_store: ValuesStore,
-    /// A map from qualified path to files
-    files_signal: Signal<IndexMap<NodePath, FileData>>,
+    /// What the form holds right now, wherever it came from (typed or picked
+    /// by the user, loaded by `form_for`, absorbed from the wire): the value
+    /// store, with each leaf's raw string, and the file table, with each
+    /// picked file. One pair, made once in [`use_form`] and copied into every
+    /// [`NodeContext`] and from there into every [`FieldHandle`], so a
+    /// widget's writes and the form's reads can never be two different
+    /// stores. A file's NAME is in the value store like any leaf's value, and
+    /// only the file itself is in the table. See [`Contents`].
+    contents: Contents,
     /// Field errors by qualified path. See [`ErrorsStore`].
     errors_store: ErrorsStore,
     /// The paths typed into since they were last checked (`ERRORS_PLAN.md`
@@ -350,7 +362,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
 
     /// The live value store, keyed by qualified path.
     pub fn values(&self) -> ValuesStore {
-        self.values_store
+        self.contents.values
     }
 
     pub fn errors(&self) -> ErrorsStore {
@@ -489,7 +501,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     fn root_ctx(&self) -> NodeContext {
         NodeContext::root(
             self.id.peek().clone(),
-            self.values_store,
+            self.contents,
             self.on_edit,
             OnFieldEvent {
                 callback: Some(self.on_field_event),
@@ -606,7 +618,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // so reading the state would ship a payload missing every edit since.
         let state = self.state_signal.read();
         WireForm::new(
-            state.ordered_values(&self.values_store.read()),
+            state.ordered_values(&self.contents.values.read()),
             state.ordered_errors(&self.errors_store.read()),
         )
     }
@@ -640,7 +652,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            FieldHandle::unreported(path, self.values_store).input(raw.clone());
+            FieldHandle::unreported(path, self.contents).input(raw.clone());
         }
         self.distribute_errors(wire.errors())
     }
@@ -656,7 +668,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     pub fn edit(&self, edit: &Edit) -> Result<Option<NodePath>, FormAccessError> {
         apply_edit(
             self.state_signal,
-            self.values_store,
+            self.contents,
             self.errors_store,
             self.changed_paths,
             self.live_validation(),
@@ -691,7 +703,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `distribute_values` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            FieldHandle::unreported(&path, self.values_store).input(raw);
+            FieldHandle::unreported(&path, self.contents).input(raw);
         }
     }
 
@@ -704,7 +716,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             self.errors_store,
             self.changed_paths,
             |state| {
-                let values = state.ordered_values(&self.values_store.read());
+                let values = state.ordered_values(&self.contents.values.read());
                 state.distribute_values(&values);
                 state.validate()
             },
@@ -751,7 +763,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         }
         FieldHandle::new(
             &key,
-            self.values_store,
+            self.contents,
             OnFieldEvent {
                 callback: Some(self.on_field_event),
                 is_live: false,
@@ -847,19 +859,21 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     });
     let mut new_blank_item = use_signal(|| None::<NodePath>);
     let changed_paths = use_signal(HashSet::new);
-    // `peek`, not `read`: seeding the store must not subscribe this component to
-    // the state, or every structural edit would re-run the initializer's scope
-    // for nothing.
-    // Re-collected into a `HashMap`: the store cannot hold the `IndexMap`
-    // `collect_values` returns — see `ValuesStore`.
-    let values = use_store(move || {
-        state
-            .peek()
-            .leaf_values()
-            .into_iter()
-            .collect::<HashMap<_, _>>()
-    });
-    let files_signal = use_signal(IndexMap::new);
+    let contents: Contents = Contents {
+        // `peek`, not `read`: seeding the store must not subscribe this component to
+        // the state, or every structural edit would re-run the initializer's scope
+        // for nothing.
+        // Re-collected into a `HashMap`: the store cannot hold the `IndexMap`
+        // `collect_values` returns — see `ValuesStore`.
+        values: use_store(move || {
+            state
+                .peek()
+                .leaf_values()
+                .into_iter()
+                .collect::<HashMap<_, _>>()
+        }),
+        files: use_signal(IndexMap::new),
+    };
     let errors = use_store(move || {
         initial
             .peek()
@@ -875,7 +889,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         .live_validation()
         .unwrap_or_else(|| crate::defaults::defaults().live_validation);
     let on_edit = use_callback(move |edit: Edit| {
-        match apply_edit(state, values, errors, changed_paths, is_live, &edit) {
+        match apply_edit(state, contents, errors, changed_paths, is_live, &edit) {
             // Not in a set: its Add made an item from the draft, and focus
             // stays in the draft for the next one (`DraftAdder`).
             Ok(Some(item))
@@ -901,7 +915,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     });
 
     let on_field_event = use_callback(move |event: FieldEvent| {
-        apply_field_event(state, values, errors, changed_paths, &event);
+        apply_field_event(state, contents, errors, changed_paths, &event);
     });
 
     let form_id = dioxus_fullstack_core::use_server_cached(new_form_id);
@@ -917,8 +931,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 
     Form {
         state_signal: state,
-        values_store: values,
-        files_signal,
+        contents,
         errors_store: errors,
         changed_paths,
         on_edit,
@@ -938,7 +951,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
 /// own errors (see [`check_item_count`]).
 fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     mut state: Signal<FormState<T>>,
-    mut values: ValuesStore,
+    mut contents: Contents,
     errors: ErrorsStore,
     changed_paths: Signal<HashSet<NodePath>>,
     is_live: bool,
@@ -955,7 +968,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
         path, value: None, ..
     } = edit
     {
-        let drafts = state.peek().draft_values(path, &values.read());
+        let drafts = state.peek().draft_values(path, &contents.values.read());
         if !drafts.is_empty() {
             state.write().distribute_values(&drafts);
         }
@@ -969,7 +982,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     // in its list would go on leaving out a removed one. By prefix rather than
     // the item's current leaves, so an unchosen variant's values go too.
     if let Some(item) = removed {
-        values.retain(|path, _| !path.starts_with(&item));
+        contents.values.retain(|path, _| !path.starts_with(&item));
     }
     // A filled item was built from its value, so the TREE has its values, but
     // widgets, `validate` and `to_wire` read the STORE. Copy the new item's
@@ -983,13 +996,13 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     {
         for (path, raw) in state.peek().leaf_values() {
             if path.starts_with(item) {
-                FieldHandle::unreported(&path, values).input(raw);
+                FieldHandle::unreported(&path, contents).input(raw);
             }
         }
     }
     // Last, once the store holds what the edit left: the count check reads it.
     if matches!(edit, Edit::AddItem { .. } | Edit::RemoveItem { .. }) {
-        check_item_count(state, values, errors, edit.path(), is_live);
+        check_item_count(state, contents, errors, edit.path(), is_live);
     }
     Ok(created)
 }
@@ -1026,7 +1039,7 @@ enum AtPath {
 /// form does not re-render; see [`check_live`].
 fn apply_field_event<T>(
     state: Signal<FormState<T>>,
-    values: ValuesStore,
+    contents: Contents,
     mut errors: ErrorsStore,
     mut changed_paths: Signal<HashSet<NodePath>>,
     event: &FieldEvent,
@@ -1054,7 +1067,7 @@ fn apply_field_event<T>(
     match event.kind {
         FieldEventKind::Written => match at_path {
             AtPath::ShowsErrors => {
-                check_live(state, values, errors, path);
+                check_live(state, contents, errors, path);
                 changed_paths.write().remove(path);
             }
             AtPath::Clean => {
@@ -1067,7 +1080,7 @@ fn apply_field_event<T>(
         },
         FieldEventKind::Blurred => {
             if changed_paths.write().remove(path) {
-                check_live(state, values, errors, path);
+                check_live(state, contents, errors, path);
             }
         }
     }
@@ -1091,7 +1104,7 @@ fn apply_field_event<T>(
 /// count that just changed.
 fn check_item_count<T>(
     state: Signal<FormState<T>>,
-    values: ValuesStore,
+    contents: Contents,
     mut errors: ErrorsStore,
     container: &NodePath,
     is_live: bool,
@@ -1099,7 +1112,7 @@ fn check_item_count<T>(
     T: Clone + Debug + PartialEq + Facet<'static> + 'static,
 {
     if is_live {
-        check_live(state, values, errors, container);
+        check_live(state, contents, errors, container);
     } else if errors
         .peek()
         .get(container)
@@ -1123,7 +1136,7 @@ fn check_item_count<T>(
 /// result is the same on this keystroke as the last does not wake.
 fn check_live<T>(
     state: Signal<FormState<T>>,
-    values: ValuesStore,
+    contents: Contents,
     mut errors: ErrorsStore,
     path: &NodePath,
 ) where
@@ -1131,7 +1144,7 @@ fn check_live<T>(
 {
     let check = {
         let state = state.peek();
-        let values = state.ordered_values(&values.peek());
+        let values = state.ordered_values(&contents.values.peek());
         state.check_live(path, &values)
     };
     // No key reads as `None`, as `ErrorsStoreExt::errors_at` reads it, so writing `None`

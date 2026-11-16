@@ -2,7 +2,7 @@ use dioxus::core::Callback;
 use dioxus::prelude::{FocusEvent, FormEvent};
 use dioxus::signals::{ReadableExt, WritableExt};
 
-use crate::nodes::ValuesStore;
+use crate::form::Contents;
 use crate::path::NodePath;
 
 /// What a widget tells the form happened to one field, for
@@ -113,15 +113,15 @@ impl OnFieldEvent {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldHandle {
     path: NodePath,
-    values: ValuesStore,
+    contents: Contents,
     handler: OnFieldEvent,
 }
 
 impl FieldHandle {
-    pub(crate) fn new(path: &NodePath, values: ValuesStore, handler: OnFieldEvent) -> Self {
+    pub(crate) fn new(path: &NodePath, contents: Contents, handler: OnFieldEvent) -> Self {
         Self {
             path: path.clone(),
-            values,
+            contents,
             handler,
         }
     }
@@ -131,10 +131,10 @@ impl FieldHandle {
     /// in `absorb`, `reset` and `apply_edit`, each of which settles the
     /// field's errors itself. Never for a widget, which would then go
     /// unchecked until submit.
-    pub(crate) fn unreported(path: &NodePath, values: ValuesStore) -> Self {
+    pub(crate) fn unreported(path: &NodePath, contents: Contents) -> Self {
         Self {
             path: path.clone(),
-            values,
+            contents,
             handler: OnFieldEvent::unreported(),
         }
     }
@@ -147,7 +147,7 @@ impl FieldHandle {
     /// never given a value. An absent key reads as `""`, the same "empty IS
     /// absence" rule the form applies when it validates.
     pub fn current(&self) -> String {
-        let slot = self.values.get_unchecked(self.path.clone());
+        let slot = self.contents.values.get_unchecked(self.path.clone());
         slot.try_read().map(|v| v.clone()).unwrap_or_default()
     }
 
@@ -206,7 +206,7 @@ impl FieldHandle {
     /// that read the whole map, as a custom adder counting its list's entries
     /// does, on every keystroke. Only a new key changes the keys.
     fn write_value(&self, raw: String) {
-        let mut values = self.values;
+        let mut values = self.contents.values;
         let populated = values.peek().contains_key(&self.path);
         if populated {
             values.get_unchecked(self.path.clone()).set(raw);

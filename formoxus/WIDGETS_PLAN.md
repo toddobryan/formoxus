@@ -1625,6 +1625,15 @@ several?
     in the unfinished widget: `files_signal` never read, and `current` and `attrs`
     unused in `FileInputView`. Each goes away with a step below.
 
+    **2026-11-16:** CC, DD and EE decided as written. f.6 DONE (Todd): `Contents`
+    is a `pub(crate) struct` in `form.rs`, held by `Form`, `NodeContext`,
+    `WidgetProps` and `FieldHandle`; `WidgetProps::new` takes `values` and `files`;
+    a test makes the table with `use_hook(FilesSignal::default)`. Suite: 1486, 22
+    failing, all of them f.12's tests waiting on f.8-f.11 (four more pass only
+    because they check for something absent; recheck them after f.9). Clippy:
+    only f.9's `todo!()`. FF-HH decided as recommended (Todd). Next: f.6b.
+    `apply_field_event` takes the whole `Contents` too (Todd), ready for f.11.
+
     Done:
 
     - [x] **f.1.** `FileInput` (`src/widgets/file_input.rs`, Todd): `Widget` with
@@ -1654,9 +1663,67 @@ several?
 
     Left, in an order where each step compiles:
 
-    - [ ] **f.6. The table reaches the widget.** `NodeContext` and `WidgetProps`
-      each gain the signal, `Form::render` puts it in the context, and
-      `props.field_handle()` hands it to the `FieldHandle`. See decision CC.
+    - [x] **f.6. The table reaches the widget, in a `Contents { values, files }`**
+      (named 2026-11-16, Todd). The value store and the file table travel
+      together: `NodeContext`, `WidgetProps` and `FieldHandle` each hold one
+      `Contents` where they held `values` (and, in the WIP, `files_signal`), and
+      `NodeContext::root` takes it, which is what clears clippy's
+      too-many-arguments warning (8 down to 7). Both halves are `Copy`, so it
+      derives `Clone, Copy, Debug, PartialEq` and goes by value. Its fields are
+      `pub(crate)`, and so is the field holding it on `NodeContext`, which also
+      closes an older hole: `NodeContext` is reachable as
+      `formoxus::nodes::NodeContext` with every field `pub`, so `values` was
+      writable from outside, and the WIP's `files_signal` would have been too.
+      `errors` stays out (Todd, 2026-11-16): it lives in `WidgetCommon`, which is
+      `pub` and shared with `SetWidgetProps`, and it never goes to the
+      `FieldHandle`. Not "UserInput" (the store also holds what `form_for` loaded
+      and what the server rebuilt from the wire) and not "FormData" (dioxus's
+      event payload, and 11g's `web_sys::FormData`). `FieldHandle::unreported`,
+      the form's own writes in `absorb`, `reset` and `apply_edit`, takes a
+      `Contents` too. **Trap: `WidgetProps::new` is `pub`** (for a test of a
+      widget on its own, as `builtin_widgets.rs` and `widgets.rs` in the suite
+      use it), so it can't take a `pub(crate)` type: it takes the two halves and
+      builds the `Contents` itself. See decision CC.
+
+    - [ ] **f.6b. `NodeContext` split by lifetime: `FormWide`** (Todd, 2026-11-16, on
+      Claude's recommendation; its own commit, after f.6 and before f.7, so the
+      file-widget diffs aren't buried in it). `NodeContext` holds two kinds of field.
+      Some are the same for every node of one render: `form_id`, `contents`,
+      `errors`, `on_edit`, `on_field_event`, `label_case`, `classes`. Others change
+      as the walk descends: `prefix`, `required`, `label_if_unnamed`, `in_draft`.
+      Today `descend_to` and `optional` rebuild the whole struct field by field, so
+      every form-wide field is written four times (the struct, `root`,
+      `descend_to`, `optional`), as f.6's `files_signal` was, and every descent
+      clones `form_id`, a `String`, at every node. So the form-wide fields move into
+      a `pub struct FormWide`, and `NodeContext` holds `form: Rc<FormWide>` beside
+      the four per-node fields. A descent then copies one `Rc`, and a new form-wide
+      field is written in `FormWide` and where it is built, never in `descend_to` or
+      `optional` again.
+
+      Details:
+
+      - **`root` takes a `FormWide`,** which `Form::root_ctx` builds. It has to be
+        built per render, not held on `Form`: `label_case()`, `classes()` and
+        `live_validation()` (inside `on_field_event`) are resolved from the cascade
+        each render ([[config-cascade]]).
+      - **`Deref<Target = FormWide>` on `NodeContext`,** as `WidgetProps` derefs to
+        `WidgetCommon` (box 6 step 3b). Then `ctx.classes`, `ctx.errors`,
+        `ctx.on_edit` and the rest keep working at their ~70 call sites, and the
+        diff is `nodes.rs` and `form.rs`. Without it, every site becomes
+        `ctx.form.classes`, which says nothing more.
+      - **`classes` stays `Rc<Classes>` inside `FormWide`,** although the whole
+        struct is in an `Rc`: `WidgetCommon` holds an `Rc<Classes>` of its own, and
+        a node hands `ctx.classes.clone()` to it. An `Rc<FormWide>` in
+        `WidgetCommon` instead would give every widget the form's callbacks.
+      - **Visibility unchanged, field by field:** `contents` and `on_field_event`
+        `pub(crate)`, the rest `pub`, as they are on `NodeContext` today.
+      - **The `Rc` rule on `classes` carries over** to `Rc<FormWide>`: it lives only
+        in render-side types, never in `FormSpec` or `FormState`, which reach the
+        server and must be `Send`.
+      - Not a bundle of their own: `form_id` with `prefix` (they meet only in `id()`,
+        already a method), `on_edit` with `on_field_event`, or `label_case` with
+        `classes`. Inside `FormWide` each pair is already together;
+        `label_if_unnamed` is per node, so it stays out.
 
     - [ ] **f.7. `FieldHandle::pick(Option<FileData>)`,** the one method that does
       every step: write the name to the store (`file.name()`, or `""` for none), put
@@ -1678,21 +1745,36 @@ several?
       (`FixedKey::RemoveFileButton`) calling `pick(None)`; `..attrs` last.
 
     - [ ] **f.10. `reset`** clears the table and bumps a new reset counter on `Form`,
-      which is the `<input>`'s `key`, so Dioxus makes it again, empty.
+      which is the `<input>`'s `key`, so Dioxus makes it again, empty. **Trap: a
+      `key` on a lone element does nothing.** dioxus-core 0.7.10 compares keys
+      only among an iterator's children (`diff_keyed_children` in
+      `diff/iterator.rs`; `diff/node.rs` never reads a key), so `input { key:
+      "{resets}", … }` written on its own is silently ignored and the browser keeps
+      showing the file `reset` threw away. Render it from a one-item iterator,
+      `for n in [resets] { input { key: "{n}", … } }`. The suite's
+      `reset_makes_the_input_again` catches the mistake.
 
     - [ ] **f.11. `validate` and `check_live`** turn the table into a `FilesByPath`
       (`FileMeta { content_type, size, stored: None }`) and pass it to
       `distribute_files` after `distribute_values`. `FormState::check_live` takes
       the files to do it.
 
-    - [ ] **f.12. Tests (Claude, each ahead of its step).** In the suite: the markup
+    - [ ] **f.12. Tests (Claude, each ahead of its step).** WRITTEN 2026-11-16, ahead
+      of f.6-f.11, in `tests/suite/file_input.rs` (26 tests, through the page only:
+      a Check button showing what `validate` returned, the wire, the errors, the
+      markup), with two `Harness` helpers in `tests/suite.rs`: `pick` (a `change`
+      carrying dioxus-html's `SerializedFileData`, with the browser's
+      `C:\fakepath\` `value`) and `times_registered` (listener registrations ever
+      seen, which is how `reset` re-making the input shows, since dioxus recycles
+      element ids). They compile and fail until the steps land. Four of them
+      assume answers to open questions FF-HH below. The original list: the markup
       (`type="file"`, no `value`, the `<output>`, "Current file:" for an `Existing`
       file, Remove only when optional); `pick` writing store and table; `reset`
       emptying the table; `validate` and the live check both catching an oversized
       pick. No browser needed: `FileData::new` takes any `NativeFileData`, so a test
       makes a fake file with a name, size and type. The e2e pair waits for box 13.
 
-    Open, Claude's recommendation first:
+    Decided (Todd, 2026-11-16, all three as Claude recommended):
 
     **CC. The widget reaches the table only through `FieldHandle::pick`.**
     `WidgetProps` holds the signal as a `pub(crate)` field, so a custom widget gets
@@ -1706,6 +1788,24 @@ several?
     **EE. "Existing" means the table has nothing at the path,** the rule
     `distribute_files` follows, so what the screen says and what `validate` sees
     agree.
+
+    Decided (Todd, 2026-11-16, as Claude recommended); the f.12 tests named pin each:
+
+    **FF. Remove shows only when there is a file to remove**, chosen or kept. An
+    empty optional field has no button that does nothing
+    (`an_empty_optional_file_has_no_remove_button`).
+
+    **GG. Remove is labelled by what it removes, `Remove “notes.txt”`**, like a
+    list item's Remove (`item_buttons.rs`), as an `aria-label` so it crosses as a
+    mutation (`remove_empties_an_optional_file`,
+    `remove_after_a_pick_drops_the_file`).
+
+    **HH. A `change` with no file changes nothing.** A browser may send one when
+    the user cancels the dialog (older Chrome cleared the selection on cancel), and
+    `pick(None)` there would turn an edit form's kept file into no file, or a
+    required error. Remove is the only way to drop a file
+    (`a_change_with_no_file_keeps_the_file`). With two files, the first is taken
+    (`a_change_with_two_files_takes_the_first`).
   - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
     `formoxus::file::Multipart<T>` (named like `WireForm<T>`, which it parallels)
     holding `to_wire()` and the table's files, and `Multipart<T>` implements dioxus's

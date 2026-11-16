@@ -9,6 +9,7 @@ use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::nodes::FilesSignal;
 use formoxus::path::NodePath;
 use formoxus::widgets::Choice;
 use formoxus::widgets::WidgetProps;
@@ -89,6 +90,7 @@ fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Elemen
         NodePath::new(PATH),
         field_attrs(),
         values,
+        FilesSignal::default(),
         errors,
         Rc::new(Classes::fx()),
     );
