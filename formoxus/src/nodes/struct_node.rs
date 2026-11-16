@@ -5,7 +5,8 @@ use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, no_such_path,
+    Drafts, Edit, ErrorsStoreExt, FilesByPath, Node, SpecsByPath, ValuesByPath, default_label,
+    no_such_path,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
@@ -98,15 +99,22 @@ impl Node for StructNode {
 
     fn collect_values(&self, prefix: &NodePath, out: &mut Vec<RawValue>) {
         let nested = prefix.join(&self.name);
-        for m in &self.nodes {
-            m.collect_values(&nested, out);
+        for n in &self.nodes {
+            n.collect_values(&nested, out);
         }
     }
 
     fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
         let nested = prefix.join(&self.name);
-        for m in &mut self.nodes {
-            m.distribute_values(&nested, specs, values);
+        for n in &mut self.nodes {
+            n.distribute_values(&nested, specs, values);
+        }
+    }
+
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        let nested = prefix.join(&self.name);
+        for n in &mut self.nodes {
+            n.distribute_files(&nested, files);
         }
     }
 

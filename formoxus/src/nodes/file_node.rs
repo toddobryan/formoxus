@@ -5,12 +5,12 @@ use formoxus_spec::FileType;
 use crate::{
     error::{FormAccessError, ValidationMessage},
     field_attrs::FieldAttrs,
-    file::FileUpload,
+    file::{FileUpload, format_size},
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
-        Drafts, Edit, FieldValidator, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath,
-        default_label,
+        Drafts, Edit, FieldValidator, FilesByPath, Node, NodeContext, RawValue, SpecsByPath,
+        ValuesByPath, default_label,
     },
     path::NodePath,
     widgets::{AnyWidget, Choice},
@@ -31,9 +31,16 @@ pub struct FileNode {
     pub meta: Option<FileMeta>,
 }
 
+/// What a [`FileNode`] knows about a file beyond its name: what `max_size` and
+/// `accept` check. Present only for a file picked in this form or received by
+/// the server; an `Existing` file has none.
 #[derive(Clone, Debug)]
 pub struct FileMeta {
+    /// As the browser or the request reported it, which may be `None` or `""`
+    /// for a type it didn't know.
     pub content_type: Option<String>,
+    /// In bytes. On the client the browser's figure; on the server the count
+    /// of bytes actually received, which is the one enforced.
     pub size: u64,
 }
 
@@ -82,6 +89,10 @@ impl Node for FileNode {
         self.file_name.clone_from(raw);
     }
 
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        self.meta = files.get(&prefix.join(&self.name)).cloned();
+    }
+
     fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {
         let mut errors: Vec<ValidationMessage> = Vec::new();
 
@@ -89,8 +100,27 @@ impl Node for FileNode {
             errors.push(ValidationMessage("This field is required.".to_string()));
         }
 
-        if let Some(_meta) = &self.meta {
-            // TODO: check max_size and accept
+        if let Some(meta) = &self.meta {
+            if let Some(max) = &self.max_size
+                && meta.size > *max
+            {
+                errors.push(ValidationMessage(format!(
+                    "This file is too large. The largest allowed is {}.",
+                    format_size(*max)
+                )));
+            }
+
+            if !FileType::accepts(&self.accept, &self.file_name, meta.content_type.as_deref()) {
+                let accepted = self
+                    .accept
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                errors.push(ValidationMessage(format!(
+                    "This file type isn't allowed. Allowed: {}.",
+                    accepted.join(", ")
+                )));
+            }
         }
 
         if errors.is_empty() {

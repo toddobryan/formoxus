@@ -1334,11 +1334,14 @@ several?
     help text, the widget, `optional`, the validator, the same way a `FieldNode` gets
     them through `LeafArgs`); the file's name, which is its value in the store; and
     `meta: Option<FileMeta>`, the file's `content_type` and `size`, plus, on the
-    server, the stored output. Its methods:
-    **Size of what is left (2026-11-15):** about 170 lines of runtime, in three
-    pieces, 11e.2, 11e.3's checks and 11e.4, in that order, since each needs the one
-    before. 11e.1 and 11e.5 are done, and so is 11e.3's `FileType`. Claude writes the
-    tests for each piece ahead of it, from this text, with no implementation.
+    server, the stored output.
+
+    **Where it stands (2026-11-15, later):** 11e.1, 11e.2, 11e.3 and 11e.5 are DONE;
+    11e.6 moved to 11f. What is left is 11e.4, about 90 lines in four pieces (below).
+    Claude writes the tests for each piece ahead of it, from this text, with no
+    implementation.
+
+    Its methods:
 
     1. `collect_values`/`distribute_values` carry only the name, so presence,
        `required`, `to_wire` and `reset` work through the store as for any field.
@@ -1346,12 +1349,17 @@ several?
     2. **A new `Node` method, `distribute_files(prefix, &FilesByPath)`,** which
        sets `meta` from a table keyed by path. Sizes and content types can't travel
        in the store, which holds one string per path, and they are what `max_size:`
-       and `accept:` check. About 60 lines.
+       and `accept:` check. (Done 2026-11-15, Todd; Claude wrote the doc comments,
+       which carry both traps below, and the suite tests in `files.rs`.)
        - **`FilesByPath`** is `IndexMap<NodePath, FileMeta>`, declared beside
          `ValuesByPath` in `nodes.rs`. `FileMeta` gains `stored: Option<StoredFile>`
          in 11e.4; until then it is the content type and size.
-       - **The default body does nothing**, which is right for every leaf but
-         `FileNode`. The five containers (`StructNode`, `OptionNode`, `ListNode`,
+       - **It is a REQUIRED method, with no default body** (Todd, 2026-11-15, an
+         improvement on this plan's first draft, which gave it a default that did
+         nothing). A default would let a future container forget it and silently
+         skip the files inside it, with every check on them passing; required, it
+         doesn't compile. The cost is an empty body on `FieldNode`, the one other
+         leaf. The five containers (`StructNode`, `OptionNode`, `ListNode`,
          `SetNode`, `VariantNode`) override it to pass the table on, and **they
          reach exactly the children their `distribute_values` reaches, with the same
          prefixes**: the current variant's nodes only, list and set items under their
@@ -1388,6 +1396,8 @@ several?
     3. `validate`: missing (no name) against `required`; then, if there is `meta`,
        `max_size` against its size and `accept` against the name's extension and the
        content type, with HTML's rules for `accept` (`.pdf`, `image/*`, `text/plain`).
+       (Done 2026-11-15: `FileType` by Claude at Todd's request, the checks by Todd,
+       `format_size` in `src/file.rs` by Claude.)
 
        **`FileType` is DONE (2026-11-15)**: `FromStr` for one entry,
        `FileType::parse_list` for a whole value and `FileType::accepts` for matching,
@@ -1481,7 +1491,21 @@ several?
          nothing branches on the reason: `form!` turns it into a `compile_error!`
          and a runtime caller panics with it.
     4. **`write_value_into` picks the variant, and `stored` is type-erased.**
-       About 70 lines.
+       About 90 lines, in four pieces, in this order:
+       1. **`StoredFile`**, in `src/file.rs`: the struct, `new`, a hand-written
+          `Debug` and `Clone` derived (an `Arc` and two plain values). About 35
+          lines, half of them docs.
+       2. **`FileMeta` gains `pub stored: Option<StoredFile>`.** A dev can only ever
+          write `None` there, since `StoredFile::new` is `pub(crate)`; that is right,
+          because only `accept_multipart` stores files. Every `FileMeta { … }`
+          literal gains `stored: None`: in the crate, none yet outside tests; in the
+          suite, one helper (`meta` in `files.rs`), which Claude changes with the
+          tests.
+       3. **`FileNode::write_value_into`** writing all three variants. About 20
+          lines.
+       4. **Decision BB's check** in `accept_multipart`'s first step. About 25
+          lines, but it can't be called until 11h, so it can wait for 11h if that
+          reads better; its tests can be written now either way.
        - **Which variant:** with `meta` whose `stored` is `Some`, `Received { name,
          content_type, size, stored }`; with `meta` and no `stored`, `Chosen { name,
          content_type, size }`; with no `meta`, `Existing { name }`, which is what it
@@ -1512,7 +1536,27 @@ several?
        - **Writing it:** `select_variant_named("Received")`, the three plain fields
          with `set_field` as `Existing`'s name is written today, then
          `begin_field("stored")`, `(stored.write)(&*stored.value, partial)` and
-         `end()`.
+         `end()`. `Chosen` is the same without the last three steps.
+         `content_type` is an `Option<String>` in the model as in `FileMeta`, so
+         `set_field("content_type", meta.content_type.clone())` should set it whole,
+         `None` included, with no `begin_some`. **Not yet checked**, like the bound
+         above: if facet wants `Option` written through `begin_some`/`set_default`,
+         the test for a file with no content type is the one that says so.
+       - **The panic inside `write`** checks `partial.shape()` against `S::SHAPE`
+         before it downcasts, and names both: "this form's `FileUpload` holds
+         `{partial.shape()}`, but the upload handler stores `{type_name}`; give
+         `accept_multipart` a handler whose `Stored` is the model's `S`". With
+         decision BB in place it can't fire, so it is an assert that the BB check
+         was not skipped, not the place a dev meets the mistake.
+       - **The tests** (Claude, ahead of the code). In the suite: a file in the
+         table validates to `Chosen` with its name, size and content type, `None`
+         content type included; no table entry is still `Existing`; `Chosen` inside
+         a list item and inside a variant; and an `Option<FileUpload>` with a file
+         is `Some(Chosen …)`. `Received` can't be reached from the suite until 11h,
+         since `StoredFile::new` is `pub(crate)`, so its tests are inline in
+         `file_node.rs`: built with `S = String`, through `form_for` and
+         `distribute_files`, a `Received` whose `stored` is that string; and a
+         `StoredFile` of the wrong type panicking with both names.
        - **Trap: a handler whose `Stored` isn't the model's `S`.** A dev's model says
          `FileUpload<S3Object>` and the call passes a `TemporaryFileUploadHandler`.
          `Partial::set` would refuse it with `WrongShape`. That is a dev bug, not a
@@ -1530,9 +1574,22 @@ several?
        matched). Then `accept_multipart`, before it reads its first file part, compares
        `<H::Stored as Facet>::SHAPE` against every file leaf's `stored_shape` and
        panics on the first that differs, with both names, before anything is
-       stored. About 20 more lines (a `Node` walk like `paths`, or a field on the
-       state built with the leaves). The check in `write` stays, as an assert that
-       can no longer fire.
+       stored. The check in `write` stays, as an assert that can no longer fire.
+
+       **BB's HOW, refined (open, Claude recommends, 2026-11-15): walk `T`'s shape,
+       not the nodes.** The `S` in each `FileUpload<S>` is a fact about the model
+       TYPE, and `accept_multipart` is generic over `T`, so a pure function over
+       `T::SHAPE` can collect every `FileUpload`'s `S` with no help from the
+       state: struct fields, every variant of an enum (not only the chosen one),
+       `Option` payloads, list and set items. That drops the `stored_shape` field on
+       `FileNode` and the new `Node` method this decision first called for, and it
+       also covers a file inside a variant or list item this request never built.
+       It runs before the first part is read, so a mismatch panics with nothing
+       stored, as BB wants. It sits beside `is_file_upload` and reads the
+       `Received` variant's `stored` field to get `S`. **Trap: a recursive model**
+       (a `Comment` holding `Vec<Comment>`) would loop forever, so the walk keeps a
+       set of shapes already visited, by `id`. A model with no `FileUpload` at all
+       needs no check, and the walk says so by returning nothing.
     5. Populating from a model (`form_for`): the name from whichever variant it is,
        and no `meta`, since a model loaded on the client has no file to hand. So an
        untouched upload in an edit form is `Existing`, which is point 3. (Done

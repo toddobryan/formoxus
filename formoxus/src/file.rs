@@ -11,6 +11,10 @@ use facet::Facet;
 
 use crate::path::NodePath;
 
+/// What `accept:` holds. Defined in `formoxus-spec`, so `form!` runs the same
+/// parser at expansion; re-exported here so a dev can name it.
+pub use formoxus_spec::{FileType, FileTypeError};
+
 static UNIQUE: AtomicU64 = AtomicU64::new(0);
 
 /// `prefix`, this process's id and a counter: never the same twice in one
@@ -18,6 +22,34 @@ static UNIQUE: AtomicU64 = AtomicU64::new(0);
 fn unique_name(prefix: &str) -> String {
     let n = UNIQUE.fetch_add(1, Ordering::Relaxed);
     format!("{prefix}{}-{n}", std::process::id())
+}
+
+/// A size as the "too large" message shows it: decimal units (1 kB is 1,000
+/// bytes, as browsers and operating systems show sizes), at most one decimal
+/// place, no trailing `.0`. `2 MB`, `1.5 MB`, `500 kB`, `999 bytes`.
+///
+/// ROUNDED DOWN, never to nearest: a limit of 2,099,999 bytes shown as "2.1 MB"
+/// would promise a user more than it allows. Integer division gives that for
+/// free, which is why this isn't `f64` and `{:.1}` (that rounds to nearest and
+/// keeps the `.0`).
+pub(crate) fn format_size(bytes: u64) -> String {
+    const UNITS: [(u64, &str); 3] = [(1_000_000_000, "GB"), (1_000_000, "MB"), (1_000, "kB")];
+    let Some(&(unit, name)) = UNITS.iter().find(|&&(unit, _)| bytes >= unit) else {
+        return if bytes == 1 {
+            "1 byte".to_string()
+        } else {
+            format!("{bytes} bytes")
+        };
+    };
+    // `bytes / (unit / 10)`, not `bytes * 10 / unit`: the same number, but
+    // multiplying first overflows past about 1.8 × 10^18 bytes.
+    let tenths = bytes / (unit / 10);
+    let (whole, tenth) = (tenths / 10, tenths % 10);
+    if tenth == 0 {
+        format!("{whole} {name}")
+    } else {
+        format!("{whole}.{tenth} {name}")
+    }
 }
 
 #[derive(Clone, Debug, Facet, PartialEq)]
@@ -398,7 +430,36 @@ mod tests {
 
     use googletest::prelude::*;
 
-    use super::{IfExists, TemporaryUploadedFile, copy_new, staging_path, versioned};
+    use super::{IfExists, TemporaryUploadedFile, copy_new, format_size, staging_path, versioned};
+
+    #[gtest]
+    fn a_size_is_shown_in_decimal_units_rounded_down() {
+        for (bytes, shown) in [
+            (0, "0 bytes"),
+            (1, "1 byte"),
+            (999, "999 bytes"),
+            (1_000, "1 kB"),
+            (1_999, "1.9 kB"),
+            (500_000, "500 kB"),
+            (999_999, "999.9 kB"),
+            (1_500_000, "1.5 MB"),
+            (2_000_000, "2 MB"),
+            (2_050_000, "2 MB"),
+            (2_099_999, "2 MB"),
+            (10_250_000, "10.2 MB"),
+            (5_000_000_000, "5 GB"),
+            (2_500_000_000_000, "2500 GB"),
+        ] {
+            expect_that!(format_size(bytes), eq(shown), "{bytes}");
+        }
+    }
+
+    /// The reason for dividing before multiplying: this would overflow
+    /// computed as `bytes * 10 / unit`.
+    #[gtest]
+    fn the_largest_size_does_not_overflow() {
+        expect_that!(format_size(u64::MAX), eq("18446744073.7 GB"));
+    }
 
     /// A fresh directory for one test, removed when the test ends. Named for
     /// the test and this process, since tests run in parallel threads of one

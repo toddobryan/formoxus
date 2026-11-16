@@ -10,7 +10,7 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, FieldValidator, Shown};
+use crate::nodes::{Drafts, FieldValidator, FilesByPath, Shown};
 use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
 use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
@@ -297,6 +297,10 @@ impl<F: Field> Node for FieldNode<F> {
             return; // nothing supplied for this field; leave it as it stands
         };
         self.take_raw(raw);
+    }
+
+    fn distribute_files(&mut self, _prefix: &NodePath, _files: &FilesByPath) {
+        // do nothing for a non-File field
     }
 
     fn paths(&self, prefix: &NodePath, _drafts: Drafts, out: &mut Vec<NodePath>) {

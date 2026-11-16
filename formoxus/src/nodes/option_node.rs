@@ -3,7 +3,9 @@ use dioxus::core::Element;
 use crate::error::FormAccessError;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath};
+use crate::nodes::{
+    Drafts, Edit, FilesByPath, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath,
+};
 use crate::path::NodePath;
 use crate::widgets::Choice;
 
@@ -38,6 +40,10 @@ impl Node for OptionNode {
 
     fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
         self.inner.distribute_values(prefix, specs, values);
+    }
+
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        self.inner.distribute_files(prefix, files);
     }
 
     fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {

@@ -30,8 +30,8 @@ use crate::{
     form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
-        Drafts, Edit, ErrorsStoreExt, Items, Node, NodeContext, RawValue, Shown, SpecsByPath,
-        ValuesByPath, default_label,
+        Drafts, Edit, ErrorsStoreExt, FilesByPath, Items, Node, NodeContext, RawValue, Shown,
+        SpecsByPath, ValuesByPath, default_label,
     },
     path::NodePath,
     widgets::{
@@ -837,6 +837,12 @@ impl Node for SetNode {
         self.draft.distribute_values(&my_path, specs, values);
         self.items.sort_by(&self.comparator);
         self.items.dedup(&self.comparator);
+    }
+
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        let my_path = prefix.join(&self.name);
+        self.items.distribute_files(&my_path, files);
+        self.draft.distribute_files(&my_path, files);
     }
 
     fn validate(&self, prefix: &NodePath, out: &mut ErrorsByPath) -> bool {

@@ -16,8 +16,8 @@ mod set_node;
 mod struct_node;
 mod variant_node;
 
-pub use file_node::FileNode;
 pub(crate) use file_node::is_file_upload;
+pub use file_node::{FileMeta, FileNode};
 pub use items::ItemValue;
 pub(crate) use items::Items;
 pub use list_node::ListNode;
@@ -94,6 +94,24 @@ pub trait Node: Debug {
     /// up its own qualified path in `values` and takes the raw string back in.
     /// This is the "shuffle back" from widget state into plain form data.
     fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath);
+
+    /// Take each file's size and content type in from `files`, the table of
+    /// files picked or received, keyed by the same qualified paths as `values`.
+    /// A container passes the table on to exactly the children its
+    /// `distribute_values` reaches, under the same prefixes; a `FileNode` takes
+    /// the entry at its own path. Required, not defaulted, so a new container
+    /// can't silently skip its files.
+    ///
+    /// Two rules for the caller, both because a `FileNode` REPLACES what it had
+    /// with what the table holds at its path, `None` when nothing:
+    /// 1. **Always the whole table, never part of it.** A path missing from
+    ///    `files` means "no file picked here", unlike `values`, which may be
+    ///    partial. A table holding only the file that just changed would drop
+    ///    every other file's size and type, and their checks would pass.
+    /// 2. **Values first, then files.** `distribute_values` builds the
+    ///    structure (variants, list items) that a file lands in, and a
+    ///    `FileNode` forgets its file when the name in the store changes.
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath);
 
     /// Validate this node and its children, adding any errors to out, by path
     /// returns true if no errors were added, false if some were
@@ -360,6 +378,11 @@ impl Shown {
 /// The live raw values, keyed by qualified path — what `leaves()` produces
 /// and what `apply()` consumes.
 pub type ValuesByPath = IndexMap<NodePath, String>;
+
+/// The files picked or received, keyed by the file leaf's qualified path: the
+/// size and content type of each, which the store (one string per path) can't
+/// hold. What [`Node::distribute_files`] takes; always the whole table.
+pub type FilesByPath = IndexMap<NodePath, FileMeta>;
 
 /// A [`std::collections::HashMap`] equivalent to [`ValuesByPath`] held in
 /// a store so a write touches one input. The two maps are different,

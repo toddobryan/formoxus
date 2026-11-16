@@ -12,7 +12,10 @@ use crate::{
     build::{FormMode, Walk, node_for_shape},
     error::{FormAccessError, ValidationMessage},
     form::ErrorsByPath,
-    nodes::{Drafts, Edit, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath, no_such_path},
+    nodes::{
+        Drafts, Edit, FilesByPath, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath,
+        no_such_path,
+    },
     path::{ITEM_SIGIL, NodePath, item_segment},
 };
 
@@ -105,6 +108,12 @@ impl Items {
         }
         for item in &mut *self {
             item.distribute_values(my_path, specs, values);
+        }
+    }
+
+    pub(crate) fn distribute_files(&mut self, my_path: &NodePath, files: &FilesByPath) {
+        for item in &mut *self {
+            item.distribute_files(my_path, files);
         }
     }
 

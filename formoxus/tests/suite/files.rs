@@ -9,11 +9,15 @@
 //! variant the model held comes back `Existing` (11e.5), which is Django's
 //! "keep the current file". The sizes and content types that make `Chosen` and
 //! `Received` arrive with `distribute_files` (11e.2, 11e.4).
+//!
+//! `FormState` has no way to read a node's `meta`, so `distribute_files` is
+//! seen through what it is for: `max_size:` and `accept:` (11e.3) refusing a
+//! file, at the path of whichever leaf the table reached.
 
 use super::across_the_wire;
 use facet::Facet;
-use formoxus::file::FileUpload;
-use formoxus::nodes::FieldValidator;
+use formoxus::file::{FileType, FileUpload};
+use formoxus::nodes::{FieldValidator, FileMeta, FilesByPath};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
@@ -246,5 +250,369 @@ fn a_validator_does_not_run_on_a_missing_file() {
     expect_that!(
         field_errors(&form, "essay"),
         elements_are![eq("This field is required.")]
+    );
+}
+
+// ── A file's size and type (11e.2, 11e.3) ───────────────────────────────
+
+const TOO_LARGE_2_MB: &str = "This file is too large. The largest allowed is 2 MB.";
+
+/// One file in the table. The one place a `FileMeta` is spelled out, so 11e.4's
+/// `stored` field changes only this.
+fn meta(content_type: Option<&str>, size: u64) -> FileMeta {
+    FileMeta {
+        content_type: content_type.map(str::to_string),
+        size,
+    }
+}
+
+/// The table `Form` keeps (11f) or `accept_multipart` builds (11h).
+fn files<const N: usize>(entries: [(&str, FileMeta); N]) -> FilesByPath {
+    entries
+        .into_iter()
+        .map(|(path, meta)| (NodePath::new(path), meta))
+        .collect()
+}
+
+fn pdf(size: u64) -> FileMeta {
+    meta(Some("application/pdf"), size)
+}
+
+fn accept(list: &str) -> Vec<FileType> {
+    FileType::parse_list(list).expect("the test's `accept` should parse")
+}
+
+/// `essay` limited to 2 MB, with a picked file at the limit named in the store.
+fn limited_essay() -> FormState<Assignment> {
+    let spec = FormSpec::default().with_max_size(&path!(Assignment.essay), 2_000_000);
+    form_for(&assignment(existing("essay.pdf"), None), spec)
+}
+
+#[gtest]
+fn a_file_over_max_size_is_refused() {
+    let mut form = limited_essay();
+    form.distribute_files(&files([("essay", pdf(2_000_001))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "essay"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+/// The limit is the largest size allowed, not the first refused.
+#[gtest]
+fn a_file_of_exactly_max_size_passes() {
+    let mut form = limited_essay();
+    form.distribute_files(&files([("essay", pdf(2_000_000))]));
+    expect_that!(form.validate(), some(anything()));
+    expect_that!(field_errors(&form, "essay"), is_empty());
+}
+
+#[gtest]
+fn without_max_size_any_size_passes() {
+    let mut form = form_for(
+        &assignment(existing("essay.pdf"), None),
+        FormSpec::default(),
+    );
+    form.distribute_files(&files([("essay", pdf(50_000_000_000))]));
+    expect_that!(form.validate(), some(anything()));
+}
+
+/// The limit as the message shows it: decimal units, at most one decimal place,
+/// no trailing `.0`, and ROUNDED DOWN, so it never promises more than it
+/// allows (2,050,000 bytes is "2 MB", not "2.1 MB").
+#[gtest]
+fn the_limit_is_shown_in_decimal_units_rounded_down() {
+    for (max_size, shown) in [
+        (2_000_000, "2 MB"),
+        (1_500_000, "1.5 MB"),
+        (2_050_000, "2 MB"),
+        (2_099_999, "2 MB"),
+        (10_250_000, "10.2 MB"),
+        (500_000, "500 kB"),
+        (1_999, "1.9 kB"),
+        (1_000, "1 kB"),
+        (999, "999 bytes"),
+        (1, "1 byte"),
+        (5_000_000_000, "5 GB"),
+    ] {
+        let spec = FormSpec::default().with_max_size(&path!(Assignment.essay), max_size);
+        let mut form = form_for(&assignment(existing("essay.pdf"), None), spec);
+        form.distribute_files(&files([("essay", pdf(max_size + 1))]));
+        form.validate();
+        expect_that!(
+            field_errors(&form, "essay"),
+            elements_are![eq(&format!(
+                "This file is too large. The largest allowed is {shown}."
+            ))],
+            "{max_size}"
+        );
+    }
+}
+
+fn pdf_or_image_essay(name: &str) -> FormState<Assignment> {
+    let spec = FormSpec::default().with_accept(&path!(Assignment.essay), accept(".pdf, image/*"));
+    form_for(&assignment(existing(name), None), spec)
+}
+
+/// The list is the dev's entries in the dev's order, as `FileType` displays
+/// them: lowercase.
+#[gtest]
+fn a_file_of_a_type_not_accepted_is_refused() {
+    let mut form = pdf_or_image_essay("essay.docx");
+    form.distribute_files(&files([(
+        "essay",
+        meta(
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            1_000,
+        ),
+    )]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "essay"),
+        elements_are![eq("This file type isn't allowed. Allowed: .pdf, image/*.")]
+    );
+}
+
+/// By its name's extension, or by its content type: either is enough.
+#[gtest]
+fn a_file_of_an_accepted_type_passes() {
+    let mut by_name = pdf_or_image_essay("essay.pdf");
+    by_name.distribute_files(&files([("essay", meta(None, 1_000))]));
+    expect_that!(by_name.validate(), some(anything()));
+
+    let mut by_type = pdf_or_image_essay("photo");
+    by_type.distribute_files(&files([("essay", meta(Some("image/heic"), 1_000))]));
+    expect_that!(by_type.validate(), some(anything()));
+}
+
+#[gtest]
+fn the_type_is_checked_against_the_name_in_the_store() {
+    // `accepts` reads the name the node holds, which is the store's: a file
+    // picked as `essay.PDF` is a PDF whatever its content type says.
+    let mut form = pdf_or_image_essay("essay.PDF");
+    form.distribute_files(&files([(
+        "essay",
+        meta(Some("application/octet-stream"), 1_000),
+    )]));
+    expect_that!(form.validate(), some(anything()));
+}
+
+#[gtest]
+fn too_large_and_the_wrong_type_are_both_reported_in_that_order() {
+    let spec = FormSpec::default()
+        .with_max_size(&path!(Assignment.essay), 2_000_000)
+        .with_accept(&path!(Assignment.essay), accept(".pdf"));
+    let mut form = form_for(&assignment(existing("essay.docx"), None), spec);
+    form.distribute_files(&files([("essay", meta(None, 3_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "essay"),
+        elements_are![
+            eq(TOO_LARGE_2_MB),
+            eq("This file type isn't allowed. Allowed: .pdf.")
+        ]
+    );
+}
+
+/// As a `FieldNode` does: the dev's validator runs only on a value formoxus's
+/// own checks passed.
+#[gtest]
+fn a_devs_validator_does_not_run_on_a_file_already_refused() {
+    let spec = pdf_only().with_max_size(&path!(Assignment.essay), 2_000_000);
+    let mut form = form_for(&assignment(existing("essay.docx"), None), spec);
+    form.distribute_files(&files([("essay", meta(None, 3_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "essay"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+/// An `Existing` file has no size or type to check, so a limit set for new
+/// files never refuses the one already kept.
+#[gtest]
+fn an_existing_file_is_not_checked() {
+    let spec = FormSpec::default()
+        .with_max_size(&path!(Assignment.essay), 1)
+        .with_accept(&path!(Assignment.essay), accept("image/*"));
+    let mut form = form_for(&assignment(existing("essay.pdf"), None), spec);
+    form.distribute_files(&FilesByPath::default());
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(existing("essay.pdf"), None)))
+    );
+}
+
+// ── The table replaces, and is always whole (11e.2) ─────────────────────
+
+/// The Reset case from the plan: the name in the store never changes, so only
+/// the table's losing the file can drop its `meta`.
+#[gtest]
+fn a_path_missing_from_the_table_drops_the_files_meta() {
+    let mut form = limited_essay();
+    form.distribute_files(&files([("essay", pdf(10_000_000))]));
+    expect_that!(form.validate(), none());
+
+    form.distribute_files(&FilesByPath::default());
+    expect_that!(
+        form.validate(),
+        some(eq(&assignment(existing("essay.pdf"), None))),
+        "no file in the table is the kept file, `Existing`, and nothing to check"
+    );
+}
+
+#[gtest]
+fn a_later_table_replaces_an_earlier_file() {
+    let mut form = limited_essay();
+    form.distribute_files(&files([("essay", pdf(10_000_000))]));
+    form.distribute_files(&files([("essay", pdf(1_000))]));
+    expect_that!(form.validate(), some(anything()));
+}
+
+/// Values first, then files: a new name in the store is a new file, so it drops
+/// what the node knew about the old one, and the table given after it is what
+/// counts.
+#[gtest]
+fn files_distributed_after_a_new_name_apply_to_it() {
+    let mut form = limited_essay();
+    form.distribute_values(
+        &[(NodePath::new("essay"), "big.pdf".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    form.distribute_files(&files([("essay", pdf(10_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "essay"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+/// A table entry at a path no file leaf has (an item since removed, a variant
+/// since unchosen, a hand-made request) is ignored, never a panic.
+#[gtest]
+fn a_file_at_no_leafs_path_is_ignored() {
+    let mut form = limited_essay();
+    form.distribute_files(&files([
+        ("title", pdf(10_000_000)),
+        ("drafts.#7", pdf(10_000_000)),
+        ("nowhere", pdf(10_000_000)),
+    ]));
+    expect_that!(form.validate(), some(anything()));
+}
+
+// ── The table reaches every file leaf (11e.2) ───────────────────────────
+
+#[gtest]
+fn the_table_reaches_an_optional_file() {
+    let spec = FormSpec::default().with_max_size(&path!(Assignment.notes?), 2_000_000);
+    let model = assignment(existing("essay.pdf"), Some(existing("notes.txt")));
+    let mut form = form_for(&model, spec);
+    form.distribute_files(&files([("notes", meta(Some("text/plain"), 3_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "notes"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+#[gtest]
+fn the_table_reaches_each_file_in_a_list_by_its_item_key() {
+    let spec = FormSpec::default().with_max_size(&path!(Portfolio.drafts[]), 2_000_000);
+    let model = Portfolio {
+        drafts: vec![existing("draft-1.pdf"), existing("draft-2.pdf")],
+    };
+    let mut form = form_for(&model, spec);
+    form.distribute_files(&files([
+        ("drafts.#0", pdf(1_000)),
+        ("drafts.#1", pdf(3_000_000)),
+    ]));
+    expect_that!(form.validate(), none());
+    expect_that!(field_errors(&form, "drafts.#0"), is_empty());
+    expect_that!(
+        field_errors(&form, "drafts.#1"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Course {
+    unit: Assignment,
+}
+
+#[gtest]
+fn the_table_reaches_a_file_in_a_nested_struct() {
+    let spec = FormSpec::default().with_max_size(&path!(Course.unit.essay), 2_000_000);
+    let model = Course {
+        unit: assignment(existing("essay.pdf"), None),
+    };
+    let mut form = form_for(&model, spec);
+    form.distribute_files(&files([("unit.essay", pdf(3_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "unit.essay"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+#[repr(u8)]
+enum Work {
+    Link { url: String },
+    Upload { file: FileUpload },
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Coursework {
+    work: Work,
+}
+
+fn uploaded_work() -> FormState<Coursework> {
+    let spec =
+        FormSpec::default().with_max_size(&path!(Coursework.work.$Work::Upload.file), 2_000_000);
+    let model = Coursework {
+        work: Work::Upload {
+            file: existing("work.pdf"),
+        },
+    };
+    form_for(&model, spec)
+}
+
+#[gtest]
+fn the_table_reaches_a_file_in_the_chosen_variant() {
+    let mut form = uploaded_work();
+    form.distribute_files(&files([("work.$Upload.file", pdf(3_000_000))]));
+    expect_that!(form.validate(), none());
+    expect_that!(
+        field_errors(&form, "work.$Upload.file"),
+        elements_are![eq(TOO_LARGE_2_MB)]
+    );
+}
+
+/// Only the chosen variant's nodes exist, so a file left in the table from
+/// before the user switched variants has nowhere to land.
+#[gtest]
+fn a_file_under_an_unchosen_variant_is_ignored() {
+    let mut form = uploaded_work();
+    form.distribute_values(
+        &[
+            (NodePath::new("work"), "Link".to_string()),
+            (
+                NodePath::new("work.$Link.url"),
+                "https://example.com".to_string(),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    form.distribute_files(&files([("work.$Upload.file", pdf(3_000_000))]));
+    expect_that!(
+        form.validate(),
+        some(eq(&Coursework {
+            work: Work::Link {
+                url: "https://example.com".to_string()
+            }
+        }))
     );
 }

@@ -9,7 +9,8 @@ use crate::field_attrs::Validity;
 use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, Items, Node, SpecsByPath, ValuesByPath, default_label,
+    Drafts, Edit, ErrorsStoreExt, FilesByPath, Items, Node, SpecsByPath, ValuesByPath,
+    default_label,
 };
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
@@ -153,6 +154,10 @@ impl Node for ListNode {
     fn distribute_values(&mut self, prefix: &NodePath, specs: &SpecsByPath, values: &ValuesByPath) {
         self.items
             .distribute_values(&prefix.join(&self.name), specs, values);
+    }
+
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        self.items.distribute_files(&prefix.join(&self.name), files);
     }
 
     fn paths(&self, prefix: &NodePath, drafts: Drafts, out: &mut Vec<NodePath>) {

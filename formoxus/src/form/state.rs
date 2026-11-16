@@ -15,7 +15,7 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Edit, Node, ValuesByPath, no_such_path};
+use crate::nodes::{Drafts, Edit, FilesByPath, Node, ValuesByPath, no_such_path};
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::{ModelPath, NodePath};
 use crate::{classes::Classes, error::ValidationError};
@@ -320,8 +320,20 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// [`collect_values`](Self::collect_values) hands out. Call this on submit, before
     /// `validate()`.
     pub fn distribute_values(&mut self, values: &ValuesByPath) {
-        for m in &mut self.nodes {
-            m.distribute_values(&NodePath::root(), &self.spec.fields, values);
+        for n in &mut self.nodes {
+            n.distribute_values(&NodePath::root(), &self.spec.fields, values);
+        }
+    }
+
+    /// Take in each file's size and content type, for `max_size` and `accept`
+    /// to check, from the WHOLE table of files picked or received: a file leaf
+    /// whose path is missing from `files` has no file. Call this after
+    /// [`distribute_values`](Self::distribute_values), which builds the
+    /// structure the files land in, and before `validate()`. See
+    /// the [`Node` method](crate::nodes::Node::distribute_files) for why.
+    pub fn distribute_files(&mut self, files: &FilesByPath) {
+        for n in &mut self.nodes {
+            n.distribute_files(&NodePath::root(), files);
         }
     }
 

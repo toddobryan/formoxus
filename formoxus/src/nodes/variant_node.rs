@@ -6,7 +6,8 @@ use crate::field_attrs::FieldAttrs;
 use crate::form::ErrorsByPath;
 use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, Node, SpecsByPath, ValuesByPath, default_label, no_such_path,
+    Drafts, Edit, ErrorsStoreExt, FilesByPath, Node, SpecsByPath, ValuesByPath, default_label,
+    no_such_path,
 };
 use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::path::NodePath;
@@ -460,8 +461,17 @@ impl Node for VariantNode {
         let Some(nested) = self.child_prefix(prefix) else {
             return; // unchosen or unknown: no nodes to fill
         };
-        for m in &mut self.nodes {
-            m.distribute_values(&nested, specs, values);
+        for n in &mut self.nodes {
+            n.distribute_values(&nested, specs, values);
+        }
+    }
+
+    fn distribute_files(&mut self, prefix: &NodePath, files: &FilesByPath) {
+        let Some(nested) = self.child_prefix(prefix) else {
+            return; // unchosen or unknown: no nodes to fill
+        };
+        for n in &mut self.nodes {
+            n.distribute_files(&nested, files);
         }
     }
 
