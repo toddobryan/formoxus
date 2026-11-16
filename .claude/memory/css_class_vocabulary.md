@@ -286,3 +286,7 @@ apart from captions and errors; `bare()` leaves it unclassed but rendered.
 ## 2026-11-11: the set widgets (WIDGETS_PLAN box 7d)
 
 `checkbox_multiple` takes `radio_group`'s shape: `fx-form-field fx-checkbox-multiple` (+`fx-invalid`) on the fieldset, `fx-legend fx-field-label`, `fx-choice` per box, `fx-control fx-checkbox` on each box (the same class as a single checkbox), `fx-choice-label`. `select_multiple` reuses `select`'s classes, `fx-control fx-select` on the `<select>`: a stylesheet that needs them apart has `select[multiple]`. One new name in all, `fx-checkbox-multiple`.
+
+## 2026-11-15: the file widget (WIDGETS_PLAN 11f)
+
+`FileInput`'s parts are `Div`, `Label`, `Input`, `Output` (Todd, 2026-11-15). The `<output for>` shows the chosen file's name ("Current file: …" for an `Existing` one), since a script can't set a file input's value and a re-rendered input forgets it (trap 11); it is the same tag `RangeInput` shows its value in. An `Option<FileUpload>`'s Remove is a button, so a `FixedKey`, not a part: `FixedKey::RemoveFileButton`, `classes_plus:` name `remove_file_button`, class `fx-button fx-button-remove-file`, beside `fx-button-remove-item`.

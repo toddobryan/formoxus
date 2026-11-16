@@ -44,6 +44,9 @@ pub enum FixedKey {
     AddItemButton,
     /// An item's remove button: `fx-button fx-button-remove-item`.
     RemoveItemButton,
+    /// An optional file's Remove, which drops the chosen file:
+    /// `fx-button fx-button-remove-file`.
+    RemoveFileButton,
     /// A set item's Edit, which puts the item into the adder's draft:
     /// `fx-button fx-button-edit-item`.
     EditItemButton,
@@ -112,6 +115,7 @@ impl FixedKey {
         Self::Button(ButtonType::Action),
         Self::AddItemButton,
         Self::RemoveItemButton,
+        Self::RemoveFileButton,
         Self::EditItemButton,
         Self::MoveItemButtons,
         Self::MoveItemUpButton,
@@ -149,6 +153,7 @@ impl FixedKey {
             Self::ButtonRow => "button_row",
             Self::AddItemButton => "add_item_button",
             Self::RemoveItemButton => "remove_item_button",
+            Self::RemoveFileButton => "remove_file_button",
             Self::EditItemButton => "edit_item_button",
             Self::MoveItemButtons => "move_item_buttons",
             Self::MoveItemUpButton => "move_item_up_button",
@@ -215,6 +220,7 @@ mod tests {
                 | FixedKey::ButtonRow
                 | FixedKey::AddItemButton
                 | FixedKey::RemoveItemButton
+                | FixedKey::RemoveFileButton
                 | FixedKey::EditItemButton
                 | FixedKey::MoveItemButtons
                 | FixedKey::MoveItemUpButton
@@ -246,7 +252,7 @@ mod tests {
                 ) => {}
             }
         }
-        expect_that!(FixedKey::ALL.len(), eq(31 + ButtonType::ALL.len()));
+        expect_that!(FixedKey::ALL.len(), eq(32 + ButtonType::ALL.len()));
     }
 
     /// Also proves the names unique: `from_form_name` returns the first match.

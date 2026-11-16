@@ -1619,6 +1619,93 @@ several?
     `FileMeta`s with no stored output, to `distribute_files` before they
     validate. Forget it in `check_live` and `max_size:` is never checked live, while
     every test that only submits still passes.
+
+    **Where it stands (2026-11-15, night; pick up here).** Committed as a WIP that
+    builds and passes every test (1460). `just ci` stops at clippy on three warnings
+    in the unfinished widget: `files_signal` never read, and `current` and `attrs`
+    unused in `FileInputView`. Each goes away with a step below.
+
+    Done:
+
+    - [x] **f.1.** `FileInput` (`src/widgets/file_input.rs`, Todd): `Widget` with
+      `PARTS` `Div`, `Label`, `Input`, `Output` (the `<output for>` shows the file's
+      name) and `EXTENDS` `valid_on(Input(File))`; `LeafWidget` with `ACCEPTS` `File`,
+      `ACCEPTS_OPTIONAL` (the Remove button is its "no value") and no choices. A
+      `FileInputView` that renders a bare `<input>` so far.
+
+    - [x] **f.2.** `form!` accepts `widget: file`. `WidgetName::FileInput` is a row,
+      and `WidgetName::NOT_YET` is deleted with its two goldens and tests (Todd; the
+      comments, Claude).
+
+    - [x] **f.3.** A file field is a type of its own: `FieldType::File`, and
+      `Kind::File` in `field_kind::kind`, asked before the enum test through
+      `is_file_upload`, now a `const fn` comparing `decl_id.0`. `renders` returns
+      `ACCEPTS.contains(File)` for a file, ignoring `choices:`, so every other widget
+      is refused on one at compile time, and `file` on anything else. The attribute
+      table's `for:` gained `File` on every all-types row except `Value`,
+      `Multiple`, `Checked`, `AriaChecked`, `Autocomplete` and `Size`; the message in
+      `form!` names it "a FileUpload field".
+
+    - [x] **f.4.** `FixedKey::RemoveFileButton`, `fx-button fx-button-remove-file`
+      (`classes_plus:` `remove_file_button`).
+
+    - [x] **f.5.** `Form.files_signal: Signal<IndexMap<NodePath, FileData>>`, made
+      in `use_form` (`FileData` is `dioxus::html::FileData`).
+
+    Left, in an order where each step compiles:
+
+    - [ ] **f.6. The table reaches the widget.** `NodeContext` and `WidgetProps`
+      each gain the signal, `Form::render` puts it in the context, and
+      `props.field_handle()` hands it to the `FieldHandle`. See decision CC.
+
+    - [ ] **f.7. `FieldHandle::pick(Option<FileData>)`,** the one method that does
+      every step: write the name to the store (`file.name()`, or `""` for none), put
+      the file in the table or take it out, and report the event as checked at once
+      (the trap above).
+
+    - [ ] **f.8. `FileNode::render`,** like `FieldNode::render`
+      (`src/field_node.rs`, `fn render`): `WidgetProps` from `ctx` (id, path, label,
+      help, classes, errors), no choices, `base_attrs` from
+      `FieldAttrs::with_owned_attrs(false, ctx.required, …)` kept to `extends`, then
+      `self.widget.render(…)`. `form!` already refuses another widget; a hand-built
+      `FormSpec` can still give one, so the builder panics with the message a
+      wrong-kind widget gets today.
+
+    - [ ] **f.9. `FileInputView`:** `type: "file"`, never a `value`; `onchange`
+      reads `evt.files()` and calls `pick`; `<output for="{id}">` with the name from
+      `handle.current()`, as "Current file: …" when the table has nothing at the
+      path (decision EE); on an optional field, a Remove button
+      (`FixedKey::RemoveFileButton`) calling `pick(None)`; `..attrs` last.
+
+    - [ ] **f.10. `reset`** clears the table and bumps a new reset counter on `Form`,
+      which is the `<input>`'s `key`, so Dioxus makes it again, empty.
+
+    - [ ] **f.11. `validate` and `check_live`** turn the table into a `FilesByPath`
+      (`FileMeta { content_type, size, stored: None }`) and pass it to
+      `distribute_files` after `distribute_values`. `FormState::check_live` takes
+      the files to do it.
+
+    - [ ] **f.12. Tests (Claude, each ahead of its step).** In the suite: the markup
+      (`type="file"`, no `value`, the `<output>`, "Current file:" for an `Existing`
+      file, Remove only when optional); `pick` writing store and table; `reset`
+      emptying the table; `validate` and the live check both catching an oversized
+      pick. No browser needed: `FileData::new` takes any `NativeFileData`, so a test
+      makes a fake file with a name, size and type. The e2e pair waits for box 13.
+
+    Open, Claude's recommendation first:
+
+    **CC. The widget reaches the table only through `FieldHandle::pick`.**
+    `WidgetProps` holds the signal as a `pub(crate)` field, so a custom widget gets
+    `pick` but can never write the table itself (the reason `StoredFile`'s fields are
+    private).
+
+    **DD. No `accept` attribute on the `<input>` until box 12** adds its row to the
+    table. Emitting it now would mean `FileNode` writing it outside the table;
+    `validate` already checks the type either way.
+
+    **EE. "Existing" means the table has nothing at the path,** the rule
+    `distribute_files` follows, so what the screen says and what `validate` sees
+    agree.
   - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
     `formoxus::file::Multipart<T>` (named like `WireForm<T>`, which it parallels)
     holding `to_wire()` and the table's files, and `Multipart<T>` implements dioxus's
@@ -1696,7 +1783,9 @@ several?
     has no executor today). The 2 MB default applies there too, so the 413 path is
     testable without a browser as well.
 
-- [ ] **12.** (Claude) The `form!` side: `file` out of `NOT_YET`, the `accept` row in
+- [ ] **12.** (Claude) The `form!` side (`file` is already a `WidgetName` row and
+  `NOT_YET` is gone, both Todd, 2026-11-15, so `form!` accepts `widget: file` today
+  on any field and the checks below are what refuses the wrong ones): the `accept` row in
   the attribute table (trap 9), `max_size:`, and goldens (`file` on a `String`, on a
   non-`FileUpload` struct, `max_size:` on a non-file field).
 

@@ -176,6 +176,7 @@ fn field_types_phrase(attr: Attr) -> String {
         (int && !float, "integer"),
         (float && !int, "float"),
         (attr.applies_to(FieldType::Bool), "bool"),
+        (attr.applies_to(FieldType::File), "FileUpload"),
     ]
     .into_iter()
     .filter_map(|(applies, word)| applies.then_some(word))

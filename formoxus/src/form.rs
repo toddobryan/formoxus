@@ -22,6 +22,7 @@ use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
+use dioxus::html::FileData;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus_spec::FixedKey;
@@ -243,6 +244,8 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// Live raw values by qualified path. Changes on every keystroke, and
     /// survives a schema rebuild because paths are stable under one.
     values_store: ValuesStore,
+    /// A map from qualified path to files
+    files_signal: Signal<IndexMap<NodePath, FileData>>,
     /// Field errors by qualified path. See [`ErrorsStore`].
     errors_store: ErrorsStore,
     /// The paths typed into since they were last checked (`ERRORS_PLAN.md`
@@ -856,6 +859,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
             .into_iter()
             .collect::<HashMap<_, _>>()
     });
+    let files_signal = use_signal(IndexMap::new);
     let errors = use_store(move || {
         initial
             .peek()
@@ -914,6 +918,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Form {
         state_signal: state,
         values_store: values,
+        files_signal,
         errors_store: errors,
         changed_paths,
         on_edit,

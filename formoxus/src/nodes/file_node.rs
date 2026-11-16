@@ -31,8 +31,11 @@ pub struct FileNode {
     pub meta: Option<FileMeta>,
 }
 
-pub(crate) fn is_file_upload(shape: &Shape) -> bool {
-    shape.decl_id == <FileUpload as Facet>::SHAPE.decl_id
+/// Whether `shape` is a `FileUpload<S>`, for any `S`. A `const fn` so that
+/// `field_kind::kind` can ask it too; hence `.0`, since `==` on a `DeclId` is
+/// a trait method, which const code cannot call.
+pub(crate) const fn is_file_upload(shape: &Shape) -> bool {
+    shape.decl_id.0 == <FileUpload as Facet>::SHAPE.decl_id.0
 }
 
 impl Node for FileNode {
@@ -47,7 +50,7 @@ impl Node for FileNode {
     }
 
     fn render(&self, _ctx: &NodeContext) -> Element {
-        VNode::empty()
+        rsx! {}
     }
 
     fn raw_value(&self) -> String {

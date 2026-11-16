@@ -32,7 +32,7 @@ use crate::field::Field;
 use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
 use crate::form::FormSpec;
-use crate::nodes::{SetEvent, SetFeedback, SetOrder};
+use crate::nodes::{SetEvent, SetFeedback, SetOrder, is_file_upload};
 use crate::path::ModelPath;
 use crate::widgets::widget::{LeafWidget, SetWidget};
 
@@ -452,7 +452,7 @@ const fn is_leaf(shape: &Shape) -> bool {
         return false;
     }
     match kind(shape) {
-        Kind::Text | Kind::Int | Kind::Float | Kind::Bool | Kind::Unknown => true,
+        Kind::Text | Kind::Int | Kind::Float | Kind::Bool | Kind::File | Kind::Unknown => true,
         Kind::Enum => is_unit_enum(shape),
         Kind::List | Kind::Set | Kind::Other => false,
     }
@@ -493,18 +493,23 @@ const fn is_bare_unit_enum(shape: &Shape) -> bool {
 /// reports once, from there. `true` for a newtype whose inside is out of reach,
 /// for the reason `Kind::Unknown` gives. Everything else is the field's
 /// `FieldType`, judged by `W`'s own consts: in [`LeafWidget::ACCEPTS`], or any type
-/// at all when it has choices and [`LeafWidget::TAKES_CHOICES`].
+/// at all when it has choices and [`LeafWidget::TAKES_CHOICES`]. Except a file:
+/// a choice is a value, and no value is a file, so for a `FileUpload` only
+/// `ACCEPTS` counts, `choices:` or not.
 ///
 /// Generic rather than taking a widget value, so `form!` can ask it in a free
 /// `const _` in the dev's crate, where `W`'s consts are visible: a `const fn`
 /// can read a trait's consts but not call its methods.
 pub const fn renders<LW: LeafWidget>(shape: &Shape, has_choices: bool) -> bool {
     let field_type = match kind(shape) {
-        Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => return true,
+        Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => {
+            return true;
+        }
         Kind::Text => FieldType::Text,
         Kind::Int => FieldType::Int,
         Kind::Float => FieldType::Float,
         Kind::Bool => FieldType::Bool,
+        Kind::File => return LW::ACCEPTS.contains(FieldType::File),
     };
     LW::ACCEPTS.contains(field_type) || (LW::TAKES_CHOICES && has_choices)
 }
@@ -725,6 +730,8 @@ enum Kind {
     Int,
     Float,
     Bool,
+    /// A `FileUpload<S>`, for any `S`: an enum, but never `Enum`.
+    File,
     /// An enum, which renders a `<select>` for the variants
     Enum,
     /// A Facet `List`, including `Vec` and `SmallVec`
@@ -752,6 +759,11 @@ const fn kind(shape: &Shape) -> Kind {
     }
     if matches!(shape.def, Def::Set(_)) {
         return Kind::Set;
+    }
+    // Before the enum test below: a `FileUpload` is an enum, but it is one
+    // file, not a choice of variants.
+    if is_file_upload(shape) {
+        return Kind::File;
     }
     match shape.module_path {
         // Every user type has a module path, so `None` is a primitive: a user
@@ -812,6 +824,7 @@ const fn field_type(shape: &Shape) -> Option<FieldType> {
         Kind::Int => Some(FieldType::Int),
         Kind::Float => Some(FieldType::Float),
         Kind::Bool => Some(FieldType::Bool),
+        Kind::File => Some(FieldType::File),
         Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
 }
@@ -1175,6 +1188,66 @@ mod tests {
         expect_that!(is_enum(<Option<std::string::String>>::SHAPE), eq(false));
         expect_that!(is_enum(<Option<u32>>::SHAPE), eq(false));
         expect_that!(is_enum(Address::SHAPE), eq(false));
+    }
+
+    /// A `FileUpload` is an enum to facet, but one file to formoxus: `kind`
+    /// asks before its enum test, for any `S`, and through an `Option`.
+    #[gtest]
+    fn a_file_upload_is_not_an_enum() {
+        use crate::file::FileUpload;
+        expect_that!(is_enum(<FileUpload>::SHAPE), eq(false));
+        expect_that!(is_enum(<FileUpload<std::string::String>>::SHAPE), eq(false));
+        expect_that!(is_enum(<Option<FileUpload>>::SHAPE), eq(false));
+    }
+
+    /// Only `file` renders a `FileUpload`, and `file` renders nothing else:
+    /// `FieldType::File` is in no other widget's `ACCEPTS`, `choices:` can't
+    /// let a `select` onto a file, and `FileInput` takes no choices, so they
+    /// can't let it onto a `String` either.
+    #[gtest]
+    fn only_the_file_widget_renders_a_file_upload() {
+        use crate::file::FileUpload;
+        use crate::widgets::FileInput;
+        for shape in [<FileUpload>::SHAPE, <Option<FileUpload>>::SHAPE] {
+            expect_that!(renders::<FileInput>(shape, false), eq(true), "{shape}");
+            expect_that!(renders::<TextInput>(shape, false), eq(false), "{shape}");
+            expect_that!(renders::<Textarea>(shape, false), eq(false), "{shape}");
+            expect_that!(renders::<Select>(shape, true), eq(false), "{shape}");
+            expect_that!(is_single_value(shape), eq(true), "{shape}");
+        }
+        expect_that!(
+            renders::<FileInput>(std::string::String::SHAPE, false),
+            eq(false)
+        );
+        expect_that!(
+            renders::<FileInput>(std::string::String::SHAPE, true),
+            eq(false)
+        );
+        expect_that!(renders::<FileInput>(bool::SHAPE, false), eq(false));
+    }
+
+    /// A file field takes what its `<input>` can carry, and not what a
+    /// file input has no use for.
+    #[gtest]
+    fn a_file_upload_takes_the_attributes_a_file_input_can() {
+        use crate::file::FileUpload;
+        let shape = <FileUpload>::SHAPE;
+        for attr in [
+            Attr::Disabled,
+            Attr::Autofocus,
+            Attr::Class,
+            Attr::AriaLabel,
+        ] {
+            expect_that!(applies(attr, shape), eq(true), "{attr:?}");
+        }
+        for attr in [
+            Attr::Placeholder,
+            Attr::MaxLength,
+            Attr::Min,
+            Attr::Autocomplete,
+        ] {
+            expect_that!(applies(attr, shape), eq(false), "{attr:?}");
+        }
     }
 
     /// The reason `Kind::Enum` is its own kind rather than a loosened

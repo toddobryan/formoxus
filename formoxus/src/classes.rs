@@ -381,6 +381,10 @@ impl Classes {
                 Slot::new("fx-button fx-button-remove-item"),
             ),
             (
+                FixedKey::RemoveFileButton,
+                Slot::new("fx-button fx-button-remove-file"),
+            ),
+            (
                 FixedKey::EditItemButton,
                 Slot::new("fx-button fx-button-edit-item"),
             ),
@@ -759,6 +763,10 @@ mod tests {
             (
                 FixedKey::RemoveItemButton,
                 "fx-button fx-button-remove-item",
+            ),
+            (
+                FixedKey::RemoveFileButton,
+                "fx-button fx-button-remove-file",
             ),
             (FixedKey::EditItemButton, "fx-button fx-button-edit-item"),
             (FixedKey::MoveItemButtons, "fx-move-buttons"),

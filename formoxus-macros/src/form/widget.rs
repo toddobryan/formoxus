@@ -22,14 +22,12 @@ use super::suggest::{edit_distance, to_snake};
 // for `datetime-local`, since a hyphen cannot be an ident) and formoxus where
 // it does not (`textarea`, `select`, `radio_group`).
 
-/// Every name `form!` knows after `widget:`, for the "unknown widget"
-/// message: the rendered widgets in `WidgetName::ALL`'s order, then the
-/// not-yet ones, so a near miss of `file` is still told it is coming.
+/// Every name `form!` knows after `widget:`, in `WidgetName::ALL`'s order,
+/// for the "unknown widget" message.
 fn widget_names() -> impl Iterator<Item = &'static str> {
     WidgetName::ALL
         .iter()
         .map(|widget_name| widget_name.form_name())
-        .chain(WidgetName::NOT_YET.iter().copied())
 }
 
 /// `widget`, as the path of the type implementing `::formoxus::widgets::Widget`
@@ -177,6 +175,7 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
         | WidgetName::DatetimeLocalInput
         | WidgetName::MonthInput
         | WidgetName::WeekInput
+        | WidgetName::FileInput
         | WidgetName::Textarea
         | WidgetName::Select => "this widget cannot render an optional field",
         // A set widget is never asked: its checks are `set_checks`'.
@@ -213,6 +212,7 @@ fn takes_choices(widget_name: WidgetName) -> bool {
         | WidgetName::MonthInput
         | WidgetName::WeekInput
         | WidgetName::CheckboxInput
+        | WidgetName::FileInput
         | WidgetName::Textarea
         | WidgetName::RangeInput => false,
     }
@@ -230,6 +230,7 @@ fn cannot_render(widget_name: WidgetName) -> &'static str {
         WidgetName::CheckboxMultiple | WidgetName::SelectMultiple => {
             "a set widget renders a set field"
         }
+        WidgetName::FileInput => "`file` can only render a `FileUpload` field",
         WidgetName::TextInput
         | WidgetName::PasswordInput
         | WidgetName::HiddenInput
@@ -515,15 +516,6 @@ impl Parse for WidgetKind {
 
         let name: Ident = input.parse()?;
         let written = name.to_string();
-        if WidgetName::NOT_YET.contains(&written.as_str()) {
-            return Err(syn::Error::new(
-                name.span(),
-                format!(
-                    "`{name}` is not supported yet — nothing renders it, so the field \
-                     would silently vanish from the form"
-                ),
-            ));
-        }
         let Some(widget) = WidgetName::from_form_name(&written) else {
             return Err(syn::Error::new(name.span(), unknown_widget(&name, true)));
         };
@@ -619,19 +611,6 @@ mod tests {
                 types.insert(tokens.clone()),
                 eq(true),
                 "`{name}` resolves to `{tokens}`, as an earlier name did"
-            );
-        }
-    }
-
-    /// A widget that renders nothing yet is refused by name, not as unknown.
-    #[gtest]
-    fn every_not_yet_name_is_refused_as_not_supported_yet() {
-        for name in WidgetName::NOT_YET {
-            let id = Ident::new(name, proc_macro2::Span::call_site());
-            expect_that!(
-                err_of(quote! { Source { f => { widget: #id } } }),
-                contains_substring(format!("`{name}` is not supported yet")),
-                "{name}"
             );
         }
     }

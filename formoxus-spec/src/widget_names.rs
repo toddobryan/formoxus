@@ -63,6 +63,7 @@ widget_names! {
     MonthInput => "month",
     WeekInput => "week",
     CheckboxInput => "checkbox",
+    FileInput => "file",
     Textarea => "textarea",
     Select => "select",
     RadioGroup => "radio_group",
@@ -80,12 +81,6 @@ impl WidgetName {
     /// nothing else in the macro.
     pub const MODULE: &[&str] = &["formoxus", "widgets"];
 
-    /// Names reserved for widgets nothing renders yet. `form!` refuses them
-    /// with "not supported yet" rather than "unknown widget", since they are
-    /// coming. Not variants: every exhaustive `match` would need an arm for
-    /// a widget that cannot reach it.
-    pub const NOT_YET: &[&str] = &["file"];
-
     /// Whether this widget renders a whole SET (a `SetWidget` in `formoxus`)
     /// rather than one value (a `LeafWidget`). `form!` reads it to call
     /// `with_set_widget` rather than `with_widget`, to check the field is a
@@ -95,7 +90,7 @@ impl WidgetName {
     }
 
     /// The widget `form!` calls `form_name`, or `None` if no rendered widget
-    /// is called that (check [`Self::NOT_YET`] for why not).
+    /// is called that.
     ///
     /// A loop with `str_eq` rather than a `match` or an iterator: a `const fn`
     /// can do neither on a `&str`.
@@ -128,13 +123,6 @@ mod tests {
     }
 
     #[gtest]
-    fn not_yet_names_are_not_widgets() {
-        for name in WidgetName::NOT_YET {
-            expect_that!(WidgetName::from_form_name(name), none(), "{name}");
-        }
-    }
-
-    #[gtest]
     fn form_names_are_unique() {
         let names: HashSet<_> = WidgetName::ALL.iter().map(|w| w.form_name()).collect();
         expect_that!(names.len(), eq(WidgetName::ALL.len()));
@@ -150,10 +138,7 @@ mod tests {
     /// them as a path to a dev's own widget.
     #[gtest]
     fn every_name_is_a_lowercase_ident() {
-        let names = WidgetName::ALL
-            .iter()
-            .map(|w| w.form_name())
-            .chain(WidgetName::NOT_YET.iter().copied());
+        let names = WidgetName::ALL.iter().map(|w| w.form_name());
         for name in names {
             expect_that!(
                 name.chars().all(|c| c.is_ascii_lowercase() || c == '_'),

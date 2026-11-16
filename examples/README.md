@@ -21,9 +21,8 @@ A development tool rather than a teaching example. It prints which
 `form!` refuses a pair `BuiltinWidget::renders` rules out, at compile time.
 Nothing checks it at runtime, so a hand-built `FormSpec` can still reach one.
 The matrix builds each pair that way and prints what really happens beside
-what `form!` would say: `ok*` marks a pair that renders but `form!` refuses,
-and the widgets `form!` names but nothing renders yet are listed after the
-table. That keeps the root README's "What isn't done" section honest.
+what `form!` would say: `ok*` marks a pair that renders but `form!` refuses.
+That keeps the root README's "What isn't done" section honest.
 
 **How it detects failure is the interesting part, and the obvious approach is
 wrong.** `catch_unwind` reports that every pair passes: Dioxus catches a panic

@@ -13,12 +13,11 @@
 //! ```
 //!
 //! It is a development tool rather than a teaching example: it exists to keep
-//! the README's "what isn't done" section honest. A widget `form!` reserves a
-//! name for but nothing renders yet (`WidgetName::NOT_YET` in `formoxus-spec`)
-//! has no type, so it has no item here until it lands. A set widget
+//! the README's "what isn't done" section honest. A set widget
 //! (`checkbox_multiple`, `select_multiple`) renders a whole set, not one of
-//! these scalar kinds, so it has no row either; `form!`'s checks for it are
-//! the set-widget goldens.
+//! these scalar kinds, so it has no row; `form!`'s checks for it are the
+//! set-widget goldens. Nor does `file`, which renders a `FileUpload`, not a
+//! scalar.
 
 // `dx serve` builds this whole package for wasm, binaries included, and there
 // is no `dioxus-ssr` there — nor any point in a terminal table inside a

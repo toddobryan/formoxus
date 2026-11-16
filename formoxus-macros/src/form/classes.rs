@@ -208,12 +208,6 @@ fn button_key(ty: &Ident) -> Result<ClassKey> {
 /// [`ClassEntry::tokens`].
 fn part_key(widget: &Ident, tag_ident: &Ident) -> Result<ClassKey> {
     let widget_as_written = widget.to_string();
-    if WidgetName::NOT_YET.contains(&widget_as_written.as_str()) {
-        return Err(syn::Error::new(
-            widget.span(),
-            format!("`{widget}` is not supported yet — nothing renders it, so it has no classes"),
-        ));
-    }
     let Some(widget_name) = WidgetName::from_form_name(&widget_as_written) else {
         return Err(syn::Error::new(
             widget.span(),
@@ -255,8 +249,7 @@ fn fixed_key(name: &Ident) -> Result<ClassKey> {
     if let Some(key) = FixedKey::from_form_name(&written) {
         return Ok(ClassKey::Fixed(key));
     }
-    let is_widget = WidgetName::from_form_name(&written).is_some()
-        || WidgetName::NOT_YET.contains(&written.as_str());
+    let is_widget = WidgetName::from_form_name(&written).is_some();
     let message = if is_widget {
         format!(
             "`{written}` is a widget, and its classes are set part by part, \
@@ -463,14 +456,6 @@ mod tests {
             key_err(quote!(select.wrapper)),
             eq("unknown part `wrapper` — a part is one of \
                  div, fieldset, label, legend, input, textarea, select, output")
-        );
-    }
-
-    #[gtest]
-    fn a_widget_not_rendered_yet_is_refused() {
-        expect_that!(
-            key_err(quote!(file.input)),
-            contains_substring("`file` is not supported yet")
         );
     }
 

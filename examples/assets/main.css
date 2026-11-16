@@ -22,6 +22,7 @@
  *   buttons     .fx-buttons  .fx-button + .fx-button-submit .fx-button-reset
  *               .fx-button-cancel .fx-button-destructive .fx-button-action
  *               .fx-button-add-item .fx-button-remove-item .fx-button-edit-item
+ *               .fx-button-remove-file
  *               .fx-move-buttons + .fx-button-move-up .fx-button-move-down
  *
  * How they nest. A field's caption is a `<label for>` BESIDE its control, not
