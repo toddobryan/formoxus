@@ -23,7 +23,7 @@
 - [Pre-publish checklist](pre_publish_checklist.md) — RAISE WHEN PUBLISHING COMES UP: wasm-opt, the doc pass, facet version, macro-side `regress`, the public-API pass, a dead-link scan of the built docs
 - [Parked: validate_values](parked_validate_values.md) — Todd wants these back: `validate_values`, `collect_values`→`ValuesByPath`, typed path keys (BREAKING, so pre-publish)
 - [Formoxus feature parity](formoxus_feature_parity.md) — vs Django + leptos_form; **#6 DONE 2026-10-01: `required: true` on a non-optional bool = must be ticked**
-- [Lint config](lint_config.md) — RAISE PERIODICALLY: why `unused_qualifications` is off (rsx! false positives) and how to sweep for real ones
+- [Lint config](lint_config.md) — RAISE PERIODICALLY: why `unused_qualifications` is off (rsx! false positives), how to sweep; run `just clippy-web` now and then (not in ci)
 - [private_intra_doc_links](private_intra_doc_links_question.md) — RESOLVED 2026-11-09: fires in both modes, public `docs` run dropped; hidden-item and hand-written HTML links go unchecked
 - [Formoxus roadmap](formoxus_roadmap.md) — STALE, superseded by mvp_scope; kept for derive-path history
 - [Running to-do queue](next_up_two_todos.md) — 2026-09-18 wire rework (leaves over the wire, `Submission<T>`); mostly historical

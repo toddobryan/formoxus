@@ -2102,21 +2102,180 @@ several?
     would need the file. The name pairs with `pick_file`; `chosen_file` would match
     `FileUpload::Chosen` instead.
 
-  - [ ] **11g. `Form::to_multipart()`, the client half.** It returns a
-    `formoxus::file::Multipart<T>` (named like `WireForm<T>`, which it parallels)
-    holding `to_wire()` and the table's files, and `Multipart<T>` implements dioxus's
-    `IntoRequest`. The first part is the wire JSON, under a reserved name (say
-    `__formoxus_wire`, as a `pub const`), and then each file under its path's string.
-    Wire first, so the server has the form's structure and settings before it touches
-    a file (box 10). On wasm: a `web_sys::FormData`, each file from
-    `FileData::inner()` downcast to a `web_sys::File`, sent by `send_js_value`,
-    exactly as in the spike. On native: a `reqwest::multipart::Form` built with
-    `.file(key, file_data.path())` and sent through `new_reqwest_request()`, as
-    dioxus-fullstack's own `send_multipart` does (`client.rs:197`). **Trap: the table
-    can hold stale files.** One picked inside an item since removed, or under a
-    variant since unchosen, is still in the table. Send only files whose path is in
-    the state's current paths, or drop entries in `apply_edit`. The first is simpler
-    and can't be missed by a new kind of edit.
+  - [ ] **11g. `Form::to_multipart()`, the client half.** What a dev's submit
+    sends when the form has a file: `form.absorb(submit(form.to_multipart()).await?)`,
+    the same shape as `to_wire()`. One multipart request, its first part the wire JSON
+    and then one part per picked file, built by formoxus in that order (box 10's
+    route (b), decided 2026-11-12). Five parts, then two open questions.
+
+    **What exists to build on.** Box 10's spike, on branch `file-spike` (commit
+    `0564e46`, `examples/src/spike_upload.rs`, type `HandBuilt`), is the model for
+    the wasm half: a `Vec` of text and file parts, an `IntoRequest` that appends them
+    to a `web_sys::FormData` in order and sends it with `ClientRequest::send_js_value`.
+    `git show 0564e46:examples/src/spike_upload.rs` prints it. dioxus-fullstack
+    0.7.10's own `ClientRequest::send_multipart` (`client.rs`, about line 186) is the
+    model for the native half. formoxus's `Cargo.toml` already has every dependency
+    this needs: `dioxus-fullstack` (with `web` on wasm), `wasm-bindgen`, `web-sys`
+    with `Blob`, `File` and `FormData`, and `serde_json`. `reqwest` comes through
+    `dioxus_fullstack::reqwest`, which dioxus-fullstack re-exports with its
+    `multipart` and `stream` features on.
+
+    **(a) The type: `formoxus::file::Multipart<T>`,** in `src/file.rs`. On the client
+    it holds the form's `WireForm<T>`, as `to_wire()` returns it, and the files to
+    send as `Vec<(NodePath, FileData)>`, in sending order. Nothing is serialized yet:
+    `into_request` does that (c). 11h adds the server half,
+    axum's `Multipart`, to the same type, because a server function's argument is ONE
+    type that is `IntoRequest` on the client and `FromRequest` on the server. So keep
+    the fields behind a private generic enum, `enum MultipartFormData<T> {
+    OnClient { wire_form: WireForm<T>, files: Vec<(NodePath, FileData)> } }`, in
+    `pub struct Multipart<T>(MultipartFormData<T>)` (names Todd's, 2026-11-16). 11h adds `OnServer(…)` (axum's `Multipart`,
+    which uses no `T`; that is fine, since `OnClient` uses it), and 11h adds a variant without touching
+    anything public. Named for the end each lives on (Todd, 2026-11-16): both hold
+    what the CLIENT sent, so `FromClient`/`FromServer` and `Outgoing`/`Incoming`
+    were turned down as ambiguous. It must be `Send`, because dioxus's `IntoRequest for (A,)`,
+    which is how a one-argument server function sends, requires `A: Send`.
+    `FileData` is (`NativeFileData: Send + Sync`), and so is `WireForm<T>` (its
+    `PhantomData<fn() -> T>`, which holds no `T`). No `T: Send` bound is needed for
+    that reason. Holding the `WireForm<T>` rather than its JSON is also what gives
+    `T` a real home in the type, and what makes LL's `wire()` a plain borrow.
+
+    **(b) `Form::to_multipart(&self) -> Multipart<T>`,** in `src/form.rs` beside
+    `to_wire`. It takes `self.to_wire()`, then picks the files. **Trap: the table can
+    hold stale files.** A file picked inside an item since removed, or under a
+    variant since unchosen, is still in the table, because nothing but Remove and
+    `reset` takes an entry out. Send only files whose path the form still has:
+    `FormState::paths(Drafts::Exclude)` (`src/form/state.rs`, private today; make it
+    `pub(crate)`) lists every node's path, file leaves included, under the chosen
+    variants and current items only. **Iterate those paths and look each up in the
+    table, rather than the other way round,** so the files go in the form's own
+    order, not the order they were picked in, and the request is the same for the
+    same form whatever the user did first. Read the table with `peek()`, as
+    `files_by_path` does. The other way to drop stale files, removing entries in
+    `apply_edit`, was turned down in the first version of this box: a new kind of
+    edit could forget to, and this filter cannot be forgotten.
+
+    **(c) The wire part (decision AA).** It is the `WireForm<T>`'s own JSON: the
+    sizes travel in `WireForm` itself (Todd, 2026-11-16), not in an envelope
+    around it. In `src/wire.rs`, give `WireForm` one more private field,
+    `file_sizes: IndexMap<NodePath, u64>`, marked `#[serde(default,
+    skip_serializing_if = "IndexMap::is_empty")]`. `skip_serializing_if` means a
+    form without files sends byte for byte what it sends today, and `default`
+    means a wire without the key still parses, so older payloads and the suite's
+    hand-written wires keep working. `new`, `from_errors`, `empty` and
+    `from_model` leave it empty, so nothing public changes, and a server's
+    reply never carries it (`absorb` never reads it). Add a `pub(crate)` setter
+    for `to_multipart` and a `pub(crate)` getter for 11h. Its doc says what the
+    numbers are: the client's claim, `FileData::size()` as the browser reported
+    it, which the server may use to refuse a file before storing it (AA's use 1)
+    but never to enforce `max_size:`; the size the server counts is the one
+    enforced.
+
+    **Fill it in `to_multipart`, in the same loop that picks the files in (b):**
+    each path that has a live file gets its size, so the sizes describe exactly
+    the files sent, and `wire()` (LL) shows them, which is what lets the suite
+    check them. 11h deserializes a plain `WireForm<T>`, so the format lives in
+    one place, `wire.rs`. (An earlier version of this box had a private
+    `WirePart<T> { wire, sizes }` envelope in `file.rs`; dropped 2026-11-16, Todd,
+    as one type more than needed.)
+
+    The JSON goes under a reserved part name, `pub(crate) const WIRE_PART: &str =
+    "__formoxus_wire_form"` (decision MM), first. Each file then goes under its path's
+    string (`NodePath`'s `Display`, as in the store: `answers.#3.file`), with the
+    file's own name as the part's filename. Serialize in `into_request` with
+    `serde_json::to_string(&wire_form)` and map a failure to
+    `RequestError::Serialization(e.to_string())`, the variant dioxus's own
+    `send_json` uses. It cannot fail for these types (string keys, strings and
+    numbers), but `into_request` already returns a `Result`, so there is no reason
+    to panic. (Decided 2026-11-16, Todd: an earlier version serialized in
+    `to_multipart` and held a `String`, which contradicted the `Send` argument in
+    (a) and left LL's `wire()` nothing to borrow.)
+
+    **(d) `impl<T: 'static> IntoRequest for Multipart<T>`, with `async fn
+    into_request`** (Todd, 2026-11-16). An `async fn` in the impl satisfies the
+    trait's `-> impl Future<…> + 'static`, checked in a scratch crate. **The
+    `T: 'static` bound is required, in either form:** the future owns `self`, so
+    it holds the `WireForm<T>`, and `PhantomData<fn() -> T>` is `'static` only
+    when `T` is; without it, E0310. It costs nothing, since every model is
+    `Facet<'static>`. Keyed on the target, not on a
+    feature (box 10's (b), revisited: formoxus has no features). `into_request`
+    destructures `self`, serializes `wire_form`, and calls a private `async fn
+    send_parts(req, json, files)`, defined twice, once per `cfg`. Two functions
+    rather than two `#[cfg]` blocks inside one body only because they read more
+    plainly: the blocks would compile too (checked; each stands as the body's
+    tail on its own target).
+    Drafted by Claude 2026-11-16 and checked, native and wasm, in a scratch copy:
+    `cargo check` clean on both, `clippy -D warnings` clean on native. (Clippy on
+    wasm stops earlier, at an existing `drop(out)` in `TemporaryFileWriter`,
+    `drop_non_drop`, since `std::fs::File` has no `Drop` there; CI never runs
+    clippy for wasm.) The two:
+    1. **`#[cfg(target_arch = "wasm32")]`:** a `web_sys::FormData`;
+       `append_with_str(WIRE_PART, &json)`; then for each file,
+       `file.inner().downcast_ref::<web_sys::File>()`, and
+       `append_with_blob_and_filename(&path.to_string(), file.unchecked_ref(),
+       &file.name())` (`wasm_bindgen::JsCast` for `unchecked_ref`). The browser
+       sets each part's content type from the `File` and streams it from disk, so
+       wasm never reads the bytes. Send with `req.send_js_value(fd.into()).await`.
+       A `FileData` that is not a `web_sys::File` cannot happen in a browser;
+       return `RequestError::Builder` naming the path rather than panicking.
+    2. **`#[cfg(not(target_arch = "wasm32"))]`** (desktop, mobile): hand dioxus
+       a form and let its own `ClientRequest::send_multipart(&dioxus_html::FormData)`
+       send it. **Trap: formoxus cannot copy `send_multipart`'s body instead,**
+       which the first version of this box said to do: `ClientResponse`'s fields
+       are `pub(crate)` in dioxus-fullstack 0.7.10 (`client.rs`, about line 426),
+       so code outside it cannot build one from a reqwest response, and every
+       public `send_*` returns one already built. So build the `FormData` from
+       dioxus-html's serializable types: `dioxus_html::FormData::new(
+       SerializedFormData::new(String::new(), objects))`, where `objects` is a
+       `Vec<SerializedFormObject>` whose first entry is `{ key: WIRE_PART, text:
+       Some(json), file: None }`, and then one per file, `{ key:
+       path.to_string(), text: None, file: Some(SerializedFileData { path:
+       file.path(), size: file.size(), last_modified: file.last_modified(),
+       content_type: file.content_type(), contents: None }) }`, the same copy
+       dioxus-html makes itself in `SerializedFormData::from_form_lossy`. Then
+       `req.send_multipart(&form_data).await`. `send_multipart` walks `values()`,
+       which for a `SerializedFormData` is the `Vec` in order, so the wire part
+       stays first; it sends each text with `reqwest`'s `.text` and each file with
+       `.file(key, path)`, which opens the file, names the part after the path's
+       final segment, and guesses its content type from the extension. These
+       types are behind dioxus-html's `serialize` feature. formoxus has
+       `dioxus-html` only as a dev-dependency today; add `dioxus-html = {
+       workspace = true }` under a `[target.'cfg(not(target_arch =
+       "wasm32"))'.dependencies]` table in `formoxus/Cargo.toml`. The workspace
+       entry (root `Cargo.toml`) already turns `serialize` on, so a dev's build
+       never has to.
+       **Trap: `.file()` reads a path, and the suite's fake files have none**
+       (`SerializedFileData::empty()`'s path is empty). That is fine because
+       nothing in the suite sends; it is why the native half is proven only by
+       box 13's desktop smoke run, which is also where box 13 checks what
+       `FileData::path()` is on mobile.
+
+    **(e) What can be tested here, and what waits.** A dev cannot call a server
+    function with `Multipart<T>` until 11h, because the server half needs
+    `FromRequest`. So 11g's own tests are about what `to_multipart` puts in, through
+    the suite (decision LL): the files sent are exactly the live ones (a file under
+    a removed list item and one under an unchosen variant stay out), in the form's
+    order; the sizes match; and a form with no file sends only the wire part. The
+    bytes on the wire are tested by 11i, which builds a request in memory and feeds
+    it to 11h's extractor, and the browser send by box 13's e2e.
+
+    **LL (decided 2026-11-16, Todd: yes, as recommended). How the suite sees what `to_multipart` built.** The
+    fields are private, and the suite is outside the crate. Claude's recommendation:
+    two read-only methods, `Multipart::wire(&self) -> &WireForm<T>` (a plain borrow
+    of `wire_form`) and `Multipart::files(&self) -> impl Iterator<Item =
+    (&NodePath, &FileData)>`, both public. A dev could use them too, to log or
+    count what is about to be sent, which makes them more than test hooks. The
+    alternative, inline tests in `src/file.rs`, would need a whole `Form` with a
+    picked file, which needs the runtime the suite already has. Either way they
+    only make sense on the client (`OnClient`); on an `OnServer` value `files()` is
+    empty and `wire()` would need a different answer, so 11h may prefer them to be
+    `Option`s.
+
+    **MM (decided 2026-11-16, Todd: `pub(crate)`, as recommended). `WIRE_PART`'s visibility.** Box 11's first draft said
+    `pub const`. Claude's recommendation: `pub(crate)` for now, because both halves
+    are formoxus's own and nothing outside needs the name, and the 2026-11-09 rule is
+    no new public API before publishing without a reason. Making it public later
+    breaks nothing. The reason it might be public: a dev testing their own server
+    function with a hand-built request, as 11i's tests will.
 
     **Decision AA: the wire part states each file's size** (Todd, 2026-11-12: yes, now). A multipart part
     carries no size, so the server learns one only by reading the whole file. But the

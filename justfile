@@ -50,6 +50,18 @@ check-web:
 check-server:
     cargo check -p formoxus-examples --features server
 
+# `clippy` above lints only the host build, so code under
+# `cfg(target_arch = "wasm32")` (the browser half of `Multipart`'s
+# `IntoRequest`) and anything that lints differently there goes unchecked by
+# it. Deliberately not in `ci` (Todd, 2026-11-16): run it now and then,
+# and after touching anything target-specific. The kind of thing it catches:
+# `drop(file)` flagged as `drop_non_drop`, because `std::fs::File` has no
+# `Drop` on wasm32-unknown-unknown (fixed in `copy_new` with a scope).
+#
+# Lint the library as a browser build sees it.
+clippy-web:
+    cargo clippy -p formoxus --target wasm32-unknown-unknown -- -D warnings
+
 # Run the browser tests against a throwaway server, then kill it (and its
 # children). Deliberately NOT part of `just ci`: it needs a browser, which CI
 # does not have. Install one once with `npx playwright@1.64.1 install chromium`.

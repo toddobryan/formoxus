@@ -16,7 +16,7 @@
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
-use crate::file::FileMeta;
+use crate::file::{FileMeta, Multipart, MultipartFormData};
 use crate::label_case::LabelCase;
 use crate::nodes::{
     Edit, ErrorsStore, FilesByPath, FilesSignal, FormWide, NodeContext, no_such_path,
@@ -656,6 +656,14 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             state.ordered_values(&self.contents.values.read()),
             state.ordered_errors(&self.errors_store.read()),
         )
+    }
+
+    pub fn to_multipart(&self) -> Multipart<T> {
+        let state = self.state_signal.read();
+        let wire_form = self.to_wire();
+        for path in state.paths(Drafts::Exclude) {}
+
+        Multipart(MultipartFormData::OnClient { wire_form, files })
     }
 
     /// Take a server's reply back into the live form: its values, then its

@@ -61,3 +61,10 @@ to the deferred doc pass. See [[pre-publish-checklist]].
 bug `an_integer_bound_too_big_for_f64_is_caught_before_it_is_rounded` is
 `#[ignore]`d against. When that closes, prefer `#[expect(…, reason = "…")]`
 over an `allow` so it points back at the test.
+
+**`just clippy-web` (added 2026-11-16):** clippy on `wasm32-unknown-unknown` for
+the library, since `just clippy` lints only the host build and misses
+`cfg(target_arch = "wasm32")` code (11g's browser `send_parts`). DELIBERATELY NOT
+in `ci` (Todd): RAISE PERIODICALLY, and after any target-specific change. First
+catch: `drop(out)` in `copy_new` (`drop_non_drop`; `std::fs::File` has no `Drop`
+on wasm32), fixed by scoping `out` in a block so it closes before `remove_file`.

@@ -73,7 +73,7 @@ use crate::{
     error::ValidationMessage,
     form::{FormErrors, FormSpec, form_for},
     nodes::ValuesByPath,
-    path::ModelPath,
+    path::{ModelPath, NodePath},
 };
 
 /// A form's mutable state, as plain data: raw values by path, both each leaf's
@@ -96,6 +96,8 @@ use crate::{
 pub struct WireForm<T> {
     values: ValuesByPath,
     errors: FormErrors,
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    file_sizes: IndexMap<NodePath, u64>,
     #[serde(skip)]
     model: PhantomData<fn() -> T>,
 }
@@ -106,6 +108,7 @@ impl<T> WireForm<T> {
         Self {
             values,
             errors,
+            file_sizes: IndexMap::default(),
             model: PhantomData,
         }
     }
@@ -185,6 +188,7 @@ impl<T> Clone for WireForm<T> {
         Self {
             values: self.values.clone(),
             errors: self.errors.clone(),
+            file_sizes: self.file_sizes.clone(),
             model: PhantomData,
         }
     }
@@ -195,6 +199,7 @@ impl<T> Debug for WireForm<T> {
         f.debug_struct("WireForm")
             .field("values", &self.values)
             .field("errors", &self.errors)
+            .field("file_sizes", &self.file_sizes)
             .finish()
     }
 }

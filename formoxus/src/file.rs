@@ -8,9 +8,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::{env, io};
 
+use dioxus::html::FileData;
+use dioxus_fullstack::{ClientRequest, ClientResponse, IntoRequest, RequestError};
 use facet::{Facet, Partial, ReflectError};
 
 use crate::path::NodePath;
+use crate::wire::WireForm;
 
 /// What `accept:` holds. Defined in `formoxus-spec`, so `form!` runs the same
 /// parser at expansion; re-exported here so a dev can name it.
@@ -354,12 +357,17 @@ fn replace(from: &Path, to: &Path) -> io::Result<()> {
 /// Copy `from` into a new file at `to`, failing if `to` exists, and flush it
 /// to disk. On any error after `to` is created, `to` is removed again.
 fn copy_new(from: &Path, to: &Path) -> io::Result<()> {
-    let mut out = OpenOptions::new().write(true).create_new(true).open(to)?;
-    let copied = File::open(from)
-        .and_then(|mut input| io::copy(&mut input, &mut out))
-        .and_then(|_| out.sync_all());
+    // `out` closes at the end of this block, before `to` is removed below:
+    // Windows refuses to delete a file that is still open. A scope rather than
+    // `drop(out)`, which clippy flags on wasm32 (`drop_non_drop`), where
+    // `std::fs::File` is a stub with no `Drop`.
+    let copied = {
+        let mut out = OpenOptions::new().write(true).create_new(true).open(to)?;
+        File::open(from)
+            .and_then(|mut input| io::copy(&mut input, &mut out))
+            .and_then(|_| out.sync_all())
+    };
     if copied.is_err() {
-        drop(out);
         let _ = fs::remove_file(to);
     }
     copied
@@ -516,6 +524,92 @@ impl FileUploadWriter for TemporaryFileWriter {
         // `self` drops when this returns, and its `Drop` removes the file.
         ready(())
     }
+}
+
+pub(crate) const WIRE_PART: &str = "__formoxus_wire_form";
+
+pub struct Multipart<T>(pub(crate) MultipartFormData<T>);
+
+impl<T> Debug for Multipart<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            MultipartFormData::OnClient { wire_form, files } => f
+                .debug_struct("Multipart")
+                .field("wire_form", wire_form)
+                .field("files", files)
+                .finish(),
+        }
+    }
+}
+
+pub(crate) enum MultipartFormData<T> {
+    OnClient {
+        wire_form: WireForm<T>,
+        files: Vec<(NodePath, FileData)>,
+    },
+}
+
+impl<T: 'static> IntoRequest for Multipart<T> {
+    async fn into_request(self, req: ClientRequest) -> Result<ClientResponse, RequestError> {
+        let Multipart(MultipartFormData::OnClient { wire_form, files }) = self;
+        let json = serde_json::to_string(&wire_form)
+            .map_err(|e| RequestError::Serialization(e.to_string()))?;
+        send_parts(req, json, files).await
+    }
+}
+
+/// In a browser: the browser's own `FormData`, which streams each file from
+/// disk itself, so wasm never holds the bytes.
+#[cfg(target_arch = "wasm32")]
+async fn send_parts(
+    req: ClientRequest,
+    json: String,
+    files: Vec<(NodePath, FileData)>,
+) -> Result<ClientResponse, RequestError> {
+    let js_error = |e: wasm_bindgen::JsValue| RequestError::Builder(format!("{e:?}"));
+    let form_data = web_sys::FormData::new().map_err(js_error)?;
+    form_data
+        .append_with_str(WIRE_PART, &json)
+        .map_err(js_error)?;
+    for (path, file) in &files {
+        let Some(browser_file) = file.inner().downcast_ref::<web_sys::File>() else {
+            return Err(RequestError::Builder(format!("{path}: not a browser file")));
+        };
+        form_data
+            .append_with_blob_and_filename(&path.to_string(), browser_file, &browser_file.name())
+            .map_err(js_error)?;
+    }
+    req.send_js_value(form_data.into()).await
+}
+
+/// On desktop and mobile: dioxus's own `send_multipart`, because
+/// `ClientResponse`'s fields are private and only dioxus can build one.
+#[cfg(not(target_arch = "wasm32"))]
+async fn send_parts(
+    req: ClientRequest,
+    json: String,
+    files: Vec<(NodePath, FileData)>,
+) -> Result<ClientResponse, RequestError> {
+    use dioxus_html::{FormData, SerializedFileData, SerializedFormData, SerializedFormObject};
+
+    let mut parts = vec![SerializedFormObject {
+        key: WIRE_PART.to_string(),
+        text: Some(json),
+        file: None,
+    }];
+    parts.extend(files.iter().map(|(path, file)| SerializedFormObject {
+        key: path.to_string(),
+        text: None,
+        file: Some(SerializedFileData {
+            path: file.path(),
+            size: file.size(),
+            last_modified: file.last_modified(),
+            content_type: file.content_type(),
+            contents: None,
+        }),
+    }));
+    let form_data = FormData::new(SerializedFormData::new(String::new(), parts));
+    req.send_multipart(&form_data).await
 }
 
 #[cfg(test)]

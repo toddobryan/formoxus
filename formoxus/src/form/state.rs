@@ -535,7 +535,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         }
     }
 
-    fn paths(&self, drafts: Drafts) -> Vec<NodePath> {
+    pub(crate) fn paths(&self, drafts: Drafts) -> Vec<NodePath> {
         let mut out: Vec<NodePath> = Vec::new();
         for n in &self.nodes {
             n.paths(&NodePath::root(), drafts, &mut out);
