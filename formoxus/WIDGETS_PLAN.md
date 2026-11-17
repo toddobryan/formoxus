@@ -1595,7 +1595,7 @@ several?
        2026-11-13, Todd, with 11d.)
     6. **Moved to 11f** (Todd, 2026-11-15): `render` calling `FileInput`, and refusing
        any other widget, belong with the widget itself.
-  - [ ] **11f. The file table and `FileInput` (trap 11).** (Includes what was
+  - [x] **11f. The file table and `FileInput` (trap 11).** (Includes what was
     11e.6: `FileNode::render` calls its widget like a leaf, with one widget only,
     `FileInput`. A different widget is refused with the same message a `widget:` of
     the wrong kind gets today.) `Form` gains `files:
@@ -1975,12 +1975,77 @@ several?
       will bump it too, on a successful `absorb`, which is a reset onto a new
       snapshot, so `resets` still reads right.
 
-    - [ ] **f.11. `validate` and `check_live`** turn the table into a `FilesByPath`
-      (`FileMeta { content_type, size, stored: None }`) and pass it to
-      `distribute_files` after `distribute_values`. `FormState::check_live` takes
-      the files to do it.
+    - [x] **f.11. `validate` and `check_live` read the table,** so a picked file's
+      size and type are checked, on submit and as the user goes. Today neither
+      reads it, so every `FileNode` has `meta: None` when it validates: a pick
+      is treated as `Existing` (`validate_sees_the_picked_file` reads `valid:
+      Existing essay.pdf`), and `max_size` is never checked
+      (`validate_refuses_an_oversized_pick`, `a_pick_is_checked_at_once`,
+      `remove_after_a_pick_drops_the_file`). Those four are the suite's only
+      failures. Four parts. **Done 2026-11-16 (Todd; Claude the nine test
+      calls).** The conversion is named `Contents::files_by_path` (Todd), not
+      `file_metas`. Mutation-checked: dropping either `distribute_files` call
+      fails its own two tests, and `reset_empties_the_table`, vacuous before
+      this, now fails without f.10's table clear. The whole suite passes.
 
-    - [ ] **f.12. Tests (Claude, each ahead of its step).** WRITTEN 2026-11-16, ahead
+      **How a file gets checked, before f.11.** `FileNode` (`src/nodes/file_node.rs`)
+      keeps the name in `file_name` and everything else in `meta: Option<FileMeta>`
+      (`src/file.rs`: `content_type`, `size`, `stored`). Its `validate` checks
+      `max_size` and `accept` only when `meta` is `Some`, and its
+      `write_value_into` builds `Existing` from `None`, `Chosen` from
+      `Some` with `stored: None`, and `Received` from `Some` with a stored file.
+      `meta` is set only by `distribute_files`, which looks the node's path up
+      in a `FilesByPath` (`IndexMap<NodePath, FileMeta>`, `src/nodes.rs`) and
+      takes `None` when it is missing. `FormState::distribute_files`
+      (`src/form/state.rs`) walks every node with it. The server half (11h)
+      will call it with `stored: Some`; the client calls it with `stored:
+      None`, which is what makes a pick `Chosen`. Nothing on the client calls it
+      yet.
+
+      **(a) One conversion, on `Contents`:** `pub(crate) fn files_by_path(&self) ->
+      FilesByPath` in `src/form.rs`, mapping each table entry to `FileMeta {
+      content_type: file.content_type(), size: file.size(), stored: None }`
+      (both are `FileData` methods, dioxus-html 0.7.10 `file_data.rs`). One
+      function, because both (b) and (c) need exactly this. Read the table with
+      `peek()`: a check runs in an event handler, and must not subscribe
+      anything if it is ever called while rendering. A `From<&FileData> for
+      FileMeta` would also work, but `FileMeta` is public, so it would add to
+      the public API for something only the crate does.
+
+      **(b) `Form::validate`** (`src/form.rs`, search `pub fn validate`). Inside
+      its `with_errors` closure, after `state.distribute_values(&values)`, add
+      `state.distribute_files(&self.contents.files_by_path())`. **Order matters:
+      values first.** `distribute_values` builds the structure the files land in
+      (an item added since the last validate, a variant just chosen), so a file
+      under a new item would find no node yet if files went first. Also,
+      `FileNode::distribute_values` clears `meta` when the name changed, and
+      `distribute_files` then sets it from the table, so the table has the last
+      word, as it should.
+
+      **(c) The live check.** Two functions, both named `check_live`. The free
+      one in `src/form.rs` (search `fn check_live<T>`) reads the store with
+      `peek` and calls `state.check_live(path, &values)`; make it also pass
+      `&contents.files_by_path()`. The method `FormState::check_live` in
+      `src/form/state.rs` gains a `files: &FilesByPath` parameter, and calls
+      `owning_node.distribute_files(&NodePath::root(), files)` right after its
+      `distribute_values`, for the same reason as (b). `owning_node` is a
+      top-level node, so `NodePath::root()` is the right prefix, as it is for
+      the `distribute_values` call beside it. **Nine calls in the inline tests
+      of `state.rs`** (`mod tests`, from about line 680) to `state.check_live`
+      pass two arguments; each gets `&FilesByPath::default()` as a third, since
+      none involves a file. Claude can do those.
+
+      **(d) What NOT to change.** `to_wire` and the store are untouched: the
+      wire carries only the name, and the file goes in 11g's multipart. Stale
+      table entries (a file picked inside an item since removed, or under a
+      variant since unchosen) are harmless here, because `distribute_files`
+      looks up only paths the tree still has; 11g is where they would matter.
+      Nothing about `Existing` changes either: a kept file has no table entry
+      (decision EE), so `meta` stays `None` and it is written as `Existing`.
+
+
+    - [x] **f.12. Tests (Claude, each ahead of its step).** ALL PASS 2026-11-16, with
+      f.11; 28 tests in the file by then. WRITTEN 2026-11-16, ahead
       of f.6-f.11, in `tests/suite/file_input.rs` (26 tests, through the page only:
       a Check button showing what `validate` returned, the wire, the errors, the
       markup), with two `Harness` helpers in `tests/suite.rs`: `pick_files` (a `change`

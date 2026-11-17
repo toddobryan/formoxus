@@ -152,7 +152,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         if self.has_errors() { None } else { Some(model) }
     }
 
-    pub(crate) fn check_live(&self, path: &NodePath, values: &ValuesByPath) -> LiveCheck {
+    pub(crate) fn check_live(
+        &self,
+        path: &NodePath,
+        values: &ValuesByPath,
+        files: &FilesByPath,
+    ) -> LiveCheck {
         let owning_node = self
             .nodes
             .iter()
@@ -165,6 +170,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
             Some(n) => {
                 let mut owning_node = n.clone();
                 owning_node.distribute_values(&NodePath::root(), &self.spec.fields, values);
+                owning_node.distribute_files(&NodePath::root(), files);
                 let mut scratch_errors: ErrorsByPath = ErrorsByPath::default();
                 owning_node.validate(&NodePath::root(), &mut scratch_errors);
                 let paths_to_clear = match owning_node.absent_owner(&NodePath::root(), path) {
@@ -627,7 +633,7 @@ mod tests {
     use super::{FormState, LiveCheck, empty_form};
     use crate::error::ValidationMessage;
     use crate::form::spec::FormSpec;
-    use crate::nodes::ValuesByPath;
+    use crate::nodes::{FilesByPath, ValuesByPath};
     use crate::path::NodePath;
 
     #[derive(Facet, Clone, Debug, PartialEq)]
@@ -678,7 +684,11 @@ mod tests {
     #[gtest]
     fn a_blank_required_field_is_required() {
         let state = state();
-        let check = state.check_live(&NodePath::new("name"), &values(&state, &[]));
+        let check = state.check_live(
+            &NodePath::new("name"),
+            &values(&state, &[]),
+            &FilesByPath::default(),
+        );
         expect_that!(
             check,
             eq(&LiveCheck {
@@ -692,7 +702,11 @@ mod tests {
     #[gtest]
     fn a_filled_field_is_checked_and_clean() {
         let state = state();
-        let check = state.check_live(&NodePath::new("name"), &values(&state, &[("name", "Ada")]));
+        let check = state.check_live(
+            &NodePath::new("name"),
+            &values(&state, &[("name", "Ada")]),
+            &FilesByPath::default(),
+        );
         expect_that!(check.errors_at_path, some(is_empty()));
     }
 
@@ -702,7 +716,11 @@ mod tests {
     #[gtest]
     fn blanking_the_last_field_clears_the_option() {
         let state = state();
-        let check = state.check_live(&NodePath::new("reach.phone.number"), &values(&state, &[]));
+        let check = state.check_live(
+            &NodePath::new("reach.phone.number"),
+            &values(&state, &[]),
+            &FilesByPath::default(),
+        );
         expect_that!(check.errors_at_path, none());
         expect_that!(
             check.paths_to_clear,
@@ -719,6 +737,7 @@ mod tests {
         let check = state.check_live(
             &NodePath::new("reach.phone.number"),
             &values(&state, &[("reach.phone.number", "555")]),
+            &FilesByPath::default(),
         );
         expect_that!(
             check,
@@ -736,12 +755,20 @@ mod tests {
     #[gtest]
     fn another_absent_option_is_left_alone() {
         let state = state();
-        let phone = state.check_live(&NodePath::new("reach.phone.number"), &values(&state, &[]));
+        let phone = state.check_live(
+            &NodePath::new("reach.phone.number"),
+            &values(&state, &[]),
+            &FilesByPath::default(),
+        );
         expect_that!(
             phone.paths_to_clear,
             each(not(displays_as(starts_with("reach.fax"))))
         );
-        let email = state.check_live(&NodePath::new("reach.email"), &values(&state, &[]));
+        let email = state.check_live(
+            &NodePath::new("reach.email"),
+            &values(&state, &[]),
+            &FilesByPath::default(),
+        );
         expect_that!(email.paths_to_clear, is_empty());
     }
 
@@ -754,6 +781,7 @@ mod tests {
         let check = state.check_live(
             &NodePath::new("reach.alt.phone.number"),
             &values(&state, &[]),
+            &FilesByPath::default(),
         );
         expect_that!(
             check.paths_to_clear,
@@ -774,6 +802,7 @@ mod tests {
         let check = state.check_live(
             &NodePath::new("reach.alt.phone.number"),
             &values(&state, &[("reach.alt.label", "Work")]),
+            &FilesByPath::default(),
         );
         expect_that!(
             check.paths_to_clear,
@@ -785,7 +814,11 @@ mod tests {
     #[gtest]
     fn an_unknown_path_finds_nothing() {
         let state = state();
-        let check = state.check_live(&NodePath::new("nope"), &values(&state, &[]));
+        let check = state.check_live(
+            &NodePath::new("nope"),
+            &values(&state, &[]),
+            &FilesByPath::default(),
+        );
         expect_that!(
             check,
             eq(&LiveCheck {

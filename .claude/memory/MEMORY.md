@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-16 end+**: `file`, f.6-f.10 DONE (f.9b/f.10 Claude); next f.11 (validate reads the table); 4 f.11 tests failing as expected
+- [**START HERE: next session**](next_session.md) — **2026-11-16 end+**: `file`, 11f DONE through f.11, suite all green; next 11g `to_multipart` (client half)
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`

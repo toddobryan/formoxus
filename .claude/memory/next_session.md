@@ -17,7 +17,7 @@ Suite: f.8 committed 0cb4b91.
 the whole table). Remove labels use STRAIGHT quotes (`Remove "big.pdf"`; Todd
 hates curly ones), and the item buttons and set messages are being switched to
 match. 6 suite failures left, all expected: 2 `reset_*` (f.10), 4 live/validate
-(f.11). f.9b + f.10 DONE 2026-11-16 (Claude, delegated): `WidgetProps::new` lost `files`, `FilesSignal` pub(crate); `Contents.resets: Signal<u32>`, `FieldHandle::resets()`, `reset` clears the table + bumps it, input keyed from `for n in [resets]`. Harness drops listeners on `ReplaceWith` too. KEY RULE corrected: dioxus reads a key on an iterator child OR the first root of an `rsx!` placed with `{…}`; nested-in-template keys are ignored. 4 failures left, all f.11. Next f.11.
+(f.11). f.9b + f.10 DONE 2026-11-16 (Claude, delegated): `WidgetProps::new` lost `files`, `FilesSignal` pub(crate); `Contents.resets: Signal<u32>`, `FieldHandle::resets()`, `reset` clears the table + bumps it, input keyed from `for n in [resets]`. Harness drops listeners on `ReplaceWith` too. KEY RULE corrected: dioxus reads a key on an iterator child OR the first root of an `rsx!` placed with `{…}`; nested-in-template keys are ignored. **f.11 DONE 2026-11-16** (Todd; `Contents::files_by_path()`, peek; Claude the 9 state.rs test calls). WHOLE SUITE GREEN (1488). Next 11g `to_multipart`.
 
 ## ▶ 2026-11-16, end (earlier): f.7 DONE, committed; next f.8
 

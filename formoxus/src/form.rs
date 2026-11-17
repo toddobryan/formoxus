@@ -16,8 +16,11 @@
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
+use crate::file::FileMeta;
 use crate::label_case::LabelCase;
-use crate::nodes::{Edit, ErrorsStore, FilesSignal, FormWide, NodeContext, no_such_path};
+use crate::nodes::{
+    Edit, ErrorsStore, FilesByPath, FilesSignal, FormWide, NodeContext, no_such_path,
+};
 use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
@@ -240,6 +243,32 @@ pub(crate) struct Contents {
     /// as its `key`, so a reset makes a fresh element that has forgotten the
     /// user's pick. Read through [`FieldHandle::resets`].
     pub(crate) resets: Signal<u32>,
+}
+
+impl Contents {
+    /// The file table as `distribute_files` takes it: each picked file's size
+    /// and content type, with `stored: None`, which is what makes a pick
+    /// `FileUpload::Chosen` rather than `Received` (the server's, which has
+    /// the bytes). A kept file has no entry, so it stays `Existing`.
+    ///
+    /// Read with `peek`: a check runs in an event handler, and must not
+    /// subscribe anything if it is ever called while rendering.
+    pub(crate) fn files_by_path(&self) -> FilesByPath {
+        self.files
+            .peek()
+            .iter()
+            .map(|(path, file)| {
+                (
+                    path.clone(),
+                    FileMeta {
+                        content_type: file.content_type(),
+                        size: file.size(),
+                        stored: None,
+                    },
+                )
+            })
+            .collect()
+    }
 }
 
 /// A live form: the state, the values beside it, and where a structural edit
@@ -737,6 +766,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             |state| {
                 let values = state.ordered_values(&self.contents.values.read());
                 state.distribute_values(&values);
+                state.distribute_files(&self.contents.files_by_path());
                 state.validate()
             },
         )
@@ -1165,7 +1195,7 @@ fn check_live<T>(
     let check = {
         let state = state.peek();
         let values = state.ordered_values(&contents.values.peek());
-        state.check_live(path, &values)
+        state.check_live(path, &values, &contents.files_by_path())
     };
     // No key reads as `None`, as `ErrorsStoreExt::errors_at` reads it, so writing `None`
     // to a path never checked is skipped too.
