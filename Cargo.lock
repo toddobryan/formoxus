@@ -1591,6 +1591,7 @@ dependencies = [
  "formoxus",
  "formoxus-macros",
  "formoxus-spec",
+ "futures",
  "googletest",
  "heck",
  "indexmap",

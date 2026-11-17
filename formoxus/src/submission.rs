@@ -2,10 +2,11 @@
 
 use std::fmt::Debug;
 
-use facet::Facet;
+use facet::{Facet, Shape};
 
+use crate::file::{FileUploadHandler, Multipart};
 use crate::form::{FormErrors, FormSpec, FormState, empty_form};
-use crate::nodes::ValuesByPath;
+use crate::nodes::{ValuesByPath, stored_shapes};
 use crate::path::ModelPath;
 use crate::wire::WireForm;
 
@@ -144,5 +145,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     fn into_wire_with_errors(self) -> WireForm<T> {
         let errors = self.state.collect_errors();
         WireForm::new(self.state.collect_values(), errors)
+    }
+
+    pub async fn accept_multipart<H: FileUploadHandler>(
+        spec: FormSpec<T>,
+        multipart: Multipart<T>,
+        handler: &H,
+        existing: Option<&T>,
+    ) -> Result<Self, FormErrors> {
+        let shapes: Vec<&'static Shape> = stored_shapes(T::SHAPE);
+
+        todo!()
     }
 }

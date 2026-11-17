@@ -173,6 +173,10 @@ impl<T> WireForm<T> {
         self.errors.form.is_empty() && self.errors.fields.is_empty()
     }
 
+    pub(crate) fn file_sizes(&self) -> &IndexMap<NodePath, u64> {
+        &self.file_sizes
+    }
+
     /// For [`Form::to_multipart`](crate::form::Form::to_multipart). See the
     /// field for what the numbers are.
     pub(crate) fn set_file_sizes(&mut self, file_sizes: IndexMap<NodePath, u64>) {

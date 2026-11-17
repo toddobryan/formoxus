@@ -9,6 +9,10 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::{env, io};
 
 use dioxus::html::FileData;
+use dioxus_fullstack::StatusCode;
+use dioxus_fullstack::extract::multipart::{Field, MultipartError};
+use dioxus_fullstack::extract::{FromRequest, Multipart as AxumMultipart, Request};
+use dioxus_fullstack::response::{IntoResponse, Response};
 use dioxus_fullstack::{ClientRequest, ClientResponse, IntoRequest, RequestError};
 use facet::{Facet, Partial, ReflectError};
 
@@ -407,7 +411,10 @@ pub trait FileUploadHandler: Send + Sync {
         content_type: Option<&str>,
     ) -> impl Future<Output = io::Result<Self::Writer>> + Send;
 
-    fn delete(&self, stored: Self::Stored) -> impl Future<Output = io::Result<()>> + Send;
+    /// Delete (or try to delete) a file this handler stored. Because the function
+    /// returns (), it is up to the individual handler to deal with any possible
+    /// errors that occur during deleting.
+    fn delete(&self, stored: Self::Stored) -> impl Future<Output = ()> + Send;
 }
 
 pub trait FileUploadWriter {
@@ -478,11 +485,11 @@ impl FileUploadHandler for TemporaryFileUploadHandler {
         ready(self.create_file())
     }
 
-    fn delete(&self, stored: Self::Stored) -> impl Future<Output = io::Result<()>> + Send {
+    fn delete(&self, stored: Self::Stored) -> impl Future<Output = ()> + Send {
         // The guard deletes the file once the last clone is dropped, which is
         // when `accept_multipart` drops the rejected form's state.
         drop(stored);
-        ready(Ok(()))
+        ready(())
     }
 }
 
@@ -526,6 +533,132 @@ impl FileUploadWriter for TemporaryFileWriter {
     }
 }
 
+/// The user's file name as formoxus keeps it (`WIDGETS_PLAN.md`, "The user's
+/// file name"): Django's `sanitize_file_name` without its `html.unescape`.
+/// The last segment after any `/` or `\`, with control characters and
+/// [`hides_text`] characters dropped; `None` if that leaves `""`, `.` or `..`.
+/// Called on the name in the wire part, never the file part's `filename=`.
+pub(crate) fn clean_file_name(raw: &str) -> Option<String> {
+    // `rsplit` yields from the END, so its first item is the last segment.
+    // (`next_back` or `last` would walk to the front: the FIRST segment.)
+    let file_name = raw.rsplit(['/', '\\']).next().unwrap_or("");
+    let cleaned: String = file_name
+        .chars()
+        .filter(|c| !c.is_control() && !hides_text(*c))
+        .collect();
+    if cleaned.is_empty() || &cleaned == "." || &cleaned == ".." {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+/// The invisible characters that can make a file name look like another:
+/// the bidi controls, which reorder what follows (`U+202E` shows
+/// `fdp.exe` as `exe.pdf`), the zero-width ones, the byte-order mark and
+/// the soft hyphen.
+///
+/// A hand list, not Django's whole rule. Django keeps only `isprintable`
+/// characters, dropping every Unicode format character (`Cf`, about 170)
+/// and every separator but the space; Rust has no such predicate, and no
+/// crate here gives general categories. These are the ones used to spoof
+/// a name (decided 2026-11-17, Todd).
+const fn hides_text(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
+}
+
+/// How [`store_part`] ended for one file part.
+#[derive(Debug)]
+pub(crate) enum PartOutcome<Stored> {
+    /// Stored whole. `size` is the bytes COUNTED, the one `max_size` is
+    /// enforced against, never the size the wire part stated.
+    Stored { stored: Stored, size: u64 },
+    /// Past `max_size`: aborted. `size` is what was counted when it passed,
+    /// so it is over `max_size`, which is all `FileNode::validate` needs.
+    TooLarge { size: u64 },
+    /// The request passed the body limit (a 413, trap 12). The writer was
+    /// aborted; the request can't be read any further.
+    BodyLimit,
+    /// The request broke off or was malformed (any other error from `chunk`).
+    /// The writer was aborted; the request can't be read any further.
+    Broken(MultipartError),
+    /// The handler failed (`new_file`, `write_chunk` or `finish`). Whatever it
+    /// had written was aborted. The request can still be read and answered.
+    Failed(io::Error),
+}
+
+/// Read one file part, through `handler`, counting, until it ends, passes
+/// `max_size`, or something fails.
+///
+/// **It does not drain what it leaves unread, because multer does:** the
+/// next `next_field` reads through the rest of an unfinished part first
+/// (multer 3.1.0, `multipart.rs`, from line 270). So what drains a REQUEST,
+/// which a server must do before answering or the reply is lost
+/// (`WIDGETS_PLAN.md` box 10 (d)), is the driver calling `next_field` until
+/// `None`, including on every early return.
+///
+/// `name` is the cleaned name from the wire part, never the part's own
+/// `filename=` (see "The name comes from the wire part" in the plan).
+/// Checking a STATED size and `accept` is the caller's, before calling this,
+/// so a file refused up front never reaches `new_file`.
+pub(crate) async fn store_part<H: FileUploadHandler>(
+    field: &mut Field<'_>,
+    handler: &H,
+    path: &NodePath,
+    name: &str,
+    content_type: Option<&str>,
+    max_size: Option<u64>,
+) -> PartOutcome<H::Stored> {
+    let mut writer = match handler.new_file(path, name, content_type).await {
+        Ok(writer) => writer,
+        Err(e) => return PartOutcome::Failed(e),
+    };
+    let mut size: u64 = 0;
+    loop {
+        let chunk = match field.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(e) => {
+                writer.abort().await;
+                return if is_body_limit(&e) {
+                    PartOutcome::BodyLimit
+                } else {
+                    PartOutcome::Broken(e)
+                };
+            }
+        };
+        size += chunk.len() as u64;
+        if max_size.is_some_and(|max| size > max) {
+            writer.abort().await;
+            return PartOutcome::TooLarge { size };
+        }
+        if let Err(e) = writer.write_chunk(&chunk).await {
+            writer.abort().await;
+            return PartOutcome::Failed(e);
+        }
+    }
+    match writer.finish().await {
+        Ok(stored) => PartOutcome::Stored { stored, size },
+        Err(e) => PartOutcome::Failed(e),
+    }
+}
+
+/// Whether a multipart error is the body limit (axum's 413, trap 12). For
+/// `store_part`'s `chunk` errors and for the driver's `next_field` ones,
+/// since the limit can trip in either: wherever multer's buffer is reading
+/// when the body passes it.
+pub(crate) fn is_body_limit(e: &MultipartError) -> bool {
+    e.status() == StatusCode::PAYLOAD_TOO_LARGE
+}
+
 /// The name of a multipart request's first part, the form's [`WireForm`] as
 /// JSON. Every other part is a file, named by its path's string
 /// (`answers.#3.file`).
@@ -550,10 +683,13 @@ impl<T> Debug for Multipart<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             MultipartFormData::OnClient { wire_form, files } => f
-                .debug_struct("Multipart")
+                .debug_struct("Multipart::OnClient")
                 .field("wire_form", wire_form)
                 .field("files", files)
                 .finish(),
+            MultipartFormData::OnServer(axum_mp) => {
+                f.debug_tuple("Multipart::OnServer").field(axum_mp).finish()
+            }
         }
     }
 }
@@ -568,25 +704,41 @@ impl<T> Debug for Multipart<T> {
 #[cfg(any(test, feature = "__test-util"))]
 impl<T> Multipart<T> {
     /// The wire part, sizes included, before it is serialized.
+    ///
+    /// # Panics
+    ///
+    /// On a `Multipart` read on the server, whose wire part is still unread
+    /// in the request: only `accept_multipart` reads it, once.
     pub fn wire(&self) -> &WireForm<T> {
         match &self.0 {
             MultipartFormData::OnClient { wire_form, .. } => wire_form,
+            MultipartFormData::OnServer(_) => panic!(
+                "a `Multipart` read on the server has no wire until \
+                 `accept_multipart` reads it"
+            ),
         }
     }
 
-    /// The file parts, in the order they are sent.
+    /// The file parts, in the order they are sent. None on a `Multipart`
+    /// read on the server, since nothing has been read from it yet.
     pub fn files(&self) -> impl Iterator<Item = (&NodePath, &FileData)> {
-        match &self.0 {
-            MultipartFormData::OnClient { files, .. } => {
-                files.iter().map(|(path, file)| (path, file))
-            }
-        }
+        let files: &[(NodePath, FileData)] = match &self.0 {
+            MultipartFormData::OnClient { files, .. } => files,
+            MultipartFormData::OnServer(_) => &[],
+        };
+        files.iter().map(|(path, file)| (path, file))
     }
 }
 
 /// What a [`Multipart`] holds, by which end it is on. Private, so 11h adds
 /// the server's variant without changing anything public. Both variants hold
 /// what the CLIENT sent; they are named for where the value lives.
+// `allow`, not `expect`: on wasm32 `OnClient` is small enough that the lint
+// doesn't fire, and an unfulfilled `expect` is an error there.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "one per submit, moved once into the request; boxing saves nothing that matters"
+)]
 pub(crate) enum MultipartFormData<T> {
     /// Built by `to_multipart`, not yet serialized: [`IntoRequest`] does
     /// that, at the send.
@@ -594,6 +746,7 @@ pub(crate) enum MultipartFormData<T> {
         wire_form: WireForm<T>,
         files: Vec<(NodePath, FileData)>,
     },
+    OnServer(AxumMultipart),
 }
 
 /// `T: 'static` because the returned future owns the `WireForm<T>`, whose
@@ -601,10 +754,27 @@ pub(crate) enum MultipartFormData<T> {
 /// `Facet<'static>`, so it costs nothing.
 impl<T: 'static> IntoRequest for Multipart<T> {
     async fn into_request(self, req: ClientRequest) -> Result<ClientResponse, RequestError> {
-        let Multipart(MultipartFormData::OnClient { wire_form, files }) = self;
-        let json = serde_json::to_string(&wire_form)
-            .map_err(|e| RequestError::Serialization(e.to_string()))?;
-        send_parts(req, json, files).await
+        match self.0 {
+            MultipartFormData::OnClient { wire_form, files } => {
+                let json = serde_json::to_string(&wire_form)
+                    .map_err(|e| RequestError::Serialization(e.to_string()))?;
+                send_parts(req, json, files).await
+            }
+            MultipartFormData::OnServer(_) => Err(RequestError::Builder(
+                "a `Multipart` read on the server can't be sent".into(),
+            )),
+        }
+    }
+}
+
+impl<S: Send + Sync + 'static, T> FromRequest<S> for Multipart<T> {
+    type Rejection = Response;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        match AxumMultipart::from_request(req, state).await {
+            Ok(mp) => Ok(Multipart(MultipartFormData::OnServer(mp))),
+            Err(e) => Err(e.into_response()),
+        }
     }
 }
 
@@ -670,7 +840,10 @@ mod tests {
 
     use googletest::prelude::*;
 
-    use super::{IfExists, TemporaryUploadedFile, copy_new, format_size, staging_path, versioned};
+    use super::{
+        IfExists, TemporaryUploadedFile, clean_file_name, copy_new, format_size, staging_path,
+        versioned,
+    };
 
     #[gtest]
     fn a_size_is_shown_in_decimal_units_rounded_down() {
@@ -911,5 +1084,489 @@ mod tests {
             some(starts_with(".essay.pdf."))
         );
         expect_that!(first, not(eq(&second)));
+    }
+
+    // ── `clean_file_name` (WIDGETS_PLAN 11h, h.4) ───────────────────────────
+    //
+    // Django's `sanitize_file_name` without its `html.unescape`. The input is
+    // the name in the wire part, never the file part's `filename=` (see "The
+    // name comes from the wire part" in the plan).
+
+    #[gtest]
+    fn a_plain_name_is_kept() {
+        expect_that!(clean_file_name("essay.pdf"), some(eq("essay.pdf")));
+    }
+
+    #[gtest]
+    fn a_unix_path_keeps_its_last_segment() {
+        expect_that!(
+            clean_file_name("/home/todd/essay.pdf"),
+            some(eq("essay.pdf"))
+        );
+    }
+
+    /// What old browsers on Windows sent, and the reason for splitting on `\`
+    /// on every server, not only on Windows ones.
+    #[gtest]
+    fn a_windows_path_keeps_its_last_segment() {
+        expect_that!(
+            clean_file_name(r"C:\Users\todd\essay.pdf"),
+            some(eq("essay.pdf"))
+        );
+    }
+
+    #[gtest]
+    fn mixed_separators_keep_the_last_segment() {
+        expect_that!(
+            clean_file_name(r"C:\Users/todd\drafts/essay.pdf"),
+            some(eq("essay.pdf"))
+        );
+    }
+
+    /// Nothing is escaped or unescaped: the wire part is JSON, so the name
+    /// arrives as the client read it.
+    #[gtest]
+    fn quotes_spaces_and_non_ascii_are_kept() {
+        expect_that!(
+            clean_file_name(r#"my "best" résumé ✓.pdf"#),
+            some(eq(r#"my "best" résumé ✓.pdf"#))
+        );
+    }
+
+    /// No `html.unescape`, unlike Django: a `FormData` is always UTF-8, so an
+    /// `&amp;` is part of the real name.
+    #[gtest]
+    fn an_html_entity_is_left_alone() {
+        expect_that!(
+            clean_file_name("Tom &amp; Jerry.pdf"),
+            some(eq("Tom &amp; Jerry.pdf"))
+        );
+    }
+
+    #[gtest]
+    fn control_characters_are_dropped() {
+        expect_that!(
+            clean_file_name("es\u{0}say\r\n\t.pdf\u{7f}"),
+            some(eq("essay.pdf"))
+        );
+    }
+
+    #[gtest]
+    fn a_dot_file_and_three_dots_are_names() {
+        expect_that!(clean_file_name(".hidden"), some(eq(".hidden")));
+        expect_that!(clean_file_name("..."), some(eq("...")));
+    }
+
+    #[gtest]
+    fn an_empty_name_is_refused() {
+        expect_that!(clean_file_name(""), none());
+    }
+
+    #[gtest]
+    fn dot_and_dot_dot_are_refused() {
+        expect_that!(clean_file_name("."), none());
+        expect_that!(clean_file_name(".."), none());
+    }
+
+    /// The LAST segment is what's judged, so a path ending in `..` is refused
+    /// however harmless the rest looks.
+    #[gtest]
+    fn a_path_ending_in_dot_dot_is_refused() {
+        expect_that!(clean_file_name("uploads/.."), none());
+        expect_that!(clean_file_name(r"uploads\.."), none());
+    }
+
+    /// Nothing after the last separator: the last segment is empty.
+    #[gtest]
+    fn a_path_ending_in_a_separator_is_refused() {
+        expect_that!(clean_file_name("uploads/"), none());
+        expect_that!(clean_file_name(r"C:\Users\"), none());
+    }
+
+    #[gtest]
+    fn a_name_of_only_control_characters_is_refused() {
+        expect_that!(clean_file_name("\u{7}\n"), none());
+    }
+
+    /// `U+202E` (right-to-left override) would show this as `exe.pdf`.
+    #[gtest]
+    fn a_bidi_override_is_dropped() {
+        expect_that!(
+            clean_file_name("invoice\u{202E}fdp.exe"),
+            some(eq("invoicefdp.exe"))
+        );
+        expect_that!(
+            clean_file_name("a\u{202A}b\u{2066}c\u{2069}d"),
+            some(eq("abcd"))
+        );
+    }
+
+    #[gtest]
+    fn zero_width_characters_are_dropped() {
+        expect_that!(
+            clean_file_name("\u{FEFF}ess\u{200B}ay\u{200D}\u{2060}.pdf"),
+            some(eq("essay.pdf"))
+        );
+    }
+
+    #[gtest]
+    fn a_soft_hyphen_is_dropped() {
+        expect_that!(clean_file_name("es\u{00AD}say.pdf"), some(eq("essay.pdf")));
+    }
+
+    /// Only the hand list goes: a no-break space, which Django would drop, is
+    /// kept (see `hides_text`).
+    #[gtest]
+    fn a_no_break_space_is_kept() {
+        expect_that!(
+            clean_file_name("my\u{00A0}essay.pdf"),
+            some(eq("my\u{00A0}essay.pdf"))
+        );
+    }
+
+    #[gtest]
+    fn a_name_of_only_invisible_characters_is_refused() {
+        expect_that!(clean_file_name("\u{200B}\u{202E}"), none());
+    }
+
+    /// The check comes AFTER the control characters go, or `.\0.` would pass
+    /// as a name and then be `..`.
+    #[gtest]
+    fn dot_dot_hidden_by_a_control_character_is_refused() {
+        expect_that!(clean_file_name(".\u{0}."), none());
+    }
+
+    // ── `store_part` (WIDGETS_PLAN 11h, h.6) ────────────────────────────────
+    //
+    // A multipart request built in memory and read through axum's own
+    // extractor, which needs no runtime, so `block_on` runs it. The body
+    // arrives in 1,000-byte frames, so a large part comes as several chunks
+    // and the counting and the abort happen mid-part.
+    //
+    // The handler records what was called. `TemporaryFileWriter` deletes its
+    // file on drop with or without `abort`, so an empty directory could not
+    // show that `abort` was called; the log can.
+
+    use std::sync::{Arc, Mutex};
+
+    use dioxus_fullstack::body::Body;
+    use dioxus_fullstack::extract::{FromRequest, Multipart as AxumMultipart};
+    use dioxus_fullstack::http::{Request, header::CONTENT_TYPE};
+    use futures::executor::block_on;
+
+    use super::{
+        FileUploadHandler, FileUploadWriter, PartOutcome, TemporaryFileUploadHandler, store_part,
+    };
+    use crate::path::NodePath;
+
+    const BOUNDARY: &str = "fx-test-boundary";
+
+    /// A multipart body of file parts, closed with the final boundary unless
+    /// `closed` is false, which leaves the last part unfinished.
+    fn body(parts: &[(&str, &[u8])], closed: bool) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (name, bytes) in parts {
+            out.extend_from_slice(
+                format!(
+                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"; \
+                     filename=\"{name}.bin\"\r\nContent-Type: application/pdf\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+            out.extend_from_slice(bytes);
+            out.extend_from_slice(b"\r\n");
+        }
+        if closed {
+            out.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
+        }
+        out
+    }
+
+    /// `body` as a request, through axum's extractor (so with axum's default
+    /// 2 MB body limit), in 1,000-byte frames with a `Pending` before each, as
+    /// a socket delivers them.
+    ///
+    /// **The `Pending`s matter.** A stream whose frames are all ready at once
+    /// lets multer's buffer swallow the whole body on its first poll, so the
+    /// body limit trips inside `next_field`, before `store_part` sees the
+    /// part. Over a network the 413 normally comes mid-part, from `chunk`, but
+    /// it CAN come from `next_field`, so the driver (h.8) handles both.
+    fn multipart(body: &[u8]) -> AxumMultipart {
+        let mut frames: std::collections::VecDeque<Result<Vec<u8>, io::Error>> =
+            body.chunks(1_000).map(|c| Ok(c.to_vec())).collect();
+        let mut wait = true;
+        let trickle = futures::stream::poll_fn(move |cx| {
+            if wait {
+                wait = false;
+                cx.waker().wake_by_ref();
+                std::task::Poll::Pending
+            } else {
+                wait = true;
+                std::task::Poll::Ready(frames.pop_front())
+            }
+        });
+        let request = Request::builder()
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={BOUNDARY}"),
+            )
+            .body(Body::from_stream(trickle))
+            .expect("a valid request");
+        block_on(AxumMultipart::from_request(request, &())).expect("a multipart request")
+    }
+
+    /// `store_part` on the request's next part, as the driver would call it.
+    fn store_next<H: FileUploadHandler>(
+        multipart: &mut AxumMultipart,
+        handler: &H,
+        max_size: Option<u64>,
+    ) -> PartOutcome<H::Stored> {
+        block_on(async {
+            let mut field = multipart
+                .next_field()
+                .await
+                .expect("a readable request")
+                .expect("one more part");
+            store_part(
+                &mut field,
+                handler,
+                &NodePath::new("essay"),
+                "essay.pdf",
+                Some("application/pdf"),
+                max_size,
+            )
+            .await
+        })
+    }
+
+    /// The name of the request's next part: whether the request can still be
+    /// read after `store_part` left a part unfinished.
+    fn next_name(multipart: &mut AxumMultipart) -> Option<String> {
+        block_on(multipart.next_field())
+            .expect("a readable request")
+            .map(|field| field.name().unwrap_or_default().to_string())
+    }
+
+    /// A handler that keeps each file in memory and logs every call, and can
+    /// be told to fail `new_file` or every `write_chunk`.
+    #[derive(Default)]
+    struct Recording {
+        log: Arc<Mutex<Vec<String>>>,
+        fail_new_file: bool,
+        fail_writes: bool,
+    }
+
+    impl Recording {
+        fn log(&self) -> Vec<String> {
+            self.log.lock().expect("unpoisoned").clone()
+        }
+    }
+
+    struct RecordingWriter {
+        bytes: Vec<u8>,
+        log: Arc<Mutex<Vec<String>>>,
+        fail_writes: bool,
+    }
+
+    impl RecordingWriter {
+        fn note(&self, entry: String) {
+            self.log.lock().expect("unpoisoned").push(entry);
+        }
+    }
+
+    impl FileUploadHandler for Recording {
+        type Stored = Vec<u8>;
+        type Writer = RecordingWriter;
+
+        fn new_file(
+            &self,
+            path: &NodePath,
+            name: &str,
+            content_type: Option<&str>,
+        ) -> impl Future<Output = io::Result<Self::Writer>> + Send {
+            self.log.lock().expect("unpoisoned").push(format!(
+                "new_file {path} {name} {}",
+                content_type.unwrap_or("-")
+            ));
+            std::future::ready(if self.fail_new_file {
+                Err(io::Error::other("no space"))
+            } else {
+                Ok(RecordingWriter {
+                    bytes: Vec::new(),
+                    log: Arc::clone(&self.log),
+                    fail_writes: self.fail_writes,
+                })
+            })
+        }
+
+        fn delete(&self, _stored: Self::Stored) -> impl Future<Output = ()> + Send {
+            std::future::ready(())
+        }
+    }
+
+    impl FileUploadWriter for RecordingWriter {
+        type Stored = Vec<u8>;
+
+        fn write_chunk(&mut self, chunk: &[u8]) -> impl Future<Output = io::Result<()>> + Send {
+            std::future::ready(if self.fail_writes {
+                Err(io::Error::other("disk gone"))
+            } else {
+                self.bytes.extend_from_slice(chunk);
+                Ok(())
+            })
+        }
+
+        fn finish(self) -> impl Future<Output = io::Result<Self::Stored>> + Send {
+            self.note(format!("finish {}", self.bytes.len()));
+            std::future::ready(Ok(self.bytes))
+        }
+
+        fn abort(self) -> impl Future<Output = ()> + Send {
+            self.note(format!("abort {}", self.bytes.len()));
+            std::future::ready(())
+        }
+    }
+
+    fn bytes(n: usize) -> Vec<u8> {
+        // 251, a prime, so no chunk boundary lines up with the pattern.
+        (0..=250_u8).cycle().take(n).collect()
+    }
+
+    #[gtest]
+    fn a_whole_part_is_stored_with_its_counted_size() {
+        let file = bytes(5_500);
+        let mut request = multipart(&body(&[("essay", &file)], true));
+        let handler = Recording::default();
+        let outcome = store_next(&mut request, &handler, None);
+        let PartOutcome::Stored { stored, size } = outcome else {
+            panic!("expected Stored, got {outcome:?}");
+        };
+        expect_that!(size, eq(5_500));
+        expect_that!(stored == file, eq(true));
+        expect_that!(
+            handler.log(),
+            elements_are![
+                eq("new_file essay essay.pdf application/pdf"),
+                eq("finish 5500")
+            ]
+        );
+        expect_that!(next_name(&mut request), none());
+    }
+
+    #[gtest]
+    fn a_part_of_exactly_max_size_is_stored() {
+        let mut request = multipart(&body(&[("essay", &bytes(3_000))], true));
+        let outcome = store_next(&mut request, &Recording::default(), Some(3_000));
+        expect_that!(
+            matches!(outcome, PartOutcome::Stored { size: 3_000, .. }),
+            eq(true),
+            "{outcome:?}"
+        );
+    }
+
+    /// Aborted at the first chunk past the limit, holding only what fit, and
+    /// the request still readable afterwards: multer reads through the rest
+    /// of the part on the next `next_field`.
+    #[gtest]
+    fn a_part_past_max_size_is_aborted_with_a_size_over_the_limit() {
+        let mut request = multipart(&body(&[("essay", &bytes(5_500)), ("after", b"x")], true));
+        let handler = Recording::default();
+        let outcome = store_next(&mut request, &handler, Some(3_000));
+        let PartOutcome::TooLarge { size } = outcome else {
+            panic!("expected TooLarge, got {outcome:?}");
+        };
+        expect_that!(size, gt(3_000));
+        // Aborted holding only what fit: fewer than 3,000 bytes written.
+        let log = handler.log();
+        expect_that!(log.len(), eq(2), "{log:?}");
+        expect_that!(log[1], starts_with("abort "));
+        let written: u64 = log[1]["abort ".len()..].parse().expect("a count");
+        expect_that!(written, le(3_000));
+        expect_that!(next_name(&mut request), some(eq("after")));
+    }
+
+    /// Past axum's default 2 MB body limit (trap 12): the request can't be
+    /// read further, so there is nothing to drain.
+    #[gtest]
+    fn a_body_past_the_limit_is_the_body_limit() {
+        let mut request = multipart(&body(&[("essay", &bytes(2_200_000))], true));
+        let handler = Recording::default();
+        let outcome = store_next(&mut request, &handler, None);
+        expect_that!(
+            matches!(outcome, PartOutcome::BodyLimit),
+            eq(true),
+            "{outcome:?}"
+        );
+        expect_that!(handler.log().last(), some(starts_with("abort ")));
+    }
+
+    /// A request that ends mid-part, as when the client goes away.
+    #[gtest]
+    fn a_request_cut_off_mid_part_is_broken() {
+        let mut request = multipart(&body(&[("essay", &bytes(5_500))], false));
+        let handler = Recording::default();
+        let outcome = store_next(&mut request, &handler, None);
+        expect_that!(
+            matches!(outcome, PartOutcome::Broken(_)),
+            eq(true),
+            "{outcome:?}"
+        );
+        expect_that!(handler.log().last(), some(starts_with("abort ")));
+    }
+
+    /// Nothing was opened, so nothing to abort.
+    #[gtest]
+    fn after_a_failed_new_file_the_request_is_still_readable() {
+        let mut request = multipart(&body(&[("essay", &bytes(5_500)), ("after", b"x")], true));
+        let handler = Recording {
+            fail_new_file: true,
+            ..Recording::default()
+        };
+        let outcome = store_next(&mut request, &handler, None);
+        expect_that!(
+            matches!(outcome, PartOutcome::Failed(_)),
+            eq(true),
+            "{outcome:?}"
+        );
+        expect_that!(
+            handler.log(),
+            elements_are![eq("new_file essay essay.pdf application/pdf")]
+        );
+        expect_that!(next_name(&mut request), some(eq("after")));
+    }
+
+    #[gtest]
+    fn a_failed_write_aborts_and_the_request_is_still_readable() {
+        let mut request = multipart(&body(&[("essay", &bytes(5_500)), ("after", b"x")], true));
+        let handler = Recording {
+            fail_writes: true,
+            ..Recording::default()
+        };
+        let outcome = store_next(&mut request, &handler, None);
+        expect_that!(
+            matches!(outcome, PartOutcome::Failed(_)),
+            eq(true),
+            "{outcome:?}"
+        );
+        expect_that!(handler.log().last(), some(eq("abort 0")));
+        expect_that!(next_name(&mut request), some(eq("after")));
+    }
+
+    /// The real handler: what it stored is on disk, byte for byte.
+    #[gtest]
+    fn the_temporary_handler_stores_the_part_on_disk() {
+        let scratch = Scratch::new("store-part");
+        let file = bytes(5_500);
+        let mut request = multipart(&body(&[("essay", &file)], true));
+        let handler = TemporaryFileUploadHandler::in_dir(&scratch.0);
+        let outcome = store_next(&mut request, &handler, None);
+        let PartOutcome::Stored { stored, size } = outcome else {
+            panic!("expected Stored, got {outcome:?}");
+        };
+        expect_that!(size, eq(5_500));
+        expect_that!(
+            fs::read(stored.path()).expect("the stored file") == file,
+            eq(true)
+        );
     }
 }

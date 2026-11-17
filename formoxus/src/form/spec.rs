@@ -60,25 +60,25 @@ pub struct FieldSpec {
 
 #[derive(Clone, Debug)]
 pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
-    pub(super) title: Option<String>,
-    pub(super) fields: IndexMap<String, FieldSpec>,
-    pub(super) validator: ValidationFn<T>,
+    pub(crate) title: Option<String>,
+    pub(crate) fields: IndexMap<String, FieldSpec>,
+    pub(crate) validator: ValidationFn<T>,
     /// Declaration order, which is display order — `form!` collects a `Vec`
     /// for exactly this reason.
-    pub(super) buttons: Vec<ButtonSpec>,
+    pub(crate) buttons: Vec<ButtonSpec>,
     /// How a field's name becomes its label when nothing names one explicitly.
     ///
     /// `None` means "not stated at this level", not "Title" — so that a future
     /// app-level default read from context can fill it in, and an explicit
     /// per-form setting can still override that. See
     /// `.claude/memory/config_cascade.md`.
-    pub(super) label_case: Option<LabelCase>,
-    pub(super) use_browser_validation: Option<bool>,
+    pub(crate) label_case: Option<LabelCase>,
+    pub(crate) use_browser_validation: Option<bool>,
     /// `form!`'s `live_validation:`. `None` is "not stated", as for
     /// `label_case`.
-    pub(super) live_validation: Option<bool>,
-    pub(super) classes: Option<Classes>,
-    pub(super) edits: Vec<ClassEdit>,
+    pub(crate) live_validation: Option<bool>,
+    pub(crate) classes: Option<Classes>,
+    pub(crate) edits: Vec<ClassEdit>,
     _type: PhantomData<T>,
 }
 

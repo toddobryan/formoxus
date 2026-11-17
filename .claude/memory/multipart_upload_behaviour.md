@@ -33,3 +33,14 @@ dioxus 0.7.10 / axum 0.8.9, through `dx serve`. Full numbers in
 **Why it matters:** decisions J/K/M of WIDGETS_PLAN part 3 rest on these.
 **How to apply:** don't design a `max_size:` check that returns early, or an
 `Upload` that buffers whole files server-side, without re-measuring.
+
+**Added 2026-11-17 (writing `store_part`, WIDGETS_PLAN 11h h.6):**
+(1) **multer drains an unfinished part itself.** `next_field` reads through the
+rest of the previous part before the next boundary (multer 3.1.0, `multipart.rs`,
+from line 270), so a per-part drain is redundant; what drains a REQUEST is calling
+`next_field` until `None`, which every early return in `accept_multipart` must do.
+(2) **The 413 can come from `next_field`, not only `chunk`**: the limit trips
+wherever multer's buffer is reading when the body passes it. `is_body_limit` in
+`file.rs` checks either. (3) **In tests, a stream whose frames are all ready at
+once is unrealistic:** multer's buffer swallows the whole body on its first poll.
+`file.rs`'s test `multipart()` returns `Pending` before each frame, like a socket.

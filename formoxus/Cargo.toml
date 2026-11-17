@@ -80,5 +80,6 @@ __test-util = []
 formoxus = { path = ".", features = ["__test-util"] }
 dioxus-html = { workspace = true }
 dioxus-ssr = { workspace = true }
+futures = { workspace = true }
 googletest = { workspace = true }
 trybuild = { workspace = true }

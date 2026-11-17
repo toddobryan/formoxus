@@ -19,7 +19,7 @@ mod struct_node;
 mod variant_node;
 
 pub use file_node::FileNode;
-pub(crate) use file_node::is_file_upload;
+pub(crate) use file_node::{is_file_upload, stored_shapes};
 pub use items::ItemValue;
 pub(crate) use items::Items;
 pub use list_node::ListNode;

@@ -89,6 +89,10 @@ dioxus-ssr = { version = "0.7" }
 # what lets a bare VirtualDom dispatch a real DOM event in a test.
 dioxus-html = { version = "0.7", features = ["serialize"] }
 facet = { version = "0.46.5", features = ["reflect"] }
+# dev-only: `block_on`, so a test can run an upload's async code with no
+# runtime. axum's `Multipart` extractor uses no tokio (checked 2026-11-12), so a
+# request built in memory needs nothing more. Already in the lock through dioxus.
+futures = { version = "0.3.34" }
 googletest = { version = "0.14.3", features = ["proptest"] }
 heck = { version = "0.5.0" }
 # Ordered map: preserves declaration order (so a `FormSpec`'s Debug output and

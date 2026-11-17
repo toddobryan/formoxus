@@ -1,5 +1,7 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
-use facet::{Facet, Partial, ReflectError, Shape};
+use facet::{Def, Facet, Partial, ReflectError, Shape, Type, UserType};
 use formoxus_spec::FileType;
 
 use crate::{
@@ -36,6 +38,59 @@ pub struct FileNode {
 /// a trait method, which const code cannot call.
 pub(crate) const fn is_file_upload(shape: &Shape) -> bool {
     shape.decl_id.0 == <FileUpload as Facet>::SHAPE.decl_id.0
+}
+
+pub(crate) fn stored_shapes(model: &'static Shape) -> Vec<&'static Shape> {
+    let mut stored: Vec<&'static Shape> = Vec::new();
+    let mut visited: HashSet<&Shape> = HashSet::new();
+    stored_shapes_helper(model, &mut stored, &mut visited);
+    stored
+}
+
+fn stored_shapes_helper(
+    shape: &'static Shape,
+    stored: &mut Vec<&'static Shape>,
+    visited: &mut HashSet<&Shape>,
+) {
+    // `insert` is false for a shape already seen, which is what ends a
+    // recursive model (a `Comment` holding `Vec<Comment>`).
+    if !visited.insert(shape) {
+        return;
+    }
+
+    // Before the struct and enum cases: `FileUpload` is an enum, and its own
+    // variants are not the model's. Its `S` is the type of `Received`'s
+    // `stored` field, and the walk stops there, since a handler's output is
+    // one value to the form, however it is built.
+    if is_file_upload(shape) {
+        let Type::User(UserType::Enum(file_upload)) = shape.ty else {
+            panic!("`FileUpload` is an enum");
+        };
+        let s = file_upload
+            .variants
+            .iter()
+            .find(|v| v.name == "Received")
+            .and_then(|v| v.data.fields.iter().find(|f| f.name == "stored"))
+            .expect("`FileUpload::Received` has a `stored` field")
+            .shape();
+        stored.push(s);
+    } else if let Def::Option(inner) = shape.def {
+        stored_shapes_helper(inner.t, stored, visited);
+    } else if let Def::List(elem) = shape.def {
+        stored_shapes_helper(elem.t(), stored, visited);
+    } else if let Def::Set(elem) = shape.def {
+        stored_shapes_helper(elem.t(), stored, visited);
+    } else if let Type::User(UserType::Struct(s)) = shape.ty {
+        for f in s.fields {
+            stored_shapes_helper(f.shape(), stored, visited);
+        }
+    } else if let Type::User(UserType::Enum(e)) = shape.ty {
+        for v in e.variants {
+            for f in v.data.fields {
+                stored_shapes_helper(f.shape(), stored, visited);
+            }
+        }
+    }
 }
 
 impl Node for FileNode {
@@ -374,5 +429,180 @@ mod tests {
             format!("{:?}", StoredFile::new("key".to_string())),
             eq(r#"StoredFile { type_name: "alloc::string::String", .. }"#)
         );
+    }
+
+    // ── Decision BB: every `FileUpload`'s `S` in a model (11h, h.5) ─────────
+    //
+    // `stored_shapes` reads the model's TYPE, before any part of a request is
+    // read, so a variant no value has chosen and a list with no items yet are
+    // reached all the same: that is what lets `accept_multipart` panic on a
+    // mismatch with nothing stored (WIDGETS_PLAN 11e.4, "BB's HOW").
+    //
+    // Assertions compare names, so a failure says which type turned up; the
+    // first compares the shapes themselves, as BB's check does. Order and
+    // duplicates are not pinned: the check only asks whether any `S` differs.
+
+    use super::stored_shapes;
+    use facet::Shape;
+    use std::path::PathBuf;
+
+    fn stored_names(model: &'static Shape) -> Vec<String> {
+        stored_shapes(model)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    #[gtest]
+    fn the_default_s_is_the_temporary_handlers() {
+        let found = stored_shapes(Essay::SHAPE);
+        expect_that!(found, not(is_empty()));
+        expect_that!(
+            found.iter().all(|s| *s == TemporaryUploadedFile::SHAPE),
+            eq(true)
+        );
+    }
+
+    #[gtest]
+    fn a_devs_own_s_is_found() {
+        expect_that!(stored_names(Report::SHAPE), elements_are![eq("String")]);
+    }
+
+    /// Two fields naming different `S`s: the top-level mismatch BB panics on,
+    /// whichever field the handler matches.
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Mixed {
+        essay: FileUpload,
+        scan: FileUpload<PathBuf>,
+    }
+
+    #[gtest]
+    fn every_file_field_is_found() {
+        let names = stored_names(Mixed::SHAPE);
+        expect_that!(names, contains(eq("TemporaryUploadedFile")));
+        expect_that!(names, contains(eq("PathBuf")));
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Notes {
+        notes: Option<FileUpload<String>>,
+    }
+
+    /// `Option<FileUpload>` is an enum to facet (`facet_option_is_an_enum`),
+    /// so the walk has to peel it rather than read it as a dev's enum.
+    #[gtest]
+    fn a_file_inside_an_option_is_found() {
+        expect_that!(stored_names(Notes::SHAPE), elements_are![eq("String")]);
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Unit {
+        essay: FileUpload<String>,
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Course {
+        title: String,
+        unit: Unit,
+    }
+
+    #[gtest]
+    fn a_file_in_a_nested_struct_is_found() {
+        expect_that!(stored_names(Course::SHAPE), elements_are![eq("String")]);
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum Work {
+        Link { url: String },
+        Upload { file: FileUpload<String> },
+        Scan { scan: FileUpload<PathBuf> },
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Coursework {
+        work: Work,
+    }
+
+    /// Every variant, not only one: a request for `Link` must still be
+    /// refused when `Scan`'s `S` doesn't match, because the check runs before
+    /// the wire part says which variant was chosen.
+    #[gtest]
+    fn every_variant_is_walked_chosen_or_not() {
+        let names = stored_names(Coursework::SHAPE);
+        expect_that!(names, contains(eq("String")));
+        expect_that!(names, contains(eq("PathBuf")));
+    }
+
+    /// A form over an enum has its variants at the root.
+    #[gtest]
+    fn a_model_that_is_itself_an_enum_is_walked() {
+        let names = stored_names(Work::SHAPE);
+        expect_that!(names, contains(eq("String")));
+        expect_that!(names, contains(eq("PathBuf")));
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Portfolio {
+        drafts: Vec<FileUpload<String>>,
+    }
+
+    /// Through the list's item type, so an empty list is checked too.
+    #[gtest]
+    fn a_file_in_a_list_item_is_found() {
+        expect_that!(stored_names(Portfolio::SHAPE), elements_are![eq("String")]);
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Syllabus {
+        title: String,
+        essays: Vec<Unit>,
+    }
+
+    #[gtest]
+    fn a_file_in_a_struct_inside_a_list_item_is_found() {
+        expect_that!(stored_names(Syllabus::SHAPE), elements_are![eq("String")]);
+    }
+
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Plain {
+        title: String,
+        count: u32,
+        tags: Vec<String>,
+        note: Option<String>,
+    }
+
+    #[gtest]
+    fn a_model_with_no_upload_has_no_s() {
+        expect_that!(stored_shapes(Plain::SHAPE), is_empty());
+    }
+
+    #[derive(Facet)]
+    struct Fake {
+        file: lookalike::FileUpload,
+    }
+
+    /// Same name, no `Received` and no `stored`: the walk must neither count
+    /// it nor go looking for a field it hasn't got.
+    #[gtest]
+    fn a_dev_type_named_file_upload_has_no_s() {
+        expect_that!(stored_shapes(Fake::SHAPE), is_empty());
+    }
+
+    /// facet needs `recursive_type` to derive this at all; without the
+    /// visited set, the walk would follow `replies` for ever.
+    #[derive(Facet, Clone, Debug, PartialEq)]
+    struct Comment {
+        body: String,
+        attachment: Option<FileUpload<String>>,
+        #[facet(recursive_type)]
+        replies: Vec<Comment>,
+    }
+
+    #[gtest]
+    fn a_recursive_model_ends() {
+        expect_that!(stored_names(Comment::SHAPE), each(eq("String")));
+        expect_that!(stored_names(Comment::SHAPE), not(is_empty()));
     }
 }
