@@ -4,4 +4,15 @@ error[E0277]: the trait bound `bool: From<&str>` is not satisfied
 37 |             comments => { widget: Notes { wrap: "yes" } },
    |                                                 ^^^^^ the trait `From<&str>` is not implemented for `bool`
    |
+   = help: `bool` implements trait `From<T>`:
+             From<subtle::Choice>
+             From<time::format_description::parse::format_item::HourBase>
+             From<time::format_description::parse::format_item::MonthCaseSensitive>
+             From<time::format_description::parse::format_item::OptionalFormat>
+             From<time::format_description::parse::format_item::PeriodCase>
+             From<time::format_description::parse::format_item::PeriodCaseSensitive>
+             From<time::format_description::parse::format_item::SignBehavior>
+             From<time::format_description::parse::format_item::WeekdayCaseSensitive>
+             From<time::format_description::parse::format_item::WeekdayOneIndexed>
+             From<time::format_description::parse::format_item::YearBase>
    = note: required for `&str` to implement `Into<bool>`

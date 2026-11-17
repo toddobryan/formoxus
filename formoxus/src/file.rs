@@ -526,8 +526,24 @@ impl FileUploadWriter for TemporaryFileWriter {
     }
 }
 
+/// The name of a multipart request's first part, the form's [`WireForm`] as
+/// JSON. Every other part is a file, named by its path's string
+/// (`answers.#3.file`).
+///
+/// `pub(crate)` while both ends are formoxus's own (`WIDGETS_PLAN.md` 11g,
+/// decision MM). It would need to be public for a dev to build a request by
+/// hand, say to test their own server function.
 pub(crate) const WIRE_PART: &str = "__formoxus_wire_form";
 
+/// A form with files on its way to the server: what a server function takes
+/// in place of a [`WireForm`] when the form has a
+/// [`FileUpload`] field. Made by
+/// [`Form::to_multipart`](crate::form::Form::to_multipart).
+///
+/// One request: first the wire part (the values, the errors, and each sent
+/// file's size), then one part per file the user picked. A server function's
+/// argument is one type on both ends, so this is also what the server reads
+/// the request into (11h).
 pub struct Multipart<T>(pub(crate) MultipartFormData<T>);
 
 impl<T> Debug for Multipart<T> {
@@ -542,13 +558,47 @@ impl<T> Debug for Multipart<T> {
     }
 }
 
+/// What [`Form::to_multipart`](crate::form::Form::to_multipart) put in, for
+/// the suite, which is outside the crate and so cannot see the fields.
+///
+/// Test-only (`__test-util`), not public: nothing but the suite needs them
+/// yet, and on 11h's server half they would have nothing to borrow until the
+/// request is read, so a public version would have to return `Option`s.
+/// Making them public later breaks nothing (`WIDGETS_PLAN.md` 11g, LL).
+#[cfg(any(test, feature = "__test-util"))]
+impl<T> Multipart<T> {
+    /// The wire part, sizes included, before it is serialized.
+    pub fn wire(&self) -> &WireForm<T> {
+        match &self.0 {
+            MultipartFormData::OnClient { wire_form, .. } => wire_form,
+        }
+    }
+
+    /// The file parts, in the order they are sent.
+    pub fn files(&self) -> impl Iterator<Item = (&NodePath, &FileData)> {
+        match &self.0 {
+            MultipartFormData::OnClient { files, .. } => {
+                files.iter().map(|(path, file)| (path, file))
+            }
+        }
+    }
+}
+
+/// What a [`Multipart`] holds, by which end it is on. Private, so 11h adds
+/// the server's variant without changing anything public. Both variants hold
+/// what the CLIENT sent; they are named for where the value lives.
 pub(crate) enum MultipartFormData<T> {
+    /// Built by `to_multipart`, not yet serialized: [`IntoRequest`] does
+    /// that, at the send.
     OnClient {
         wire_form: WireForm<T>,
         files: Vec<(NodePath, FileData)>,
     },
 }
 
+/// `T: 'static` because the returned future owns the `WireForm<T>`, whose
+/// `PhantomData<fn() -> T>` is `'static` only when `T` is. Every model is
+/// `Facet<'static>`, so it costs nothing.
 impl<T: 'static> IntoRequest for Multipart<T> {
     async fn into_request(self, req: ClientRequest) -> Result<ClientResponse, RequestError> {
         let Multipart(MultipartFormData::OnClient { wire_form, files }) = self;

@@ -96,6 +96,15 @@ use crate::{
 pub struct WireForm<T> {
     values: ValuesByPath,
     errors: FormErrors,
+    /// Each sent file's size, as the CLIENT reports it (`FileData::size()`),
+    /// keyed by the file's path; filled only by
+    /// [`Form::to_multipart`](crate::form::Form::to_multipart), for exactly the
+    /// files it sends (decision AA). A claim, not a fact: the server may use it
+    /// to refuse a file before storing any of it, but never to enforce
+    /// `max_size:`, which is checked against the bytes it counts.
+    ///
+    /// `skip_serializing_if` keeps a form without files byte-for-byte what it
+    /// was before files existed; `default` lets a wire without the key parse.
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     file_sizes: IndexMap<NodePath, u64>,
     #[serde(skip)]
@@ -162,6 +171,12 @@ impl<T> WireForm<T> {
     /// cross-field verdict has no path and lands in [`FormErrors::form`].
     pub fn is_clean(&self) -> bool {
         self.errors.form.is_empty() && self.errors.fields.is_empty()
+    }
+
+    /// For [`Form::to_multipart`](crate::form::Form::to_multipart). See the
+    /// field for what the numbers are.
+    pub(crate) fn set_file_sizes(&mut self, file_sizes: IndexMap<NodePath, u64>) {
+        self.file_sizes = file_sizes;
     }
 }
 

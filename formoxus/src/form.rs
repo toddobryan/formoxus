@@ -19,12 +19,13 @@ use crate::error::{FormAccessError, ValidationMessage};
 use crate::file::{FileMeta, Multipart, MultipartFormData};
 use crate::label_case::LabelCase;
 use crate::nodes::{
-    Edit, ErrorsStore, FilesByPath, FilesSignal, FormWide, NodeContext, no_such_path,
+    Drafts, Edit, ErrorsStore, FilesByPath, FilesSignal, FormWide, NodeContext, no_such_path,
 };
 use crate::path::{ModelPath, NodePath};
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
+use dioxus::html::FileData;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus_spec::FixedKey;
@@ -658,10 +659,32 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         )
     }
 
+    /// This form as one multipart request: [`to_wire`](Self::to_wire)'s
+    /// [`WireForm`] first, then each file the user picked. A form with a
+    /// [`FileUpload`](crate::file::FileUpload) sends this in place of
+    /// `to_wire()`: `form.absorb(submit(form.to_multipart()).await?)`.
+    ///
+    /// Only files the form still has are sent. The file table keeps a file
+    /// picked inside a list item since removed, or under a variant since
+    /// switched away from, so this walks the form's own paths and looks each
+    /// up, rather than walking the table. That also puts the files in the
+    /// form's order, so the same form sends the same request whatever the
+    /// user picked first. A kept file (`Existing`) is not sent: the wire part
+    /// carries its name, which is all there is.
     pub fn to_multipart(&self) -> Multipart<T> {
         let state = self.state_signal.read();
-        let wire_form = self.to_wire();
-        for path in state.paths(Drafts::Exclude) {}
+        let mut wire_form = self.to_wire();
+        let form_files = self.contents.files.peek();
+        let mut files: Vec<(NodePath, FileData)> = Vec::new();
+        let mut file_sizes: IndexMap<NodePath, u64> = IndexMap::default();
+        for path in state.paths(Drafts::Exclude) {
+            let maybe_file = form_files.get(&path);
+            if let Some(f) = maybe_file {
+                files.push((path.clone(), f.clone()));
+                file_sizes.insert(path, f.size());
+            }
+        }
+        wire_form.set_file_sizes(file_sizes);
 
         Multipart(MultipartFormData::OnClient { wire_form, files })
     }

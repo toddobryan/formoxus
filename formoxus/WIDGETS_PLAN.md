@@ -2102,7 +2102,7 @@ several?
     would need the file. The name pairs with `pick_file`; `chosen_file` would match
     `FileUpload::Chosen` instead.
 
-  - [ ] **11g. `Form::to_multipart()`, the client half.** What a dev's submit
+  - [x] **11g. `Form::to_multipart()`, the client half.** What a dev's submit
     sends when the form has a file: `form.absorb(submit(form.to_multipart()).await?)`,
     the same shape as `to_wire()`. One multipart request, its first part the wire JSON
     and then one part per picked file, built by formoxus in that order (box 10's
@@ -2269,6 +2269,12 @@ several?
     only make sense on the client (`OnClient`); on an `OnServer` value `files()` is
     empty and `wire()` would need a different answer, so 11h may prefer them to be
     `Option`s.
+    **As built (2026-11-17, Todd, on Claude's second recommendation): test-only,
+    not public.** Behind `#[cfg(any(test, feature = "__test-util"))]`, like
+    `NodePath == &str`. The "a dev could log what is sent" argument was too thin
+    for new public API before publishing, and the `Option` question above goes
+    away when nothing but the suite calls them. Making them public later breaks
+    nothing.
 
     **MM (decided 2026-11-16, Todd: `pub(crate)`, as recommended). `WIRE_PART`'s visibility.** Box 11's first draft said
     `pub const`. Claude's recommendation: `pub(crate)` for now, because both halves
@@ -2287,50 +2293,239 @@ several?
     then. The stated size is the client's claim, so the counted size stays the one
     that's enforced: a file that turns out larger than stated fails `max_size:` as
     usual (or, under a memory handler, spills to disk).
+
+    **Done 2026-11-17.** Todd: `Multipart<T>`, `MultipartFormData::OnClient`,
+    `WIRE_PART`, the `IntoRequest` impl and both `send_parts`, `WireForm.file_sizes`
+    and its `pub(crate)` setter, and `to_multipart` (`src/form.rs`), which walks
+    `paths(Drafts::Exclude)` and looks each up in the table with `peek()`. Claude:
+    the test-only `wire()`/`files()` (LL as built, above), the docs, and
+    `tests/suite/multipart.rs`: 8 tests, each through a Pack button: an empty form
+    sends only the wire part, with no `file_sizes` key at all; a kept file isn't
+    sent; a picked file goes under its path with its size; two fields, and two list
+    items, go in the form's order whatever order they were picked in; a file under
+    a removed item, or under a variant switched away from, stays out (with a
+    control test showing it is sent while the variant is chosen). Checked by
+    mutation: iterating the table instead of the paths fails the four order and
+    stale-file tests. `just ci` 1496, `check-web` and `clippy-web` clean.
+    **Found on the way:** making `dioxus-html` a direct dependency put `subtle` and
+    `time` into the crates rustc searches, so the `form_widget_prop_wrong_type`
+    golden gained a `help:` listing their `From<…> for bool` impls. The error and
+    its span are unchanged, and the toolchain (1.99.1) and `rust-src` were checked
+    first, so it was re-blessed. And native `cargo check` passes an import of
+    `dioxus_html::…` that wasm refuses, because `dioxus-html` is a native-only
+    dependency: in `formoxus/src`, outside the native `send_parts`, name it
+    `dioxus::html::…`.
   - [ ] **11h. `Multipart<T>` on the server, and `Submission::accept_multipart`.** On the
     server, `Multipart<T>` implements axum's `FromRequest` by wrapping axum's
     `Multipart` and reading nothing yet. Then `Submission::accept_multipart(spec,
     multipart, &handler, existing).await` replaces box 11's earlier
     `WireForm::from_multipart`. The reason: a stream can only be read once, and the
     limits for a file part come from the spec, so the spec has to be in hand before
-    the files are read. In order:
-    0. **Decision BB's check** (moved here from 11e.4), before reading any part:
-       walk `T::SHAPE` for every `FileUpload`'s `S`, keeping a set of shapes
-       already visited so a recursive model ends, and panic on the first `S` that
-       isn't `<H::Stored as Facet>::SHAPE`, naming both, with nothing stored. See
-       "BB's HOW" in 11e.4. About 25 lines, beside `is_file_upload`; Claude writes
-       its tests first: a match, a mismatch at the top level, one inside an
-       unchosen variant and one inside a list item, a model with no upload, and a
-       recursive model that ends.
-    1. The first part has to be the wire JSON. If it isn't, the request didn't come
-       from `to_multipart`, and it is a form-level error with nothing stored.
-    2. An empty form from the spec; `distribute_values` with the wire's values, which
-       builds the structure, so every file leaf's path now exists.
-    3. Each further part: find the file leaf at its path. A part at no leaf's path,
-       or at a leaf whose name in the wire is empty, is drained and ignored, since
-       only a hand-made request sends one. Cut the file name to its final segment ("The user's
-       file name" above). Refuse a size stated in the wire part (decision AA) that
-       is over `max_size:`, and check `accept`, both before calling `new_file`,
-       from the file name and the content type, so a wrong type is never stored.
-       Stream it in chunks into the writer (`write_chunk`), counting. Past
-       `max_size:`, call `abort`, drain the rest of the part and the request (box 10 (d)), and record the
-       error. A `413` from `chunk()` (the body limit, trap 12) aborts every open writer and
-       becomes a form-level error naming the limit. **Trap, not yet measured:**
-       whether the client still gets an answer after a 413. Box 13 tests it in a
-       browser.
-    4. `distribute_files` with each finished file's `FileMeta`, with its output
-       type-erased (11e.4), and decision V's check of each `Existing` against `existing`.
-    5. `validate`, exactly as `accept` does. On `Err`, the handler's `delete` takes every output that
-       finished storing, then return the errors. On `Ok`, the `Submission` holds a
-       model whose files are `Received`.
+    the files are read.
+
+    **Which file each change goes in** (expanded 2026-11-17). Six files change,
+    most of the work in `file.rs` and `submission.rs`, and it splits into pieces
+    that can each be built and tested alone:
+
+    1. `formoxus/src/file.rs`: the server half of the type (a), the file-name
+       cleaning (b) and the streaming of one part (c).
+    2. `formoxus/src/nodes/file_node.rs`: decision BB's walk (step 0 below), beside
+       `is_file_upload`, with its inline tests in that file's `mod tests`.
+    3. `formoxus/src/form/spec.rs`: one `pub(crate)` getter, so `submission.rs` can
+       read a field's `max_size` and `accept` (step 2).
+    4. `formoxus/src/wire.rs`: a `pub(crate)` getter for `file_sizes`, beside 11g's
+       setter (step 2).
+    5. `formoxus/src/submission.rs`: `accept_multipart` itself, the driver that runs
+       steps 0-5 in order and calls everything else.
+    6. `formoxus/tests/suite/multipart.rs` (11i): the end-to-end tests, in the
+       module 11g started, from a request built in memory.
+
+    `formoxus/src/form/state.rs` needs nothing new: `empty_form`,
+    `distribute_values`, `distribute_files`, `paths`, `validate` and
+    `collect_errors` already exist and are `pub` or `pub(crate)`.
+
+    **Checked 2026-11-17, before writing this out:**
+
+    - **`FromRequest` and axum's `Multipart` are there on every target,** with no
+      formoxus feature: dioxus-fullstack 0.7.10 depends on axum with `multipart`
+      always on (its `Cargo.toml`, `[dependencies.axum]`), and re-exports
+      `axum::extract` as `dioxus_fullstack::extract`. Only dioxus's OWN impl for
+      its `MultipartFormData` is behind its `server` feature (`payloads/
+      multipart.rs`, line 109), because its struct has a field only there. Ours has
+      no such field, so ours needs no `cfg`.
+    - **`FormState` is not `Send`, and neither is `Submission`,** because a node is
+      `Box<dyn Node>` and `Node: Debug` only. `FormSpec` IS `Send`. (A throwaway
+      `is_send::<…>()` probe in the suite.) **This is fine for a server function:**
+      dioxus-server runs each one with `LocalPoolHandle::spawn_pinned`
+      (`dioxus-server-0.7.10/src/serverfn.rs`, line 76), which takes a future that
+      is not `Send`. apcsp already relies on it: `perform_password_change` (apcsp
+      `crates/api/src/auth.rs`, line 181 on) holds a `Submission` across
+      `matches_password(…).await`. So `accept_multipart`'s future may hold a
+      `FormState` across an `.await`, and does not promise `Send`. 11c's rule (the
+      handler's futures are `Send`) stays as it is: it costs nothing, and a handler
+      may be used from a plain axum route someday.
+    - **A part's path finds its limits without a new `Node` method.**
+      `NodePath::spec_key()` (`src/path.rs`, line 284) turns `drafts.#3` into
+      `drafts[]`, the key `FormSpec` stores a field's `max_size` and `accept`
+      under, and `spec_key_shape(T::SHAPE, key)` (`src/build.rs`, line 75) gives
+      the shape at that key, which `is_file_upload` can then test.
+
+    **(a) The type's server half, in `src/file.rs`.**
+
+    1. Add `OnServer(dioxus_fullstack::extract::Multipart)` to
+       `MultipartFormData`. Import axum's `Multipart` under another name
+       (`use dioxus_fullstack::extract::Multipart as AxumMultipart;`), since ours
+       has the same name.
+    2. `impl<S: Send + Sync + 'static, T> FromRequest<S> for Multipart<T>`, with
+       `type Rejection = Response` (`dioxus_fullstack::response::Response`). Copy
+       dioxus's own impl (`payloads/multipart.rs`, line 109), minus its `cfg`s:
+       `AxumMultipart::from_request(req, state).await.map_err(|e|
+       e.into_response())`, then wrap it in `OnServer`. Nothing is read yet, so a
+       request whose content type has no boundary is refused here, by axum, with
+       axum's own 400.
+    3. The three `match`es on `MultipartFormData` gain an arm each. In `Debug`,
+       print `Multipart(OnServer)` without its contents. In the test-only `files()`,
+       return nothing. In the test-only `wire()`, panic ("a `Multipart` read on the
+       server has no wire until `accept_multipart` reads it"), since only a test
+       could call it there. In `into_request`, the `let Multipart(OnClient { … }) =
+       self;` becomes a `match`, because the pattern is no longer irrefutable;
+       sending an `OnServer` value from a client is a bug, so return
+       `RequestError::Builder` saying so.
+
+    **(b) Cleaning the user's file name, in `src/file.rs`.** `pub(crate) fn
+    clean_file_name(raw: &str) -> Option<String>`: split on both `/` and `\`, keep
+    the last piece, drop control characters, and return `None` for an empty
+    result, `.` or `..`. The rule is "The user's file name" above, decided with
+    Todd. A pure function, so its tests go inline in `file.rs`'s `mod tests`, as
+    CLAUDE.md says (Claude, if Todd wants).
+
+    **(c) Streaming one part, in `src/file.rs`.** A private `async fn
+    store_part<H: FileUploadHandler>(field: &mut Field<'_>, handler: &H, path:
+    &NodePath, name: &str, content_type: Option<&str>, max_size: Option<u64>) ->
+    PartOutcome<H::Stored>`, where `Field` is
+    `dioxus_fullstack::extract::multipart::Field` and `PartOutcome` is a small
+    private enum: `Stored { stored, size }`, `TooLarge`, `BodyLimit`, or `Failed
+    (io::Error)`. It calls `new_file`, loops on `field.chunk().await`, counts, and
+    `write_chunk`s each chunk. Past `max_size` it calls `abort`, drains the rest of
+    the part (box 10 (d): a server that answers before draining loses its reply),
+    and returns `TooLarge`. A chunk error whose `status()` is 413 is the body
+    limit (trap 12), so `abort` and return `BodyLimit`. At the end it calls
+    `finish`. It lives in `file.rs`, beside the handler traits it drives, rather
+    than in `submission.rs`, so that the driver reads as the five steps below and
+    nothing else.
+
+    **(d) The driver, `Submission::accept_multipart`, in `src/submission.rs`.**
+
+        pub async fn accept_multipart<H: FileUploadHandler>(
+            spec: FormSpec<T>,
+            multipart: Multipart<T>,
+            handler: &H,
+            existing: Option<&T>,
+        ) -> Result<Self, FormErrors>
+
+    `H::Stored` is NOT tied to `T` in the signature: Rust cannot say "every
+    `FileUpload<S>` inside `T` has `S = H::Stored`", which is why step 0 checks it
+    at run time. Its doc says to use it under `#[middleware(DefaultBodyLimit::max(…))]`
+    when files can pass 2 MB (trap 12). In order:
+
+    0. **Decision BB's check,** before reading any part. In
+       `src/nodes/file_node.rs`, beside `is_file_upload`: `pub(crate) fn
+       stored_shapes(model: &'static Shape) -> Vec<&'static Shape>`, every
+       `FileUpload`'s `S` in `model`, walking struct fields, every variant of an
+       enum (not only a chosen one), `Option` payloads, and list and set items,
+       keeping a set of shapes already visited (by `id`) so a recursive model ends.
+       `S` is the shape of the `Received` variant's `stored` field. The driver
+       panics on the first that isn't `<H::Stored as Facet>::SHAPE`, naming both,
+       with nothing stored. See "BB's HOW" in 11e.4. About 25 lines; Claude writes
+       its tests first, inline in `file_node.rs`: a match, a mismatch at the top
+       level, one inside an unchosen variant and one inside a list item, a model
+       with no upload, and a recursive model that ends.
+    1. **The wire part.** Take the `AxumMultipart` out of `OnServer` (an
+       `OnClient` here is a bug: panic). `next_field().await` must give a field
+       named `WIRE_PART`; read it with `field.text().await` and
+       `serde_json::from_str::<WireForm<T>>`. If the first field is missing, has
+       another name, or doesn't parse, the request didn't come from
+       `to_multipart`: return a form-level error (`FormErrors { form:
+       vec![…], fields: … }`, in `src/form.rs`, line 53) with nothing stored.
+       Step 2 reads the stated sizes through `wire.rs`'s new getter.
+    2. **Each further part** (`next_field().await` until `None`). This needs only
+       the spec and the wire's values, not a `FormState`, which is why it comes
+       before the form is built. The part's name is a path (`NodePath::new`). Find
+       the file leaf at its path: its spec key must be a file field
+       (`spec_key_shape` + `is_file_upload`, see "Checked" above), and its name in
+       the wire must be non-empty. If not, drain the part and ignore it, since
+       only a hand-made request sends one. Clean the file name with (b); a `None`
+       there is a form-level error. Read `max_size` and `accept` from
+       `spec.field_spec(&path.spec_key())`, a new `pub(crate) fn field_spec(&self,
+       key: &str) -> Option<&FieldSpec>` in `src/form/spec.rs` (`fields` is
+       `pub(super)`, so `submission.rs` can't reach it). Refuse a size stated in
+       the wire part (decision AA) that is over `max_size`, and check `accept`
+       with `FileType::accepts(&accept, &name, content_type)`, both BEFORE calling
+       `new_file`, so a file of the wrong type or a stated size too large is
+       never stored. Otherwise call (c).
+       **Every part ends as a `FileMeta` at its path,** collected into a
+       `FilesByPath` (`src/nodes.rs`, line 388) for step 4: a stored part as
+       `FileMeta { content_type, size, stored: Some(StoredFile::new(stored)) }`,
+       with the size (c) COUNTED, never the stated one; a refused part (drained)
+       as the same with `stored: None` and the size stated or counted so far.
+       Nothing records an error by hand: `FileNode::validate` already checks
+       `max_size` and `accept` against the `meta` it is given, so step 5 reports
+       the refused part with the same message the browser showed. Keep each
+       stored file's `H::Stored`, cloned, in a `Vec` for step 5's `delete`. On
+       `BodyLimit`, call `delete` on every file already stored and return a
+       form-level error; see open question OO on its wording. **Trap, not yet
+       measured:** whether the client still gets an answer after a 413. Box 13
+       tests it in a browser.
+    3. **Decision V's check.** A file leaf in the wire's values with a non-empty
+       name and no part in step 2's table is an `Existing` claim. Check each one
+       against `existing`: build `form_for(existing, spec.clone())` and read the
+       name at the same path from its `collect_values()`. If `existing` is `None`,
+       the path is not there, its name is empty, or the path is inside a list or
+       set item (any segment starting with `ITEM_SIGIL`, `src/path.rs`; V's trap),
+       set the value to `""` in a copy of the wire's values, so it counts as
+       missing: a required error, or `None` for an `Option<FileUpload>`. See open
+       question NN for when the names differ.
+    4. **The form.** `empty_form(spec)`, then `distribute_values` with step 3's
+       values, which builds the structure so every file leaf's path exists, then
+       `distribute_files` with step 2's table.
+    5. **`validate`, as `accept` does.** On `None`, call `handler.delete` on every
+       stored file, ignoring a failed delete (see open question PP), then return
+       `collect_errors()`. On `Some(model)`, the `Submission` holds a model whose
+       new files are `Received` and whose kept ones are `Existing`.
 
     The dev's server function is then `async fn submit(form: Multipart<Essay>) ->
     Result<WireForm<Essay>, ServerFnError>`, under
     `#[middleware(DefaultBodyLimit::max(…))]` when its files exceed 2 MB, and the
     client calls `form.absorb(submit(form.to_multipart()).await?)`.
+
+    **Open questions, Claude's recommendation first, Todd to answer:**
+
+    - **NN. An `Existing` whose name differs from `existing`'s.** The client says
+      "keep `old.pdf`", but the record holds `report.pdf`. Recommended: use the
+      record's name, silently. The claim only means "keep what is there"; the name
+      is the server's fact, and a client can't learn anything or do harm by
+      sending a wrong one. The alternative, counting it as missing, would punish a
+      user whose tab was open while someone else replaced the file.
+    - **OO. The body-limit error's wording.** The plan said it names the limit,
+      but formoxus doesn't know it: the dev sets it with `DefaultBodyLimit`, and
+      axum's error doesn't say it. Recommended: "These files are too large to send
+      together." with no number, as a form-level error. The alternative, a
+      `with_body_limit(bytes)` on `FormSpec` purely for the message, could disagree
+      with the real middleware.
+    - **PP. Failures after storing.** (1) A `delete` that fails in step 2 or 5:
+      recommended, ignore it and return the form's errors, since the user's
+      errors are what the reply is for; with `TemporaryFileUploadHandler` a
+      failed delete is a temp file the OS cleans up. (2) A dev who calls
+      `reject_field` after `accept_multipart` succeeded drops a model holding
+      `Received` files. With the temporary handler those delete themselves on
+      drop (`TemporaryUploadedFile`, "Deleted when the last clone is dropped");
+      with a dev's own handler (S3) they stay. Recommended: say so in
+      `accept_multipart`'s and `reject_field`'s docs, and nothing more for now.
   - [ ] **11i. Green before box 12.** `just ci` passes with no `form!` changes, an upload
     field reachable only through a hand-built spec. Box 13 tests `accept_multipart`
-    without a server or a browser. Checked 2026-11-12 in axum 0.8.9: the extractor
+    without a server or a browser, in `formoxus/tests/suite/multipart.rs` beside
+    11g's tests, with `futures` added under `[dev-dependencies]` in
+    `formoxus/Cargo.toml`. Checked 2026-11-12 in axum 0.8.9: the extractor
     (`extract/multipart.rs:68`) needs only a request whose content type has a
     boundary, wraps the body in `multer` and uses no tokio. So a test builds an
     `http::Request` with a multipart body in memory, extracts `Multipart<T>` from it,

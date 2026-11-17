@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-16 end+**: `file`, 11f DONE through f.11, suite all green; next 11g `to_multipart` (client half)
+- [**START HERE: next session**](next_session.md) — **2026-11-17 morning**: `file`, 11g DONE (ci 1496); 11h expanded file by file, NN-PP await Todd
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -69,6 +69,7 @@
 
 ## Gotchas
 - [Multipart upload behaviour](multipart_upload_behaviour.md) — measured: body limit fails mid-stream (413), answering before draining loses the reply, buffering = file size in RSS
+- [Server fn futures need not be Send](server_fn_futures_need_not_be_send.md) — dioxus-server runs them via `spawn_pinned`; `FormState`/`Submission` are !Send and that is fine
 - [Mutation restore keeps the mutant](mutation_restore_mtime.md) — restoring by moving a backup back leaves an old mtime: cargo/dx keep the MUTATED build; `os.utime` on restore
 - [`optional` is payload-only](optional_flag_is_payload_only.md) — the walk's `optional` = "this node IS an Option's payload"; never pass a container's down to rebuilt children; test with `bool`, not `String`
 - [Toolchain pin & goldens](toolchain_pin_and_goldens.md) — 1.99.1 + rust-src pinned 2026-10-21; a golden flips on another stable OR missing rust-src; check both before re-blessing

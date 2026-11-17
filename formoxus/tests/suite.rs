@@ -67,6 +67,8 @@ mod label_case;
 mod live_checks;
 #[path = "suite/live_validation.rs"]
 mod live_validation;
+#[path = "suite/multipart.rs"]
+mod multipart;
 #[path = "suite/newtypes.rs"]
 mod newtypes;
 #[path = "suite/optional_containers.rs"]
