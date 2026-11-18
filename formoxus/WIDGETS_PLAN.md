@@ -2840,6 +2840,9 @@ several?
 
 - [ ] **14.** (Todd) Merge `file`. apcsp builds its upload form.
 
+  **Merged 2026-11-18** (fast-forward at `d2bc866`, branch deleted; ci 1575, e2e 85 of
+  85 first). Left: apcsp's upload form, from box 13's sketch.
+
 ## Not in this plan
 
 - **Several files in one field** (`Vec<FileUpload>`), unless decision L says otherwise.
