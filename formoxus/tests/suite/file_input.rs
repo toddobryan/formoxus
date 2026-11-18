@@ -19,6 +19,8 @@ use dioxus::prelude::*;
 use dioxus_html::SerializedFileData;
 use facet::Facet;
 use formoxus::file::{FileType, FileUpload};
+use formoxus::nodes::ValuesByPath;
+use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 
@@ -78,7 +80,9 @@ fn describe_notes(model: &Notes) -> String {
 }
 
 /// The form, then a Check button that runs `validate` and shows what it
-/// returned in `#checked`, a Reset button, and the wire in `#wire`.
+/// returned in `#checked`, a Reset button, Save and Reject buttons that
+/// `absorb` a server's answer (an error-free reply with no values, and a
+/// form-level error), and the wire in `#wire`.
 ///
 /// The buttons' labels are formatted so they cross as mutations, which is what
 /// `Harness::labelled` reads.
@@ -89,7 +93,7 @@ where
     // A copy, for the two button handlers to own.
     let form = *form;
     let mut checked = use_signal(String::new);
-    let (check, reset) = ("Check", "Reset");
+    let (check, reset, save, reject) = ("Check", "Reset", "Save", "Reject");
     let wire = form
         .to_wire()
         .values()
@@ -110,6 +114,25 @@ where
             "Check"
         }
         button { aria_label: "{reset}", onclick: move |_| form.reset(), "Reset" }
+        button {
+            aria_label: "{save}",
+            onclick: move |_| {
+                form.absorb(WireForm::new(ValuesByPath::new(), FormErrors::default()))
+                    .expect("an empty reply names no paths");
+            },
+            "Save"
+        }
+        button {
+            aria_label: "{reject}",
+            onclick: move |_| {
+                form.absorb(WireForm::from_errors(FormErrors {
+                    form: vec![ValidationMessage("Try again later.".to_string())],
+                    fields: ErrorsByPath::new(),
+                }))
+                .expect("a form-level error names no paths");
+            },
+            "Reject"
+        }
         pre { id: "checked", "{checked}" }
         pre { id: "wire", "{wire}" }
     }
@@ -172,6 +195,14 @@ fn check(app: &mut Harness) {
 
 fn reset(app: &mut Harness) {
     app.click(app.labelled("click", "Reset"));
+}
+
+fn save(app: &mut Harness) {
+    app.click(app.labelled("click", "Save"));
+}
+
+fn reject(app: &mut Harness) {
+    app.click(app.labelled("click", "Reject"));
 }
 
 // ── The forms ───────────────────────────────────────────────────────────
@@ -599,4 +630,120 @@ fn reset_makes_the_input_again() {
     reset(&mut app);
     expect_that!(app.times_registered("change"), eq(before + 1));
     let _ = the_input(&app);
+}
+
+// ── absorb (#25) ────────────────────────────────────────────────────────
+//
+// An error-free reply is a save: the file picked is now the server's, so it
+// becomes the form's kept file at once, not only after a reset. The table
+// empties and the input is made again, as on a reset, or the view would show
+// it as a fresh pick and a second submit would send it again.
+
+/// An edit form whose save comes back with the server's name for the file,
+/// as a reply from `WireForm::from_model` of the saved record would (NN: the
+/// record's name wins). `IfExists::Version` is how a file gets one.
+#[component]
+fn EditEssayRenamed() -> Element {
+    let form = use_form(|| {
+        form_for(
+            &Essay {
+                essay: existing("old.pdf"),
+            },
+            limited().with_live_validation(false),
+        )
+    });
+    let label = "Save as new (1).pdf";
+    rsx! {
+        {probe(&form, describe_essay)}
+        button {
+            aria_label: "{label}",
+            onclick: move |_| {
+                let values: ValuesByPath =
+                    [(NodePath::new("essay"), "new (1).pdf".to_string())].into_iter().collect();
+                form.absorb(WireForm::new(values, FormErrors::default()))
+                    .expect("essay is a field of this form");
+            },
+            "Save as new (1).pdf"
+        }
+    }
+}
+
+#[gtest]
+fn a_successful_absorb_makes_the_pick_the_current_file() {
+    let mut app = Harness::mount(EditEssay);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    save(&mut app);
+    expect_that!(output_text(&app.html()), eq("Current file: new.pdf"));
+}
+
+/// A pick still in the table would make this `Chosen new.pdf 1000`, and be
+/// sent again by the next submit, since `to_multipart` sends what the table
+/// holds.
+#[gtest]
+fn a_successful_absorb_empties_the_table() {
+    let mut app = Harness::mount(EditEssay);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    save(&mut app);
+    check(&mut app);
+    expect_that!(checked(&app.html()), eq("valid: Existing new.pdf"));
+}
+
+/// As `reset_makes_the_input_again`: only a new `<input>` forgets the
+/// browser's own selection.
+#[gtest]
+fn a_successful_absorb_makes_the_input_again() {
+    let mut app = Harness::mount(EditEssay);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    let before = app.times_registered("change");
+    save(&mut app);
+    expect_that!(app.times_registered("change"), eq(before + 1));
+    let _ = the_input(&app);
+}
+
+/// Reset goes back to the saved file, not to `old.pdf`, which the server may
+/// no longer have.
+#[gtest]
+fn reset_after_a_successful_absorb_keeps_the_saved_file() {
+    let mut app = Harness::mount(EditEssay);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    save(&mut app);
+    reset(&mut app);
+    expect_that!(output_text(&app.html()), eq("Current file: new.pdf"));
+    check(&mut app);
+    expect_that!(checked(&app.html()), eq("valid: Existing new.pdf"));
+}
+
+/// A form built empty: after the first save, reset shows the saved file, not
+/// an empty input.
+#[gtest]
+fn reset_after_a_successful_absorb_on_a_new_form_keeps_the_saved_file() {
+    let mut app = Harness::mount(NewEssayNotLive);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    save(&mut app);
+    reset(&mut app);
+    expect_that!(output_text(&app.html()), eq("Current file: new.pdf"));
+}
+
+/// A rejected save keeps the pick, so a second submit sends the file again;
+/// and reset still goes back to the file from before.
+#[gtest]
+fn a_rejected_absorb_keeps_the_pick() {
+    let mut app = Harness::mount(EditEssay);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    reject(&mut app);
+    check(&mut app);
+    expect_that!(checked(&app.html()), eq("valid: Chosen new.pdf 1000"));
+    reset(&mut app);
+    expect_that!(output_text(&app.html()), eq("Current file: old.pdf"));
+}
+
+/// The server's name is the one shown, and the one reset returns to.
+#[gtest]
+fn a_successful_absorb_shows_the_servers_name_for_the_file() {
+    let mut app = Harness::mount(EditEssayRenamed);
+    app.pick_files(the_input(&app), &[pdf("new.pdf", 1_000)]);
+    app.click(app.labelled("click", "Save as new (1).pdf"));
+    expect_that!(output_text(&app.html()), eq("Current file: new (1).pdf"));
+    reset(&mut app);
+    expect_that!(output_text(&app.html()), eq("Current file: new (1).pdf"));
 }

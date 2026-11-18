@@ -12,7 +12,9 @@ use facet::Facet;
 use formoxus::path::NodePath;
 use formoxus::{
     ErrorsByPath, Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form,
-    form, form_for, nodes::ValuesByPath, path, use_form, using_fns,
+    form, form_for,
+    nodes::{Edit, ItemValue, ValuesByPath},
+    path, use_form, using_fns,
 };
 use googletest::prelude::*;
 
@@ -292,6 +294,160 @@ fn absorbing_errors_alone_leaves_the_values_alone() {
     let html = render(App);
     expect_that!(html, contains_substring(r#"value="Ada""#));
     expect_that!(html, contains_substring("Already registered."));
+}
+
+// ── absorb moves the reset snapshot (#25) ────────────────────────────────
+//
+// A reply with no errors is a save, and reset goes back to what was saved
+// from then on. A reply with errors, field-level or form-level, is a rejected
+// save, and reset still goes back to the version from before it. The file
+// half is in `file_input.rs` and the draft half in `sets.rs`.
+
+/// An error-free reply, the way a server answers a save it accepted without
+/// changing anything: no values, since the client still holds them.
+fn saved<T: Facet<'static>>() -> WireForm<T> {
+    WireForm::new(ValuesByPath::new(), FormErrors::default())
+}
+
+/// What was typed before the save is what reset returns to, not the seeded
+/// value from before it, and not what was typed after.
+#[gtest]
+fn reset_after_a_successful_absorb_returns_to_what_was_saved() {
+    #[component]
+    fn App() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.write(&path!(Contact.name), "Grace")
+            .expect("name is a field of this form");
+        form.absorb(saved()).expect("an empty reply names no paths");
+        form.write(&path!(Contact.name), "Hopper")
+            .expect("name is a field of this form");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="Grace""#));
+    expect_that!(html, not(contains_substring("Hopper")));
+    expect_that!(html, not(contains_substring(r#"value="Ada""#)));
+}
+
+/// A field error is a rejected save: reset goes back to the seeded model,
+/// not to the values the server refused.
+#[gtest]
+fn reset_after_a_rejected_absorb_returns_to_the_start() {
+    #[component]
+    fn App() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.write(&path!(Contact.name), "Grace")
+            .expect("name is a field of this form");
+        form.absorb(WireForm::from_errors(errors_at(
+            "email",
+            "Already registered.",
+        )))
+        .expect("email is a field of this form");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="Ada""#));
+    expect_that!(html, not(contains_substring("Grace")));
+}
+
+/// A form-level error counts as much as a field's: "These files are too
+/// large to send together." is one, and nothing was saved.
+#[gtest]
+fn a_form_level_error_is_a_rejected_save_too() {
+    #[component]
+    fn App() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.write(&path!(Contact.name), "Grace")
+            .expect("name is a field of this form");
+        form.absorb(WireForm::from_errors(FormErrors {
+            form: vec![ValidationMessage("Try again later.".to_string())],
+            fields: ErrorsByPath::new(),
+        }))
+        .expect("a form-level error names no paths");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="Ada""#));
+    expect_that!(html, not(contains_substring("Grace")));
+}
+
+/// A value the server changed is part of what was saved: reset returns to
+/// the server's version, not to what the user typed.
+#[gtest]
+fn reset_after_a_successful_absorb_keeps_the_servers_value() {
+    #[component]
+    fn App() -> Element {
+        let contact = seeded();
+        let form = use_form(move || form_for(&contact, form! { Contact {} }));
+        form.write(&path!(Contact.email), "  GRACE@Example.COM ")
+            .expect("email is a field of this form");
+        let normalized: ValuesByPath = [(NodePath::new("email"), "grace@example.com".to_string())]
+            .into_iter()
+            .collect();
+        form.absorb(WireForm::new(normalized, FormErrors::default()))
+            .expect("email is a field of this form");
+        form.write(&path!(Contact.email), "typed after")
+            .expect("email is a field of this form");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="grace@example.com""#));
+    expect_that!(html, not(contains_substring("GRACE@Example.COM")));
+    expect_that!(html, not(contains_substring("typed after")));
+    expect_that!(html, not(contains_substring("ada@example.com")));
+}
+
+/// After a successful save, a reset leaves no errors behind, even ones the
+/// form was built with.
+#[gtest]
+fn reset_after_a_successful_absorb_shows_no_errors() {
+    #[component]
+    fn App() -> Element {
+        let mut state = form_for(&seeded(), form! { Contact {} });
+        state.field_errors = errors_at("email", "Already registered.").fields;
+        let form = use_form(move || state);
+        form.absorb(saved()).expect("an empty reply names no paths");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    expect_that!(render(App), not(contains_substring("Already registered.")));
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Answers {
+    answers: Vec<String>,
+}
+
+/// Structure is saved too: an item added before the save is still there
+/// after a reset, which only a snapshot of the whole state can give.
+#[gtest]
+fn an_item_added_before_a_successful_absorb_survives_reset() {
+    #[component]
+    fn App() -> Element {
+        let answers = Answers {
+            answers: vec!["alpha".to_string()],
+        };
+        let form = use_form(move || form_for(&answers, FormSpec::default()));
+        form.edit(&Edit::AddItem {
+            path: NodePath::new("answers"),
+            before: None,
+            value: Some(ItemValue::new("gamma".to_string())),
+        })
+        .expect("gamma is a new answer");
+        form.absorb(saved()).expect("an empty reply names no paths");
+        form.reset();
+        form.render(using_fns! {})
+    }
+    let html = render(App);
+    expect_that!(html, contains_substring(r#"value="alpha""#));
+    expect_that!(html, contains_substring(r#"value="gamma""#));
 }
 
 // ── The whole round trip ─────────────────────────────────────────────────

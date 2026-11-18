@@ -1750,11 +1750,19 @@ fn EmptySizesForm() -> Element {
 fn ResettableTaggedForm() -> Element {
     let form = use_form(|| empty_form(FormSpec::<Tagged>::default()));
     // Formatted, so the label crosses as a mutation `Harness::labelled` sees.
-    let label = "Reset";
+    let (label, save) = ("Reset", "Save");
     with_wire(
         &form,
         rsx! {
             button { aria_label: "{label}", onclick: move |_| form.reset(), "Reset" }
+            button {
+                aria_label: "{save}",
+                onclick: move |_| {
+                    form.absorb(WireForm::new(ValuesByPath::new(), FormErrors::default()))
+                        .expect("an empty reply names no paths");
+                },
+                "Save"
+            }
         },
     )
 }
@@ -1885,6 +1893,18 @@ fn a_duplicate_draft_is_refused_and_keeps_its_text() {
 fn reset_clears_the_draft() {
     let mut app = super::Harness::mount(ResettableTaggedForm);
     app.fire("input", draft_input(&app), "we");
+    app.click(app.labelled("click", "Reset"));
+    expect_that!(app.html(), contains_substring(draft_value("tags.#0", "")));
+}
+
+/// A draft is never sent, so it was never saved: a reset after a successful
+/// `absorb` (#25) still empties it, though the snapshot moved.
+#[gtest]
+fn reset_after_a_successful_absorb_clears_the_draft() {
+    let mut app = super::Harness::mount(ResettableTaggedForm);
+    app.fire("input", draft_input(&app), "we");
+    app.click(app.labelled("click", "Save"));
+    expect_that!(app.html(), contains_substring(draft_value("tags.#0", "we")));
     app.click(app.labelled("click", "Reset"));
     expect_that!(app.html(), contains_substring(draft_value("tags.#0", "")));
 }

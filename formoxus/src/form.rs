@@ -56,6 +56,12 @@ pub struct FormErrors {
 }
 
 impl FormErrors {
+    /// No error at all, form-level or a field's: how [`Form::absorb`] tells a
+    /// save the server accepted from one it refused.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.form.is_empty() && self.fields.is_empty()
+    }
+
     pub fn paths(&self) -> Vec<NodePath> {
         self.fields.keys().cloned().collect()
     }
@@ -317,7 +323,8 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// unequal and re-render every field on every render.
     on_field_event: Callback<FieldEvent>,
     /// What [`Self::reset`] goes back to: the state as [`use_form`] first built
-    /// it, before any edit.
+    /// it, before any edit, until a successful [`absorb`](Self::absorb) moves
+    /// it to what the server saved (#25).
     ///
     /// A whole `FormState`, not just its leaves, because a reset has to undo
     /// STRUCTURAL edits too — items added to a `Vec`, a variant chosen. Those
@@ -696,6 +703,24 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     /// sends errors only, since the client still holds what it submitted; a
     /// server that normalized something sends values back too.
     ///
+    /// **A reply with no errors is a save, and moves what [`reset`](Self::reset)
+    /// returns to.** From then on a reset goes back to the form as it stood
+    /// once the reply was applied: the values on screen, the server's where it
+    /// sent any, and the items and variants the user added or chose, with no
+    /// errors. A reply with any error, a field's or a form-level one, is a
+    /// save the server refused, and a reset still goes back to the version from
+    /// before it, not to the values it refused. A dev's code is the same
+    /// either way: `form.absorb(save(form.to_wire()).await?)`.
+    ///
+    /// **After a save, each picked file is the form's kept file at once**, not
+    /// only after a reset: the view says `Current file: …`, the browser's file
+    /// input is made again (as on a reset, the only way to clear it), and a
+    /// second submit sends no file, since the server already has it. The name
+    /// it shows is the one in the store, so a server that stores a file under
+    /// another name (`IfExists::Version`'s `essay (1).pdf`) should reply with
+    /// [`WireForm::from_model`] of the saved record, whose name then wins. A
+    /// reply with no values keeps the name the user's file had.
+    ///
     /// Values are written per path rather than by replacing the map, for the
     /// reason [`reset`](Self::reset) documents: each input's own subscription
     /// has to fire. Expect every field whose value changed to re-render, which
@@ -720,7 +745,59 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         for (path, raw) in wire.values() {
             FieldHandle::unreported(path, self.contents).input(raw.clone());
         }
-        self.distribute_errors(wire.errors())
+        self.distribute_errors(wire.errors())?;
+        // Decided from the reply, not the form: a reply with an error at a
+        // path that doesn't exist has already returned above, and was no save.
+        if wire.errors().is_empty() {
+            let mut initial = self.initial_signal;
+            initial.set(self.saved_state());
+            self.forget_picks();
+        }
+        Ok(())
+    }
+
+    /// The state a successful [`absorb`](Self::absorb) makes the new reset
+    /// snapshot: the live state, for its structure (the items added and the
+    /// variants chosen live only there), with the store's values distributed
+    /// into it, which by then include the server's.
+    ///
+    /// Through `ordered_values`, the bridge `validate` crosses, which leaves
+    /// out drafts: a draft is never sent, so it was never saved, and keeps the
+    /// state's own text, which is empty, since a draft's text lives only in the
+    /// store.
+    ///
+    /// Taken after the store's writes and before [`forget_picks`](Self::forget_picks),
+    /// which doesn't touch the store: each file's name is already there.
+    fn saved_state(&self) -> FormState<T> {
+        let mut saved = self.state_signal.peek().clone();
+        let values = saved.ordered_values(&self.contents.values.peek());
+        saved.distribute_values(&values);
+        // Every file is now kept, so `Existing`. The clone can still carry the
+        // size and type the last `validate` gave a pick; nothing reads them
+        // before `distribute_files` replaces them, but the snapshot shouldn't
+        // hold a pick that no longer exists.
+        saved.distribute_files(&FilesByPath::new());
+        // `reset` restores these through `with_errors`. The working state's
+        // are already empty (`with_errors` takes `field_errors` back out, and
+        // the reply had no form-level ones); cleared so nothing rests on it.
+        saved.errors.clear();
+        saved.field_errors.clear();
+        saved
+    }
+
+    /// Forget every file the user picked: empty the table, and make every file
+    /// input again. What [`reset`](Self::reset) and a successful
+    /// [`absorb`](Self::absorb) both end with.
+    fn forget_picks(&self) {
+        // The whole table, not path by path: nothing is picked anywhere now,
+        // and a stale pick under a removed item goes with the rest.
+        let mut files = self.contents.files;
+        files.write().clear();
+        // A new number is a new `key` on every file input, so Dioxus drops
+        // each one and makes it again, empty: a script cannot clear what a
+        // file input shows any other way.
+        let mut resets = self.contents.resets;
+        resets.with_mut(|n| *n = n.wrapping_add(1));
     }
 
     /// Apply a structural edit from code: add, remove or move an item, or choose
@@ -742,12 +819,16 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         )
     }
 
-    /// Put the form back the way [`use_form`] built it.
+    /// Put the form back the way [`use_form`] built it, or the way the last
+    /// successful [`absorb`](Self::absorb) left it.
     ///
-    /// Everything goes: edited values, validation errors, and structural edits
-    /// like added items or a chosen variant. A form built with
+    /// Everything since goes: edited values, validation errors, and structural
+    /// edits like added items or a chosen variant. A form built with
     /// [`form_for`] returns to that model's values; one built with
-    /// [`empty_form`] goes back to empty.
+    /// [`empty_form`] goes back to empty. Once a reply with no errors has been
+    /// absorbed, the form returns to what was saved instead: a dev who keeps
+    /// the form on screen after a save gets a reset to the saved values, not
+    /// to the ones from before it.
     ///
     /// **A `type="reset"` button does not do this on its own.** Native reset
     /// restores the DOM's own idea of each widget's initial value, but every
@@ -776,14 +857,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         for (path, raw) in leaves {
             FieldHandle::unreported(&path, self.contents).input(raw);
         }
-        // The whole table, not path by path: after a reset nothing is picked
-        // anywhere, and a stale pick under a removed item goes with the rest.
-        let mut files = self.contents.files;
-        files.write().clear();
-        // A new number is a new `key` on every file input, so Dioxus drops
-        // each one and makes it again, empty.
-        let mut resets = self.contents.resets;
-        resets.with_mut(|n| *n = n.wrapping_add(1));
+        self.forget_picks();
     }
 
     pub fn validate(&self) -> Option<T> {
@@ -927,7 +1001,8 @@ fn render_problems(ctx: &NodeContext, problems: &[String]) -> Element {
 pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     state: impl FnOnce() -> FormState<T>,
 ) -> Form<T> {
-    // A snapshot, taken once, for `reset`. It comes first because the state
+    // The snapshot `reset` returns to, until a successful `absorb` moves it.
+    // It comes first because the state
     // handed in can already hold errors: those belong in the snapshot and the
     // store, while the working state starts with `field_errors` empty, and
     // clearing a copy here avoids writing to a signal during render.
