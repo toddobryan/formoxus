@@ -10,6 +10,7 @@ use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::rc::Rc;
 
+mod field_node;
 mod file_node;
 mod items;
 mod list_node;
@@ -18,6 +19,7 @@ mod set_node;
 mod struct_node;
 mod variant_node;
 
+pub use field_node::{FieldNode, LeafArgs, NodeCtor};
 pub use file_node::FileNode;
 pub(crate) use file_node::{is_file_upload, stored_shapes};
 pub use items::ItemValue;
@@ -51,7 +53,7 @@ pub enum Drafts {
     Exclude,
 }
 
-/// One part of a form's tree: a leaf ([`FieldNode`](crate::field_node::FieldNode)) or
+/// One part of a form's tree: a leaf ([`FieldNode`]) or
 /// a container ([`StructNode`], [`ListNode`], [`OptionNode`], [`SetNode`],
 /// [`VariantNode`]).
 ///

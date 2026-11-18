@@ -20,7 +20,7 @@ old full one). Every set widget would then BE a leaf widget, with a leaf `render
 it could only stub, and would type-check as `widget:` on a `String`.
 
 **Names:** `Leaf` is already public vocabulary (`nodes::RawValue::Leaf`,
-`field_node::LeafArgs`, "one component per leaf"). `SingleItemWidget` was set
+`nodes::LeafArgs`, "one component per leaf"). `SingleItemWidget` was set
 aside because "item" means one element of a list or set (`#3`, `ItemValue`), and a
 leaf widget renders no items. `FieldWidget` was the deleted derive path's name.
 

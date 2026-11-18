@@ -82,4 +82,3 @@
 - [Scratch copies need their own target](scratch_copies_need_their_own_target.md) — a `git archive` copy on the repo's `target` reads stale builds as fresh, both ways
 - [Plans spell out the why](feedback_plans_spell_out_the_why.md) — steps Todd implements get full plain sentences, not telegraphic shorthand
 - [Widget trait family](widget_trait_family.md) — DECIDED 2026-11-11: `Widget` = NAME/PARTS/EXTENDS only; `LeafWidget: Widget` renders one value; `SetWidget: Widget` next; why not one trait
-- [Move field_node.rs into nodes/](todo_move_field_node.md) — REMINDER for Todd once WIDGETS_PLAN is done, not before

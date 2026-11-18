@@ -43,7 +43,7 @@ pub struct FieldSpec {
     pub widget: Option<AnyWidget>,
     /// Builds this leaf during the shape walk, instead of the default field
     /// for its type. What `field:` and a typed field's settings expand to.
-    pub node: Option<crate::field_node::NodeCtor>,
+    pub node: Option<crate::nodes::NodeCtor>,
     pub adder: Option<ItemAdder>,
     pub treat_as_set: bool,
     pub sort_by: Option<SetOrder>,
@@ -178,7 +178,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
 
     /// Build the leaf at `path` (a `[]` item path is fine) with `ctor` instead
     /// of the default for its type.
-    pub fn with_node(mut self, path: &ModelPath<T>, ctor: crate::field_node::NodeCtor) -> Self {
+    pub fn with_node(mut self, path: &ModelPath<T>, ctor: crate::nodes::NodeCtor) -> Self {
         self.field(path).node = Some(ctor);
         self
     }

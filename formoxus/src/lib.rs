@@ -73,7 +73,6 @@ pub mod field;
 pub mod field_attrs;
 #[doc(hidden)]
 pub mod field_kind;
-pub mod field_node;
 pub mod fields;
 pub mod file;
 pub mod form;

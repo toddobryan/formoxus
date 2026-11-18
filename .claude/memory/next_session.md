@@ -18,6 +18,14 @@ The night section's "NOT pushed" was stale by then: boxes 12 and 13 had been pus
 them, refuse a literal 0, keep the `u64` form; binary units and a runtime helper left
 open). The rest stand.
 
+**Then, the same day: `field_node.rs` moved into `nodes/`** (Todd's 2026-11-13 reminder,
+now retired). It follows its siblings: a private `mod field_node;` in `nodes.rs`, with
+`FieldNode`, `LeafArgs` and `NodeCtor` re-exported from `nodes`, so the public path is
+`formoxus::nodes::FieldNode`, not `formoxus::field_node::FieldNode`. ci 1575,
+`check-web`/`clippy-web` clean. apcsp does NOT compile against `main` (its `crates/ui`
+widget still implements the pre-2026-11-11 one-trait `Widget`); Todd: leave apcsp alone
+until he opens it.
+
 **Next.** Box 14's second half: apcsp builds its upload form (box 13's "For apcsp"
 sketch). Then the road to publish ([[mvp-scope]]): #25 (`absorb` moves the reset
 snapshot), which waited for this plan and is now unblocked, and #22/#23.

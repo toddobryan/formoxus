@@ -29,9 +29,9 @@ use facet::{Def, Facet, Shape, StructKind, Type, UserType};
 use formoxus_spec::{Attr, FieldType, HtmlElement};
 
 use crate::field::Field;
-use crate::field_node::NodeCtor;
 use crate::fields::{ChoiceField, DefaultField, IntoChoice};
 use crate::form::FormSpec;
+use crate::nodes::NodeCtor;
 use crate::nodes::{SetEvent, SetFeedback, SetOrder, is_file_upload};
 use crate::path::ModelPath;
 use crate::widgets::widget::{LeafWidget, SetWidget};
