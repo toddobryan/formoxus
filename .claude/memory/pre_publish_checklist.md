@@ -104,3 +104,13 @@ only the macros crate's doc (its `pub use formoxus_macros::{form, path, using_fn
 carries none), so its summary line now opens "Emits a witness borrow…". `form!`
 avoids this by keeping a plain-text summary in the macros crate (`FormSpec`, no
 link), which the root page then shows twice.
+
+## 7. Log the upload errors the driver drops (added 2026-11-17)
+
+`Submission::accept_multipart` turns a handler failure (`PartOutcome::Failed(io::Error)`)
+and a broken request (`PartOutcome::Broken(MultipartError)`) into form-level messages
+for the user, and drops the error itself: nothing logs it, so whoever runs the server
+never learns the disk was full or S3 was down. Both fields carry
+`#[expect(dead_code, reason = "to be logged; …")]` in `src/file.rs` until then. Todd:
+"deal with logging later. Probably before MVP." Claude's lean: `tracing`, which
+Dioxus already pulls in. Removing the two `expect`s is the reminder that it's done.

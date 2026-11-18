@@ -2,12 +2,19 @@
 
 use std::fmt::Debug;
 
-use facet::{Facet, Shape};
+use dioxus_fullstack::extract::multipart::{Field, MultipartError};
+use facet::Facet;
+use indexmap::IndexMap;
 
-use crate::file::{FileUploadHandler, Multipart};
-use crate::form::{FormErrors, FormSpec, FormState, empty_form};
-use crate::nodes::{ValuesByPath, stored_shapes};
-use crate::path::ModelPath;
+use crate::build::{peel, spec_key_shape};
+use crate::error::ValidationMessage;
+use crate::file::{
+    FileMeta, FileType, FileUploadHandler, Multipart, MultipartFormData, PartOutcome, StoredFile,
+    WIRE_PART, clean_file_name, drain, is_body_limit, store_part,
+};
+use crate::form::{FormErrors, FormSpec, FormState, empty_form, form_for};
+use crate::nodes::{FilesByPath, ValuesByPath, is_file_upload, stored_shapes};
+use crate::path::{ITEM_SIGIL, ModelPath, NodePath};
 use crate::wire::WireForm;
 
 /// A submitted form that passed its own validation, holding both the model the
@@ -153,8 +160,273 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
         handler: &H,
         existing: Option<&T>,
     ) -> Result<Self, FormErrors> {
-        let shapes: Vec<&'static Shape> = stored_shapes(T::SHAPE);
+        for s in stored_shapes(T::SHAPE) {
+            assert!(
+                s == <H::Stored as Facet>::SHAPE,
+                "Expected file handler of type {}, but found {}",
+                s,
+                <H::Stored as Facet>::SHAPE,
+            );
+        }
+        let Multipart(MultipartFormData::OnServer(mut axum_mp)) = multipart else {
+            panic!("Expected a Multipart(OnServer(_), but found {multipart:?}");
+        };
 
-        todo!()
+        // A read error (from `next_field` or `text`) means the request can't be
+        // read further, so it returns at once; anything else drains first.
+        let text = match axum_mp.next_field().await {
+            Ok(Some(field)) if field.name() == Some(WIRE_PART) => match field.text().await {
+                Ok(text) => Some(text),
+                Err(e) => return Err(unreadable(&e)),
+            },
+            Ok(_) => None,
+            Err(e) => return Err(unreadable(&e)),
+        };
+        let Some(wire_form) = text.and_then(|t| serde_json::from_str::<WireForm<T>>(&t).ok())
+        else {
+            drain(&mut axum_mp).await;
+            return Err(form_error(NOT_FROM_FORMOXUS));
+        };
+
+        let mut received = Received {
+            values: wire_form.values().clone(),
+            files: FilesByPath::new(),
+            stored: Vec::new(),
+        };
+        // Every failure breaks out to the one cleanup below, so a file stored
+        // before it is always deleted.
+        let abort = loop {
+            match axum_mp.next_field().await {
+                Ok(Some(field)) => {
+                    let sizes = wire_form.file_sizes();
+                    if let Err(abort) =
+                        Self::handle_file(field, &spec, handler, sizes, &mut received).await
+                    {
+                        break Some(abort);
+                    }
+                }
+                Ok(None) => break None,
+                Err(e) => break Some(Abort::Unreadable(unreadable(&e))),
+            }
+        };
+        if let Some(abort) = abort {
+            let errors = match abort {
+                Abort::Unreadable(errors) => errors,
+                Abort::Drain(errors) => {
+                    drain(&mut axum_mp).await;
+                    errors
+                }
+            };
+            // Each handler owns what a failed delete means (PP).
+            for stored in received.stored {
+                handler.delete(stored).await;
+            }
+            return Err(errors);
+        }
+
+        Self::check_existing_claims(&spec, existing, &mut received);
+
+        // h.10: as `accept` does, with the files distributed after the values,
+        // since the values build the structure (variants, items) every file
+        // leaf's path needs.
+        let mut state = empty_form(spec);
+        state.distribute_values(&received.values);
+        state.distribute_files(&received.files);
+        let Some(model) = state.validate() else {
+            // Each handler owns what a failed delete means (PP).
+            for stored in received.stored {
+                handler.delete(stored).await;
+            }
+            return Err(state.collect_errors());
+        };
+        Ok(Self { state, model })
     }
+
+    /// h.8 for one part: check it names a file leaf the wire part named,
+    /// refuse a stated size or a type the field won't take, otherwise store
+    /// it. Every file part it accepts ends as a `FileMeta` in
+    /// `received.files`, stored or not; `FileNode::validate` reports a refused
+    /// one later, with the message the browser showed.
+    ///
+    /// A part that isn't a file leaf, or whose name the wire part left empty,
+    /// is ignored: only a hand-made request sends one, and the next
+    /// `next_field` drains it.
+    async fn handle_file<H: FileUploadHandler>(
+        mut field: Field<'_>,
+        spec: &FormSpec<T>,
+        handler: &H,
+        stated_sizes: &IndexMap<NodePath, u64>,
+        received: &mut Received<H::Stored>,
+    ) -> Result<(), Abort> {
+        let Some(path) = field.name().map(NodePath::new) else {
+            return Ok(());
+        };
+        if !is_file_leaf::<T>(&path) {
+            return Ok(());
+        }
+        let key = path.spec_key();
+        // The file's name is the wire's, never the part's `filename=`.
+        let Some(raw_name) = received.values.get(&path).filter(|name| !name.is_empty()) else {
+            return Ok(());
+        };
+        let Some(name) = clean_file_name(raw_name) else {
+            return Err(Abort::Drain(form_error(UNUSABLE_FILE_NAME)));
+        };
+        received.values.insert(path.clone(), name.clone());
+
+        let content_type = field.content_type().map(str::to_owned);
+        let field_spec = spec.fields.get(&key);
+        let max_size = field_spec.and_then(|s| s.max_size);
+        let accept = field_spec.map_or(&[][..], |s| &s.accept[..]);
+        let stated = stated_sizes.get(&path).copied();
+
+        // Refused before `new_file`, so nothing is stored.
+        if stated
+            .zip(max_size)
+            .is_some_and(|(stated, max)| stated > max)
+            || !FileType::accepts(accept, &name, content_type.as_deref())
+        {
+            let meta = FileMeta {
+                content_type,
+                size: stated.unwrap_or(0),
+                stored: None,
+            };
+            received.files.insert(path, meta);
+            return Ok(());
+        }
+
+        let outcome = store_part(
+            &mut field,
+            handler,
+            &path,
+            &name,
+            content_type.as_deref(),
+            max_size,
+        )
+        .await;
+        let meta = match outcome {
+            PartOutcome::Stored { stored, size } => {
+                received.stored.push(stored.clone());
+                FileMeta {
+                    content_type,
+                    size,
+                    stored: Some(StoredFile::new(stored)),
+                }
+            }
+            PartOutcome::TooLarge { size } => FileMeta {
+                content_type,
+                size,
+                stored: None,
+            },
+            PartOutcome::BodyLimit => {
+                return Err(Abort::Unreadable(form_error(TOO_LARGE_TOGETHER)));
+            }
+            PartOutcome::Broken(_) => return Err(Abort::Unreadable(form_error(BROKEN_OFF))),
+            PartOutcome::Failed(_) => return Err(Abort::Drain(form_error(NOT_SAVED))),
+        };
+        received.files.insert(path, meta);
+        Ok(())
+    }
+
+    /// h.9, decision V with NN: a file leaf the wire part names, with no part
+    /// in `received.files`, claims the file already on the record. Check each
+    /// claim against `existing`, rewriting its value in `received.values`.
+    ///
+    /// A claim stands only where the record has a non-empty name at the same
+    /// path, and the value becomes the RECORD's name, whatever the client sent
+    /// (NN). Otherwise it becomes `""`, so it counts as missing: a required
+    /// error, or `None` for an `Option<FileUpload>`. That covers a create
+    /// (`existing` is `None`), a path the record lacks, and any path inside a
+    /// list or set item: an item key (`#3`) is the form's own count, not an
+    /// identity the record shares, so the same key may name another file there
+    /// (decision V's trap).
+    fn check_existing_claims<S>(
+        spec: &FormSpec<T>,
+        existing: Option<&T>,
+        received: &mut Received<S>,
+    ) {
+        let claims: Vec<NodePath> = received
+            .values
+            .iter()
+            .filter(|(path, name)| {
+                !name.is_empty() && !received.files.contains_key(*path) && is_file_leaf::<T>(path)
+            })
+            .map(|(path, _)| path.clone())
+            .collect();
+        if claims.is_empty() {
+            return;
+        }
+        // Built once, and only when something claims a file.
+        let on_record = existing.map(|record| form_for(record, spec.clone()).collect_values());
+        for path in claims {
+            let in_item = path.as_str().split('.').any(|s| s.starts_with(ITEM_SIGIL));
+            let name = on_record
+                .as_ref()
+                .filter(|_| !in_item)
+                .and_then(|values| values.get(&path))
+                .filter(|name| !name.is_empty())
+                .cloned()
+                .unwrap_or_default();
+            received.values.insert(path, name);
+        }
+    }
+}
+
+/// Whether `path` names a `FileUpload` leaf of `T`, optional or not. Peeled:
+/// `spec_key_shape` returns an `Option<FileUpload>` field's shape as the
+/// `Option`.
+fn is_file_leaf<T: Facet<'static>>(path: &NodePath) -> bool {
+    spec_key_shape(T::SHAPE, &path.spec_key()).is_ok_and(|shape| is_file_upload(peel(shape)))
+}
+
+/// What h.8 gathers from the file parts, for h.9 and h.10.
+struct Received<S> {
+    /// A copy of the wire's values with each received file's name cleaned,
+    /// which h.9 edits further and h.10 distributes.
+    values: ValuesByPath,
+    /// Every file part h.8 accepted, stored or refused, for `distribute_files`.
+    files: FilesByPath,
+    /// What the handler stored, to `delete` if the submission fails.
+    stored: Vec<S>,
+}
+
+/// Why the driver stopped reading parts. Either way, everything stored so far
+/// is deleted.
+enum Abort {
+    /// The body limit or a broken request: it can't be read further, so no
+    /// drain.
+    Unreadable(FormErrors),
+    /// It can still be read (the handler failed, or a file name was refused),
+    /// so drain it before answering.
+    Drain(FormErrors),
+}
+
+/// The first part wasn't a [`WireForm`] named `WIRE_PART`: the request didn't
+/// come from `to_multipart`, so only a hand-made one gets this.
+const NOT_FROM_FORMOXUS: &str = "Expected a Multipart value with wire_form as first field";
+/// Decision OO. The limit itself can't be named: axum-core keeps it private.
+const TOO_LARGE_TOGETHER: &str = "These files are too large to send together.";
+/// The request broke off or was malformed partway (`PartOutcome::Broken`).
+const BROKEN_OFF: &str = "The upload was interrupted. Please try again.";
+/// Decision QQ: the handler failed (the disk is full, S3 is down).
+const NOT_SAVED: &str = "This upload couldn't be saved. Please try again.";
+/// `clean_file_name` refused the wire's name: nothing usable was left.
+const UNUSABLE_FILE_NAME: &str =
+    "That file name can't be used. Please rename the file and try again.";
+
+fn form_error(message: &str) -> FormErrors {
+    FormErrors {
+        form: vec![ValidationMessage(message.to_string())],
+        fields: IndexMap::new(),
+    }
+}
+
+/// A read error that ends the request: the body limit (OO) or broken off.
+/// Neither drains, since neither request can be read any further.
+fn unreadable(e: &MultipartError) -> FormErrors {
+    form_error(if is_body_limit(e) {
+        TOO_LARGE_TOGETHER
+    } else {
+        BROKEN_OFF
+    })
 }

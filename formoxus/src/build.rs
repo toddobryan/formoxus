@@ -115,7 +115,7 @@ enum At {
 
 /// `shape` with every `Option` around it taken off, which the node walk does
 /// without adding a segment.
-fn peel(mut shape: &'static Shape) -> &'static Shape {
+pub(crate) fn peel(mut shape: &'static Shape) -> &'static Shape {
     while let Ok(option_def) = shape.def.into_option() {
         shape = option_def.t;
     }

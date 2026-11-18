@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-17 school END**: `file` pushed WIP, 11h h.1-h.6 DONE; next h.7-h.10 the driver (ci fails only on dead code)
+- [**START HERE: next session**](next_session.md) — **2026-11-17 home END**: driver h.7-h.10 + 11i (31 tests) DONE, ci 1566 green; next h.11 docs, then box 12
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -20,7 +20,7 @@
 
 ## Plan
 - [MVP scope](mvp_scope.md) — road to publish, 2026-11-09: #20+#21 plan → four widgets incl. `file` → #22+#23 → grammar docs → doc pass → `wasm-opt`
-- [Pre-publish checklist](pre_publish_checklist.md) — RAISE WHEN PUBLISHING COMES UP: wasm-opt, the doc pass, facet version, macro-side `regress`, the public-API pass, a dead-link scan of the built docs
+- [Pre-publish checklist](pre_publish_checklist.md) — RAISE WHEN PUBLISHING COMES UP: wasm-opt, the doc pass, facet version, macro-side `regress`, the public-API pass, a dead-link scan of the built docs, logging dropped upload errors
 - [Parked: validate_values](parked_validate_values.md) — Todd wants these back: `validate_values`, `collect_values`→`ValuesByPath`, typed path keys (BREAKING, so pre-publish)
 - [Formoxus feature parity](formoxus_feature_parity.md) — vs Django + leptos_form; **#6 DONE 2026-10-01: `required: true` on a non-optional bool = must be ticked**
 - [Lint config](lint_config.md) — RAISE PERIODICALLY: why `unused_qualifications` is off (rsx! false positives), how to sweep; run `just clippy-web` now and then (not in ci)

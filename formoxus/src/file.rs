@@ -41,10 +41,6 @@ impl StoredFile {
     /// `for<'a> Facet<'a>`, not `Facet<'static>`: `Partial<'p>::set` needs
     /// `S: Facet<'p>` for whatever `'p` the write happens at, and a derived
     /// type implements `Facet<'a>` for every `'a`, which this bound says.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "accept_multipart (11h) is the caller")
-    )]
     pub(crate) fn new<S>(stored: S) -> Self
     where
         S: for<'a> Facet<'a> + Clone + Send + Sync + 'static,
@@ -76,13 +72,6 @@ impl Debug for StoredFile {
 /// `StoredFile::write` for one `S`: get the `S` back out of the `dyn Any`,
 /// clone it (the `StoredFile` keeps its own) and set it into `partial`, which
 /// `FileNode` has opened at `Received`'s `stored` field.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "accept_multipart (11h) is the caller, through `new`"
-    )
-)]
 fn write_stored<'p, S>(
     value: &(dyn Any + Send + Sync),
     partial: Partial<'p>,
@@ -401,7 +390,7 @@ fn staging_path(to: &Path) -> PathBuf {
 }
 
 pub trait FileUploadHandler: Send + Sync {
-    type Stored: Clone + Debug + PartialEq + Facet<'static> + Send + Sync + 'static;
+    type Stored: Clone + Debug + PartialEq + for<'a> Facet<'a> + Send + Sync + 'static;
     type Writer: FileUploadWriter<Stored = Self::Stored> + Send;
 
     fn new_file(
@@ -589,10 +578,12 @@ pub(crate) enum PartOutcome<Stored> {
     BodyLimit,
     /// The request broke off or was malformed (any other error from `chunk`).
     /// The writer was aborted; the request can't be read any further.
-    Broken(MultipartError),
+    Broken(
+        #[expect(dead_code, reason = "to be logged; the driver drops it for now")] MultipartError,
+    ),
     /// The handler failed (`new_file`, `write_chunk` or `finish`). Whatever it
     /// had written was aborted. The request can still be read and answered.
-    Failed(io::Error),
+    Failed(#[expect(dead_code, reason = "to be logged; the driver drops it for now")] io::Error),
 }
 
 /// Read one file part, through `handler`, counting, until it ends, passes
@@ -649,6 +640,17 @@ pub(crate) async fn store_part<H: FileUploadHandler>(
         Ok(stored) => PartOutcome::Stored { stored, size },
         Err(e) => PartOutcome::Failed(e),
     }
+}
+
+/// Read the rest of a request, part by part, discarding it: what the driver
+/// does before every early return, since a server that answers before
+/// reading the whole request loses its reply (`WIDGETS_PLAN.md` box 10 (d)).
+/// Each `next_field` reads through the part before it (see [`store_part`]).
+///
+/// Stops at the first error: past the body limit, or broken off, the request
+/// can't be read any further, and there is nothing left to drain.
+pub(crate) async fn drain(multipart: &mut AxumMultipart) {
+    while let Ok(Some(_)) = multipart.next_field().await {}
 }
 
 /// Whether a multipart error is the body limit (axum's 413, trap 12). For

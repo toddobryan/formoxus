@@ -2542,7 +2542,7 @@ several?
     `FileUpload<S>` inside `T` has `S = H::Stored`", which is why h.7 checks it at
     run time. Its steps, in the order it runs them:
 
-    - [ ] **h.7.** (Todd) **BB's check, then the wire part.** First, before reading
+    - [x] **h.7.** (Todd) **BB's check, then the wire part.** First, before reading
       any part, call h.5's `stored_shapes(T::SHAPE)` and panic on the first that
       isn't `<H::Stored as Facet>::SHAPE`, naming both, with nothing stored. Then
       take the `AxumMultipart` out of `OnServer` (an `OnClient` here is a bug:
@@ -2551,7 +2551,25 @@ several?
       first field is missing, has another name, or doesn't parse, the request
       didn't come from `to_multipart`: return a form-level error (`FormErrors {
       form: vec![…], fields: … }`, `src/form.rs`, line 53) with nothing stored.
-    - [ ] **h.8.** (Todd) **Each further part** (`next_field().await` until
+      **As built (2026-11-17; the check and the `OnServer` match Todd, the wire
+      read Claude at Todd's request), two additions to the above.** (1) **A read
+      error on the first part is h.8's rule, applied early.** Both `next_field`
+      and `field.text()` can fail, and with the 413 (a wire part big enough
+      passes the limit by itself). Either error returns at once, without
+      draining, since the request can't be read further: OO's message if
+      `is_body_limit`, otherwise "The upload was interrupted. Please try
+      again." Only a missing first part, another name, or JSON that doesn't
+      parse drains first and then returns the form-level error. (2) **Three
+      private helpers that h.8 reuses.** `pub(crate) async fn drain(&mut
+      AxumMultipart)` in `file.rs`, beside `store_part`, calls `next_field`
+      until `None` and stops at the first error. In `submission.rs`,
+      `form_error(&str) -> FormErrors` builds a form-level error, and
+      `unreadable(&MultipartError) -> FormErrors` picks between OO's message
+      and the interrupted one. The messages are private consts there:
+      `NOT_FROM_FORMOXUS`, `TOO_LARGE_TOGETHER` (OO) and `BROKEN_OFF`. Tested in
+      11i. `NOT_FROM_FORMOXUS` reads "Expected a Multipart value with wire_form
+      as first field" (it said "Multiform" until 2026-11-17).
+    - [x] **h.8.** (Todd) **Each further part** (`next_field().await` until
       `None`). This needs only the spec and the wire's values, not a `FormState`,
       which is why it comes before the form is built. The part's name is a path
       (`NodePath::new`). Find the file leaf at its path: its spec key must be a
@@ -2593,7 +2611,31 @@ several?
       file name `clean_file_name` refuses here.
       **Trap, not yet measured:** whether the client still gets an answer after a
       413. Box 13 tests it in a browser.
-    - [ ] **h.9.** (Todd) **Decision V's check, with NN.** A file leaf in the
+      **As built (2026-11-17, Claude at Todd's request, from Claude's outline).**
+      One part is `Submission::handle_file(field, &spec, handler, stated_sizes,
+      &mut received) -> Result<(), Abort>`, in the order above. (1) **`Received<S>`**
+      (private) gathers what h.9 and h.10 need: `values` (a copy of the wire's,
+      with each received file's name cleaned), `files` (the `FilesByPath`) and
+      `stored` (each `H::Stored`, for `delete`). (2) **`Abort`** (private) is
+      `Unreadable(FormErrors)` (the 413 or a broken request: no drain) or
+      `Drain(FormErrors)` (QQ, or a refused name). (3) **The loop never returns
+      early:** every failure, `next_field`'s included, breaks out to one cleanup
+      that drains if `Drain`, `delete`s everything stored, and returns. (4)
+      **`is_file_leaf::<T>(&NodePath)`** (private, free) is `spec_key_shape` +
+      `is_file_upload`, on the shape PEELED: `spec_key_shape` returns an
+      `Option<FileUpload>` field's shape as the `Option`, so without `peel`
+      (`build.rs`, now `pub(crate)`) every optional upload was ignored. h.9 uses
+      it too. (5) Two more private consts: `NOT_SAVED` (QQ) and
+      `UNUSABLE_FILE_NAME`, "That file name can't be used. Please rename the
+      file and try again." (6) A refused part's size is `stated.unwrap_or(0)`:
+      nothing has been counted yet, and a refusal by type alone doesn't need
+      one. (7) **`FileUploadHandler::Stored` is now `for<'a> Facet<'a>`**, not
+      `Facet<'static>`, because `StoredFile::new` needs it (`Partial<'p>::set`);
+      every derived type already is one. (8) `PartOutcome::Broken`'s and
+      `Failed`'s errors are dropped, each field `#[expect(dead_code)]` until
+      logging is decided (pre-publish checklist, item 7). `StoredFile::new` and
+      `write_stored` lost their `expect(dead_code)`.
+    - [x] **h.9.** (Todd) **Decision V's check, with NN.** A file leaf in the
       wire's values with a non-empty name and no part in h.8's table is an
       `Existing` claim. Check each one against `existing`: build
       `form_for(existing, spec.clone())` and read the name at the same path from
@@ -2603,13 +2645,20 @@ several?
       in a copy of the wire's values, so it counts as missing: a required error,
       or `None` for an `Option<FileUpload>`. Otherwise set it to the record's name
       (NN), whatever the client sent.
-    - [ ] **h.10.** (Todd) **The form, then `validate`, as `accept` does.**
+      **As built (2026-11-17, Claude at Todd's request):**
+      `Submission::check_existing_claims(&spec, existing, &mut received)`, run
+      after the parts and before `empty_form`. The claims are collected first;
+      the record's values are built once, and only when there is a claim and an
+      `existing`.
+    - [x] **h.10.** (Todd) **The form, then `validate`, as `accept` does.**
       `empty_form(spec)`, then `distribute_values` with h.9's values, which builds
       the structure so every file leaf's path exists, then `distribute_files` with
       h.8's table, then `validate`. On `None`, `delete` every stored file (each
       handler deals with its own failures, PP) and return `collect_errors()`. On
       `Some(model)`, the `Submission` holds a model whose new files are `Received`
       and whose kept ones are `Existing`.
+      **As built (2026-11-17, Claude at Todd's request):** as written. The
+      delete loop appears twice (here and in h.8's cleanup), left inline.
     - [ ] **h.11.** (Claude, or Todd) **Docs.** `accept_multipart`: what each
       argument is for (`existing` and decision V; `None` on a create), that the
       request is read once and in order, the body limit
@@ -2631,7 +2680,7 @@ several?
     Result<WireForm<Essay>, ServerFnError>`, under
     `#[middleware(DefaultBodyLimit::max(…))]` when its files exceed 2 MB, and the
     client calls `form.absorb(submit(form.to_multipart()).await?)`.
-  - [ ] **11i. Green before box 12.** `just ci` passes with no `form!` changes, an upload
+  - [x] **11i. Green before box 12.** `just ci` passes with no `form!` changes, an upload
     field reachable only through a hand-built spec. Box 13 tests `accept_multipart`
     without a server or a browser, in `formoxus/tests/suite/multipart.rs` beside
     11g's tests, with `futures` added under `[dev-dependencies]` in
@@ -2642,6 +2691,23 @@ several?
     and runs it under `futures::executor::block_on` (a new dev-dependency; the suite
     has no executor today). The 2 MB default applies there too, so the 413 path is
     testable without a browser as well.
+    **As built (2026-11-17, Claude): 31 tests in `tests/suite/accept_multipart.rs`,**
+    not `multipart.rs`, which names a model `Submission` that would shadow
+    `formoxus::Submission`; same suite target. `just ci` 1566. The wire part comes
+    from `WireForm::from_model`, with stated sizes added to its JSON by hand (only
+    `to_multipart` sets them); `WIRE_PART` is spelled out, since it is
+    `pub(crate)`. The request trickles in 1,000-byte frames with a `Pending`
+    before each, as `file.rs`'s tests do. A `Memory` handler (`Stored = String`,
+    so the models hold `FileUpload<String>`) logs `new_file`, `finish`, `abort`
+    and `delete`, and can fail `new_file` at one path; two tests run
+    `TemporaryFileUploadHandler` in a directory of their own (the bytes are on
+    disk; nothing is left after a rejection). **Mutation-checked:** 17 breaks
+    of the driver, each caught. The one that first survived, `unreadable`
+    never seeing the 413, needed the limit to trip outside a file part: in
+    `next_field` (an ignored part too big to read through) and in h.7's
+    `text()` (a wire part too big). **Not testable here: draining.** Leaving a
+    request unread changes nothing in memory; the cost is a reply the browser
+    never gets, which box 13 tests.
 
 - [ ] **12.** (Claude) The `form!` side (`file` is already a `WidgetName` row and
   `NOT_YET` is gone, both Todd, 2026-11-15, so `form!` accepts `widget: file` today
