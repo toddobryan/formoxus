@@ -44,3 +44,15 @@ wherever multer's buffer is reading when the body passes it. `is_body_limit` in
 `file.rs` checks either. (3) **In tests, a stream whose frames are all ready at
 once is unrealistic:** multer's buffer swallows the whole body on its first poll.
 `file.rs`'s test `multipart()` returns `Pending` before each frame, like a socket.
+
+**Added 2026-11-17 night (box 13's e2e tests, `e2e/tests/upload.rs`):**
+(4) **After a 413 the browser DOES get the answer.** `accept_multipart` returns
+OO's error at once, without draining (the request can't be read), and Chromium
+shows it: `past_the_body_limit_the_form_says_so`, 3 MB against the 2 MB default,
+passed 10 of 10 runs. The trap h.8 left "not yet measured" is measured. (5)
+**Draining is visible only with a large file.** With 1.5 MB the browser had sent
+everything before the server answered, so a driver that skipped draining still
+passed. With 20 MB (box 10's size; that page's limit raised to 32 MB) the
+no-drain mutation fails exactly as box 10 found, `TypeError: Failed to fetch`,
+and the real driver passes (6 of 6). A drain test needs a file still in flight
+when the server has its answer.

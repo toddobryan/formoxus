@@ -21,6 +21,9 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+#[cfg(feature = "server")]
+use formoxus::file::TemporaryFileUploadHandler;
+use formoxus::file::{FileUpload, Multipart};
 use formoxus::widgets::LeafWidget;
 use formoxus::{nodes::ItemValue, prelude::*};
 use std::collections::BTreeSet;
@@ -62,6 +65,10 @@ pub fn TestForm(slug: String) -> Element {
         "live-select" => rsx! { LiveSelect {} },
         "live-off" => rsx! { LiveOff {} },
         "live-custom" => rsx! { LiveCustom {} },
+        "upload" => rsx! { UploadForm {} },
+        "upload-unlimited" => rsx! { UploadUnlimited {} },
+        "upload-big" => rsx! { UploadBig {} },
+        "upload-server-limit" => rsx! { UploadServerLimit {} },
         other => rsx! {
             main { class: "container",
                 h1 { "No such test form" }
@@ -1096,5 +1103,178 @@ fn LiveCustom() -> Element {
                 buttons: { save: { type: submit } }
             }
         },
+    )
+}
+
+// ── upload, upload-unlimited, upload-big ─────────────────────────────────
+
+/// One file field, sent with `to_multipart` to a server function that hands
+/// it to `accept_multipart` and reports what was stored, on disk. The pages
+/// differ only in their limits, which is what the tests are about.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Upload {
+    essay: FileUpload,
+}
+
+/// At most 1 kB, and only `.txt`. Both checked in the browser at the pick and
+/// again by the server.
+fn upload_spec() -> FormSpec<Upload> {
+    form! {
+        Upload {
+            browser_validation: off,
+            essay => { max_size: 1_000, accept: ".txt" },
+            buttons: { send: { type: submit } }
+        }
+    }
+}
+
+/// No `max_size`, so nothing stops a large file before it is sent: only the
+/// server's body limit, axum's 2 MB default here.
+fn unlimited_spec() -> FormSpec<Upload> {
+    form! {
+        Upload {
+            browser_validation: off,
+            buttons: { send: { type: submit } }
+        }
+    }
+}
+
+/// What a server function says back: the form's reply for `absorb`, and a
+/// line saying what it stored, for a test to read.
+type UploadReply = (WireForm<Upload>, String);
+
+/// Each server function's body: read the request through `accept_multipart`
+/// and report the stored file's name, its size, and its bytes ON DISK, read
+/// back from the temporary file, which is the proof it arrived whole. The
+/// file is deleted when the submission is dropped, at the end.
+#[cfg(feature = "server")]
+async fn receive(spec: FormSpec<Upload>, form: Multipart<Upload>) -> UploadReply {
+    let handler = TemporaryFileUploadHandler::new();
+    match Submission::accept_multipart(spec, form, &handler, None).await {
+        Ok(sub) => {
+            let report = match &sub.model().essay {
+                FileUpload::Received {
+                    name, size, stored, ..
+                } => {
+                    let on_disk = std::fs::read(stored.path()).unwrap_or_default();
+                    let start =
+                        String::from_utf8_lossy(&on_disk[..on_disk.len().min(20)]).into_owned();
+                    format!(
+                        "received {name}, {size} bytes, {} on disk: {start}",
+                        on_disk.len()
+                    )
+                }
+                other => format!("no file received: {other:?}"),
+            };
+            (sub.into_wire(), report)
+        }
+        Err(errors) => (WireForm::from_errors(errors), "rejected".to_string()),
+    }
+}
+
+#[post("/api/t/upload")]
+async fn send_upload(form: Multipart<Upload>) -> Result<UploadReply, ServerFnError> {
+    Ok(receive(upload_spec(), form).await)
+}
+
+#[post("/api/t/upload-unlimited")]
+async fn send_unlimited(form: Multipart<Upload>) -> Result<UploadReply, ServerFnError> {
+    Ok(receive(unlimited_spec(), form).await)
+}
+
+/// The body limit raised for this one function, as `accept_multipart`'s docs
+/// say to: 8 MB.
+#[post("/api/t/upload-big")]
+#[middleware(dioxus::fullstack::axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024))]
+async fn send_big(form: Multipart<Upload>) -> Result<UploadReply, ServerFnError> {
+    Ok(receive(unlimited_spec(), form).await)
+}
+
+/// A server function's call, boxed so the pages can share `upload_page`.
+type Sending =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<UploadReply, ServerFnError>>>>;
+
+/// The server's own 1 kB limit, behind a client with none: what a request
+/// that skipped the browser's check meets. The server stops storing at 1 kB
+/// and must read the rest of the file before answering, or the browser loses
+/// the reply (`WIDGETS_PLAN.md` box 10 (d)). The body limit is raised to
+/// 32 MB so a file large enough to still be sending when the server answers
+/// (20 MB, as in box 10's spike) gets past it.
+#[post("/api/t/upload-server-limit")]
+#[middleware(dioxus::fullstack::axum::extract::DefaultBodyLimit::max(32 * 1024 * 1024))]
+async fn send_server_limit(form: Multipart<Upload>) -> Result<UploadReply, ServerFnError> {
+    Ok(receive(upload_spec(), form).await)
+}
+
+/// The page for each of them: the form, whose Send validates, sends the
+/// multipart, and absorbs the reply; then `#report`, the server's line, or
+/// what went wrong reaching it. `#report` is present and empty until a reply.
+fn upload_page(
+    title: &str,
+    note: &str,
+    spec: fn() -> FormSpec<Upload>,
+    send: fn(Multipart<Upload>) -> Sending,
+) -> Element {
+    let mut report = use_signal(String::new);
+    let form = use_form(move || empty_form(spec()));
+    rsx! {
+        main { class: "container",
+            h1 { "{title}" }
+            p { class: "note", "{note}" }
+            {
+                form.render(using_fns! {
+                    send: move |_model: Upload| async move {
+                        match send(form.to_multipart()).await {
+                            Ok((wire, line)) => {
+                                let _ = form.absorb(wire);
+                                report.set(line);
+                            }
+                            Err(e) => report.set(format!("SERVER_ERROR {e}")),
+                        }
+                    },
+                })
+            }
+            pre { id: "report", "{report}" }
+        }
+    }
+}
+
+#[component]
+fn UploadForm() -> Element {
+    upload_page(
+        "upload",
+        "One .txt file, at most 1 kB, checked in the browser and again on the server.",
+        upload_spec,
+        |form| Box::pin(send_upload(form)),
+    )
+}
+
+#[component]
+fn UploadUnlimited() -> Element {
+    upload_page(
+        "upload-unlimited",
+        "No size limit of its own, so only the server's 2 MB body limit stops a large file.",
+        unlimited_spec,
+        |form| Box::pin(send_unlimited(form)),
+    )
+}
+
+#[component]
+fn UploadServerLimit() -> Element {
+    upload_page(
+        "upload-server-limit",
+        "No size limit in the browser, but the server allows 1 kB (and a body of 32 MB), so a larger file is refused by the server after it has read the whole request.",
+        unlimited_spec,
+        |form| Box::pin(send_server_limit(form)),
+    )
+}
+
+#[component]
+fn UploadBig() -> Element {
+    upload_page(
+        "upload-big",
+        "No size limit of its own, and a server function whose body limit is raised to 8 MB.",
+        unlimited_spec,
+        |form| Box::pin(send_big(form)),
     )
 }

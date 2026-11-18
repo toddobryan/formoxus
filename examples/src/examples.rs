@@ -8,6 +8,7 @@ mod live;
 mod select;
 mod sets;
 mod sliders;
+mod uploads;
 
 /// Every example, in the order they appear on the page.
 ///
@@ -39,6 +40,12 @@ pub fn Gallery() -> Element {
             title: "Sliders",
             note: "A range for a whole number, one for a float in half steps, and one without its number. Each starts where the browser draws an empty slider, so sending the form untouched sends what it shows.",
             sliders::Sliders {},
+        }
+
+        Example {
+            title: "Files",
+            note: "A required essay and an optional figure, each with its own size limit and types. A pick that is too large or of the wrong type is refused at once and never sent; the server checks every file again as it arrives, stores it, and says what it stored.",
+            uploads::HandIn {},
         }
 
         Example {

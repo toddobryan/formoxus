@@ -2763,11 +2763,80 @@ several?
   - **Not done:** `form!` grammar docs for the two keys. There is no per-key reference
     yet; that is MVP item A1, which comes after the grammar is complete.
 
-- [ ] **13.** (Claude) Suite tests (the server-side checks: missing, too large, wrong
+- [x] **13.** (Claude) Suite tests (the server-side checks: missing, too large, wrong
   type; a form with a file and ordinary fields, from the multipart into the model), the
   real e2e test with an upload, and a gallery entry. Docs, including the body limit
   (trap 12) and what `accept` does and does not prove. Memory. An apcsp note on what
   its upload form would look like.
+
+  **As built (2026-11-17, Claude, unattended at Todd's request; decisions listed for his
+  review in `next_session`).** `just ci` 1575; `just e2e` 85 of 85.
+
+  - **Suite.** Most of it was 11i's (`accept_multipart.rs`: too large stated and
+    counted, wrong type, a form with `title` and two files into the model). Added: a
+    required file never sent, and box 12's `form!` limits reaching the server.
+  - **E2E, `e2e/tests/upload.rs` (6), against the examples app's first server
+    functions** (`examples/src/test_forms.rs`: `send_upload`, `send_unlimited`,
+    `send_server_limit`, `send_big`, each through one `receive` that calls
+    `accept_multipart` with `TemporaryFileUploadHandler` and reports the stored file
+    read back from disk). A pick reaches the server whole; a file over `max_size` and
+    a type `accept` doesn't list are refused at the pick and never sent (and the input
+    carries `accept`); **past the 2 MB body limit the user gets OO's form-level error**
+    (the trap h.8 left unmeasured: measured, 10 of 10); a server-only `max_size`
+    refusal still gets its answer (box 10 (d)); and a raised limit (`#[middleware(…)]`,
+    8 MB) lets 3 MB through.
+    **Draining is now tested, with a 20 MB file.** At 1.5 MB a driver that skipped
+    draining still passed, since the browser had sent everything before the server
+    answered. At 20 MB (`/t/upload-server-limit`'s body limit raised to 32 MB) the
+    no-drain mutation fails with box 10's `TypeError: Failed to fetch`, and the real
+    driver passes, 6 of 6.
+  - **Gallery: "Files"** (`examples/src/examples/uploads.rs`), a required essay
+    (`.pdf, .docx, .txt`, 5 MB) and an optional figure (`image/*`, 2 MB) sent to
+    `hand_in`, whose body limit is raised to 8 MB, and which says what it stored.
+    Driven once in a browser by a throwaway test, not kept: the gallery has no e2e
+    tests by design.
+  - **Docs.** `with_max_size` and `with_accept` (`form/spec.rs`) say where each is
+    checked, that the body limit caps `max_size`, and what `accept` proves: the
+    client's claims (name, content type), which keep an honest user from a wrong pick
+    and say nothing about the bytes. The body limit itself is h.11's, on
+    `accept_multipart`.
+  - **Memory.** `multipart_upload_behaviour` (the 413 answer arrives; draining needs a
+    large file to show), `e2e_harness` (the upload pages, `-E "'binary(x)'"`).
+
+  **For apcsp (box 14): what its upload form would look like.** apcsp has no upload
+  code yet (`crates/` has no `FileUpload`), so this is a sketch from formoxus's side:
+
+      #[derive(Facet, Clone, Debug, PartialEq)]
+      struct HandIn {
+          work: FileUpload<StoredWork>,       // apcsp's own S, if not on local disk
+          note: Option<String>,
+      }
+
+      fn hand_in_spec() -> FormSpec<HandIn> {
+          form! {
+              HandIn {
+                  work => { max_size: 20_000_000, accept: ".py, .zip, .pdf" },
+                  note? => { widget: textarea },
+                  buttons: { hand_in: { type: submit, text: "Hand in" } }
+              }
+          }
+      }
+
+      #[post("/api/assignments/hand-in")]
+      #[middleware(DefaultBodyLimit::max(25 * 1024 * 1024))]  // above max_size
+      async fn hand_in(form: Multipart<HandIn>) -> Result<WireForm<HandIn>, ServerFnError>
+
+  (1) **One file per field** (decision L): several files are several fields, or a zip.
+  (2) **The handler.** `TemporaryFileUploadHandler` then `move_to(dir.join(name),
+  IfExists::Version)` into a per-student directory (Todd: apcsp puts the username in
+  each path) is enough on one server; a handler of apcsp's own (`StoredWork`, an S3
+  key) streams straight to storage, and then rejecting after success must `delete`
+  (PP, in `accept_multipart`'s docs). (3) **Resubmitting:** pass the student's
+  current submission as `existing`, so an unchanged file stays `Existing` (V, NN);
+  `form_for` on that record renders "Current file: …". (4) **The body limit** must be
+  above `max_size` plus the other fields, or the 413 comes first and says "too large
+  to send together". (5) **`accept` is not a check of the contents:** a `.py` that
+  must be Python is the grader's to open.
 
 - [ ] **14.** (Todd) Merge `file`. apcsp builds its upload form.
 

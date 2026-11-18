@@ -194,3 +194,14 @@ On `/t/live-text`, `live-click`, `live-server-error`, `live-select`, `live-off`,
 
 ## 2026-11-11: set widgets (7), for WIDGETS_PLAN box 9, `tests/set_widgets.rs`
 On `/t/checkbox-multiple` (`Schedule.days`, a unit enum, 1..=2) and `/t/select-multiple` (`Visit.cities`, strings with `PLACES`, min 1). **A `<select multiple>` is role `listbox`, not `combobox`**: `roles::listbox`. `select_option_multiple(&[..])` makes ONE change event selecting exactly those, so one call can swap several options; that is what tests the remove-highest-index-first rule. Each box is found by its choice's name (`checkbox(&s, "Mon")`). 79 tests.
+
+## 2026-11-17: `upload` (6), for WIDGETS_PLAN box 13
+On `/t/upload` (1 kB, `.txt`), `/t/upload-unlimited` (2 MB body limit only),
+`/t/upload-server-limit` (1 kB on the server only, 32 MB body) and `/t/upload-big`
+(8 MB body). **The examples app's first server functions** (`#[post("/api/t/…")]`,
+`#[middleware(DefaultBodyLimit::max(…))]`), each reporting what it stored, read
+back from the temporary file, in `#report`. A file is set with
+`locator("input[type=\"file\"]").set_input_files(&path, None)`, which ignores
+`accept` (as "All files" in a picker does). **`just e2e <filter>` matches TEST
+names, not files:** for one file write `just e2e -E "'binary(upload)'"`. Draining
+needs a 20 MB file to be observable; see [[multipart-upload-behaviour]].

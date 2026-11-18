@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-17 home END**: box 11 DONE (driver, 11i tests, h.11 docs), pushed, ci 1566; next boxes 12 + 13
+- [**START HERE: next session**](next_session.md) — **2026-11-17 night**: boxes 12 + 13 DONE unattended, NOT pushed, ci 1575, e2e 85; Todd reviews 13 decisions; next box 14 (merge)
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -68,7 +68,7 @@
 - [Formoxus widget survey](formoxus_widget_survey.md) — Django's Field/Widget split (constraints follow the value type); why a proc macro beat facet attrs
 
 ## Gotchas
-- [Multipart upload behaviour](multipart_upload_behaviour.md) — measured: body limit fails mid-stream (413), answering before draining loses the reply, buffering = file size in RSS
+- [Multipart upload behaviour](multipart_upload_behaviour.md) — measured: 413 mid-stream (reply still arrives), early answer loses the reply (visible only with ~20 MB), buffering = file size in RSS
 - [Server fn futures need not be Send](server_fn_futures_need_not_be_send.md) — dioxus-server runs them via `spawn_pinned`; `FormState`/`Submission` are !Send and that is fine
 - [Mutation restore keeps the mutant](mutation_restore_mtime.md) — restoring by moving a backup back leaves an old mtime: cargo/dx keep the MUTATED build; `os.utime` on restore
 - [`optional` is payload-only](optional_flag_is_payload_only.md) — the walk's `optional` = "this node IS an Option's payload"; never pass a container's down to rebuilt children; test with `bool`, not `String`
@@ -78,7 +78,7 @@
 - [Formoxus/darling gotchas](formoxus_darling_gotchas.md) — darling field defaults, `SpannedValue`, quote!/rsx! nesting traps
 - [facet: Option is an enum](facet_option_is_an_enum.md) — `Option<T>`'s `shape.ty` is `UserType::Enum`; classify via `field_kind::kind`, which peels it
 - [Dioxus Signal is not Sync](dioxus_signal_not_sync.md) — a spec-held hook is `Send + Sync`: capture `use_signal_sync`, not `use_signal`; `let _ = s;` captures nothing
-- [E2E harness](e2e_harness.md) — `just e2e`; use `get_by_role` with a name, not exact `get_by_label` (aria-hidden marker)
+- [E2E harness](e2e_harness.md) — `just e2e`; `get_by_role` with a name, not exact `get_by_label`; one file is `-E "'binary(x)'"`; upload pages + server fns
 - [Scratch copies need their own target](scratch_copies_need_their_own_target.md) — a `git archive` copy on the repo's `target` reads stale builds as fresh, both ways
 - [Plans spell out the why](feedback_plans_spell_out_the_why.md) — steps Todd implements get full plain sentences, not telegraphic shorthand
 - [Widget trait family](widget_trait_family.md) — DECIDED 2026-11-11: `Widget` = NAME/PARTS/EXTENDS only; `LeafWidget: Widget` renders one value; `SetWidget: Widget` next; why not one trait

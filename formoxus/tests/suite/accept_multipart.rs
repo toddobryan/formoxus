@@ -613,6 +613,20 @@ fn a_part_that_isnt_a_file_leaf_is_ignored() {
     );
 }
 
+/// The plain case of "missing": a required file the user never picked. No
+/// part, and an empty name in the wire part.
+#[gtest]
+fn a_required_file_never_sent_is_a_required_error() {
+    let handler = Memory::default();
+    let body = body(&[wire_part(&assignment(chosen(""), None), &[])]);
+    let errors = accept::<Assignment>(&body, &handler, None).expect_err("rejected");
+    expect_that!(
+        field_errors(&errors),
+        elements_are![(eq("essay"), elements_are![eq(REQUIRED)])]
+    );
+    expect_that!(handler.log(), is_empty());
+}
+
 #[gtest]
 fn a_part_whose_wire_name_is_empty_is_ignored() {
     let handler = Memory::default();

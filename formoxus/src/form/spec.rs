@@ -210,13 +210,38 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
-    /// The max size of an uploaded file.
+    /// The largest file, in bytes, the file field at `path` takes (`max_size:`
+    /// in `form!`). Checked in the browser the moment a file is picked, from
+    /// the size the browser reports, so a file too large is never sent; and
+    /// again on the server, against the bytes it counts as they arrive, so a
+    /// request that skipped the browser is stopped where it passes the limit
+    /// rather than stored whole.
+    ///
+    /// The server function's body limit (axum's default is 2 MB) caps what
+    /// reaches this check at all: a `max_size` above it can never be reached,
+    /// and the request fails as a whole first. See
+    /// [`Submission::accept_multipart`](crate::submission::Submission::accept_multipart)
+    /// for raising it.
     pub fn with_max_size(mut self, path: &ModelPath<T>, max_size: u64) -> Self {
         self.field(path).max_size = Some(max_size);
         self
     }
 
-    /// Which kinds of files a file upload accepts
+    /// The file types the file field at `path` takes (`accept:` in `form!`,
+    /// written as HTML's `accept` is: `".pdf, image/*"`). Emitted as the
+    /// `<input>`'s `accept`, so the browser's picker offers those types first,
+    /// and checked in `validate` on both sides against the file's name and
+    /// content type, with HTML's rules. An empty list takes any file.
+    ///
+    /// **What it proves, and what it doesn't.** A file passes when its name
+    /// ends in a listed extension or its content type matches a listed type,
+    /// and both of those are the CLIENT's claims: the browser guesses a
+    /// content type from the extension, and a request made by hand can send
+    /// any name and type it likes. So `accept` keeps an honest user from
+    /// picking the wrong file by mistake. It says nothing about what the bytes
+    /// are: a server that needs a file to really BE a PDF has to open it and
+    /// see, and must never trust the name for anything that matters, such as
+    /// how the file is served back.
     pub fn with_accept(mut self, path: &ModelPath<T>, accept: Vec<FileType>) -> Self {
         self.field(path).accept = accept;
         self
