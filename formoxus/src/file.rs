@@ -676,9 +676,15 @@ pub(crate) const WIRE_PART: &str = "__formoxus_wire_form";
 /// [`Form::to_multipart`](crate::form::Form::to_multipart).
 ///
 /// One request: first the wire part (the values, the errors, and each sent
-/// file's size), then one part per file the user picked. A server function's
-/// argument is one type on both ends, so this is also what the server reads
-/// the request into (11h).
+/// file's size), then one part per file the user picked.
+///
+/// **On the server** it is the server function's argument as well, since an
+/// argument is one type on both ends. Taking it out of the request reads
+/// nothing yet: the parts stay in the request until
+/// [`Submission::accept_multipart`](crate::submission::Submission::accept_multipart)
+/// reads them, once, storing each file as it arrives. So a server function
+/// passes it straight there. axum's 2 MB default body limit applies, and
+/// `accept_multipart`'s docs say how to raise it.
 pub struct Multipart<T>(pub(crate) MultipartFormData<T>);
 
 impl<T> Debug for Multipart<T> {

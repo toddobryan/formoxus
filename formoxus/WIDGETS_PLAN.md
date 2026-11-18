@@ -1063,7 +1063,7 @@ several?
   `max_size:`s, because the body limit is the most a request can make the server
   drain.
 
-- [ ] **11.** (Todd) The runtime: `FileUpload` (decision K), recognized by the build walk
+- [x] **11.** (Todd) The runtime: `FileUpload` (decision K), recognized by the build walk
   before the enum case (trap 10); its leaf, holding the file's name in the store; the
   file table on `Form`; `FileInput` (trap 11); `Form::to_multipart` and
   `Submission::accept_multipart`, per the spike; and the checks in decision M.
@@ -2333,7 +2333,7 @@ several?
     `dioxus_html::…` that wasm refuses, because `dioxus-html` is a native-only
     dependency: in `formoxus/src`, outside the native `send_parts`, name it
     `dioxus::html::…`.
-  - [ ] **11h. `Multipart<T>` on the server, and `Submission::accept_multipart`.** On the
+  - [x] **11h. `Multipart<T>` on the server, and `Submission::accept_multipart`.** On the
     server, `Multipart<T>` implements axum's `FromRequest` by wrapping axum's
     `Multipart` and reading nothing yet. Then `Submission::accept_multipart(spec,
     multipart, &handler, existing).await` replaces box 11's earlier
@@ -2659,12 +2659,21 @@ several?
       and whose kept ones are `Existing`.
       **As built (2026-11-17, Claude at Todd's request):** as written. The
       delete loop appears twice (here and in h.8's cleanup), left inline.
-    - [ ] **h.11.** (Claude, or Todd) **Docs.** `accept_multipart`: what each
+    - [x] **h.11.** (Claude, or Todd) **Docs.** `accept_multipart`: what each
       argument is for (`existing` and decision V; `None` on a create), that the
       request is read once and in order, the body limit
       (`#[middleware(DefaultBodyLimit::max(…))]` when files can pass 2 MB, trap
       12), and PP's note on rejecting after success. `reject_field`'s doc gains
       the same note. `Multipart`'s doc gains the server half.
+      **As built (2026-11-17, Claude):** `accept_multipart` documents each
+      argument (`handler`'s `Stored` checked at run time, `existing` with V and
+      NN), what `Ok` and `Err` hold, the read-once-in-order-to-the-end rule and
+      its two exceptions, the body limit, rejecting after success, and an
+      `ignore`d example (`#[middleware(DefaultBodyLimit::max(…))]`, `move_to`
+      with `IfExists::Version`, the client's `absorb(submit(to_multipart()))`).
+      `reject_field` and `reject` both gained the note on rejecting after
+      success; `reject` refers to `reject_field`'s. `Multipart`'s doc gained
+      the server half. `just docs` clean.
 
     **Decided 2026-11-17 (Todd, agreeing to Claude's recommendation):**
 

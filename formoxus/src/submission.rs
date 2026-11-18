@@ -119,6 +119,13 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// input can provoke, and on a server a panic unwinds into a 500 — which
     /// beats dropping the message on the floor.
     ///
+    /// **After [`accept_multipart`](Self::accept_multipart),** rejecting drops
+    /// the model's `Received` files without deleting them. Pass each one's
+    /// `stored` to `handler.delete` first, unless the handler's files delete
+    /// themselves when dropped, as
+    /// [`TemporaryFileUploadHandler`](crate::file::TemporaryFileUploadHandler)'s
+    /// do.
+    ///
     /// [`FormState::push_field_error`]: crate::form::FormState::push_field_error
     pub fn reject_field(mut self, path: &ModelPath<T>, message: &str) -> WireForm<T> {
         self.state
@@ -132,6 +139,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
     /// The counterpart to [`reject_field`](Self::reject_field) for a verdict
     /// that names no field — "those credentials don't match" can't say whether
     /// it was the username or the password.
+    ///
+    /// After [`accept_multipart`](Self::accept_multipart), delete the received
+    /// files first, as [`reject_field`](Self::reject_field) says.
     pub fn reject(mut self, message: &str) -> WireForm<T> {
         self.state.errors.push(message.into());
         self.into_wire_with_errors()
@@ -154,6 +164,81 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
         WireForm::new(self.state.collect_values(), errors)
     }
 
+    /// [`accept`](Self::accept) for a form with files: read a [`Multipart`]
+    /// request, store each file through `handler` as it arrives, then rebuild
+    /// the form and run its validation.
+    ///
+    /// - **`spec`** is the one the client rendered from, as for `accept`. Each
+    ///   file field's `max_size` and `accept` are checked again against what
+    ///   arrives, with the messages the browser showed. A file whose stated
+    ///   size is over the limit, or whose type the field won't take, is never
+    ///   stored; one that turns out larger than it said is stopped where it
+    ///   passes the limit.
+    /// - **`handler`** stores each file as it streams in, never whole in
+    ///   memory. Its `Stored` must be the `S` of every
+    ///   [`FileUpload<S>`](crate::file::FileUpload) in `T`. The signature can't
+    ///   say so, so it is checked first, and a mismatch panics: that is a bug
+    ///   in the server function, not anything a user can cause.
+    /// - **`existing`** is the record being edited, or `None` on a create. A
+    ///   file the user kept arrives as a name with no file, and is believed
+    ///   only if `existing` has a file at the same path. It then takes the
+    ///   record's name, whatever the client sent; otherwise it counts as
+    ///   missing (a required error, or `None` for an `Option<FileUpload>`). A
+    ///   kept file inside a list or set item always counts as missing, because
+    ///   an item's key is the form's own count and may name a different file on
+    ///   the record.
+    ///
+    /// On `Ok`, each new file is `FileUpload::Received`, holding what the
+    /// handler stored, and each kept one is `FileUpload::Existing`. On `Err`,
+    /// every file stored for this request has already been passed to
+    /// `handler.delete`. The `Err` holds field errors, or one form-level error
+    /// when the request was too large, broke off, didn't come from
+    /// [`Form::to_multipart`](crate::form::Form::to_multipart), or a file
+    /// couldn't be stored.
+    ///
+    /// **The request is read once, in order, and to its end.** The values come
+    /// first, then each file, stored before the form exists. This returns only
+    /// after the whole request has been read, even when it has already failed,
+    /// because a server that answers before the browser has finished sending
+    /// loses its reply. The exceptions are a request past the body limit and
+    /// one that broke off, neither of which can be read any further.
+    ///
+    /// **The body limit.** axum refuses a request body past 2 MB by default, so
+    /// a server function whose files can be larger needs a limit of its own:
+    /// `#[middleware(DefaultBodyLimit::max(…))]` on it. Past the limit this
+    /// returns the form-level error "These files are too large to send
+    /// together." The limit can't be read from the request, so the message
+    /// can't name it. A `max_size` above the body limit can never be reached.
+    ///
+    /// **Rejecting after success.** A check that fails after this returned
+    /// `Ok` ([`reject_field`](Self::reject_field), [`reject`](Self::reject))
+    /// drops the model's `Received` files without deleting them.
+    /// [`TemporaryFileUploadHandler`](crate::file::TemporaryFileUploadHandler)'s
+    /// files delete themselves when dropped; a handler of your own (an S3 key,
+    /// say) may leave them stored. Pass each `Received` file's `stored` to
+    /// `handler.delete` before rejecting.
+    ///
+    /// ```ignore
+    /// // server
+    /// #[post("/api/essay")]
+    /// #[middleware(DefaultBodyLimit::max(25 * 1024 * 1024))]
+    /// async fn submit(form: Multipart<Essay>) -> Result<WireForm<Essay>, ServerFnError> {
+    ///     let handler = TemporaryFileUploadHandler::new();
+    ///     let sub = match Submission::accept_multipart(spec(), form, &handler, None).await {
+    ///         Ok(sub) => sub,
+    ///         Err(errors) => return Ok(WireForm::from_errors(errors)),
+    ///     };
+    ///     let model = sub.into_model();
+    ///     if let FileUpload::Received { name, stored, .. } = &model.essay {
+    ///         stored.move_to(essay_dir().join(name), IfExists::Version)?;
+    ///     }
+    ///     insert(&model).await?;
+    ///     Ok(WireForm::from_model(&model, spec()))
+    /// }
+    ///
+    /// // client
+    /// form.absorb(submit(form.to_multipart()).await?);
+    /// ```
     pub async fn accept_multipart<H: FileUploadHandler>(
         spec: FormSpec<T>,
         multipart: Multipart<T>,
