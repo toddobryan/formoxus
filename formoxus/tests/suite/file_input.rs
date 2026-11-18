@@ -283,12 +283,97 @@ fn PdfEssay() -> Element {
     form.render(using_fns! {})
 }
 
-/// Decision DD: `accept` waits for box 12's row in the attribute table.
-/// `validate` checks the type either way (`files.rs`).
+/// The field's `accept` setting reaches the `<input>` (box 12, ending
+/// decision DD), so the browser's picker offers what `validate` takes.
 #[gtest]
-fn no_accept_attribute_yet() {
+fn the_accept_setting_is_the_inputs_accept() {
     let html = render_to_html(PdfEssay);
+    expect_that!(attr(file_input_tag(&html), "accept"), some(eq(".pdf")));
+}
+
+#[gtest]
+fn a_file_field_without_accept_has_no_accept_attribute() {
+    let html = render_to_html(NewEssay);
     expect_that!(attr(file_input_tag(&html), "accept"), none());
+}
+
+// ── Through `form!` (box 12) ─────────────────────────────────────────────
+
+/// `max_size:` and `accept:` written in `form!`, checked live.
+#[component]
+fn MacroEssay() -> Element {
+    let form = use_form(|| {
+        empty_form(
+            form! {
+                Essay {
+                    essay => { widget: file, max_size: 2_000_000, accept: ".pdf, image/*" },
+                }
+            }
+            .with_live_validation(true),
+        )
+    });
+    probe(&form, describe_essay)
+}
+
+/// Each entry as `FileType` writes it, joined as HTML's `accept` is.
+#[gtest]
+fn form_macro_accept_is_the_inputs_accept() {
+    let html = render_to_html(MacroEssay);
+    expect_that!(
+        attr(file_input_tag(&html), "accept"),
+        some(eq(".pdf, image/*"))
+    );
+}
+
+#[gtest]
+fn form_macro_max_size_refuses_a_larger_pick() {
+    let mut app = Harness::mount(MacroEssay);
+    app.pick_files(the_input(&app), &[pdf("essay.pdf", 3_000_000)]);
+    expect_that!(app.html(), contains_substring(TOO_LARGE_2_MB));
+}
+
+#[gtest]
+fn form_macro_accept_refuses_another_type() {
+    let mut app = Harness::mount(MacroEssay);
+    app.pick_files(the_input(&app), &[file("essay.txt", "text/plain", 100)]);
+    expect_that!(
+        app.html(),
+        contains_substring("This file type isn&#39;t allowed. Allowed: .pdf, image/*.")
+    );
+}
+
+#[gtest]
+fn form_macro_accept_takes_a_matching_pick() {
+    let mut app = Harness::mount(MacroEssay);
+    app.pick_files(the_input(&app), &[file("scan.png", "image/png", 100)]);
+    check(&mut app);
+    expect_that!(checked(&app.html()), eq("valid: Chosen scan.png 100"));
+}
+
+/// An `accept:` that isn't a literal is parsed when the spec is built.
+#[component]
+fn MacroEssayFromAConst() -> Element {
+    const DOCUMENTS: &str = ".pdf,.docx";
+    let form = use_form(|| empty_form(form! { Essay { essay => { accept: DOCUMENTS } } }));
+    form.render(using_fns! {})
+}
+
+#[gtest]
+fn form_macro_accept_may_be_any_str_expression() {
+    let html = render_to_html(MacroEssayFromAConst);
+    expect_that!(
+        attr(file_input_tag(&html), "accept"),
+        some(eq(".pdf, .docx"))
+    );
+}
+
+/// A literal is checked by `form!` itself (the goldens); anything else can
+/// only be parsed at run time, and a bad one panics when the spec is built.
+#[gtest]
+#[should_panic(expected = "`accept`: `pdf` is not a file type: did you mean `.pdf`?")]
+fn form_macro_accept_from_a_bad_const_panics() {
+    const DOCUMENTS: &str = "pdf";
+    let _ = form! { Essay { essay => { accept: DOCUMENTS } } };
 }
 
 #[gtest]

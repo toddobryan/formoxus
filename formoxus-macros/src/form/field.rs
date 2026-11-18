@@ -52,6 +52,11 @@ pub(crate) struct FieldBody {
     /// items (#14). The keys are kept for the list check's span.
     pub(crate) min_items: Option<(Ident, Expr)>,
     pub(crate) max_items: Option<(Ident, Expr)>,
+    /// `max_size: n`, a file field's largest file in bytes (`WIDGETS_PLAN.md`
+    /// decision M), any expression of type `u64`. A key of formoxus's own,
+    /// not a table attribute, since HTML has no such attribute. The key is
+    /// kept for the "only a file field" check's span.
+    pub(crate) max_size: Option<(Ident, Expr)>,
     /// The bare flag `no_trim`: read a text field's raw text as typed rather
     /// than trimmed (#16). A setting on the field, so a field without one,
     /// like a number's, does not compile. The key, since a flag has nothing
@@ -361,6 +366,9 @@ impl FieldBody {
             .0
             .iter()
             .filter_map(|(attr_id, parsed_attr)| match attr_id {
+                // `accept` is a file field's, which has no settings struct:
+                // `file_tokens` gives it to `with_accept` instead.
+                AttrId::Std(Attr::Accept) => None,
                 AttrId::Std(attr) if attr.validated() => Some(parsed_attr.setting_tokens(*attr)),
                 _ => None,
             })
@@ -502,6 +510,7 @@ impl FieldBody {
             });
         }
         checks.push(self.list_checks(&shape, key));
+        checks.push(self.max_size_checks(&shape));
         checks.push(self.set_checks(&shape));
         checks.push(self.at_most_one_checks(&shape));
         checks.push(self.order_checks(&shape, path_span));
@@ -819,6 +828,7 @@ impl Parse for FieldBody {
             ));
         }
         fb.range_checks()?;
+        fb.accept_checks()?;
         fb.beside_widget_checks()?;
         if let (Some(_), Some(key)) = (&fb.choices, &fb.no_trim) {
             return Err(syn::Error::new(
@@ -872,7 +882,7 @@ impl FieldBody {
         let name = key.to_string();
         match name.as_str() {
             "widget" | "label" | "help_text" | "validator" | "choices" | "adder" | "feedback"
-            | "item" | "min_items" | "max_items" => self.parse_keyed(&key, body),
+            | "item" | "min_items" | "max_items" | "max_size" => self.parse_keyed(&key, body),
             "sort_by" => {
                 body.parse::<Token![:]>()?;
                 if self.sort_by.is_some() {
@@ -910,8 +920,8 @@ impl FieldBody {
 
     /// A `key: value` entry whose key is formoxus's own rather than an
     /// attribute's: `widget`, `label`, `help_text`, `validator`, `choices`,
-    /// `adder`, `feedback`, `item`, `min_items` and `max_items`. Each may be
-    /// given once.
+    /// `adder`, `feedback`, `item`, `min_items`, `max_items` and `max_size`.
+    /// Each may be given once.
     fn parse_keyed(&mut self, key: &Ident, body: ParseStream<'_>) -> Result<()> {
         let name = key.to_string();
         body.parse::<Token![:]>()?;
@@ -946,6 +956,11 @@ impl FieldBody {
                 return Err(given_twice());
             }
             *slot = Some((key.clone(), body.parse()?));
+        } else if name == "max_size" {
+            if self.max_size.is_some() {
+                return Err(given_twice());
+            }
+            self.max_size = Some((key.clone(), body.parse()?));
         } else if name == "adder" {
             if self.adder.is_some() {
                 return Err(given_twice());
@@ -969,6 +984,60 @@ impl FieldBody {
             self.choices = Some((key.clone(), body.parse()?));
         }
         Ok(())
+    }
+
+    /// A literal `accept:` parsed as the browser and `FileNode::validate` will
+    /// read it, so a malformed list (`"pdf"`, `"image/"`, a duplicate) is an
+    /// error on the string rather than a panic when the form is built. Any
+    /// other expression is parsed at run time, by `file_tokens`' builder call.
+    fn accept_checks(&self) -> Result<()> {
+        let Some(Expr::Lit(ExprLit {
+            lit: Lit::Str(list),
+            ..
+        })) = self.attrs.expr(Attr::Accept)
+        else {
+            return Ok(());
+        };
+        formoxus_spec::FileType::parse_list(&list.value())
+            .map(|_| ())
+            .map_err(|e| syn::Error::new(list.span(), format!("`accept`: {e}")))
+    }
+
+    /// A file field's two settings, as `FormSpec` builder calls:
+    /// `with_max_size` for `max_size:` and `with_accept` for `accept:`. They
+    /// are `FieldSpec`'s own fields, not a settings closure's, because a
+    /// `FileUpload` is a `FileNode`, which no `field_for` builds.
+    ///
+    /// `accept:` is parsed again here, at run time, since only a literal was
+    /// parsed by `accept_checks`; for a literal the `expect` cannot fire.
+    pub(crate) fn file_tokens(&self, key: &TokenStream2) -> TokenStream2 {
+        let max_size = self.max_size.as_ref().map(|(max_key, n)| {
+            quote_spanned! { max_key.span()=> .with_max_size(#key, #n) }
+        });
+        let accept = self.attrs.expr(Attr::Accept).map(|list| {
+            quote_spanned! { list.span()=>
+                .with_accept(
+                    #key,
+                    ::formoxus::file::FileType::parse_list(&(#list))
+                        .unwrap_or_else(|e| ::core::panic!("`accept`: {e}")),
+                )
+            }
+        });
+        quote! { #max_size #accept }
+    }
+
+    /// `max_size:`'s `const _` assertion, spanned on the key: that the field
+    /// is a `FileUpload` (or an `Option` of one).
+    fn max_size_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let Some((key, _)) = &self.max_size else {
+            return TokenStream2::new();
+        };
+        quote_spanned! { key.span()=>
+            const _: () = ::core::assert!(
+                ::formoxus::field_kind::is_file(#shape),
+                "`max_size` applies only to a FileUpload field"
+            );
+        }
     }
 
     /// What a `widget:` leaves nothing for (`WIDGETS_PLAN.md` decision H): a
@@ -1070,6 +1139,7 @@ impl FieldBody {
             && self.omit_value.is_none()
             && self.min_items.is_none()
             && self.max_items.is_none()
+            && self.max_size.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
             && self.adder.is_none()
@@ -1552,6 +1622,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "omit_value".to_string(),
         "min_items".to_string(),
         "max_items".to_string(),
+        "max_size".to_string(),
         "choices".to_string(),
         "adder".to_string(),
         "set".to_string(),
@@ -1864,6 +1935,9 @@ mod tests {
                 // Only on a `range`, which needs its bounds.
                 "omit_value" => quote!(widget: range, min: 0, max: 10, #ident),
                 "min_items" | "max_items" => quote!(#ident: 2),
+                "max_size" => quote!(#ident: 2_000_000),
+                // A literal `accept` is parsed, so `"x"` would be refused.
+                "accept" => quote!(#ident: ".pdf"),
                 "sort_by" => quote!(#ident: String::cmp),
                 "feedback" => quote!(#ident: |_| None),
                 "item" => quote!(#ident: TagChip),

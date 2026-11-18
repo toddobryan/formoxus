@@ -910,7 +910,8 @@ impl FieldSpec {
             .set
             .as_ref()
             .map(|_| quote! { .treat_as_set(#key) });
-        quote! { #label #help_text #leaf_widget #node #attrs #adder #set #set_widget #sort_by #feedback #item #validator #min_items #max_items }
+        let file = self.body.file_tokens(&key);
+        quote! { #label #help_text #leaf_widget #node #attrs #adder #set #set_widget #sort_by #feedback #item #validator #min_items #max_items #file }
     }
 }
 

@@ -359,11 +359,18 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// never be checked, so the browser and the server would disagree.
     pub fn with_attrs(mut self, path: &ModelPath<T>, attrs: FieldAttrs) -> Self {
         if let Some(attr) = attrs.first_validated() {
+            // A file field's `accept` is `FieldSpec`'s own, not a settings
+            // struct's, so it has a builder of its own.
+            let builder = if attr == formoxus_spec::Attr::Accept {
+                "with_accept"
+            } else {
+                "with_node"
+            };
             // `form!`'s spelling (`max_length`), not the HTML name (`maxlength`):
             // the one the dev wrote, and the field's setting is named the same.
             panic!(
                 "{path}: `{}` is validated, so it is a setting of the field, not an \
-                 attribute; give it with `with_node`",
+                 attribute; give it with `{builder}`",
                 attr.variant_name().to_snake_case()
             );
         }

@@ -1,0 +1,5 @@
+error: `accept`: `docx` is not a file type: did you mean `.docx`?
+  --> tests/ui/form_accept_not_a_file_type.rs:15:32
+   |
+15 |             essay => { accept: ".pdf, docx" },
+   |                                ^^^^^^^^^^^^

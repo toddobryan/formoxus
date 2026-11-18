@@ -918,8 +918,8 @@ fn file_node(
         widget,
         attrs: spec.map(|s| s.attrs.clone()).unwrap_or_default(),
         file_name,
-        // `form!` has no `max_size:` or `accept:` until box 12, and `FieldSpec`
-        // no place for them, so neither can be set yet.
+        // From `form!`'s `max_size:` and `accept:`, or a hand-built spec's
+        // `with_max_size` and `with_accept`.
         max_size: spec.and_then(|s| s.max_size),
         accept: spec.map_or_else(Vec::new, |s| s.accept.clone()),
         meta: None,

@@ -283,6 +283,18 @@ impl AttrSet {
 }
 
 attributes! {
+    // A file input's allowed types. Validated: `FileNode::validate` checks the
+    // file against it on both sides, so it is the field's setting
+    // (`FieldSpec::accept`, parsed into `FileType`s), and `FileNode` emits it
+    // from there rather than from the dev's attributes.
+    Accept {
+        name: "accept",
+        owner: Author,
+        type: String,
+        for: File,
+        on: Input(File),
+        validated: true,
+    },
     Accesskey {
         name: "accesskey",
         owner: Author,
@@ -1274,6 +1286,7 @@ mod tests {
             ),
             Attr::Size => (TEXT_LIKE.to_vec(), vec![SELECT]),
             Attr::Multiple => (vec!["email", "file"], vec![SELECT]),
+            Attr::Accept => (vec!["file"], vec![]),
             Attr::Alpha | Attr::Colorspace => (vec!["color"], vec![]),
             Attr::Cols | Attr::Rows | Attr::Wrap => (vec![], vec![TEXTAREA]),
             _ => return None,
@@ -1346,6 +1359,7 @@ mod tests {
         ];
         let numbers = [Attr::Min, Attr::Max, Attr::Step];
         let bools = [Attr::RequiredTrue];
+        let files = [Attr::Accept];
         // Every scalar but no file: a file input has no `value` a script can
         // set and holds one file, and the rest can't be emitted on one.
         let not_files = [
@@ -1365,6 +1379,8 @@ mod tests {
                 &[Int, Float]
             } else if bools.contains(&attr) {
                 &[Bool]
+            } else if files.contains(&attr) {
+                &[File]
             } else if not_files.contains(&attr) {
                 &[Text, Int, Float, Bool]
             } else {
@@ -1429,7 +1445,7 @@ mod tests {
     }
 
     /// Exactly the attributes `validate` enforces today: the four constraint
-    /// keys, the presence check and #6's must-be-true.
+    /// keys, the presence check, #6's must-be-true, and a file's types.
     #[gtest]
     fn formoxus_validates_exactly_todays_constraints() {
         let validated: Vec<Attr> = Attr::ALL
@@ -1447,6 +1463,7 @@ mod tests {
                 eq(&Attr::Max),
                 eq(&Attr::Required),
                 eq(&Attr::RequiredTrue),
+                eq(&Attr::Accept),
             ]
         );
     }

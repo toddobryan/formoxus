@@ -245,7 +245,8 @@ fn cannot_render(widget_name: WidgetName) -> &'static str {
         | WidgetName::DatetimeLocalInput
         | WidgetName::MonthInput
         | WidgetName::WeekInput => {
-            "an `<input>` widget cannot render a bool field; use `checkbox` or `select`"
+            "an `<input>` widget renders only a text or number field: use `checkbox` or \
+             `select` for a bool, and `file` for a `FileUpload`"
         }
     }
 }

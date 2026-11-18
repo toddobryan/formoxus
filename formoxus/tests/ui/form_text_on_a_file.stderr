@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: an `<input>` widget renders only a text or number field: use `checkbox` or `select` for a bool, and `file` for a `FileUpload`
+  --> tests/ui/form_text_on_a_file.rs:14:32
+   |
+14 |             essay => { widget: text },
+   |                                ^^^^ evaluation of `main::_` failed here

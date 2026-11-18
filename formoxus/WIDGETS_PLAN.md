@@ -2718,11 +2718,50 @@ several?
     request unread changes nothing in memory; the cost is a reply the browser
     never gets, which box 13 tests.
 
-- [ ] **12.** (Claude) The `form!` side (`file` is already a `WidgetName` row and
+- [x] **12.** (Claude) The `form!` side (`file` is already a `WidgetName` row and
   `NOT_YET` is gone, both Todd, 2026-11-15, so `form!` accepts `widget: file` today
   on any field and the checks below are what refuses the wrong ones): the `accept` row in
   the attribute table (trap 9), `max_size:`, and goldens (`file` on a `String`, on a
   non-`FileUpload` struct, `max_size:` on a non-file field).
+
+  **As built (2026-11-17, Claude, unattended at Todd's request; decisions listed for his
+  review in `next_session`).** `just ci` 1574.
+
+  - **`accept`, a table row** (`formoxus-spec/src/attrs.rs`): owner `Author`, type
+    `String`, `for: File`, `on: Input(File)`, `validated: true`. Validated, because
+    `FileNode::validate` enforces it, which makes it the field's setting rather than
+    an attribute `with_attrs` passes through (`with_attrs` refuses it, naming
+    `with_accept`). The table's tests gained it (`for:`, `on:`, the validated list).
+  - **`form!`'s `accept:`** goes to `with_accept`, not to the settings closure
+    (`settings_tokens` skips it), since a `FileUpload` has no settings struct: it is
+    a `FileNode`, which no `field_for` builds. A **literal** is parsed by `form!` with
+    `FileType::parse_list`, so `accept: ".pdf, docx"` is an error on the string
+    ("`accept`: `docx` is not a file type: did you mean `.docx`?"). Any other
+    expression (a `const`) is parsed when the spec is built, and a bad one panics
+    there with the same message. "Applies only to a FileUpload field" comes free from
+    the row's `for:`.
+  - **`form!`'s `max_size: n`** is a key of formoxus's own (HTML has no such
+    attribute), any `u64` expression, emitted as `with_max_size`. Its check is a
+    `const _` on the new `field_kind::is_file(shape)` ("`max_size` applies only to a
+    FileUpload field"), spanned on the key.
+  - **`FileNode` emits `accept`** on the `<input>` (decision DD's wait is over), from
+    its setting: entries in `FileType`'s `Display`, joined with ", ", before the
+    dev's own attributes; none when the list is empty.
+  - **A message fixed on the way:** an `<input>` widget (`text`, …) on a `FileUpload`
+    said "cannot render a bool field". All `<input>` widgets now say "renders only a
+    text or number field: use `checkbox` or `select` for a bool, and `file` for a
+    `FileUpload`"; `form_input_widget_on_a_bool`'s golden re-blessed.
+  - **Goldens (6 new):** `form_file_on_a_string`, `form_file_on_a_struct` (both
+    refused already, by 11f's checks), `form_text_on_a_file`, `form_max_size_on_a_string`,
+    `form_accept_on_a_string`, `form_accept_not_a_file_type`.
+  - **Suite:** `file_input.rs` (the DD test flipped to "the setting is the input's
+    `accept`", one for no `accept`, and 6 through `form!`: markup, a larger pick, a
+    wrong type, a matching type, a `const` list, a bad `const` panicking) and
+    `accept_multipart.rs` (`notes? => { max_size }` and `drafts[] => { accept }` reach
+    the server). Mutation-checked: no builder calls, no `accept` attribute, no literal
+    check, no `max_size` check: each caught.
+  - **Not done:** `form!` grammar docs for the two keys. There is no per-key reference
+    yet; that is MVP item A1, which comes after the grammar is complete.
 
 - [ ] **13.** (Claude) Suite tests (the server-side checks: missing, too large, wrong
   type; a form with a file and ordinary fields, from the multipart into the model), the

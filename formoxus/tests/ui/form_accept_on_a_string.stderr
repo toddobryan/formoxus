@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `accept` applies only to a FileUpload field
+  --> tests/ui/form_accept_on_a_string.rs:13:32
+   |
+13 |             essay => { accept: ".pdf" },
+   |                                ^^^^^^ evaluation of `main::_` failed here

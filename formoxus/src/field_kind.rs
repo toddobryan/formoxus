@@ -382,6 +382,12 @@ pub const fn is_list(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::List)
 }
 
+/// Whether the field is a `FileUpload<S>`, for any `S`, or an `Option` of
+/// one: what `form!`'s `max_size:` asks.
+pub const fn is_file(shape: &Shape) -> bool {
+    matches!(kind(shape), Kind::File)
+}
+
 /// Whether the field is a set (`HashSet` or `BTreeSet` or an Option<_> of one)
 pub const fn is_set(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Set)

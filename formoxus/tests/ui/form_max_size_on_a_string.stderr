@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `max_size` applies only to a FileUpload field
+  --> tests/ui/form_max_size_on_a_string.rs:13:24
+   |
+13 |             essay => { max_size: 2_000_000 },
+   |                        ^^^^^^^^ evaluation of `main::_` failed here

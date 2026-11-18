@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: an `<input>` widget cannot render a bool field; use `checkbox` or `select`
+error[E0080]: evaluation panicked: an `<input>` widget renders only a text or number field: use `checkbox` or `select` for a bool, and `file` for a `FileUpload`
   --> tests/ui/form_input_widget_on_a_bool.rs:13:37
    |
 13 |             subscribed => { widget: text },

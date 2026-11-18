@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a widget applies only to a single-value field, not a struct, list or enum
+  --> tests/ui/form_file_on_a_struct.rs:20:32
+   |
+20 |             essay => { widget: file },
+   |                                ^^^^ evaluation of `main::_` failed here

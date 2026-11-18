@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 use facet::{Def, Facet, Partial, ReflectError, Shape, Type, UserType};
-use formoxus_spec::FileType;
+use formoxus_spec::{Attr, AttrKey, AttrValue, FileType};
 
 use crate::{
     error::{FormAccessError, ValidationMessage},
@@ -93,6 +93,27 @@ fn stored_shapes_helper(
     }
 }
 
+impl FileNode {
+    /// `accept`, from the field's setting, then the dev's own attributes:
+    /// what `render` hands the widget before `required` is added. `accept`
+    /// joined as HTML writes it (`.pdf, image/*`), with each entry in the
+    /// form `FileType`'s `Display` gives, and left out when it is empty,
+    /// since `accept=""` allows anything anyway.
+    fn own_attrs(&self) -> FieldAttrs {
+        if self.accept.is_empty() {
+            return self.attrs.clone();
+        }
+        let accept = self
+            .accept
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        FieldAttrs::from([(AttrKey::Std(Attr::Accept), AttrValue::String(accept))])
+            .then(&self.attrs)
+    }
+}
+
 impl Node for FileNode {
     fn name(&self) -> String {
         self.name.clone()
@@ -105,11 +126,11 @@ impl Node for FileNode {
     }
 
     /// As `FieldNode::render` does for a leaf, with two differences. No
-    /// choices, since no value is a file. And no attributes of the field's own
-    /// yet: `accept` waits for box 12's row in the attribute table (decision
-    /// DD), and `validate` checks the type either way. So the attributes are
-    /// `required`, when the field is, and the dev's own, which `form!` has
-    /// already kept to what the widget takes.
+    /// choices, since no value is a file. And the one attribute of the field's
+    /// own is `accept`, from its setting, so the browser's picker offers the
+    /// types `validate` will take. So the attributes are `required`, when the
+    /// field is, `accept`, when it has one, and the dev's own, which `form!`
+    /// has already kept to what the widget takes.
     ///
     /// `required` is how the widget tells an optional file, which gets a
     /// Remove button, from a required one: `OptionNode` renders an
@@ -128,7 +149,7 @@ impl Node for FileNode {
             },
             contents: ctx.contents,
             choices: None,
-            base_attrs: FieldAttrs::with_owned_attrs(false, ctx.required, &self.attrs),
+            base_attrs: FieldAttrs::with_owned_attrs(false, ctx.required, &self.own_attrs()),
             extra_attrs: Vec::new(),
             on_field_event: ctx.on_field_event,
         })

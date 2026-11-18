@@ -536,6 +536,58 @@ fn a_type_the_field_wont_take_is_refused_before_storing() {
     expect_that!(handler.log(), is_empty(), "never reached `new_file`");
 }
 
+/// `form!`'s `max_size:` and `accept:` on an optional field and on a list's
+/// items: the spec keys it writes (`notes`, `drafts[]`) are the ones the
+/// server reads a part's limits from.
+#[gtest]
+fn form_macro_limits_reach_the_server_through_options_and_items() {
+    let handler = Memory::default();
+    let spec = form! {
+        Assignment {
+            notes? => { max_size: 5 },
+        }
+    };
+    let request = body(&[
+        wire_part(
+            &assignment(chosen("essay.pdf"), Some(chosen("notes.pdf"))),
+            &[],
+        ),
+        pdf("essay", "my essay"),
+        pdf("notes", "much longer than five"),
+    ]);
+    let errors = accept_with(spec, &request, &handler, None).expect_err("rejected");
+    expect_that!(
+        field_errors(&errors),
+        elements_are![(
+            eq("notes"),
+            elements_are![starts_with("This file is too large.")]
+        )]
+    );
+
+    let handler = Memory::default();
+    let spec = form! {
+        Portfolio {
+            drafts[] => { accept: ".pdf" },
+        }
+    };
+    let model = Portfolio {
+        drafts: vec![chosen("first.txt")],
+    };
+    let request = body(&[
+        wire_part(&model, &[]),
+        file_part("drafts.#0", "text/plain", b"plain"),
+    ]);
+    let errors = accept_with(spec, &request, &handler, None).expect_err("rejected");
+    expect_that!(
+        field_errors(&errors),
+        elements_are![(
+            starts_with("drafts.#"),
+            elements_are![eq("This file type isn't allowed. Allowed: .pdf.")]
+        )]
+    );
+    expect_that!(handler.log(), is_empty(), "refused before `new_file`");
+}
+
 // ── Parts that are ignored ───────────────────────────────────────────────
 
 #[gtest]

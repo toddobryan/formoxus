@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `file` can only render a `FileUpload` field
+  --> tests/ui/form_file_on_a_string.rs:13:32
+   |
+13 |             essay => { widget: file },
+   |                                ^^^^ evaluation of `main::_` failed here
