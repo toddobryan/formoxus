@@ -1722,39 +1722,25 @@ fn filled_option_items_keep_some_and_none() {
 
 /// An adder that says what it was handed, and adds a filled `"gamma"` item
 /// when clicked. `first` is item `#0`'s value as the store has it, and
-/// `stored` how many store entries it finds under the list, read whole, as an
-/// adder leaving out the choices already in its list would.
+/// `stored` how many store entries it finds under the list, as an adder
+/// leaving out the choices already in its list would: both through its bound
+/// field's read-only `values()`, and the add through the field too, which
+/// addresses it to the list (`BOUND_PLAN.md`).
 #[component]
 fn ProbeAdder(props: AddItemProps) -> Element {
     let AddItemProps {
-        path,
-        id,
-        values,
-        on_edit,
-        item_count,
-        ..
+        field, item_count, ..
     } = props;
-    // Read straight from the store, as a dev's adder has to: `get_current` is
-    // crate-private, and nothing public reads one key yet (issue #22).
-    let first = values
-        .read()
-        .get(format!("{path}.#0").as_str())
-        .cloned()
-        .unwrap_or_default();
-    let under = format!("{path}.");
-    let stored = values
-        .read()
-        .keys()
-        .filter(|k| k.as_str().starts_with(&under))
-        .count();
+    let (path, id) = (field.path().clone(), field.id().to_string());
+    let values = field.values();
+    let first = values.get(&NodePath::new(format!("{path}.#0")));
+    let stored = values.paths_under(&path).len();
     let says = format!("{path} has {item_count}, first {first}, stored {stored}");
     rsx! {
         button {
             r#type: "button",
             id: "{id}-add",
-            onclick: move |_| {
-                on_edit.call(add_item(path.as_str(), Some(ItemValue::new("gamma".to_string()))));
-            },
+            onclick: move |_| field.add(Some(ItemValue::new("gamma".to_string()))),
             "{says}"
         }
     }

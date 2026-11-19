@@ -62,7 +62,8 @@ cannot write values today; only its errors leak.
 
 **Part 1 (#22): two read-only views, and the stores go crate-private.** The aliases
 `ValuesStore` and `ErrorsStore` become `pub(crate)`, and every place in the table
-hands out a view instead. A view is `Copy`, wraps the store in a private field, and
+hands out a view instead (the `values` fields of `AddItemProps` and `SetItemProps`
+go altogether, replaced by their bound field's `values()`, Part 2). A view is `Copy`, wraps the store in a private field, and
 has read methods only. The crate reaches the store inside through a `pub(crate)`
 accessor, so the internal code changes little.
 
@@ -85,75 +86,112 @@ The errors view: **`at(&NodePath) -> Option<Vec<ValidationMessage>>`** and
 newtype can have inherent methods, which the alias couldn't (the orphan rule), so
 the extension trait goes.
 
-**Part 2 (#23): `FieldHandle` becomes the bound field.** The shape recommended in
-decision D:
+**Part 2 (#23): one `BoundField<K>` for every kind of node** (decisions D, E, F).
+`FieldHandle` is renamed `BoundField` and gains a kind parameter, `BoundField<K = Leaf>`,
+where `K` is a zero-sized marker naming what kind of node the path is.
 
-1. `WidgetCommon` stays what every widget, leaf or set, shares: `id`, `path`,
-   `label`, `help_text`, `classes`, and now the errors VIEW. Its `validity()`,
-   `is_invalid()` and `part_class()` stay where they are.
-2. `FieldHandle` is renamed `BoundField` and holds a `WidgetCommon` plus what is
-   crate-private today: `contents` (values, files, resets) and `on_field_event`.
-   It keeps every method `FieldHandle` has (`current`, `input`, `change`, `blur`,
-   the `on_*` builders, `pick_file`, `picked_file`, `resets`), and derefs to
-   `WidgetCommon`, so it also answers `errors()`, `validity()` and `is_invalid()`
-   for its own key, without being handed a path.
-3. `WidgetProps` holds a `BoundField` instead of `common`, `contents` and
-   `on_field_event`, plus what is about rendering, not the field's state:
-   `base_attrs`, `extra_attrs`, `choices`. It derefs to the `BoundField`, so
-   `props.on_input()` and `props.is_invalid()` both work, and a widget that renders
-   another passes the props on whole, as now. `field_handle()` goes, or becomes
-   `field()` returning a clone (decision E).
-4. `SetWidgetProps` keeps a plain `WidgetCommon`. A set's widget has no value to
-   write (it sends `Edit`s), so it gets no `BoundField`, and `current()` or `input()`
-   at a set's path, which would write a raw string over its structure entry, cannot
-   be called.
+**Why one type can serve every kind.** Every non-leaf widget already writes the same
+way: it sends an `Edit` addressed to its own path. The variant select sends
+`ChooseVariant`, a set widget `AddItem` and `RemoveItem`, an adder `AddItem`, and
+Remove, Edit and ↑/↓ the rest. So a node's write is either a value at its path (a
+leaf) or an edit at its path (everything else), and every kind of node has a path,
+an id and errors. What differs is only which writes make sense.
 
-Containers (a struct, list, set or variant node, with errors and no value) keep
-reading through `NodeContext`, now as `ctx.errors.at(path)` on the view: #23's open
-question 1, answered "no new type" (decision F).
+1. **The members are the same for every kind.** `path`, `id`, `label`, `help_text`,
+   `classes` and the `ErrorsView`, which is what `WidgetCommon` holds today, plus
+   the form's three handles: `contents` (values, files, resets), `on_field_event`
+   and `on_edit`. The handles are all `Copy`, so carrying one on a kind that never
+   uses it costs nothing. A `PhantomData<K>` is the only thing that tells the kinds
+   apart. `WidgetCommon` goes: its fields are these.
+2. **Methods common to every kind**, in one `impl<K> BoundField<K>`: `path()`,
+   `id()`, `label()`, `help_text()`, `classes()`, `errors()`, `validity()`,
+   `is_invalid()` and `part_class::<W>()`, all for the node's own path; and
+   `values() -> ValuesView`, the whole form's values, read-only, for a widget that
+   shows more than its own value. That last one replaces the `values` fields of
+   `AddItemProps` and `SetItemProps`: `ProbeAdder` becomes
+   `field.values().paths_under(field.path())`.
+3. **Methods per kind**, each in its own `impl BoundField<Kind>`. The edit methods
+   fill in the node's own path, so a dev's adder no longer writes
+   `Edit::AddItem { path: path.clone(), … }` by hand, and cannot address an edit to
+   the wrong node.
 
-## Decisions (Todd)
+   | Kind | Used by | Methods beyond the common ones |
+   |---|---|---|
+   | `Leaf` (the default) | `WidgetProps` | `current`, `input`, `change`, `blur` and their `on_*` builders, `pick_file`, `on_pick_file`, `picked_file`, `resets`: everything `FieldHandle` has now |
+   | `Variant` | `VariantSelect` | `choose(Option<&str>)` |
+   | `List` | a list's Remove and ↑/↓ | `add`, `remove(index)`, `move_item(from, to)` |
+   | `Set` | `SetWidgetProps`, a set's Remove and Edit | `add`, `remove(index)`, `edit_item(Option<index>)`. No move: a set is sorted. |
+   | `Items` | `AddItemProps` | `add`, `remove(index)`. One `ItemAdder` serves lists and sets alike, so its field needs a kind both share; `From<BoundField<List>>` and `From<BoundField<Set>>` make one. |
+   | `SetItem` | `SetItemProps` | `current()`, read-only. Not `Leaf`: writing a set's item directly would skip the set's duplicate check. |
+   | `Struct` | the internal nodes, for now | none |
 
-- **A. A newtype, or dioxus's `ReadStore`?** dioxus-stores 0.7.10 has a read-only
-  store, `ReadStore<T>` (`store.rs:25`), made from a `Store` with `From`. Handing that
-  out closes the write hole with no new type. **Claude recommends the newtype**:
-  (1) it keeps dioxus-stores out of formoxus's public API, so a dioxus-stores
-  change can't break a dev, and the `insert`-versus-`set` subtlety stays internal,
-  as with the file table (`FilesSignal` is crate-private "so that choice can
-  change"); (2) it gets the missing-key rule and `paths_under`, which `ReadStore`
-  would leave every dev to write; (3) inherent methods replace `ErrorsStoreExt`.
-  `ReadStore`'s argument is less code and a type devs may already know.
-- **B. Names.** Claude recommends `ValuesView` and `ErrorsView` (they say read-only,
-  and the crate-private stores keep their names, so the internal diff stays
-  small). And whether the values view has `peek`: recommended yes, since an adder's
-  `onclick` reading a value should not subscribe anything (the trap `changed_paths`
-  documents).
-- **C. Delete `use_form_values`?** Recommended yes: it has no caller, is in the
-  prelude, and hands out a store that nothing connects to a form.
-- **D. The bound field's shape and name.** Recommended as above: rename
-  `FieldHandle` to `BoundField`, holding `WidgetCommon`, and held by `WidgetProps`.
-  The alternatives: (1) keep the name `FieldHandle` (already in every built-in
-  widget and the docs; `BoundField` matches Django and reads better in docs: "a
-  widget is handed a bound field"); (2) do only Part 1 and close #23 as "the
-  `WidgetCommon` and the handle together are the bound field", documented, which is
-  the least churn and leaves the split #23 complains about.
-- **E. `props.field_handle()`.** With `WidgetProps` dereffing to the bound field,
-  a widget calls `props.on_input()` directly. A widget still needs an owned
-  `BoundField` to move into a closure of its own; recommended `props.field()`, a
-  clone, and `field_handle()` goes.
-- **F. Containers.** Recommended: no bound type for them now (`ctx.errors.at(path)`
-  is short), revisited only if a custom container node becomes a thing devs write.
-- **G. `WidgetProps::new` for a widget tested alone.** It takes the stores now,
-  which a dev can no longer name. Recommended: it takes the seed maps
-  (`HashMap<NodePath, String>` and the errors map) and makes the stores itself with
-  `Store::new`, as it already makes its file table. A test then sees a write
-  through the props (`props.current()`), not by reading a store it made.
-  `PasswordWithEcho` (`tests/suite/widgets.rs:556`) is the one test that reads a
-  write that way, and moves to that.
-- **H. Re-exports.** `widgets::*` swaps the two store aliases for the two views.
-  That is a swap, not a new re-export, so the "no new re-exports" rule
-  ([[prelude-is-the-one-list]]) holds. `BoundField` replaces `FieldHandle` in the
-  kit the same way.
+4. **What stays on the props**: what the node works out on each render, which is
+   not the field's live state. `choices`, `chosen`, `selected`, `item_count`,
+   `max_items`, `required`, `draft`, `editing`, a set item's `text` and `index`, and
+   the attributes.
+5. **Who gets which:**
+
+   1. `WidgetProps` becomes `WidgetProps<K = Leaf>`: a `BoundField<K>` plus
+      `base_attrs`, `extra_attrs` and `choices`, dereffing to the bound field, so
+      `props.on_input()` and `props.is_invalid()` both work, and a widget that
+      renders another passes the props on whole, as now. `props.field()` returns a
+      clone, for a closure to own; `field_handle()` goes (E). `LeafWidget::render`
+      takes `WidgetProps`, that is `WidgetProps<Leaf>`.
+   2. `VariantSelect` takes `WidgetProps<Variant>` and loses its separate `on_edit`
+      prop. Today it is handed a leaf's `WidgetProps`, so under the old plan it
+      would have had `input()`, which writes a raw string over the enum's structure
+      entry. This is the case that decided F.
+   3. `SetWidgetProps` holds a `BoundField<Set>` in place of `common` and `on_edit`.
+   4. `AddItemProps` holds a `BoundField<Items>` in place of `path`, `id`, `values`,
+      `on_edit` and `classes`.
+   5. `SetItemProps` holds a `BoundField<SetItem>` in place of `path`, `values` and
+      `classes`.
+   6. The item buttons, `RemoveItemButton`, `EditItemButton` and `MoveItemButtons`,
+      public components that take a path and an `on_edit` today, take a bound field
+      of the kind their edits need: `Items`, `Set` and `List`.
+
+6. **The container nodes** (struct, list, variant) render themselves inside the
+   crate, reading `ctx.errors.at(path)`. They may switch to a `BoundField<Struct>`
+   (and `List`, `Variant`) built from the `NodeContext` now or later: it is internal
+   and breaks nobody, so box 4 does not require it.
+7. **Not one plain `BoundField` with every method on it**, because the wrong call
+   would then compile: `input()` on the variant select, `move_item` on a set. With
+   the kind parameter each is a compile error.
+
+## Decisions
+
+**A to H decided 2026-11-19 (Todd)**, all as recommended except F, which went
+further:
+
+- **A.** Newtypes, not dioxus-stores' `ReadStore<T>` (`store.rs:25`): they keep
+  dioxus-stores out of the public API, build in the missing-key rule and
+  `paths_under`, and allow inherent methods in place of `ErrorsStoreExt`.
+- **B.** `ValuesView` and `ErrorsView`; the values view has `peek`, so an event
+  handler reads without subscribing.
+- **C.** `use_form_values` is deleted.
+- **D.** `FieldHandle` is renamed `BoundField`.
+- **E.** `props.field()` returns a clone; `field_handle()` goes.
+- **F.** One `BoundField<K = Leaf>` for every kind of node, as in Part 2 (Todd asked
+  whether it could be "BoundField all the way down"; Claude's answer was this
+  design). The public props all take it now; the internal container nodes may
+  follow when convenient.
+- **G.** `WidgetProps::new` takes the seed maps and makes the stores itself with
+  `Store::new`, as it already makes its file table. `PasswordWithEcho`
+  (`tests/suite/widgets.rs:556`) then sees its write through `props.current()`.
+- **H.** `widgets::*` swaps the two store aliases for the two views, and
+  `FieldHandle` for `BoundField`: a swap, not a new re-export
+  ([[prelude-is-the-one-list]]). The seven kind markers are `pub` where they are
+  defined and re-exported nowhere.
+
+**Raised by F, decided 2026-11-19 (Todd: "probably right"):**
+
+- **I. Private fields with getters.** `WidgetCommon`'s fields are `pub` today
+  (`WidgetProps::new`'s doc: "a caller sets them afterwards"), while `FieldHandle`'s
+  are private. On a bound field, a `pub path` could be changed after it is built,
+  and every write would then go to the wrong node. So the fields are private, read
+  through the getters in Part 2 item 2, and `WidgetProps` gets `with_label` and
+  `with_help_text` builders for the one caller that sets them, a widget tested
+  alone.
 
 ## Traps
 
@@ -170,44 +208,107 @@ question 1, answered "no new type" (decision F).
    A hand-written `PartialEq` that compared contents would re-render every field
    whenever any value changed.
 4. **`VariantNode` passes attributes with the error attributes already applied**
-   (`WidgetProps.base_attrs`'s doc). Moving `common` into the bound field must keep
-   that exception working; `enums.rs`'s `aria-describedby` tests catch it.
+   (`WidgetProps.base_attrs`'s doc). Moving to `WidgetProps<Variant>` must keep that
+   exception working; `enums.rs`'s `aria-describedby` tests catch it.
 5. **The suite reads the whole store in one place that is not a dev's adder or
    view:** `with_store_keys` (`tests/suite.rs:142`, the keys a structural edit
    leaves behind). It moves to `paths_under(&NodePath::root())`. Every other
    `.values()` in the suite is a `WireForm`'s or a `FormEvent`'s, and is untouched.
+6. **`#[derive]` on a generic type bounds its parameter.** `#[derive(Clone, Debug,
+   PartialEq)]` on `BoundField<K>` adds `K: Clone + Debug + PartialEq`, the spurious
+   bound `form.rs` hand-writes `Copy` for `Form` to avoid. Either every marker
+   derives `Clone, Copy, Debug, PartialEq, Eq` (they are unit structs, so that is
+   free), or the impls are written out. The first is less code.
+7. **Only the crate builds a bound field.** Its constructor is `pub(crate)`, called
+   by the node that knows its own kind, so a dev can never hold a `BoundField<Set>`
+   for a leaf's path. `WidgetProps::new` (G) is the one public way in, and it makes
+   a `Leaf`.
+8. **The conversions go one way.** `From<BoundField<List>>` and
+   `From<BoundField<Set>>` for `BoundField<Items>`, and nothing back, and nothing
+   between a leaf kind and a non-leaf one. Each new `From` widens what a field can
+   be used as.
 
 ## Boxes
 
-- [ ] **1.** (Todd) Decide A to H.
+- [x] **1.** (Todd) Decide A to I. All decided 2026-11-19.
 
-- [ ] **2.** (Claude) Tests first, on branch `bound`, with no implementation:
+- [x] **2.** (Claude) Tests first, on branch `bound`, with no implementation:
 
   1. The values view: an absent key reads `""`; `get` subscribes one key (a
      keystroke in one field re-renders no reader of another, counted with the
      `Harness`); `paths_under` returns the keys under a list and wakes on an added
      item but not on a keystroke; `peek` subscribes nothing.
   2. The errors view: `at` and `validity`, the three states, one-key subscription.
-  3. `ProbeAdder` and `TagChip` rewritten to read through the views, with their
-     "as a dev's adder has to" comments gone.
-  4. The bound field: a widget built only from `props.current()`, `props.on_input()`,
+  3. `ProbeAdder` and `TagChip` rewritten to read through their bound fields
+     (`field.values()`, `field.current()`), with their "as a dev's adder has to"
+     comments gone.
+  4. The leaf kind: a widget built only from `props.current()`, `props.on_input()`,
      `props.on_blur()` and `props.is_invalid()` is live-checked (the live-check tests
      already in `live_checks.rs`, run against such a widget).
-  5. A trybuild golden: `form.values().insert(…)` does not compile. The one place
-     "read-only" is pinned rather than just true.
+  5. The edit kinds: a dev's adder that calls `field.add(…)` adds to its own list
+     and to its own set (one `ItemAdder` for both, through `Items`); Remove, Edit and
+     ↑/↓ built from bound fields still edit the right item; `VariantSelect`'s
+     `choose` reaches the state.
+  6. trybuild goldens, the one place "you can't" is pinned rather than just true:
+     `form.values().insert(…)` does not compile; nor does `input(…)` on a
+     `BoundField<Variant>`, `move_item` on a `BoundField<Set>`, or `input(…)` on a
+     `BoundField<SetItem>`.
+
+  **As built (2026-11-19, Claude).** The suite does not compile until boxes 3 and 4
+  exist, as with 11h's tests.
+
+  - **`tests/suite/bound.rs`, 13 tests**: the values view (an absent key, `get`
+    after a write, `get` subscribing one key and `peek` none, both counted by
+    render, `paths_under` a list beside a field whose name shares its prefix, and
+    from the root, and not waking on a keystroke), a dev's adder adding through
+    `field.add` to a list and to a set, the errors view's three states (seeded
+    through `FormState::field_errors`), and a leaf widget written only against the
+    props (`label()`, `id()`, `path()`, `current()`, `on_input()`, `on_blur()`,
+    `is_invalid()`, and a handler owning `props.field()`), live-checked.
+  - **`ProbeAdder`** (`vecs.rs`) and **`TagChip`** (`sets.rs`) read through their
+    bound fields. The rest of the suite's old calls (`TagAdder`'s `props.path`,
+    `plain_props`, the live-check `Probe`, …) are box 5's, from the compiler's list.
+  - **`tests/ui-pending/bound_*.rs`, 5 cases**, no `.stderr`: writing through
+    `form.values()` or `form.errors()`, `input` on a `Variant` or a `SetItem`,
+    `move_item` on a `Set`. **They fail to compile today for the wrong reason**
+    (nothing they name exists), so box 5 moves them to `tests/ui/`, blesses them
+    with `TRYBUILD=overwrite`, and reads each `.stderr` to see it is the intended
+    error: no such method, not an unresolved import.
+
+  **The API the tests assume**, for box 3 and 4 to match or change on purpose:
+
+  1. `ValuesView::{get, peek}(&self, &NodePath) -> String`,
+     `paths_under(&self, &NodePath) -> Vec<NodePath>`, with `paths_under` segment-wise
+     (`answers_note` is not under `answers`), as `NodePath::starts_with` is.
+  2. `ErrorsView::at(&self, &NodePath) -> Option<Vec<ValidationMessage>>`,
+     `validity(&self, &NodePath) -> Validity`.
+  3. On every kind: `path() -> &NodePath`, `id() -> &str`, `label() -> Option<&str>`,
+     `values() -> ValuesView`, `is_invalid() -> bool`.
+  4. `BoundField<Items>::add(&self, Option<ItemValue>)`, appending; Remove and the
+     `before:` position are not named by any test yet.
+  5. `AddItemProps.field` and `SetItemProps.field`, `pub`, as the other props fields
+     are; `props.field()` on `WidgetProps`, a clone.
+  6. The markers at `formoxus::widgets::bound_field::{Leaf, Variant, List, Set,
+     Items, SetItem, Struct}`, so `widgets/field_handle.rs` becomes a `pub mod
+     bound_field` (it is a private `mod` today), and `BoundField` itself in the
+     `widgets::*` kit (H).
 
 - [ ] **3.** (Todd) Part 1: `ValuesView` and `ErrorsView` in `nodes.rs`; the aliases
   `pub(crate)`; `ErrorsStoreExt` becomes the view's inherent methods; every row of the
-  table above takes or returns a view; `use_form_values` deleted (C);
+  table in "Where the stores reach a dev today" takes or returns a view; `use_form_values` deleted (C);
   `WidgetProps::new` takes maps (G).
 
-- [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField` holding `WidgetCommon`;
-  `WidgetProps` holds it and derefs to it; the built-in widgets move from
-  `props.field_handle()` to the props or `props.field()` (E).
+- [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the seven
+  markers, in `widgets/field_handle.rs` (renamed to match); `WidgetCommon` folded
+  into it; `WidgetProps<K>`, `SetWidgetProps`, `AddItemProps`, `SetItemProps`,
+  `VariantSelect` and the item buttons as in Part 2, item 5; the built-in widgets
+  moved from `props.field_handle()` to the props or `props.field()` (E). The
+  container nodes' own rendering may stay on `ctx.errors.at(path)` (F).
 
 - [ ] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
-  docs (each view, `BoundField`, `WidgetProps`, the custom-widget walkthrough in
-  `widgets.rs`); memory (a `bound_field` file, the renames line in `MEMORY.md`); a
-  note for apcsp's catch-up when Todd opens it.
+  docs (each view, `BoundField` and each kind's methods, `WidgetProps`, the
+  custom-widget walkthrough in `widgets.rs`, and the adder and item-view docs);
+  memory (a `bound_field` file with the "why not one plain type" reasoning, the
+  renames line in `MEMORY.md`); a note for apcsp's catch-up when Todd opens it.
 
 - [ ] **6.** (Todd) Merge `bound`; close #22 and #23.

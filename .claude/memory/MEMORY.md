@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-18 latest**: `file` and #25 merged into main; #22+#23 planned in `formoxus/BOUND_PLAN.md`, next Todd decides A-H, then Claude writes the tests on branch `bound`
+- [**START HERE: next session**](next_session.md) — **2026-11-19 school END**: branch `bound` pushed, BOUND_PLAN A-I decided, box 2 tests written (suite won't compile until boxes 3-4); next Todd box 3 (Part 1, views)
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
