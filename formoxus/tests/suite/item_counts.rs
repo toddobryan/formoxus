@@ -7,9 +7,10 @@
 use super::{Harness, render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::{Edit, ItemValue, ValuesByPath};
+use formoxus::nodes::{Edit, ItemValue};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::ValuesByPath;
 use formoxus::widgets::AddItemProps;
 use googletest::prelude::*;
 use std::collections::BTreeSet;

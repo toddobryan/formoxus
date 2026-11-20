@@ -2,7 +2,7 @@
 
 use super::across_the_wire;
 use facet::Facet;
-use formoxus::{nodes::ValuesByPath, prelude::*};
+use formoxus::{prelude::*, stores::ValuesByPath};
 use googletest::prelude::*;
 use std::fmt::Debug;
 

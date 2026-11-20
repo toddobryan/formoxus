@@ -27,8 +27,6 @@ mod accept_multipart;
 mod assignment_shape;
 #[path = "suite/author_attrs.rs"]
 mod author_attrs;
-#[path = "suite/bound.rs"]
-mod bound;
 #[path = "suite/browser_validation.rs"]
 mod browser_validation;
 #[path = "suite/builtin_widgets.rs"]
@@ -147,8 +145,8 @@ where
 {
     let mut keys: Vec<String> = form
         .values()
-        .read()
-        .keys()
+        .paths_under(&formoxus::path::NodePath::root())
+        .iter()
         .map(ToString::to_string)
         .collect();
     keys.sort();

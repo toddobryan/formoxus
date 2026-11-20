@@ -17,9 +17,10 @@
 use super::across_the_wire;
 use facet::Facet;
 use formoxus::file::{FileMeta, FileType, FileUpload};
-use formoxus::nodes::{FieldValidator, FilesByPath};
+use formoxus::nodes::FieldValidator;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::FilesByPath;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

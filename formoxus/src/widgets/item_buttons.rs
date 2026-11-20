@@ -14,8 +14,8 @@ use std::{fmt::Debug, ptr::fn_addr_eq};
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
-use crate::nodes::ValuesStore;
 use crate::path::NodePath;
+use crate::stores::ValuesView;
 use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
@@ -41,7 +41,7 @@ pub struct AddItemProps {
     /// of choices can read the items already there, to leave those out. The
     /// adder is a component of its own, so reading it re-renders only the
     /// adder.
-    pub values: ValuesStore,
+    pub values: ValuesView,
     /// Where the adder sends its `Edit`.
     pub on_edit: Callback<Edit>,
     /// The form's resolved classes, so a custom adder can borrow the

@@ -5,10 +5,10 @@ use super::models::{Location, Shape};
 use super::{Harness, new_since, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::ValuesByPath;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::ValuesByPath;
 use formoxus::widgets::{AddItemButton, AddItemProps, ItemAdder};
 use googletest::prelude::*;
 use indexmap::IndexMap;
@@ -1722,17 +1722,19 @@ fn filled_option_items_keep_some_and_none() {
 
 /// An adder that says what it was handed, and adds a filled `"gamma"` item
 /// when clicked. `first` is item `#0`'s value as the store has it, and
-/// `stored` how many store entries it finds under the list, as an adder
-/// leaving out the choices already in its list would: both through its bound
-/// field's read-only `values()`, and the add through the field too, which
-/// addresses it to the list (`BOUND_PLAN.md`).
+/// `stored` how many store entries it finds under the list, read whole, as an
+/// adder leaving out the choices already in its list would.
 #[component]
 fn ProbeAdder(props: AddItemProps) -> Element {
     let AddItemProps {
-        field, item_count, ..
+        path,
+        id,
+        values,
+        on_edit,
+        item_count,
+        ..
     } = props;
-    let (path, id) = (field.path().clone(), field.id().to_string());
-    let values = field.values();
+    // Through the values view (issue #22); box 4 moves this to the bound field.
     let first = values.get(&NodePath::new(format!("{path}.#0")));
     let stored = values.paths_under(&path).len();
     let says = format!("{path} has {item_count}, first {first}, stored {stored}");
@@ -1740,7 +1742,9 @@ fn ProbeAdder(props: AddItemProps) -> Element {
         button {
             r#type: "button",
             id: "{id}-add",
-            onclick: move |_| field.add(Some(ItemValue::new("gamma".to_string()))),
+            onclick: move |_| {
+                on_edit.call(add_item(path.as_str(), Some(ItemValue::new("gamma".to_string()))));
+            },
             "{says}"
         }
     }
@@ -1903,10 +1907,12 @@ fn RemovedEnumRowProbe() -> Element {
             Some("Rectangle"),
         ))
         .expect("Rectangle is a variant");
-        let left_behind = form
+        // A key, not a non-empty value: `paths_under` a leaf is the leaf
+        // itself when the store holds it, the view's `contains_key`.
+        let left_behind = !form
             .values()
-            .peek()
-            .contains_key("shapes.#0.$Circle.radius");
+            .paths_under(&NodePath::new("shapes.#0.$Circle.radius"))
+            .is_empty();
         form.edit(&remove_item("shapes", 0)).expect("item 0 exists");
         left_behind
     });

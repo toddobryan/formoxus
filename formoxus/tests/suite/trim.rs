@@ -8,7 +8,7 @@ use super::Harness;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::path::NodePath;
-use formoxus::{nodes::ValuesByPath, prelude::*};
+use formoxus::{prelude::*, stores::ValuesByPath};
 use googletest::prelude::*;
 use std::collections::BTreeSet;
 

@@ -12,9 +12,10 @@ use super::models::Shape;
 use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::{Edit, ValuesByPath};
+use formoxus::nodes::Edit;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::ValuesByPath;
 use googletest::prelude::*;
 use std::collections::BTreeSet;
 

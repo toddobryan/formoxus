@@ -76,6 +76,12 @@ prelude and the `widgets::*` kit as they stood then. Before publishing, in one p
    the public surface, so it is what proves the lists are enough.
 Do this before the doc pass (item 2): it decides which items are public and need docs.
 
+**Taken OUT of the prelude, to reconsider here:** `ErrorsByPath` (2026-11-19, branch
+`bound`). It moved from `form.rs` to the new `formoxus::stores`, and Todd kept it out
+of the prelude on purpose: "keep everything in the project pointing at where things
+actually live. We'll add it back to the prelude when we get ready to publish." A dev
+needs it for `WidgetProps::new`, so it likely goes back.
+
 ## 6. Scan the built docs for dead links — no lint can see two kinds
 
 Added 2026-11-09 (Todd: "checklist", not a `just docs` step, for now). rustdoc's
@@ -114,3 +120,16 @@ never learns the disk was full or S3 was down. Both fields carry
 `#[expect(dead_code, reason = "to be logged; …")]` in `src/file.rs` until then. Todd:
 "deal with logging later. Probably before MVP." Claude's lean: `tracing`, which
 Dioxus already pulls in. Removing the two `expect`s is the reminder that it's done.
+
+## 8. Make the `use` style consistent (added 2026-11-19)
+
+Files mix two styles: one `use crate::{a::X, b::Y, …}` tree (rust-analyzer's default
+auto-import) and one `use` line per module (hand-written, and scripted edits).
+`cargo fmt` cannot fix it: its `imports_granularity` default is `Preserve`, and the
+options that enforce a style (`imports_granularity`, `group_imports`) are nightly-only,
+while the toolchain is pinned stable. Since 2026-11-19 `.vscode/settings.json` sets
+rust-analyzer to `"module"` granularity, enforced, so new imports come out one `use` per
+module; existing files keep their mix until this pass. Todd: "clean it up and make
+everything consistent before publishing." One way: a one-off `cargo +nightly fmt` with
+`imports_granularity = "Module"` passed on the command line (`-- --config …`), read the
+diff, commit, and add nothing nightly to the repo.

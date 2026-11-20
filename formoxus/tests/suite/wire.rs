@@ -11,10 +11,12 @@ use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::path::NodePath;
 use formoxus::{
-    ErrorsByPath, Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form,
-    form, form_for,
-    nodes::{Edit, ItemValue, ValuesByPath},
-    path, use_form, using_fns,
+    Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form, form,
+    form_for,
+    nodes::{Edit, ItemValue},
+    path,
+    stores::{ErrorsByPath, ValuesByPath},
+    use_form, using_fns,
 };
 use googletest::prelude::*;
 

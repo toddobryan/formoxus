@@ -19,9 +19,9 @@ use dioxus::prelude::*;
 use dioxus_html::SerializedFileData;
 use facet::Facet;
 use formoxus::file::{FileType, FileUpload};
-use formoxus::nodes::ValuesByPath;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::{ErrorsByPath, ValuesByPath};
 use googletest::prelude::*;
 
 use super::{Harness, render_to_html};

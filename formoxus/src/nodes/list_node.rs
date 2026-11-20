@@ -6,14 +6,11 @@
 
 use crate::error::FormAccessError;
 use crate::field_attrs::Validity;
-use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
-use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, FilesByPath, Items, Node, SpecsByPath, ValuesByPath,
-    default_label,
-};
+use crate::nodes::{Drafts, Edit, Items, Node, SpecsByPath, default_label};
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
+use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath, ValuesView};
 use crate::widgets::field_row::required_marker;
 use crate::widgets::{
     AddItemProps, Choice, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton,
@@ -128,7 +125,7 @@ impl Node for ListNode {
                         AddItemProps {
                             path: path.clone(),
                             id: id.clone(),
-                            values: ctx.contents.values,
+                            values: ValuesView(ctx.contents.values),
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),

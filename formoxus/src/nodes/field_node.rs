@@ -7,12 +7,12 @@ use formoxus_spec::{Attr, FieldType};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
 use crate::field_attrs::FieldAttrs;
-use crate::form::ErrorsByPath;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, FieldValidator, FilesByPath, Shown};
 use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
+use crate::stores::ErrorsByPath;
 use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
 use crate::widgets::{AnyWidget, CheckboxInput, Choice, Widget};
 

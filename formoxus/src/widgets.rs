@@ -141,7 +141,7 @@ pub use types::{Choice, InputType};
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with
 // an `ItemValue`.
-pub use crate::nodes::{Edit, ErrorsStore, ItemValue, ValuesStore};
+pub use crate::nodes::{Edit, ItemValue};
 pub use variant_select::VariantSelect;
 pub use widget::{AnySetWidget, AnyWidget, LeafWidget, SetWidget, Widget};
 pub use widget_props::{SetWidgetProps, WidgetCommon, WidgetProps};

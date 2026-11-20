@@ -10,6 +10,7 @@ use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
 use formoxus::path::NodePath;
+use formoxus::stores::{ErrorsByPath, ValuesByPath};
 use formoxus::widgets::Choice;
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{
@@ -18,7 +19,6 @@ use formoxus::widgets::{
     Textarea, TimeInput, UrlInput, WeekInput, Widget,
 };
 use googletest::prelude::*;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 const ID: &str = "rand0123-title";
@@ -77,19 +77,17 @@ fn errors() -> Vec<ValidationMessage> {
     vec![ValidationMessage::from("too short")]
 }
 
-fn values() -> HashMap<NodePath, String> {
-    HashMap::from([(NodePath::new(PATH), "A".to_string())])
+fn values() -> ValuesByPath {
+    ValuesByPath::from([(NodePath::new(PATH), "A".to_string())])
 }
 
 fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
-    let values = use_store(values);
-    let errors = use_store(|| HashMap::from([(NodePath::new(PATH), Some(errors()))]));
     let mut props = WidgetProps::new(
         ID,
         NodePath::new(PATH),
         field_attrs(),
-        values,
-        errors,
+        values(),
+        ErrorsByPath::from([(NodePath::new(PATH), errors())]),
         Rc::new(Classes::fx()),
     );
     props.label = Some("Title".into());

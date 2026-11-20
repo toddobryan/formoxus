@@ -11,8 +11,8 @@ use std::{fmt::Debug, ptr::fn_addr_eq};
 use dioxus::prelude::*;
 
 use crate::classes::Classes;
-use crate::nodes::ValuesStore;
 use crate::path::NodePath;
+use crate::stores::ValuesView;
 
 /// What an item's view is handed: [`ItemText`], or a dev's own component
 /// named by `item:`.
@@ -32,7 +32,7 @@ pub struct SetItemProps {
     /// Whether the item is the one being edited, its value in the draft.
     pub editing: bool,
     /// The whole form's values, for a view that shows more than its own item.
-    pub values: ValuesStore,
+    pub values: ValuesView,
     /// The form's resolved classes, so a dev's view can follow the app's
     /// preset.
     pub classes: Rc<Classes>,

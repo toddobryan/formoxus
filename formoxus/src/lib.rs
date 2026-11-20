@@ -79,6 +79,7 @@ pub mod form;
 pub mod label_case;
 pub mod nodes;
 pub mod path;
+pub mod stores;
 pub mod submission;
 pub mod widgets;
 pub mod wire;
@@ -148,8 +149,8 @@ pub mod prelude {
     pub use crate::defaults::{Formoxus, defaults, provide_defaults};
     pub use crate::error::{ValidationError, ValidationMessage};
     pub use crate::form::{
-        ErrorsByPath, Form, FormErrors, FormSpec, FormState, Provider, empty_form, form_for,
-        handler, provider, unchecked_handler, use_form, use_form_values,
+        Form, FormErrors, FormSpec, FormState, Provider, empty_form, form_for, handler, provider,
+        unchecked_handler, use_form,
     };
     // What a dev writes after `sort_by:` for a set of strings, and matches on
     // in `feedback:`.

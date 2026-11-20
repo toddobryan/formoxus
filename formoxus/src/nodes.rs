@@ -1,11 +1,9 @@
 //! The `Node` trait every part of a form implements, and the container
 //! kinds that make a form a tree rather than a flat list.
 
-use dioxus::html::FileData;
 use dioxus::prelude::*;
 use facet::{Partial, Peek, ReflectError};
 use indexmap::IndexMap;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -34,16 +32,14 @@ pub use struct_node::StructNode;
 pub use variant_node::{VariantChoice, VariantNode};
 
 use crate::classes::Classes;
-use crate::error::{FormAccessError, ValidationMessage};
-use crate::field_attrs::Validity;
-use crate::file::FileMeta;
+use crate::error::FormAccessError;
+use crate::form::Contents;
 use crate::form::FieldSpec;
-use crate::form::{Contents, ErrorsByPath};
 use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
+use crate::stores::{ErrorsByPath, ErrorsView, FilesByPath, ValuesByPath};
 use crate::widgets::Choice;
 use crate::widgets::field_handle::OnFieldEvent;
-use dioxus::stores::Store;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
 
@@ -219,7 +215,7 @@ pub(crate) fn default_label(name: &str, case: LabelCase) -> Option<String> {
 /// string.
 ///
 /// A [`Leaf`](Self::Leaf) is what a user types into one input, and lives in the
-/// [`ValuesStore`]. A [`Structure`](Self::Structure) decides which nodes exist
+/// form's live values, what a [`ValuesView`](crate::stores::ValuesView) reads. A [`Structure`](Self::Structure) decides which nodes exist
 /// at all (an enum's variant name, a list's item keys), and lives only in the
 /// state, never in the store. Both cross the wire, because a server rebuilds
 /// from an empty form and has no other way to learn the structure.
@@ -380,78 +376,6 @@ impl Shown {
     }
 }
 
-/// The live raw values, keyed by qualified path — what `leaves()` produces
-/// and what `apply()` consumes.
-pub type ValuesByPath = IndexMap<NodePath, String>;
-
-/// The files picked or received, keyed by the file leaf's qualified path: the
-/// size and content type of each, which the store (one string per path) can't
-/// hold. What [`Node::distribute_files`] takes; always the whole table.
-pub type FilesByPath = IndexMap<NodePath, FileMeta>;
-
-/// A [`std::collections::HashMap`] equivalent to [`ValuesByPath`] held in
-/// a store so a write touches one input. The two maps are different,
-/// because [`ValuesByPath`] maintains insertion order, but
-/// [`struct@dioxus_stores::Store`] doesn't support [`indexmap::IndexMap`], just
-/// [`std::collections::HashMap`] and a few others.
-pub type ValuesStore = Store<HashMap<NodePath, String>>;
-
-/// The form's file table: each file the user picked, keyed by its file
-/// leaf's qualified path. Only [`FieldHandle::pick_file`] writes it, and
-/// [`FieldHandle::picked_file`] reads one entry.
-///
-/// One `Signal`, not a `Store`, so a pick re-renders every file widget in
-/// the form (`WIDGETS_PLAN.md` decision KK). A store's `remove` and `clear` wake
-/// only readers of the map's shape, not of the removed key, so per-widget
-/// re-rendering would need `Option` values set to `None` instead. Crate-
-/// private, so that choice can change without breaking anyone.
-///
-/// [`FieldHandle::pick_file`]: crate::widgets::FieldHandle::pick_file
-/// [`FieldHandle::picked_file`]: crate::widgets::FieldHandle::picked_file
-pub(crate) type FilesSignal = Signal<IndexMap<NodePath, FileData>>;
-
-/// Client home for field errors. Held in a store so that an error on one
-/// field only redraws that field, not the whole page. This is a three-way
-/// distinction, for each path:
-///
-/// - `None`, or a missing key, means that path was never checked or was cleared.
-/// - `Some(vec![])` means that path was valid.
-/// - `Some(vec![...])` means that path did not validate.
-pub type ErrorsStore = Store<HashMap<NodePath, Option<Vec<ValidationMessage>>>>;
-
-/// Reading one path's errors out of an [`ErrorsStore`], for rendering.
-///
-/// A trait because `ErrorsStore` is an alias for dioxus's `Store`, so the
-/// orphan rule allows no inherent methods on it. Crate-private: a widget reads
-/// its field's errors through [`WidgetProps`](crate::widgets::WidgetProps),
-/// which already knows the path, and never needs the store.
-pub(crate) trait ErrorsStoreExt {
-    /// The entry at `path` as the store holds it: `None` when it is unchecked
-    /// (no key, or a key holding `None`), `Some` of the messages otherwise,
-    /// empty when the path is valid.
-    ///
-    /// **Reads one key, not the map.** `self.read()` would subscribe the caller
-    /// to every path, so one field's error would wake every widget. A key that
-    /// is not there yet still wakes its reader when `insert` first writes it.
-    /// Owned rather than a borrow, because the borrow would be of a read guard
-    /// that ends when this returns.
-    fn errors_at(&self, path: &NodePath) -> Option<Vec<ValidationMessage>>;
-
-    /// The [`Validity`] of `path`, from [`errors_at`](Self::errors_at), with
-    /// the same one-key subscription.
-    fn validity_at(&self, path: &NodePath) -> Validity;
-}
-
-impl ErrorsStoreExt for ErrorsStore {
-    fn errors_at(&self, path: &NodePath) -> Option<Vec<ValidationMessage>> {
-        self.get_unchecked(path.clone()).try_read().ok()?.cloned()
-    }
-
-    fn validity_at(&self, path: &NodePath) -> Validity {
-        Validity::of(self.errors_at(path).as_deref())
-    }
-}
-
 /// What every node of one render shares: the form's id, where its values,
 /// files and errors live, where edits and field events go, and its resolved
 /// label case and classes. `Form::root_ctx` builds one per render, since
@@ -475,7 +399,7 @@ impl ErrorsStoreExt for ErrorsStore {
 pub struct FormWide {
     pub form_id: String,
     pub(crate) contents: Contents,
-    pub errors: ErrorsStore,
+    pub errors: ErrorsView,
     pub on_edit: Callback<Edit>,
     pub(crate) on_field_event: OnFieldEvent,
     /// Already resolved — the cascade is settled once, where the ctx is built,

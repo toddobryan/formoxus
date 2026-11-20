@@ -27,13 +27,10 @@ use crate::{
     build::retain_first,
     error::FormAccessError,
     field_attrs::Validity,
-    form::ErrorsByPath,
     label_case::LabelCase,
-    nodes::{
-        Drafts, Edit, ErrorsStoreExt, FilesByPath, Items, Node, NodeContext, RawValue, Shown,
-        SpecsByPath, ValuesByPath, default_label,
-    },
+    nodes::{Drafts, Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, default_label},
     path::NodePath,
+    stores::{ErrorsByPath, FilesByPath, ValuesByPath, ValuesView},
     widgets::{
         AddItemProps, Choice, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
         RemoveItemButton, SetItemProps, SetWidgetProps, WidgetCommon, described_by, field_help,
@@ -599,7 +596,7 @@ impl SetNode {
                             path: path.join(&name),
                             index,
                             editing,
-                            values: ctx.contents.values,
+                            values: ValuesView(ctx.contents.values),
                             classes: ctx.classes.clone(),
                         },
                         "ItemView",
@@ -1076,7 +1073,7 @@ impl Node for SetNode {
                         AddItemProps {
                             path: path.clone(),
                             id: id.clone(),
-                            values: ctx.contents.values,
+                            values: ValuesView(ctx.contents.values),
                             on_edit: ctx.on_edit,
                             classes: ctx.classes.clone(),
                             item_count: self.items.len(),

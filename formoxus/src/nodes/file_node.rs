@@ -8,13 +8,13 @@ use crate::{
     error::{FormAccessError, ValidationMessage},
     field_attrs::FieldAttrs,
     file::{FileMeta, FileUpload, format_size},
-    form::ErrorsByPath,
     label_case::LabelCase,
     nodes::{
         Drafts, Edit, FieldValidator, FilesByPath, Node, NodeContext, RawValue, SpecsByPath,
         ValuesByPath, default_label,
     },
     path::NodePath,
+    stores::ErrorsByPath,
     widgets::{AnyWidget, Choice, WidgetCommon, WidgetProps},
 };
 

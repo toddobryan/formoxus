@@ -1,12 +1,12 @@
 use dioxus::core::Element;
 
 use crate::error::FormAccessError;
-use crate::form::ErrorsByPath;
 use crate::label_case::LabelCase;
 use crate::nodes::{
     Drafts, Edit, FilesByPath, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath,
 };
 use crate::path::NodePath;
+use crate::stores::ErrorsByPath;
 use crate::widgets::Choice;
 
 #[derive(Clone, Debug)]

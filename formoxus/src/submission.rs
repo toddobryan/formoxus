@@ -13,8 +13,9 @@ use crate::file::{
     WIRE_PART, clean_file_name, drain, is_body_limit, store_part,
 };
 use crate::form::{FormErrors, FormSpec, FormState, empty_form, form_for};
-use crate::nodes::{FilesByPath, ValuesByPath, is_file_upload, stored_shapes};
+use crate::nodes::{is_file_upload, stored_shapes};
 use crate::path::{ITEM_SIGIL, ModelPath, NodePath};
+use crate::stores::{FilesByPath, ValuesByPath};
 use crate::wire::WireForm;
 
 /// A submitted form that passed its own validation, holding both the model the

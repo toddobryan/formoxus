@@ -67,6 +67,10 @@ go altogether, replaced by their bound field's `values()`, Part 2). A view is `C
 has read methods only. The crate reaches the store inside through a `pub(crate)`
 accessor, so the internal code changes little.
 
+**Where they live: a new `pub mod stores`, `src/stores.rs`** (decision J). The views
+and the path-keyed maps and stores they read move out of `nodes.rs` and `form.rs`
+into it, so the form's per-path state sits in one module, apart from the node tree.
+
 The values view:
 
 1. **`get(&NodePath) -> String`**: one key, subscribing to that key only, with the
@@ -82,9 +86,15 @@ The values view:
    re-renders when an item is added or removed, not on every keystroke.
 
 The errors view: **`at(&NodePath) -> Option<Vec<ValidationMessage>>`** and
-**`validity(&NodePath) -> Validity`**, which are `ErrorsStoreExt`'s two methods. A
-newtype can have inherent methods, which the alias couldn't (the orphan rule), so
-the extension trait goes.
+**`validity_at(&NodePath) -> Validity`**: `ErrorsStoreExt`'s two methods, the first
+renamed from `errors_at` (Todd, 2026-11-19; he briefly chose `validity` for the
+second, then kept `validity_at`). `errors.errors_at(path)` repeats itself, and
+`WireForm::errors_at` already exists returning `&[ValidationMessage]`, so two
+`errors_at`s returning different things would confuse a dev. `validity_at` keeps its
+`_at` because the view has no validity of its own, and `BoundField::validity()`
+(no argument, the node's own path) is a different method. A newtype can have
+inherent methods, which the alias couldn't (the orphan rule), so the extension trait
+goes.
 
 **Part 2 (#23): one `BoundField<K>` for every kind of node** (decisions D, E, F).
 `FieldHandle` is renamed `BoundField` and gains a kind parameter, `BoundField<K = Leaf>`,
@@ -193,6 +203,34 @@ further:
   `with_help_text` builders for the one caller that sets them, a widget tested
   alone.
 
+**Decided 2026-11-19, at the start of box 3 (Todd):**
+
+- **J. A new `pub mod stores` (`src/stores.rs`) holds the views and the path-keyed
+  types**, not `nodes.rs`. `nodes.rs` is the node tree; these are the form's state,
+  a different job. Named for its contents (`types` would describe every module;
+  `state` competes with `form/state.rs` and `FormState`). It is a `pub mod`, like
+  every other top-level module, because a public name is reached through its
+  defining module ([[prelude-is-the-one-list]]) and a dev must be able to name a
+  view: `form.values()` returns one.
+
+  | Moves in | From | Visibility after |
+  |---|---|---|
+  | `ValuesView`, `ErrorsView` | new | `pub` |
+  | `ValuesStore`, `ErrorsStore` | `nodes.rs` | `pub(crate)` (Part 1) |
+  | `FilesSignal` | `nodes.rs` | `pub(crate)`, as now |
+  | `ValuesByPath`, `FilesByPath` | `nodes.rs` | `pub`, as now: the suite and the wire use them |
+  | `ErrorsByPath` | `form.rs` | `pub`, as now |
+  | `ErrorsStoreExt` | `nodes.rs` | gone: the errors view's inherent methods |
+
+  **Staying put:** `Handler` and `UncheckedHandler` in `form.rs` (submit-handler
+  types, not per-path state), and `SpecsByPath` in `nodes.rs` (spec-side, keyed by
+  `String`, not `NodePath`).
+
+  **The cost:** about ten suite files import `formoxus::nodes::ValuesByPath` (and
+  `FilesByPath`, `ValuesStore`); they become `formoxus::stores::…` in box 5, from the
+  compiler's list. No box 2 test imports a view by module path (they come through
+  `widgets::*`), so nothing written for this branch moves.
+
 ## Traps
 
 1. **`get` must read one key, never the map.** `self.store.read().get(path)` would
@@ -257,6 +295,32 @@ further:
   **As built (2026-11-19, Claude).** The suite does not compile until boxes 3 and 4
   exist, as with 11h's tests.
 
+  **SET ASIDE 2026-11-19, and committed that way with box 3 (Todd's choice).** Todd
+  asked to refactor the views without them, then chose to commit box 3 with them still
+  aside, so the tip's `just ci` is green (1589). Box 3's commit deletes `bound.rs` and
+  the five `ui-pending/bound_*.rs`, and its `suite.rs`, `sets.rs` and `vecs.rs` are the
+  pre-box-2 versions (`6f02073`) plus box 3's fixes. Commit `2df77a1` still has box 2's.
+  Box 5 brings them back:
+
+  1. The six new files restore as they were:
+
+     ```text
+     git checkout 2df77a1 -- formoxus/tests/suite/bound.rs \
+       formoxus/tests/ui-pending/bound_errors_view_is_read_only.rs \
+       formoxus/tests/ui-pending/bound_set_has_no_move.rs \
+       formoxus/tests/ui-pending/bound_set_item_has_no_input.rs \
+       formoxus/tests/ui-pending/bound_values_view_is_read_only.rs \
+       formoxus/tests/ui-pending/bound_variant_has_no_input.rs
+     ```
+
+  2. **`suite.rs`, `sets.rs` and `vecs.rs` are merged by hand, not checked out**: a
+     checkout would undo box 3's fixes in them. From `git diff 6f02073 2df77a1 --
+     <file>`, re-apply box 2's changes: `suite.rs`'s `mod bound;`, `ProbeAdder`
+     (`vecs.rs`) and `TagChip` (`sets.rs`) rewritten to their bound fields. Box 3's
+     interim view reads in those two go.
+  3. `bound.rs`'s errors-view test calls `validity`; it is `validity_at` (item 2 of the
+     API list below).
+
   - **`tests/suite/bound.rs`, 13 tests**: the values view (an absent key, `get`
     after a write, `get` subscribing one key and `peek` none, both counted by
     render, `paths_under` a list beside a field whose name shares its prefix, and
@@ -281,7 +345,9 @@ further:
      `paths_under(&self, &NodePath) -> Vec<NodePath>`, with `paths_under` segment-wise
      (`answers_note` is not under `answers`), as `NodePath::starts_with` is.
   2. `ErrorsView::at(&self, &NodePath) -> Option<Vec<ValidationMessage>>`,
-     `validity(&self, &NodePath) -> Validity`.
+     `validity_at(&self, &NodePath) -> Validity`. (The tests were written calling
+     `validity`; Todd chose `validity_at` in box 3, so box 5 renames the three calls
+     in `bound.rs`'s errors-view test.)
   3. On every kind: `path() -> &NodePath`, `id() -> &str`, `label() -> Option<&str>`,
      `values() -> ValuesView`, `is_invalid() -> bool`.
   4. `BoundField<Items>::add(&self, Option<ItemValue>)`, appending; Remove and the
@@ -293,10 +359,44 @@ further:
      bound_field` (it is a private `mod` today), and `BoundField` itself in the
      `widgets::*` kit (H).
 
-- [ ] **3.** (Todd) Part 1: `ValuesView` and `ErrorsView` in `nodes.rs`; the aliases
-  `pub(crate)`; `ErrorsStoreExt` becomes the view's inherent methods; every row of the
-  table in "Where the stores reach a dev today" takes or returns a view; `use_form_values` deleted (C);
-  `WidgetProps::new` takes maps (G).
+- [x] **3.** (Todd) Part 1:
+
+  1. A new `pub mod stores` in `src/stores.rs`, holding what decision J's table lists:
+     `ValuesView` and `ErrorsView`, and the path-keyed maps and stores moved there
+     from `nodes.rs` and `form.rs`.
+  2. The store aliases `ValuesStore` and `ErrorsStore` become `pub(crate)`.
+  3. `ErrorsStoreExt` becomes the errors view's inherent methods.
+  4. Every row of the table in "Where the stores reach a dev today" takes or returns
+     a view.
+  5. `use_form_values` is deleted (C).
+  6. `WidgetProps::new` takes maps (G).
+
+  **As built (2026-11-19, Todd; the test side and a few loose ends Claude).**
+
+  - **`src/stores.rs`**, a `pub mod`: `ValuesView` (`get`, `peek`, `paths_under`) and
+    `ErrorsView` (`at`, `validity_at`; see Part 1 for the names), each a `Copy`
+    newtype whose field is `pub(crate)`, which is the crate's way to the store inside.
+    Moved in: `ValuesByPath`, `FilesByPath`, `ErrorsByPath` (all `pub`), `ValuesStore`,
+    `ErrorsStore` and `FilesSignal` (all `pub(crate)`). `ErrorsStoreExt` and
+    `use_form_values` are gone.
+  - **The crate's own fields keep the stores** (`Contents.values`, `FormState`'s errors
+    store, `apply_edit`'s parameter); a view is made where one is handed out:
+    `values()`, `errors()`, `FormWide.errors`, `WidgetCommon.errors`, and
+    `AddItemProps.values`/`SetItemProps.values` until box 4 removes them. A first try
+    held views internally, and every internal write broke.
+  - **`ErrorsByPath` is out of the prelude**, on purpose (Todd: "keep everything in the
+    project pointing at where things actually live"); the pre-publish checklist,
+    item 5, has it.
+  - **`NodePath::root()` is `pub`** (Todd: devs may need it), with a doc.
+  - **The suite**: imports moved to `formoxus::stores`; `with_store_keys`, `TagChip`
+    and `ProbeAdder` read through the views; the variant left-behind check asks
+    `paths_under(leaf)` for the key, not `peek` for a value; `plain_props` and
+    `through_widget` pass maps; `PasswordWithEcho` builds its props once in `use_hook`
+    and echoes `field_handle().current()`, because `WidgetProps::new` makes its own
+    store and props built every render would hand the re-render an empty one.
+  - Five intra-doc links fixed; the two in docs on public items now name the
+    `ValuesView`, since a `pub(crate)` alias trips `private_intra_doc_links`.
+  - `just ci` green, 1589.
 
 - [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the seven
   markers, in `widgets/field_handle.rs` (renamed to match); `WidgetCommon` folded
@@ -309,6 +409,7 @@ further:
   docs (each view, `BoundField` and each kind's methods, `WidgetProps`, the
   custom-widget walkthrough in `widgets.rs`, and the adder and item-view docs);
   memory (a `bound_field` file with the "why not one plain type" reasoning, the
-  renames line in `MEMORY.md`); a note for apcsp's catch-up when Todd opens it.
+  renames line in `MEMORY.md`, which also records the moves from `nodes::` and
+  `form::` to `stores::`); a note for apcsp's catch-up when Todd opens it.
 
 - [ ] **6.** (Todd) Merge `bound`; close #22 and #23.

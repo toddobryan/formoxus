@@ -11,12 +11,12 @@ use facet::{Facet, Peek, Shape};
 use crate::{
     build::{FormMode, Walk, node_for_shape},
     error::{FormAccessError, ValidationMessage},
-    form::ErrorsByPath,
     nodes::{
         Drafts, Edit, FilesByPath, Node, RawValue, SetOrder, SpecsByPath, ValuesByPath,
         no_such_path,
     },
     path::{ITEM_SIGIL, NodePath, item_segment},
+    stores::ErrorsByPath,
 };
 
 #[derive(Clone, Debug)]

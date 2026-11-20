@@ -168,7 +168,7 @@ fn signals_are_populated_from_the_model() {
 // `Node::render`, so they stay meaningful regardless of how the nodes wire it
 // up.
 
-use formoxus::nodes::ValuesStore;
+use formoxus::stores::{ErrorsByPath, ValuesByPath};
 use formoxus::widgets::LeafWidget;
 use formoxus::widgets::WidgetProps;
 
@@ -177,13 +177,13 @@ const ID: &str = "rand0123-name";
 /// What a `String` field with no constraints hands its widget. Spelled out
 /// because nothing upstream computes it, which is the point: these pin the
 /// widget boundary independently of how the nodes wire it up.
-fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetProps {
+fn plain_props(values: ValuesByPath, path: &str, label: Option<&str>) -> WidgetProps {
     let mut props = WidgetProps::new(
         ID,
         NodePath::new(path),
         FieldAttrs::default(),
         values,
-        use_store(HashMap::new),
+        ErrorsByPath::new(),
         Rc::new(Classes::default()),
     );
     props.label = label.map(str::to_string);
@@ -192,8 +192,7 @@ fn plain_props(values: ValuesStore, path: &str, label: Option<&str>) -> WidgetPr
 
 #[component]
 fn PopulatedInput() -> Element {
-    let values =
-        use_store(|| HashMap::from([(NodePath::new("title"), "Board Game Night".to_string())]));
+    let values = ValuesByPath::from([(NodePath::new("title"), "Board Game Night".to_string())]);
     rsx! {
         {TextInput.render(plain_props(values, "title", Some("Title")))}
     }
@@ -203,9 +202,8 @@ fn PopulatedInput() -> Element {
 fn EmptyInput() -> Element {
     // A path the schema has but the value map has never seen — what a variant
     // chosen after mount produces.
-    let values = use_store(HashMap::<NodePath, String>::new);
     rsx! {
-        {TextInput.render(plain_props(values, "shape.radius", None))}
+        {TextInput.render(plain_props(ValuesByPath::new(), "shape.radius", None))}
     }
 }
 
@@ -552,12 +550,16 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
 ///
 /// The echo is the only way to observe the write: the input itself must NOT show
 /// the value, so the rendered `value=` attribute cannot be the evidence.
+///
+/// The props are built once, in `use_hook`: `WidgetProps::new` makes its own
+/// store, so props built on every render would hand the re-render a new, empty
+/// one, and the echo would never see the keystroke.
 #[component]
 fn PasswordWithEcho() -> Element {
-    let values = use_store(HashMap::<NodePath, String>::new);
-    let stored = values.read().get("secret").cloned().unwrap_or_default();
+    let props = use_hook(|| plain_props(ValuesByPath::new(), "secret", Some("Secret")));
+    let stored = props.field_handle().current();
     rsx! {
-        {PasswordInput.render(plain_props(values, "secret", Some("Secret")))}
+        {PasswordInput.render(props)}
         p { class: "echo", "{stored}" }
     }
 }

@@ -72,8 +72,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::ValidationMessage,
     form::{FormErrors, FormSpec, form_for},
-    nodes::ValuesByPath,
     path::{ModelPath, NodePath},
+    stores::ValuesByPath,
 };
 
 /// A form's mutable state, as plain data: raw values by path, both each leaf's

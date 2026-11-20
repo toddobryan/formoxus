@@ -216,7 +216,10 @@ impl NodePath {
         Self(path.into())
     }
 
-    pub(crate) fn root() -> Self {
+    /// The empty path: the form's own, above every field. Every path
+    /// starts with it, so `form.values().paths_under(&NodePath::root())` is
+    /// every key the form's values hold.
+    pub fn root() -> Self {
         Self(String::new())
     }
 

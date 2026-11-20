@@ -18,12 +18,13 @@ use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::file::{FileMeta, Multipart, MultipartFormData};
 use crate::label_case::LabelCase;
-use crate::nodes::{
-    Drafts, Edit, ErrorsStore, FilesByPath, FilesSignal, FormWide, NodeContext, no_such_path,
-};
+use crate::nodes::{Drafts, Edit, FormWide, NodeContext, no_such_path};
 use crate::path::{ModelPath, NodePath};
+use crate::stores::{
+    ErrorsByPath, ErrorsStore, ErrorsView, FilesByPath, FilesSignal, ValuesStore, ValuesView,
+};
+use crate::widgets::FieldHandle;
 use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
-use crate::widgets::{FieldHandle, ValuesStore};
 use crate::wire::WireForm;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
@@ -40,14 +41,6 @@ mod state;
 
 pub use spec::{FieldSpec, FormSpec};
 pub use state::{FormState, empty_form, form_for};
-
-/// A form's field errors, one entry per path. An empty `Vec` means the path was
-/// checked and is clean, which is not the same as no entry, where nothing has
-/// checked it. `IndexMap` over a plain `HashMap` for the same reason
-/// `FormSpec`'s own fields use it: insertion order is preserved, and
-/// `collect_errors` deliberately builds this in the same order `render` walks
-/// the tree.
-pub type ErrorsByPath = IndexMap<NodePath, Vec<ValidationMessage>>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct FormErrors {
@@ -226,17 +219,6 @@ where
     }
 }
 
-/// The value store on its own, seeded from a state's leaves.
-///
-/// The low-level half of [`use_form`], which is what a page normally wants.
-pub fn use_form_values<T>(form: &FormState<T>) -> ValuesStore
-where
-    T: Clone + Debug + PartialEq + Facet<'static>,
-{
-    let leaves = form.leaf_values();
-    use_store(move || leaves.into_iter().collect())
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Contents {
     /// Live raw values by qualified path. Changes on every keystroke, and
@@ -300,8 +282,8 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// stores. A file's NAME is in the value store like any leaf's value, and
     /// only the file itself is in the table. See [`Contents`].
     contents: Contents,
-    /// Field errors by qualified path. See [`ErrorsStore`].
-    errors_store: ErrorsStore,
+    /// Field errors by qualified path. See [`ErrorsView`].
+    errors: ErrorsStore,
     /// The paths typed into since they were last checked (`ERRORS_PLAN.md`
     /// decision E). A blur checks only these, so tabbing through an empty
     /// field says nothing, and clicking in and out of one leaves a server's
@@ -404,20 +386,17 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     }
 
     /// The live value store, keyed by qualified path.
-    pub fn values(&self) -> ValuesStore {
-        self.contents.values
+    pub fn values(&self) -> ValuesView {
+        ValuesView(self.contents.values)
     }
 
-    pub fn errors(&self) -> ErrorsStore {
-        self.errors_store
+    pub fn errors(&self) -> ErrorsView {
+        ErrorsView(self.errors)
     }
 
     /// Whether this form shows any error, form-level or on a field.
     pub fn has_errors(&self) -> bool {
-        let errors = self
-            .state_signal
-            .read()
-            .ordered_errors(&self.errors_store.read());
+        let errors = self.state_signal.read().ordered_errors(&self.errors.read());
         !errors.form.is_empty() || !errors.fields.is_empty()
     }
 
@@ -552,7 +531,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
             },
             label_case: self.label_case(),
             classes: Rc::new(self.classes()),
-            errors: self.errors_store,
+            errors: self.errors(),
         })
     }
 
@@ -605,7 +584,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     ) -> Result<(), FormAccessError> {
         with_errors(
             self.state_signal,
-            self.errors_store,
+            self.errors,
             self.changed_paths,
             |state| state.push_field_error(path, message),
         )
@@ -627,7 +606,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     pub fn distribute_errors(&self, errors: &FormErrors) -> Result<(), FormAccessError> {
         let unclaimed = with_errors(
             self.state_signal,
-            self.errors_store,
+            self.errors,
             self.changed_paths,
             |state| {
                 state.errors.clone_from(&errors.form);
@@ -662,7 +641,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let state = self.state_signal.read();
         WireForm::new(
             state.ordered_values(&self.contents.values.read()),
-            state.ordered_errors(&self.errors_store.read()),
+            state.ordered_errors(&self.errors.read()),
         )
     }
 
@@ -812,7 +791,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         apply_edit(
             self.state_signal,
             self.contents,
-            self.errors_store,
+            self.errors,
             self.changed_paths,
             self.live_validation(),
             edit,
@@ -845,7 +824,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         let leaves = fresh.leaf_values();
         with_errors(
             self.state_signal,
-            self.errors_store,
+            self.errors,
             self.changed_paths,
             |state| *state = fresh,
         );
@@ -866,7 +845,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // then validates the stale values it kept.
         with_errors(
             self.state_signal,
-            self.errors_store,
+            self.errors,
             self.changed_paths,
             |state| {
                 let values = state.ordered_values(&self.contents.values.read());
@@ -1088,7 +1067,7 @@ pub fn use_form<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     Form {
         state_signal: state,
         contents,
-        errors_store: errors,
+        errors,
         changed_paths,
         on_edit,
         on_field_event,
@@ -1303,7 +1282,7 @@ fn check_live<T>(
         let values = state.ordered_values(&contents.values.peek());
         state.check_live(path, &values, &contents.files_by_path())
     };
-    // No key reads as `None`, as `ErrorsStoreExt::errors_at` reads it, so writing `None`
+    // No key reads as `None`, as `ErrorsView::at` reads it, so writing `None`
     // to a path never checked is skipped too.
     let unchanged = errors.peek().get(path).unwrap_or(&None) == &check.errors_at_path;
     if !unchanged {

@@ -3,14 +3,11 @@
 use crate::build::{FormMode, Walk, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
-use crate::form::ErrorsByPath;
 use crate::label_case::{LabelCase, ToCase};
-use crate::nodes::{
-    Drafts, Edit, ErrorsStoreExt, FilesByPath, Node, SpecsByPath, ValuesByPath, default_label,
-    no_such_path,
-};
+use crate::nodes::{Drafts, Edit, Node, SpecsByPath, default_label, no_such_path};
 use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::path::NodePath;
+use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
 use crate::widgets::{Choice, VariantSelect, field_help};

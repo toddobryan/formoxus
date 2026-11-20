@@ -3,16 +3,20 @@ use std::{
     rc::Rc,
 };
 
-use dioxus::core::{Attribute, Callback};
 use dioxus::signals::Signal;
+use dioxus::{
+    core::{Attribute, Callback},
+    stores::Store,
+};
 use formoxus_spec::Tag;
 
 use crate::{
     classes::Classes,
     field_attrs::{FieldAttrs, Validity},
     form::Contents,
-    nodes::{Edit, ErrorsStore, ErrorsStoreExt, FilesSignal, ValuesStore},
+    nodes::Edit,
     path::NodePath,
+    stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath},
     widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent},
 };
 
@@ -33,7 +37,7 @@ pub struct WidgetCommon {
     /// from [`current_attrs`](WidgetProps::current_attrs), names. A widget not using
     /// `field_row` renders it with [`field_help`](super::field_help).
     pub help_text: Option<String>,
-    pub errors: ErrorsStore,
+    pub errors: ErrorsView,
     /// The form's resolved classes, for the widget to look up its parts' slots
     /// (`classes.part_class::<Widget>(Tag::Label, invalid)`). A custom widget gets
     /// them too, so it can borrow a built-in slot and follow the app's preset.
@@ -121,8 +125,8 @@ impl WidgetProps {
         id: impl Into<String>,
         path: NodePath,
         attrs: FieldAttrs,
-        values: ValuesStore,
-        errors: ErrorsStore,
+        values: ValuesByPath,
+        errors: ErrorsByPath,
         classes: Rc<Classes>,
     ) -> Self {
         Self {
@@ -131,13 +135,18 @@ impl WidgetProps {
                 path,
                 label: None,
                 help_text: None,
-                errors,
+                errors: ErrorsView(Store::new(
+                    errors
+                        .into_iter()
+                        .map(|(path, messages)| (path, Some(messages)))
+                        .collect(),
+                )),
                 classes,
             },
             base_attrs: attrs,
             extra_attrs: Vec::new(),
             contents: Contents {
-                values,
+                values: Store::new(values.into_iter().collect()),
                 files: FilesSignal::default(),
                 resets: Signal::default(),
             },

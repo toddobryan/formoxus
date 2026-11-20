@@ -8,8 +8,8 @@
 use facet::Facet;
 use formoxus::attrs::Tag;
 use formoxus::form;
-use formoxus::nodes::ValuesByPath;
 use formoxus::path::NodePath;
+use formoxus::stores::ValuesByPath;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 

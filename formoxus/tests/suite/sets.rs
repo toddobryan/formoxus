@@ -10,9 +10,10 @@
 use super::{across_the_wire, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::nodes::{Edit, ItemValue, SetFeedback, SetOrder, ValuesByPath};
+use formoxus::nodes::{Edit, ItemValue, SetFeedback, SetOrder};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::ValuesByPath;
 use formoxus::widgets::{AddItemProps, ItemAdder};
 use googletest::prelude::*;
 use std::cmp::Ordering;
@@ -2474,13 +2475,11 @@ fn the_tags_preset_is_one_class_on_the_set() {
 /// A view that shows everything it was handed.
 #[component]
 fn TagChip(props: formoxus::widgets::SetItemProps) -> Element {
-    let stored = props.field.current();
+    // Through the values view (issue #22); box 4 moves this to the bound field.
+    let stored = props.values.get(&props.path);
     let says = format!(
         "{} at {} #{} editing={} stored={stored}",
-        props.text,
-        props.field.path(),
-        props.index,
-        props.editing
+        props.text, props.path, props.index, props.editing
     );
     rsx! { span { class: "chip", "{says}" } }
 }

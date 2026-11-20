@@ -28,9 +28,9 @@ use super::{FORM_ID, Harness, new_since, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::Edit;
-use formoxus::nodes::ValuesByPath;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::stores::ValuesByPath;
 use formoxus::widgets::ABSENT_DISPLAY;
 use googletest::prelude::*;
 

@@ -15,9 +15,10 @@ use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
 use crate::label_case::LabelCase;
-use crate::nodes::{Drafts, Edit, FilesByPath, Node, ValuesByPath, no_such_path};
+use crate::nodes::{Drafts, Edit, Node, no_such_path};
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::{ModelPath, NodePath};
+use crate::stores::{FilesByPath, ValuesByPath};
 use crate::{classes::Classes, error::ValidationError};
 
 use super::FormSpec;
@@ -200,7 +201,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
         out
     }
 
-    /// The leaf entries alone: what a [`ValuesStore`](crate::nodes::ValuesStore)
+    /// The leaf entries alone: what a [`ValuesStore`](crate::stores::ValuesStore)
     /// is seeded with. Structure stays out, because the state owns it. A set's
     /// draft is in, so `reset` clears what was typed into it.
     pub(crate) fn leaf_values(&self) -> ValuesByPath {
@@ -227,8 +228,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// client that builds a payload without a form (a script, a test) has to
     /// send both, or the server rebuilds no variants and no items.
     ///
-    /// Only the leaves belong in a [`ValuesStore`](crate::nodes::ValuesStore): the
-    /// state owns structure, so seeding a store takes the leaves alone.
+    /// Only the leaves belong in the form's live values (what a
+    /// [`ValuesView`](crate::stores::ValuesView) reads): the state owns structure,
+    /// so seeding them takes the leaves alone.
     ///
     /// A set's draft is left out: until Add commits it, it is not in the set.
     pub fn collect_values(&self) -> ValuesByPath {
@@ -245,7 +247,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     ///
     /// The bridge every read of the live values crosses, because the store's map
     /// and [`ValuesByPath`] cannot be the same type — see
-    /// [`ValuesStore`](crate::nodes::ValuesStore). Takes its PATHS and their
+    /// [`ValuesStore`](crate::stores::ValuesStore). Takes its PATHS and their
     /// order from the node tree's own walk (the [`RawValue`]s behind
     /// [`collect_values`](Self::collect_values)), and each VALUE from whichever
     /// side owns it, which the entry's kind decides:
@@ -633,8 +635,8 @@ mod tests {
     use super::{FormState, LiveCheck, empty_form};
     use crate::error::ValidationMessage;
     use crate::form::spec::FormSpec;
-    use crate::nodes::{FilesByPath, ValuesByPath};
     use crate::path::NodePath;
+    use crate::stores::{FilesByPath, ValuesByPath};
 
     #[derive(Facet, Clone, Debug, PartialEq)]
     struct Phone {
