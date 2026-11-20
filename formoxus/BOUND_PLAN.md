@@ -231,6 +231,34 @@ further:
   compiler's list. No box 2 test imports a view by module path (they come through
   `widgets::*`), so nothing written for this branch moves.
 
+**Decided 2026-11-19, at the start of box 4 (Todd):**
+
+- **K. `BoundField` and its seven kind markers get their own top-level `pub mod
+  bound_field`** (`src/bound_field.rs`), neither in `widgets` (where `FieldHandle`
+  lives today, `widgets/field_handle.rs`) nor in `fields`.
+
+  1. **Not `fields`:** in this crate a field is the Django-style `Field`, and `fields`
+     holds one per value family (`StringField`, `BoolField`, `ChoiceField`,
+     `NumberField`): the side that parses and validates. A bound field is not one of
+     those. It binds a NODE to the live form state (its path, the two views, the
+     `on_edit` and `on_field_event` writers), and under F most of its kinds
+     (`Variant`, `List`, `Set`, `Items`, `Struct`) are not fields at all. Putting it
+     there would blur the Field/Widget split the design came from
+     ([[django-parallel-design]]).
+  2. **Not `widgets`:** under F it is not only a widget's. The container nodes may hold
+     a `BoundField<Struct>`, `<List>` or `<Variant>` too, so widgets are its main
+     users, not its owner.
+  3. **Django does the same:** its `BoundField` lives in `django.forms.boundfield`,
+     beside fields and widgets rather than in either.
+  4. **What stays the same:** the `widgets::*` kit still exports `BoundField` itself, as
+     H says, a swap for `FieldHandle`, so no new re-export. The markers are reached at
+     their defining module only: `formoxus::bound_field::{Leaf, Variant, List, Set,
+     Items, SetItem, Struct}`.
+  5. **The cost:** three imports in the set-aside box 2 tests change from
+     `formoxus::widgets::bound_field::{Set, SetItem, Variant}` to
+     `formoxus::bound_field::…` (box 5), and the crate's intra-doc links to
+     `crate::widgets::FieldHandle` go to `crate::bound_field::BoundField`.
+
 ## Traps
 
 1. **`get` must read one key, never the map.** `self.store.read().get(path)` would
@@ -357,7 +385,8 @@ further:
   6. The markers at `formoxus::widgets::bound_field::{Leaf, Variant, List, Set,
      Items, SetItem, Struct}`, so `widgets/field_handle.rs` becomes a `pub mod
      bound_field` (it is a private `mod` today), and `BoundField` itself in the
-     `widgets::*` kit (H).
+     `widgets::*` kit (H). **Changed by K:** the module is top-level,
+     `formoxus::bound_field::…`, so box 5 changes the tests' three marker imports.
 
 - [x] **3.** (Todd) Part 1:
 
@@ -399,7 +428,9 @@ further:
   - `just ci` green, 1589.
 
 - [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the seven
-  markers, in `widgets/field_handle.rs` (renamed to match); `WidgetCommon` folded
+  markers, moved from `widgets/field_handle.rs` to a new top-level `pub mod
+  bound_field` in `src/bound_field.rs` (K), with `BoundField` in the `widgets::*` kit
+  in place of `FieldHandle` (H); `WidgetCommon` folded
   into it; `WidgetProps<K>`, `SetWidgetProps`, `AddItemProps`, `SetItemProps`,
   `VariantSelect` and the item buttons as in Part 2, item 5; the built-in widgets
   moved from `props.field_handle()` to the props or `props.field()` (E). The

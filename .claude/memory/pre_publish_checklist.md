@@ -76,11 +76,30 @@ prelude and the `widgets::*` kit as they stood then. Before publishing, in one p
    the public surface, so it is what proves the lists are enough.
 Do this before the doc pass (item 2): it decides which items are public and need docs.
 
+**Todd's goal for this pass (2026-11-19): the `use` lines a dev has to write should
+"just make sense".** Judge each import by whether a dev who has read only the guide
+could guess where the type lives, using dev-shaped code (the examples, apcsp), not the
+suite, which reaches into internals on purpose. Starting point, counted that day: seven
+example files need only `prelude::*`. The rest reach for `file::{FileUpload,
+Multipart, TemporaryFileUploadHandler}`, `nodes::ItemValue`, `attrs::FieldType` and
+`widgets::LeafWidget` (the kit's job), and one names `{FormSpec, ModelPath,
+empty_form, path, use_form}` one by one. In the suite, `path::NodePath` is imported 29
+times, `nodes` 17 and `stores` 14. First to question: `NodePath` in `path`,
+`ItemValue` in `nodes`, `FieldType` in `attrs`.
+
 **Taken OUT of the prelude, to reconsider here:** `ErrorsByPath` (2026-11-19, branch
 `bound`). It moved from `form.rs` to the new `formoxus::stores`, and Todd kept it out
 of the prelude on purpose: "keep everything in the project pointing at where things
 actually live. We'll add it back to the prelude when we get ready to publish." A dev
 needs it for `WidgetProps::new`, so it likely goes back.
+
+**`BoundField`: the `widgets::*` kit, not the prelude** (2026-11-19, Todd agreed),
+unless real code (apcsp, the examples) names it from a form-writing context. The
+prelude's dev writes `form!` and `use_form` and reads values through `form.values()`
+(a `ValuesView`), never a bound field; the kit's dev gets one as `props.field` and
+seldom names the type (only in a helper's signature, importing the marker from
+`formoxus::bound_field`). In both lists, the next export change would have to be made
+twice, the drift that ended the flat root list.
 
 ## 6. Scan the built docs for dead links — no lint can see two kinds
 
