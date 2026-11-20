@@ -13,5 +13,12 @@
   // Its own target dir, so rust-analyzer's flycheck and a `cargo`/`just ci` in
   // the terminal stop taking turns on the build lock and invalidating each
   // other's artifacts. Costs disk, saves a lot of waiting.
-  "rust-analyzer.cargo.targetDir": true
+  "rust-analyzer.cargo.targetDir": true,
+
+  // One `use` per module for auto-imports, enforced rather than copied from the
+  // file's existing style. `cargo fmt` cannot do this on stable (its
+  // `imports_granularity` is nightly-only), so this keeps new imports
+  // consistent; the existing mix is cleaned up before publishing.
+  "rust-analyzer.imports.granularity.group": "module",
+  "rust-analyzer.imports.granularity.enforce": true
 }
