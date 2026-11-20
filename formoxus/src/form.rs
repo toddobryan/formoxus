@@ -23,8 +23,8 @@ use crate::path::{ModelPath, NodePath};
 use crate::stores::{
     ErrorsByPath, ErrorsStore, ErrorsView, FilesByPath, FilesSignal, ValuesStore, ValuesView,
 };
-use crate::widgets::FieldHandle;
-use crate::widgets::field_handle::{FieldEvent, FieldEventKind, OnFieldEvent};
+use crate::bound_field::BoundField;
+use crate::bound_field::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::wire::WireForm;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
@@ -257,6 +257,25 @@ impl Contents {
                 )
             })
             .collect()
+    }
+
+        /// Put `raw` in the store, and nothing else: reporting it is the caller's
+    /// job, which is why this is private and [`input`](Self::input) and
+    /// [`change`](Self::change) are not.
+    ///
+    /// **`set` when the key is there, `insert` only when it is not.** Both wake
+    /// this field's own readers, but `insert` also marks the map's keys as
+    /// changed (dioxus-stores 0.7.10, `HashMap` `insert`). That wakes anything
+    /// that read the whole map, as a custom adder counting its list's entries
+    /// does, on every keystroke. Only a new key changes the keys.
+    pub(crate) fn write_value(&self, path: &NodePath, raw: String) {
+        let mut values = self.values;
+        let populated = values.peek().contains_key(path);
+        if populated {
+            values.get_unchecked(path.clone()).set(raw);
+        } else {
+            values.insert(path.clone(), raw);
+        }
     }
 }
 
@@ -722,7 +741,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            FieldHandle::unreported(path, self.contents).input(raw.clone());
+            self.contents.write_value(path, *raw);
         }
         self.distribute_errors(wire.errors())?;
         // Decided from the reply, not the form: a reply with an error at a
@@ -834,7 +853,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         // the restored schema is what decides which paths get rendered, and
         // `distribute_values` treats an absent path as empty either way.
         for (path, raw) in leaves {
-            FieldHandle::unreported(&path, self.contents).input(raw);
+            self.contents.write_value(&path, raw);
         }
         self.forget_picks();
     }
@@ -894,7 +913,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         if !self.state_signal.peek().leaf_values().contains_key(&key) {
             return Err(no_such_path(path));
         }
-        FieldHandle::new(
+        BoundField::new(
             &key,
             self.contents,
             OnFieldEvent {
@@ -1131,7 +1150,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     {
         for (path, raw) in state.peek().leaf_values() {
             if path.starts_with(item) {
-                FieldHandle::unreported(&path, contents).input(raw);
+                self.contents.write_value(path, raw);
             }
         }
     }

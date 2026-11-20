@@ -96,7 +96,6 @@
 
 pub mod checkbox_multiple;
 pub mod errors;
-pub(crate) mod field_handle;
 pub mod field_row;
 pub mod file_input;
 pub mod help;
@@ -118,7 +117,6 @@ pub(crate) mod widget_props;
 pub use crate::field_attrs::Validity;
 pub use checkbox_multiple::CheckboxMultiple;
 pub use errors::FieldErrors;
-pub use field_handle::FieldHandle;
 pub use field_row::{LabelSide, field_label, field_row, required_marker};
 pub use file_input::FileInput;
 pub use help::{described_by, field_help, help_id};

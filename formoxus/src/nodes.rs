@@ -39,7 +39,7 @@ use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
 use crate::stores::{ErrorsByPath, ErrorsView, FilesByPath, ValuesByPath};
 use crate::widgets::Choice;
-use crate::widgets::field_handle::OnFieldEvent;
+use crate::bound_field::OnFieldEvent;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
 
@@ -395,7 +395,7 @@ impl Shown {
 /// **No `Clone`,** on purpose: every copy should be an `Rc::clone`, and
 /// without `Clone` a deep copy (a `String` and an `Rc` bump) can't be written
 /// by accident, as through `NodeContext`'s `Deref`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FormWide {
     pub form_id: String,
     pub(crate) contents: Contents,

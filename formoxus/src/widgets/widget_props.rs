@@ -11,13 +11,14 @@ use dioxus::{
 use formoxus_spec::Tag;
 
 use crate::{
+    bound_field::{BoundField, OnFieldEvent},
     classes::Classes,
     field_attrs::{FieldAttrs, Validity},
     form::Contents,
     nodes::Edit,
     path::NodePath,
     stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath},
-    widgets::{Choice, FieldHandle, Widget, field_handle::OnFieldEvent},
+    widgets::{Choice, Widget},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -197,8 +198,8 @@ impl WidgetProps {
     /// Call it while rendering, then move the closures its `on_*` methods
     /// return into the element's event attributes. Each closure owns a clone
     /// of the handle, so nothing borrows the props.
-    pub fn field_handle(&self) -> FieldHandle {
-        FieldHandle::new(&self.path, self.contents, self.on_field_event)
+    pub fn field_handle(&self) -> BoundField {
+        BoundField::new(&self.path, self.contents, self.on_field_event)
     }
 }
 
