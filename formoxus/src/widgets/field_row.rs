@@ -5,8 +5,9 @@
 use dioxus::prelude::*;
 use formoxus_spec::{FixedKey, Tag};
 
+use crate::bound_field::BoundField;
 use crate::classes::Classes;
-use crate::widgets::{FieldErrors, Widget, WidgetCommon, field_help};
+use crate::widgets::{FieldErrors, Widget, field_help};
 
 /// Which side of its form control a field's caption goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,21 +42,21 @@ pub enum LabelSide {
 /// `&props` and the `Deref` hands it over, and a set widget with one control
 /// (`SelectMultiple`) uses it too.
 pub fn field_row<W: Widget>(
-    props: &WidgetCommon,
+    field: &BoundField<impl Sized>,
     marked: bool,
     side: LabelSide,
     control: Element,
 ) -> Element {
     let label = field_label::<W>(
-        &props.id,
-        props.label.clone(),
+        field.id(),
+        field.label(),
         marked,
-        &props.classes,
-        props.is_invalid(),
+        field.classes(),
+        field.is_invalid(),
     );
     let captioned = rsx! {
         {label}
-        {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
+        {field_help(field.id(), field.help_text(), &field.classes())}
     };
     let (before, after) = match side {
         LabelSide::Before => (captioned, rsx! {}),
@@ -63,15 +64,15 @@ pub fn field_row<W: Widget>(
     };
     rsx! {
         div {
-            class: props.part_class::<W>(Tag::Div),
+            class: field.part_class::<W>(Tag::Div),
             {before}
             {control}
             {after}
             FieldErrors {
-                field_id: &props.id,
-                paths: vec![props.path.clone()],
-                errors: props.errors,
-                classes: props.classes.clone(),
+                field_id: field.id(),
+                paths: vec![field.path().clone()],
+                errors: field.errors(),
+                classes: field.classes().clone(),
             }
         }
     }
@@ -86,7 +87,7 @@ pub fn field_row<W: Widget>(
 /// otherwise push a lone asterisk onto its own line.
 pub fn field_label<W: Widget>(
     id: &str,
-    text: Option<String>,
+    text: Option<&str>,
     marked: bool,
     classes: &Classes,
     invalid: bool,

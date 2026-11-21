@@ -23,6 +23,7 @@ use facet::{Def, Facet, Partial, Peek, ReflectError, ScalarType, Shape, Type, Us
 use formoxus_spec::FixedKey;
 use unicase::{Ascii, UniCase};
 
+use crate::bound_field::BoundField;
 use crate::{
     build::retain_first,
     error::FormAccessError,
@@ -33,7 +34,7 @@ use crate::{
     stores::{ErrorsByPath, FilesByPath, ValuesByPath, ValuesView},
     widgets::{
         AddItemProps, Choice, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
-        RemoveItemButton, SetItemProps, SetWidgetProps, WidgetCommon, described_by, field_help,
+        RemoveItemButton, SetItemProps, SetWidgetProps, described_by, field_help,
         field_row::required_marker, widget::AnySetWidget,
     },
 };
@@ -972,21 +973,19 @@ impl Node for SetNode {
             let path = ctx.path(&self.name);
             let chosen = self.chosen(&path);
             return widget.render(SetWidgetProps {
-                common: WidgetCommon {
-                    id: ctx.id(&self.name),
-                    path,
-                    label: self.label(ctx.label_case),
-                    help_text: self.help_text.clone(),
-                    errors: ctx.errors,
-                    classes: ctx.classes.clone(),
-                },
                 choices: self
                     .choices(ctx.label_case)
                     .expect("a SetWidget should have had choices"),
                 chosen,
                 required: self.items.min_items().is_some_and(|min| min > 0),
                 max_items: self.items.max_items(),
-                on_edit: ctx.on_edit,
+                field: BoundField::new(
+                    ctx.id(&self.name),
+                    ctx.path(&self.name),
+                    self.label(ctx.label_case),
+                    self.help_text.clone(),
+                    ctx.form.clone(),
+                ),
             });
         }
 

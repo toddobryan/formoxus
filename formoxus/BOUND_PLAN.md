@@ -436,6 +436,180 @@ further:
   moved from `props.field_handle()` to the props or `props.field()` (E). The
   container nodes' own rendering may stay on `ctx.errors.at(path)` (F).
 
+  In order, one kind at a time. Until 4.5 is done, the aim is the library alone,
+  `cargo check -p formoxus --lib`. The suite, the examples and the e2e crate break at
+  4.4 and stay broken until box 5 (Claude), which also restores box 2's tests.
+
+  - [x] **4.1** Started (2026-11-20, `524e173` and `6ba3d3a`).
+    `widgets/field_handle.rs` moved to `src/bound_field.rs`, and `FieldHandle` was
+    renamed `BoundField` at every use. The seven markers are `pub` unit structs
+    deriving `Clone, Copy, Debug, Default, PartialEq, Eq` (trap 6). The struct is
+    `BoundField<K = Leaf> { id, path, label, help_text, form: Rc<FormWide>, _data }`.
+    `FormWide` derives `PartialEq`. A new `Contents::write_value` exists, and `absorb`
+    and `reset` already call it.
+
+  - [x] **4.2** Stop the form's own writes from going through a bound field
+    (`form.rs`). These are the two errors in `form.rs`.
+
+    1. `apply_edit` (around line 1153) is a free function, so it must call
+       `contents.write_value(&path, raw)`, not `self.contents.…`.
+    2. `absorb` (around line 744) needs `raw.clone()`.
+    3. `Form::write` (around line 916) still calls `BoundField::new(&key, contents,
+       OnFieldEvent { … })`. It should call `write_value`, then
+       `OnFieldEvent { … }.send(&key, FieldEventKind::Written)`.
+    4. Delete `BoundField::unreported`.
+    5. Fix `Contents::write_value`'s doc: it is still `BoundField`'s old doc, and its
+       first line is indented wrongly.
+
+  - [x] **4.3** Give `BoundField` its constructor and the methods every kind shares
+    (`bound_field.rs`, Part 2, items 1 and 2).
+
+    1. Write one `pub(crate) fn new(id, path, label, help_text, form: Rc<FormWide>)`
+       in `impl<K> BoundField<K>`. It is generic in `K`, because the node calling it
+       knows its own kind (trap 7).
+    2. In the method bodies, replace `self.contents` with `self.form.contents`, and
+       `self.handler` with `self.form.on_field_event`.
+    3. Put the getters in `impl<K>`, all `pub`: they are how a custom widget reads
+       what were `WidgetCommon`'s `pub` fields (I). They return borrows: `path() -> &NodePath`,
+       `id() -> &str`, `label()` and `help_text() -> Option<&str>`, and
+       `classes() -> &Rc<Classes>`. Add `errors() -> ErrorsView` and
+       `values() -> ValuesView`, which are both `Copy`.
+    4. Move `WidgetCommon`'s three methods into `impl<K>`: `validity`, `is_invalid`
+       and `part_class::<W>`. Leave `WidgetCommon` in place for now, because
+       `SetWidgetProps` still uses it until 4.5.
+    5. Add one private `send_edit(&self, edit: Edit)` in `impl<K>`, which calls
+       `self.form.on_edit`. Every kind's edit method in 4.5 to 4.10 goes through it.
+    6. Leave the current methods in `impl BoundField` (which means `Leaf`): `current`,
+       `input`, `change`, `blur` and their `on_*` builders, `pick_file`,
+       `on_pick_file`, `picked_file` and `resets`.
+
+  - [x] **4.4** `Leaf`: `WidgetProps` holds a `BoundField` (Part 2, item 5.1). It
+    stays non-generic for now, because `VariantSelect` still takes it until 4.6.
+
+    1. In `widget_props.rs`, `WidgetProps` drops `common`, `contents` and
+       `on_field_event`, and gains `field: BoundField`. `Deref` targets the
+       `BoundField`. `DerefMut` goes, because the fields are private (I).
+    2. `field()` returns a clone, replacing `field_handle()`.
+    3. Add the builders `with_label` and `with_help_text` (I).
+    4. **`WidgetProps::new` is renamed `WidgetProps::detached`** (2026-11-21). Its
+       only callers are two suite tests (box 5 changes them). `new` reads as the
+       normal way to build props, and it is not: the nodes build the real ones. A
+       dev writing a widget that renders another would reach for `new`, and the
+       inner widget would then lose its live check. Its doc warns about this, but
+       the name should say it ([[feedback-hard-to-misuse]]): these props are
+       connected to no form. The doc keeps the warning, and says to pass a clone of
+       your own props on instead. Its body builds a throwaway `FormWide`:
+       `Callback::new(|_| {})` for
+       `on_edit`, `OnFieldEvent { callback: None, is_live: false }` (this replaces
+       `unreported()`), a fixed form id, and `Formoxus::default().label_case`.
+       Nothing reads that casing (a bound field never does, and `VariantSelect`
+       gets its own as a prop), so any valid value works. Taking it from
+       `Formoxus::default()` keeps the built-ins in one place. `LabelCase` gets no
+       `Default` (2026-11-21): a `LabelCase::default()` would read as the right
+       answer anywhere, and a node calling it while rendering would skip the
+       config cascade without anyone noticing.
+    5. `current_attrs` and `control_class` read through the getters.
+    6. Make `field_row` take `&BoundField<K>`, generic in `K`, in place of
+       `&WidgetCommon`. The set widgets and `VariantSelect` use it too.
+    7. Change the nodes that build a `WidgetProps`: `field_node.rs` (around line
+       338), `file_node.rs` (around 139) and `variant_node.rs` (around 273, still a
+       leaf's props until 4.6). Each passes `ctx.form.clone()` to `BoundField::new`.
+    8. Change the eight `field_handle()` callers to `field()`: `input.rs` (4),
+       `textarea.rs`, `select.rs`, `radio_group.rs` and `file_input.rs`.
+    9. Change about 50 direct field reads in `src/widgets` (`props.id`,
+       `props.help_text`, `props.classes`, …) to the getters. The compiler lists them.
+    10. The lib still does not compile here: `select_multiple.rs` uses `field_row` on
+        `SetWidgetProps`. Doing 4.5 next is what fixes it.
+
+  - [x] **4.5** `Set`: `SetWidgetProps` (Part 2, item 5.3).
+
+    1. `SetWidgetProps` drops `common` and `on_edit`, and gains
+       `field: BoundField<Set>`. Its `Deref` targets the bound field, and its
+       `DerefMut` goes.
+    2. In `impl BoundField<Set>`, add `add(Option<ItemValue>)` and `remove(index)`.
+       `edit_item` waits for 4.9, when `EditItemButton` needs it.
+    3. Move `checkbox_multiple.rs` and `select_multiple.rs` to `props.field.add(…)`
+       and `props.field.remove(…)`, in place of `on_edit.call(Edit::…)`.
+    4. `set_node.rs` (around line 974) builds the `BoundField<Set>`.
+    5. Delete `WidgetCommon`, and its re-export in `widgets.rs`.
+    6. **The lib compiles. Commit.**
+
+  - [ ] **4.6** `Variant`: `VariantSelect` (Part 2, item 5.2).
+
+    1. `WidgetProps` becomes `WidgetProps<K = Leaf>`, holding `BoundField<K>`.
+       `LeafWidget::render` still takes plain `WidgetProps`.
+    2. In `impl BoundField<Variant>`, add `choose(Option<&str>)`, which sends
+       `Edit::new_choose_variant` at its own path.
+    3. `VariantSelect` takes `WidgetProps<Variant>`, and drops its `on_edit` prop.
+    4. Keep trap 4 in mind: `variant_node.rs` passes the attributes with the error
+       attributes already applied. The `aria-describedby` tests in `enums.rs` catch
+       a mistake there in box 5.
+
+  - [ ] **4.7** Decide **L**, `DraftAdder`'s Cancel. The plan missed this. A set's
+    built-in adder, `DraftAdder` (`item_buttons.rs`, around line 185), sends
+    `Edit::EditItem { index: None }` for Cancel. But it takes `AddItemProps`, whose
+    field is `Items`, and `Items` has only `add` and `remove`. A list rejects
+    `EditItem` at runtime (`list_node.rs`, around line 224, logged as a warning).
+    Two ways out:
+
+    1. **`AddItemProps.editing` becomes `Option<Editing>`**, where `Editing` holds the
+       text and a `BoundField<Set>`, and has a `cancel()` (Claude recommends this).
+       Cancel then exists only while an item is being edited, which only ever
+       happens on a set. So no list can send one, and it needs no new `From`.
+    2. **`Items` gets `stop_editing()`**, documented as set-only. That is less code,
+       but on a list the call would compile and then fail with a warning, which goes
+       against [[feedback-hard-to-misuse]].
+
+  - [ ] **4.8** `Items`: `AddItemProps` and `RemoveItemButton` (Part 2, items 5.4
+    and 5.6).
+
+    1. `AddItemProps` drops `path`, `id`, `values`, `on_edit` and `classes`, and
+       gains `field: BoundField<Items>`. Do whatever L decided for `editing`.
+    2. In `impl BoundField<Items>`, add `add(Option<ItemValue>)` (which appends, so
+       `before: None`) and `remove(index)`.
+    3. Add `From<BoundField<List>>` and `From<BoundField<Set>>` for
+       `BoundField<Items>`, and no conversion back (trap 8).
+    4. Move `Add` and `DraftAdder` to the field. `DraftAdder` builds its draft id
+       from `field.id()`.
+    5. `RemoveItemButton` takes `field: BoundField<Items>` in place of `path`,
+       `on_edit` and `classes`.
+    6. Change the callers: `list_node.rs` (around lines 117 and 125) builds a
+       `BoundField<List>` and calls `.into()`. `set_node.rs` (around 621 and 1073)
+       does the same with its `BoundField<Set>`.
+
+  - [ ] **4.9** `SetItem`: `SetItemProps` and `EditItemButton` (Part 2, item 5.5).
+
+    1. `SetItemProps` drops `path`, `values` and `classes`, and gains
+       `field: BoundField<SetItem>`.
+    2. In `impl BoundField<SetItem>`, add only a read-only `current()`. A set's item
+       must not be written directly, because that would skip the set's duplicate
+       check.
+    3. In `impl BoundField<Set>`, add `edit_item(Option<usize>)`.
+    4. `EditItemButton` takes `field: BoundField<Set>` in place of `path`, `on_edit`
+       and `classes`.
+    5. Change `set_node.rs` (around lines 594 and 612).
+
+  - [ ] **4.10** `List`: `MoveItemButtons` (Part 2, item 5.6).
+
+    1. In `impl BoundField<List>`, add `add`, `remove(index)` and
+       `move_item(from, to)`.
+    2. `MoveItemButtons` takes `field: BoundField<List>` in place of `path`, `on_edit`
+       and `classes`.
+    3. Change `list_node.rs` (around line 115), reusing the `BoundField<List>` from
+       4.8.
+
+  - [ ] **4.11** Loose ends, then commit and push.
+
+    1. Fix the doc links that still name `WidgetCommon`, `FieldHandle` or
+       `field_handle`: `widgets.rs` (lines 62, 63 and 82), `field_attrs.rs` (299),
+       `nodes.rs` (414 to 419), and `BoundField`'s own doc.
+    2. `FormWide.classes`'s doc (`nodes.rs`, around 413) says a widget "must not
+       hold the whole `FormWide`" because that would hand it the form's callbacks.
+       That is no longer true: a bound field holds it, behind private fields. Say
+       why `classes` is still an `Rc` of its own, or stop it being one.
+    3. Run `cargo clippy -p formoxus --lib` and `cargo doc -p formoxus --no-deps`
+       until both are clean. The rest of `just ci` is box 5's.
+
 - [ ] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
   docs (each view, `BoundField` and each kind's methods, `WidgetProps`, the
   custom-widget walkthrough in `widgets.rs`, and the adder and item-view docs);

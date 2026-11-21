@@ -36,13 +36,13 @@ impl LeafWidget for FileInput {
 #[component]
 pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
     let props = widget_props;
-    let handle = props.field_handle();
-    let remover = handle.clone();
-    let file_name = &handle.current();
+    let field = props.field();
+    let remover = field.clone();
+    let file_name = &field.current();
     let output = if file_name.is_empty() {
         ""
     } else {
-        match handle.picked_file() {
+        match field.picked_file() {
             Some(_) => file_name,
             None => &format!("Current file: {file_name}"),
         }
@@ -59,7 +59,7 @@ pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
     // (On this block's first root it would be read, since `field_row` places
     // `control` with `{…}`, but it would make the output and Remove again too,
     // and break if the input stopped being first.)
-    let resets = handle.resets();
+    let resets = field.resets();
 
     let control = rsx! {
         for n in [resets] {
@@ -67,21 +67,21 @@ pub(crate) fn FileInputView(widget_props: WidgetProps) -> Element {
                 key: "{n}",
                 class: props.control_class::<FileInput>(Tag::Input),
                 r#type: "file",
-                name: "{props.path}",
-                id: "{props.id}",
-                onchange: handle.on_pick_file(),
+                name: "{props.path()}",
+                id: "{props.id()}",
+                onchange: field.on_pick_file(),
                 ..attrs.clone(),
             }
         }
         output {
             class: props.part_class::<FileInput>(Tag::Output),
-            "for": "{props.id}",
+            "for": "{props.id()}",
             "{output}"
         }
         if !required && !file_name.is_empty() {
             button {
                 r#type: "button",
-                class: props.classes.fixed_class(FixedKey::RemoveFileButton, false),
+                class: props.classes().fixed_class(FixedKey::RemoveFileButton, false),
                 aria_label: "Remove \"{file_name}\"",
                 onclick: move |_| {
                     remover.pick_file(None);

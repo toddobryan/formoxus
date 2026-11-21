@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use facet::{Def, Facet, Partial, ReflectError, Shape, Type, UserType};
 use formoxus_spec::{Attr, AttrKey, AttrValue, FileType};
 
+use crate::bound_field::BoundField;
 use crate::{
     error::{FormAccessError, ValidationMessage},
     field_attrs::FieldAttrs,
@@ -15,7 +16,7 @@ use crate::{
     },
     path::NodePath,
     stores::ErrorsByPath,
-    widgets::{AnyWidget, Choice, WidgetCommon, WidgetProps},
+    widgets::{AnyWidget, Choice, WidgetProps},
 };
 
 #[derive(Clone, Debug)]
@@ -137,21 +138,17 @@ impl Node for FileNode {
     /// `Option<FileUpload>` with `ctx.optional()`.
     fn render(&self, ctx: &NodeContext) -> Element {
         self.widget.render(WidgetProps {
-            common: WidgetCommon {
-                id: ctx.id(&self.name),
-                path: ctx.path(&self.name),
-                label: self
-                    .label(ctx.label_case)
-                    .or_else(|| ctx.label_if_unnamed.clone()),
-                help_text: self.help_text.clone(),
-                classes: ctx.classes.clone(),
-                errors: ctx.errors,
-            },
-            contents: ctx.contents,
-            choices: None,
             base_attrs: FieldAttrs::with_owned_attrs(false, ctx.required, &self.own_attrs()),
             extra_attrs: Vec::new(),
-            on_field_event: ctx.on_field_event,
+            choices: None,
+            field: BoundField::new(
+                ctx.id(&self.name),
+                ctx.path(&self.name),
+                self.label(ctx.label_case)
+                    .or_else(|| ctx.label_if_unnamed.clone()),
+                self.help_text.clone(),
+                ctx.form.clone(),
+            ),
         })
     }
 

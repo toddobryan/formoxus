@@ -289,14 +289,14 @@ pub(crate) fn InputView<W: Widget>(
 /// visible text and an asterisk on screen beside a widget nobody can see, and
 /// label an unlabelable element for a screen reader.
 fn hidden(props: &WidgetProps) -> Element {
-    let handle = props.field_handle();
-    let current = handle.current();
+    let field = props.field();
+    let current = field.current();
     rsx! {
         input {
             r#type: "hidden",
-            name: "{props.path}",
+            name: "{props.path()}",
             value: current,
-            oninput: handle.on_input(),
+            oninput: field.on_input(),
         }
     }
 }
@@ -320,8 +320,8 @@ fn hidden(props: &WidgetProps) -> Element {
 // programmatically (so "reset after a successful change" became impossible),
 // and the only asymmetric input in the set.
 fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
-    let handle = props.field_handle();
-    let current = handle.current();
+    let field = props.field();
+    let current = field.current();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -330,11 +330,11 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
         input {
             class: props.control_class::<W>(Tag::Input),
             r#type: input_type.html_type(),
-            id: "{props.id}",
-            name: "{props.path}",
+            id: "{props.id()}",
+            name: "{props.path()}",
             value: "{current}",
-            oninput: handle.on_input(),
-            onblur: handle.on_blur(),
+            oninput: field.on_input(),
+            onblur: field.on_blur(),
             // Last, and it has to be: rsx! treats everything after a spread
             // as children, so an attribute below this is a parse error.
             ..attrs,
@@ -345,7 +345,7 @@ fn text_like<W: Widget>(input_type: InputType, props: &WidgetProps) -> Element {
 }
 
 fn checkbox(props: &WidgetProps) -> Element {
-    let handle = props.field_handle();
+    let field = props.field();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -353,11 +353,11 @@ fn checkbox(props: &WidgetProps) -> Element {
     let control = rsx! {
         input {
             class: props.control_class::<CheckboxInput>(Tag::Input),
-            name: "{props.path}",
-            id: "{props.id}",
+            name: "{props.path()}",
+            id: "{props.id()}",
             r#type: "checkbox",
-            checked: handle.current() == "true",
-            onchange: handle.on_change(),
+            checked: field.current() == "true",
+            onchange: field.on_change(),
             // Last: rsx! reads anything after a spread as children.
             ..attrs,
         }
@@ -372,8 +372,8 @@ fn checkbox(props: &WidgetProps) -> Element {
 }
 
 fn range(omit_value: bool, props: &WidgetProps) -> Element {
-    let handle = props.field_handle();
-    let current = handle.current();
+    let field = props.field();
+    let current = field.current();
     // Out of the spread, as `RadioGroup` takes it off its `<fieldset>`: HTML does
     // not allow `required` on a range, and a slider always has a value, so it
     // would enforce nothing. It stays in `base_attrs`, where it says the FIELD
@@ -387,17 +387,17 @@ fn range(omit_value: bool, props: &WidgetProps) -> Element {
         input {
             class: props.control_class::<RangeInput>(Tag::Input),
             r#type: "range",
-            name: "{props.path}",
-            id: "{props.id}",
+            name: "{props.path()}",
+            id: "{props.id()}",
             value: "{current}",
-            oninput: handle.on_input(),
-            onchange: handle.on_change(),
+            oninput: field.on_input(),
+            onchange: field.on_change(),
             ..attrs
         }
         if !omit_value {
             output {
                 class: props.part_class::<RangeInput>(Tag::Output),
-                "for": "{props.id}",
+                "for": "{props.id()}",
                 "{current}"
             }
         }

@@ -142,7 +142,7 @@ pub use types::{Choice, InputType};
 pub use crate::nodes::{Edit, ItemValue};
 pub use variant_select::VariantSelect;
 pub use widget::{AnySetWidget, AnyWidget, LeafWidget, SetWidget, Widget};
-pub use widget_props::{SetWidgetProps, WidgetCommon, WidgetProps};
+pub use widget_props::{SetWidgetProps, WidgetProps};
 
 #[cfg(test)]
 mod tests {

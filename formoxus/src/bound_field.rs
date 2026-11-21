@@ -5,12 +5,14 @@ use dioxus::core::Callback;
 use dioxus::html::FileData;
 use dioxus::prelude::{FocusEvent, FormEvent};
 use dioxus::signals::{ReadableExt, WritableExt};
+use formoxus_spec::Tag;
 
-use crate::Classes;
-use crate::form::Contents;
-use crate::nodes::{Edit, FormWide};
+use crate::classes::Classes;
+use crate::field_attrs::Validity;
+use crate::nodes::{Edit, FormWide, ItemValue};
 use crate::path::NodePath;
-use crate::stores::ErrorsView;
+use crate::stores::{ErrorsView, ValuesView};
+use crate::widgets::widget::Widget;
 
 /// What a widget tells the form happened to one field, for
 /// `apply_field_event` (in `form.rs`, private there, so not a link).
@@ -108,8 +110,6 @@ pub struct SetItem;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Struct;
 
-
-
 /// How a widget reads and writes its field's value, from
 /// [`WidgetProps::field_handle`](crate::widgets::WidgetProps::field_handle).
 ///
@@ -150,28 +150,99 @@ pub struct BoundField<K = Leaf> {
     _data: PhantomData<K>,
 }
 
+impl<K> BoundField<K> {
+    pub(crate) fn new(
+        id: String,
+        path: NodePath,
+        label: Option<String>,
+        help_text: Option<String>,
+        form: Rc<FormWide>,
+    ) -> Self {
+        Self {
+            id,
+            path,
+            label,
+            help_text,
+            form,
+            _data: PhantomData,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn path(&self) -> &NodePath {
+        &self.path
+    }
+
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
+    pub(crate) fn with_label(self, label: String) -> Self {
+        Self {
+            label: Some(label),
+            ..self
+        }
+    }
+
+    pub fn help_text(&self) -> Option<&str> {
+        self.help_text.as_deref()
+    }
+
+    pub(crate) fn with_help_text(self, help_text: String) -> Self {
+        Self {
+            help_text: Some(help_text),
+            ..self
+        }
+    }
+
+    pub fn classes(&self) -> &Rc<Classes> {
+        &self.form.classes
+    }
+
+    pub fn errors(&self) -> ErrorsView {
+        self.form.errors
+    }
+
+    pub fn values(&self) -> ValuesView {
+        ValuesView(self.form.contents.values)
+    }
+
+    fn send_edit(&self, edit: Edit) {
+        (self.form.on_edit)(edit)
+    }
+
+    /// Whether the field has errors to show: [`validity`](Self::validity) is
+    /// [`Invalid`](Validity::Invalid). What the invalid classes and the error
+    /// list key on, since an unchecked field and a valid one look alike there;
+    /// only `aria-invalid` tells them apart.
+    pub fn is_invalid(&self) -> bool {
+        self.validity() == Validity::Invalid
+    }
+
+    /// Where this field stands with validation: unchecked, valid or invalid.
+    /// Reading it while rendering subscribes the reader to this one field's
+    /// errors, so a new error wakes this widget and no other.
+    ///
+    /// A built-in widget rarely needs it directly:
+    /// [`current_attrs`](crate::widgets::WidgetProps::current_attrs) turns it into `aria-invalid`,
+    /// and [`is_invalid`](Self::is_invalid) is the yes-or-no the classes want.
+    pub fn validity(&self) -> Validity {
+        self.errors().validity_at(&self.path)
+    }
+
+    /// `part`'s classes from the form's `Classes`, with its invalid addition
+    /// when the field has errors. For a part's `class` other than the control,
+    /// such as the wrapping `div`; [`control_class`](crate::widgets::WidgetProps::control_class) is
+    /// for the control itself.
+    pub fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
+        self.form.classes.part_class::<W>(tag, self.is_invalid())
+    }
+}
+
 impl BoundField {
-    pub(crate) fn new(path: &NodePath, contents: Contents, handler: OnFieldEvent) -> Self {
-        Self {
-            path: path.clone(),
-            contents,
-            handler,
-        }
-    }
-
-    /// A handle whose writes the form never hears of: no live check follows
-    /// one, and a clean result is not made stale. For the form's own writes
-    /// in `absorb`, `reset` and `apply_edit`, each of which settles the
-    /// field's errors itself. Never for a widget, which would then go
-    /// unchecked until submit.
-    pub(crate) fn unreported(path: &NodePath, contents: Contents) -> Self {
-        Self {
-            path: path.clone(),
-            contents,
-            handler: OnFieldEvent::unreported(),
-        }
-    }
-
     /// The field's raw value, or `""` if it has none yet. Reading it while
     /// rendering subscribes the reader to this one field.
     ///
@@ -180,7 +251,7 @@ impl BoundField {
     /// never given a value. An absent key reads as `""`, the same "empty IS
     /// absence" rule the form applies when it validates.
     pub fn current(&self) -> String {
-        let slot = self.contents.values.get_unchecked(self.path.clone());
+        let slot = self.form.contents.values.get_unchecked(self.path.clone());
         slot.try_read().map(|v| v.clone()).unwrap_or_default()
     }
 
@@ -188,8 +259,10 @@ impl BoundField {
     /// error is checked again at once, so the error goes as soon as it is
     /// fixed; any other field waits for [`blur`](Self::blur).
     pub fn input(&self, raw: String) {
-        self.write_value(raw);
-        self.handler.send(&self.path, FieldEventKind::Written);
+        self.form.contents.write_value(&self.path, raw);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Written);
     }
 
     /// [`input`](Self::input) as an `oninput` handler, for an element the user
@@ -203,9 +276,13 @@ impl BoundField {
     /// The user chose: write `raw`, then check it at once. A chooser has no
     /// typing to wait out, so its change counts as leaving the field too.
     pub fn change(&self, raw: String) {
-        self.write_value(raw);
-        self.handler.send(&self.path, FieldEventKind::Written);
-        self.handler.send(&self.path, FieldEventKind::Blurred);
+        self.form.contents.write_value(&self.path, raw);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Written);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Blurred);
     }
 
     /// [`change`](Self::change) as an `onchange` handler, for a `<select>`, a
@@ -219,7 +296,9 @@ impl BoundField {
     /// was last checked; otherwise nothing happens, so tabbing through a form
     /// does not cover it in errors.
     pub fn blur(&self) {
-        self.handler.send(&self.path, FieldEventKind::Blurred);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Blurred);
     }
 
     /// [`blur`](Self::blur) as an `onblur` handler, to go with
@@ -246,14 +325,20 @@ impl BoundField {
     /// cancels the dialog, and that must keep the file, which is why
     /// [`on_pick_file`](Self::on_pick_file) never calls this with `None`.
     pub fn pick_file(&self, file_data: Option<&FileData>) {
-        let mut files = self.contents.files;
-        self.write_value(file_data.map_or(String::new(), FileData::name));
+        let mut files = self.form.contents.files;
+        self.form
+            .contents
+            .write_value(&self.path, file_data.map_or(String::new(), FileData::name));
         match file_data {
             Some(file) => files.write().insert(self.path.clone(), file.clone()),
             None => files.write().shift_remove(&self.path),
         };
-        self.handler.send(&self.path, FieldEventKind::Written);
-        self.handler.send(&self.path, FieldEventKind::Blurred);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Written);
+        self.form
+            .on_field_event
+            .send(&self.path, FieldEventKind::Blurred);
     }
 
     /// [`pick_file`](Self::pick_file) as an `onchange` handler, for an
@@ -288,7 +373,7 @@ impl BoundField {
     /// The result is a copy, and changing it changes nothing in the form.
     /// The only way in is [`pick_file`](Self::pick_file).
     pub fn picked_file(&self) -> Option<FileData> {
-        self.contents.files.read().get(&self.path).cloned()
+        self.form.contents.files.read().get(&self.path).cloned()
     }
 
     /// How many times the form has been reset. Reading it while rendering
@@ -315,6 +400,26 @@ impl BoundField {
     /// }
     /// ```
     pub fn resets(&self) -> u32 {
-        *self.contents.resets.read()
+        *self.form.contents.resets.read()
+    }
+}
+
+impl BoundField<Set> {
+    /// Add an item to the set: `value`, or with `None` the set's draft.
+    pub fn add(&self, value: Option<ItemValue>) {
+        self.send_edit(Edit::AddItem {
+            path: self.path.clone(),
+            value,
+            // A set is sorted, so there is nowhere to insert before.
+            before: None,
+        });
+    }
+
+    /// Remove the item at `index`, its place in the set as sorted now.
+    pub fn remove(&self, index: usize) {
+        self.send_edit(Edit::RemoveItem {
+            path: self.path.clone(),
+            index,
+        });
     }
 }

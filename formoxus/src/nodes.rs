@@ -31,6 +31,7 @@ pub use set_node::{
 pub use struct_node::StructNode;
 pub use variant_node::{VariantChoice, VariantNode};
 
+use crate::bound_field::OnFieldEvent;
 use crate::classes::Classes;
 use crate::error::FormAccessError;
 use crate::form::Contents;
@@ -39,7 +40,6 @@ use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
 use crate::stores::{ErrorsByPath, ErrorsView, FilesByPath, ValuesByPath};
 use crate::widgets::Choice;
-use crate::bound_field::OnFieldEvent;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
 

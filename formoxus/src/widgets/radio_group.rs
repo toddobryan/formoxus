@@ -45,7 +45,7 @@ impl LeafWidget for RadioGroup {
     const TAKES_CHOICES: bool = true;
 
     fn render(&self, props: WidgetProps) -> Element {
-        reject_if_not_required(&props.base_attrs, &props.path);
+        reject_if_not_required(&props.base_attrs, props.path());
         rsx! {
             RadioGroupView { widget_props: props }
         }
@@ -82,7 +82,7 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let mut props = widget_props;
-    let handle = props.field_handle();
+    let field = props.field();
     let is_invalid = props.is_invalid();
     let base_attrs = &props.base_attrs;
     let current_attrs = props.current_attrs();
@@ -99,19 +99,24 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
         .without(Attr::Required)
         .merge_with_attrs(take(&mut props.extra_attrs));
 
-    let field_class = base_attrs.class(props.classes.part::<RadioGroup>(Tag::Fieldset), is_invalid);
+    let field_class = base_attrs.class(
+        props.classes().part::<RadioGroup>(Tag::Fieldset),
+        is_invalid,
+    );
 
-    let current = handle.current();
+    let current = field.current();
 
-    let div_class = props.classes.part_class::<RadioGroup>(Tag::Div, is_invalid);
+    let div_class = props
+        .classes()
+        .part_class::<RadioGroup>(Tag::Div, is_invalid);
     let input_class = props
-        .classes
+        .classes()
         .part_class::<RadioGroup>(Tag::Input, is_invalid);
     let label_class = props
-        .classes
+        .classes()
         .part_class::<RadioGroup>(Tag::Label, is_invalid);
     let legend_class = props
-        .classes
+        .classes()
         .part_class::<RadioGroup>(Tag::Legend, is_invalid);
 
     // Built out here rather than in a `for` inside the `rsx!`, because each
@@ -133,18 +138,18 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                         // the browser, and what `distribute_form_values` collects
                         // the pick under, but allows each label to refer to just
                         // its choice.
-                        id: "{props.id}-{index}",
-                        name: "{props.path}",
+                        id: "{props.id()}-{index}",
+                        name: "{props.path()}",
                         value: "{choice.value}",
                         checked: choice.value == current,
                         // On every radio, though one would do for the browser:
                         // each then announces "required" when it has focus.
                         required,
-                        onchange: handle.on_change(),
+                        onchange: field.on_change(),
                     }
                     label {
                         class: &label_class,
-                        r#for: "{props.id}-{index}",
+                        r#for: "{props.id()}-{index}",
                         "{choice.display}"
                     }
                 }
@@ -166,22 +171,22 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                 // means nothing. `aria-hidden` because it is visual only: on a
                 // radio group `required` applies to the whole group and that is
                 // what a screen reader announces.
-                if let Some(text) = props.label.clone() {
+                if let Some(text) = props.label() {
                     "{text}"
                     if required {
-                        {required_marker(&props.classes)}
+                        {required_marker(&props.classes())}
                     }
                 }
             }
             // After the legend, as `field_row` puts it after a caption; the
             // fieldset's `aria-describedby`, from `current_attrs`, names it.
-            {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
+            {field_help(props.id(), props.help_text(), &props.classes())}
             { radios.into_iter() }
             FieldErrors {
-                field_id: &props.id,
-                paths: vec![props.path.clone()],
-                errors: props.errors,
-                classes: props.classes.clone(),
+                field_id: props.id(),
+                paths: vec![props.path().clone()],
+                errors: props.errors(),
+                classes: props.classes().clone(),
             }
         }
     }

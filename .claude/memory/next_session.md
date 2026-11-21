@@ -40,6 +40,9 @@ its first line's indentation is off), with `absorb` and `reset` already calling 
   follow-up after `bound` merges, not box 4.
 
 **Next, in order (Todd):**
+
+**2026-11-21: expanded into tickboxes 4.1-4.11 in `formoxus/BOUND_PLAN.md` box 4** (Claude, uncommitted), which supersede the four steps below. New open decision **L** (box 4.7): `DraftAdder`'s Cancel sends `EditItem`, which `Items` cannot; Claude recommends `editing: Option<Editing>` holding a `BoundField<Set>`. Box 4.4 alone leaves the lib broken (`select_multiple` uses `field_row`); it compiles again after 4.5.
+
 1. The two `form.rs` errors: `apply_edit` (`form.rs:~1153`) is a free fn, so
    `contents.write_value(&path, raw)`, not `self.`; `absorb` (`~744`) needs
    `raw.clone()`. `Form::write` (`~916`) still calls `BoundField::new(&key,

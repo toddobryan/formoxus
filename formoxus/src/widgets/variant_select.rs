@@ -30,18 +30,18 @@ pub fn VariantSelect(
     props: WidgetProps,
 ) -> Element {
     let required = props.base_attrs.contains(Attr::Required);
-    let path = props.path.clone();
+    let path = props.path().clone();
     let attrs: Vec<Attribute> = props.base_attrs.merge_with_attrs(props.extra_attrs.clone());
 
     let control = rsx! {
         select {
             class: props.control_class::<Select>(Tag::Select),
-            id: "{props.id}",
+            id: "{props.id()}",
             // The enum's own path, where `collect_values` already sends the
             // variant's name: so a native post would carry the choice too,
             // and a test can find the picker by `name` like every other
             // control (#17).
-            name: "{props.path}",
+            name: "{props.path()}",
             onchange: move |e: FormEvent| {
                 let v = e.value();
                 let variant = (!v.is_empty()).then_some(v);

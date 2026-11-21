@@ -58,9 +58,9 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let handle = props.field_handle();
+    let field = props.field();
     let choices = props.choices.clone().unwrap_or_else(bool_choices);
-    let current = handle.current();
+    let current = field.current();
     let required = props.base_attrs.contains(Attr::Required);
     let attrs: Vec<Attribute> = props
         .current_attrs()
@@ -69,14 +69,14 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
     let control = rsx! {
         select {
             class: props.control_class::<Select>(Tag::Select),
-            id: "{props.id}",
+            id: "{props.id()}",
             // Unlike `VariantSelect`, this one IS a leaf, so it must carry a
             // `name` or `distribute_form_values` would never see it.
-            name: "{props.path}",
+            name: "{props.path()}",
             // No branch on emptiness: the "no value" option's value is `""`,
             // and `""` IS absence at both boundaries, so the same write does
             // for every option.
-            onchange: handle.on_change(),
+            onchange: field.on_change(),
             // Last among attributes, before the options: rsx! reads
             // anything after a spread as children, and the options ARE
             // children, so this sits between the two.

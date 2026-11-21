@@ -13,6 +13,7 @@
 //! validator, buttons — that `form!` builds and the shape walk applies as it
 //! builds the tree. Lives in `spec`.
 
+use crate::bound_field::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::buttons::{ButtonFn, ButtonSpec, ButtonType, Fns};
 use crate::classes::Classes;
 use crate::error::{FormAccessError, ValidationMessage};
@@ -23,8 +24,6 @@ use crate::path::{ModelPath, NodePath};
 use crate::stores::{
     ErrorsByPath, ErrorsStore, ErrorsView, FilesByPath, FilesSignal, ValuesStore, ValuesView,
 };
-use crate::bound_field::BoundField;
-use crate::bound_field::{FieldEvent, FieldEventKind, OnFieldEvent};
 use crate::wire::WireForm;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
@@ -230,7 +229,8 @@ pub(crate) struct Contents {
     pub(crate) files: FilesSignal,
     /// How many times the form has been reset, which every file input uses
     /// as its `key`, so a reset makes a fresh element that has forgotten the
-    /// user's pick. Read through [`FieldHandle::resets`].
+    /// user's pick. Read through
+    /// [`BoundField::resets`](crate::bound_field::BoundField::resets).
     pub(crate) resets: Signal<u32>,
 }
 
@@ -259,9 +259,19 @@ impl Contents {
             .collect()
     }
 
-        /// Put `raw` in the store, and nothing else: reporting it is the caller's
-    /// job, which is why this is private and [`input`](Self::input) and
-    /// [`change`](Self::change) are not.
+    /// Put `raw` in the value store at `path`, and nothing else. Telling the
+    /// form is the caller's job: this sends no field event, so no live check
+    /// follows, and a clean result is not made stale.
+    ///
+    /// **Two kinds of caller.** A widget writes through its bound field, whose
+    /// [`input`](crate::bound_field::BoundField::input),
+    /// [`change`](crate::bound_field::BoundField::change) and
+    /// [`pick_file`](crate::bound_field::BoundField::pick_file) call this and
+    /// then report the write. That is why this is `pub(crate)`: a widget
+    /// writing here directly would go unchecked until submit. The form's own
+    /// writes call this directly. `absorb`, `reset` and `apply_edit` each
+    /// settle the field's errors themselves, and [`Form::write`] reports its
+    /// write by sending `Written`.
     ///
     /// **`set` when the key is there, `insert` only when it is not.** Both wake
     /// this field's own readers, but `insert` also marks the map's keys as
@@ -296,9 +306,9 @@ pub struct Form<T: Clone + Debug + PartialEq + Facet<'static> + 'static> {
     /// by the user, loaded by `form_for`, absorbed from the wire): the value
     /// store, with each leaf's raw string, and the file table, with each
     /// picked file. One pair, made once in [`use_form`] and copied into every
-    /// [`NodeContext`] and from there into every [`FieldHandle`], so a
-    /// widget's writes and the form's reads can never be two different
-    /// stores. A file's NAME is in the value store like any leaf's value, and
+    /// [`NodeContext`] and from there into every
+    /// [`BoundField`](crate::bound_field::BoundField), so a widget's writes
+    /// and the form's reads can never be two different stores. A file's NAME is in the value store like any leaf's value, and
     /// only the file itself is in the table. See [`Contents`].
     contents: Contents,
     /// Field errors by qualified path. See [`ErrorsView`].
@@ -741,7 +751,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
     )]
     pub fn absorb(&self, wire: WireForm<T>) -> Result<(), FormAccessError> {
         for (path, raw) in wire.values() {
-            self.contents.write_value(path, *raw);
+            self.contents.write_value(path, raw.clone());
         }
         self.distribute_errors(wire.errors())?;
         // Decided from the reply, not the form: a reply with an error at a
@@ -913,15 +923,12 @@ impl<T: Clone + Debug + PartialEq + Facet<'static> + 'static> Form<T> {
         if !self.state_signal.peek().leaf_values().contains_key(&key) {
             return Err(no_such_path(path));
         }
-        BoundField::new(
-            &key,
-            self.contents,
-            OnFieldEvent {
-                callback: Some(self.on_field_event),
-                is_live: false,
-            },
-        )
-        .input(raw.into());
+        self.contents.write_value(&key, raw.into());
+        OnFieldEvent {
+            callback: Some(self.on_field_event),
+            is_live: false,
+        }
+        .send(&key, FieldEventKind::Written);
         Ok(())
     }
 }
@@ -1150,7 +1157,7 @@ fn apply_edit<T: Clone + Debug + PartialEq + Facet<'static> + 'static>(
     {
         for (path, raw) in state.peek().leaf_values() {
             if path.starts_with(item) {
-                self.contents.write_value(path, raw);
+                contents.write_value(&path, raw);
             }
         }
     }

@@ -44,8 +44,8 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     // Not `props`: Dioxus reads a component's lone `props` parameter as its
     // whole props struct, which `WidgetProps` is not.
     let props = widget_props;
-    let handle = props.field_handle();
-    let current = handle.current();
+    let field = props.field();
+    let current = field.current();
     let attrs: Vec<Attribute> = props
         .current_attrs()
         .merge_with_attrs(props.extra_attrs.clone());
@@ -53,8 +53,8 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
     let control = rsx! {
         textarea {
             class: props.control_class::<Textarea>(Tag::Textarea),
-            id: "{props.id}",
-            name: "{props.path}",
+            id: "{props.id()}",
+            name: "{props.path()}",
             value: "{current}",
             // A textarea's text comes from its CONTENT, not a `value` attribute,
             // and hydration never re-applies attributes, so `value` alone
@@ -66,8 +66,8 @@ pub(crate) fn TextareaView(widget_props: WidgetProps) -> Element {
             // clearing, Edit, Cancel): once the user has typed, content
             // only moves the default value, not what is shown.
             dangerous_inner_html: escape_text(&current),
-            oninput: handle.on_input(),
-            onblur: handle.on_blur(),
+            oninput: field.on_input(),
+            onblur: field.on_blur(),
             // TODO: delete pattern, since not allowed in HTML
             ..attrs,
         }

@@ -1,5 +1,6 @@
 //! An enum-typed node, locked to one variant chosen before the form existed.
 
+use crate::bound_field::BoundField;
 use crate::build::{FormMode, Walk, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
@@ -9,7 +10,7 @@ use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::path::NodePath;
 use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
 use crate::widgets::field_row::required_marker;
-use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
+use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{Choice, VariantSelect, field_help};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
@@ -271,26 +272,22 @@ impl Node for VariantNode {
                     on_edit: ctx.on_edit,
                     label_case: ctx.label_case,
                     props: WidgetProps {
-                        common: WidgetCommon {
-                            id: id.clone(),
-                            path: ctx.path(&self.name),
-                            // The legend above already names this group; a second copy
-                            // beside the select would just be the same word twice.
-                            label: None,
-                            // Rendered above, under the legend; the select's
-                            // `aria-describedby`, applied to `base_attrs` above,
-                            // names it.
-                            help_text: None,
-                            classes: ctx.classes.clone(),
-                            errors: ctx.errors,
-                        },
                         base_attrs,
                         extra_attrs: Vec::new(),
-                        // Read by no one: a variant choice is not a value in
-                        // the store, and its variants arrive as `variants`.
-                        contents: ctx.contents,
                         choices: None,
-                        on_field_event: ctx.on_field_event,
+                        field: BoundField::new(
+                            id,
+                            ctx.path(&self.name),
+                            // No label: the legend above already names this
+                            // group; a second copy beside the select would
+                            // just be the same word twice.
+                            None,
+                            // No help text: rendered above, under the legend;
+                            // the select's `aria-describedby`, applied to
+                            // `base_attrs` above, names it.
+                            None,
+                            ctx.form.clone(),
+                        )
                     }
                 }
                 { nodes.into_iter() }

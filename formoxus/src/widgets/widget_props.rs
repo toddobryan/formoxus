@@ -1,84 +1,24 @@
-use std::{
-    ops::{Deref, DerefMut},
-    rc::Rc,
-};
+use std::ops::Deref;
+use std::rc::Rc;
 
+use dioxus::core::{Attribute, Callback};
 use dioxus::signals::Signal;
-use dioxus::{
-    core::{Attribute, Callback},
-    stores::Store,
-};
+use dioxus::stores::Store;
 use formoxus_spec::Tag;
 
-use crate::{
-    bound_field::{BoundField, OnFieldEvent},
-    classes::Classes,
-    field_attrs::{FieldAttrs, Validity},
-    form::Contents,
-    nodes::Edit,
-    path::NodePath,
-    stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath},
-    widgets::{Choice, Widget},
-};
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct WidgetCommon {
-    /// The field's name in the PAGE: the control's `id`, what its `<label for>`
-    /// and `aria-describedby` point at. `{form id}-{path}`, built by
-    /// `NodeContext::id`, so it differs between two copies of one form on a page.
-    pub id: String,
-    /// The field's name in the DATA: its `name` attribute, its key in the value
-    /// store, and what the server matches a submitted value to. The same for
-    /// every copy of the form, and never containing the form id, which the
-    /// server does not have.
-    pub path: NodePath,
-    pub label: Option<String>,
-    /// The field's hint (`help_text:`), which [`field_row`](super::field_row::field_row)
-    /// renders after the caption, and which its control's `aria-describedby`,
-    /// from [`current_attrs`](WidgetProps::current_attrs), names. A widget not using
-    /// `field_row` renders it with [`field_help`](super::field_help).
-    pub help_text: Option<String>,
-    pub errors: ErrorsView,
-    /// The form's resolved classes, for the widget to look up its parts' slots
-    /// (`classes.part_class::<Widget>(Tag::Label, invalid)`). A custom widget gets
-    /// them too, so it can borrow a built-in slot and follow the app's preset.
-    /// An `Rc` from [`FormWide::classes`](crate::nodes::FormWide::classes); see the
-    /// rule there.
-    pub classes: Rc<Classes>,
-}
-
-impl WidgetCommon {
-    /// Whether the field has errors to show: [`validity`](Self::validity) is
-    /// [`Invalid`](Validity::Invalid). What the invalid classes and the error
-    /// list key on, since an unchecked field and a valid one look alike there;
-    /// only `aria-invalid` tells them apart.
-    pub fn is_invalid(&self) -> bool {
-        self.validity() == Validity::Invalid
-    }
-
-    /// Where this field stands with validation: unchecked, valid or invalid.
-    /// Reading it while rendering subscribes the reader to this one field's
-    /// errors, so a new error wakes this widget and no other.
-    ///
-    /// A built-in widget rarely needs it directly:
-    /// [`current_attrs`](WidgetProps::current_attrs) turns it into `aria-invalid`,
-    /// and [`is_invalid`](Self::is_invalid) is the yes-or-no the classes want.
-    pub fn validity(&self) -> Validity {
-        self.errors.validity_at(&self.path)
-    }
-
-    /// `part`'s classes from the form's `Classes`, with its invalid addition
-    /// when the field has errors. For a part's `class` other than the control,
-    /// such as the wrapping `div`; [`control_class`](WidgetProps::control_class) is
-    /// for the control itself.
-    pub fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
-        self.classes.part_class::<W>(tag, self.is_invalid())
-    }
-}
+use crate::bound_field::{BoundField, OnFieldEvent, Set};
+use crate::classes::Classes;
+use crate::defaults::Formoxus;
+use crate::field_attrs::FieldAttrs;
+use crate::form::Contents;
+use crate::nodes::FormWide;
+use crate::path::NodePath;
+use crate::stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath};
+use crate::widgets::types::Choice;
+use crate::widgets::widget::Widget;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WidgetProps {
-    pub common: WidgetCommon,
     /// The field's attributes BEFORE its errors are applied: its own, its
     /// constraints and `required`, which the node can work out in the form's
     /// scope. [`current_attrs`](Self::current_attrs) adds `aria-invalid` and
@@ -98,31 +38,40 @@ pub struct WidgetProps {
     /// so a field whose choices change is shown with the new ones. `None` for
     /// a field without any; a chooser over a `bool` then offers true/false.
     pub choices: Option<Vec<Choice>>,
-    pub(crate) contents: Contents,
-    pub(crate) on_field_event: OnFieldEvent,
+    pub(crate) field: BoundField,
 }
 
 impl WidgetProps {
-    /// Props for the field at `path`, whose control has the page id `id`, with
-    /// no label, hint, choices or extra attributes. Those four are `pub`, so a
-    /// caller sets them afterwards.
+    /// Props connected to no form, for rendering a widget on its own: in a
+    /// test, or on a page that shows a widget outside any form. A form's
+    /// widgets are never built this way; their node builds their props.
     ///
-    /// A widget is handed its props, so this is rarely needed: it is for a test
-    /// of a widget on its own. `attrs` are the field's attributes before its
-    /// errors are applied; [`current_attrs`](Self::current_attrs) adds those.
+    /// The field is at `path`, and its control has the page id `id`. `attrs`
+    /// are its attributes before its errors are applied, which
+    /// [`current_attrs`](Self::current_attrs) adds. The form state these
+    /// props read starts from the two maps: `values` fills the value store,
+    /// and `errors` the error store, so a widget can be shown with a value
+    /// and with errors. The props have no label, hint, choices or extra
+    /// attributes: set the first two with [`with_label`](Self::with_label) and
+    /// [`with_help_text`](Self::with_help_text), and the other two, which are
+    /// `pub`, directly.
     ///
-    /// **Props built here never trigger a live check.** They are not connected
-    /// to a form, so a [`FieldHandle`] from them writes the value store and
-    /// tells nobody: no check on blur, and a clean result is not made stale. A
-    /// widget that renders another should pass on a clone of its own props, not
-    /// build new ones, or the inner widget loses its live check.
+    /// **Detached means a write reaches nothing but these props' own stores.**
+    /// The bound field writes the value store and tells nobody: no check on
+    /// blur or as the user types, and no edit goes anywhere. So **a widget
+    /// that renders another widget must not build its props here.** That
+    /// compiles and renders, but the inner widget is then outside the form:
+    /// its value never reaches the wire, and it is never checked before
+    /// submit. Pass on a clone of your own props instead.
     ///
-    /// They also get a file table of their own, empty, so a file widget built
-    /// from them starts with no file picked. That makes new signals each time
-    /// this runs, kept until the calling component unmounts: called in a
-    /// component's body, that is a few more per render, which a test of one
-    /// widget can afford. Call it inside `use_hook` if it ever matters.
-    pub fn new(
+    /// The stores are new, and so is the empty file table, so a file widget
+    /// built from these props starts with no file picked. They are signals,
+    /// kept until the calling component unmounts, so each call makes a few
+    /// more: called in a component's body, that is a few more per render,
+    /// which a test of one widget can afford. Call it inside `use_hook` if
+    /// that ever matters, and also when the widget's writes must survive a
+    /// re-render, since props built on every render start empty every time.
+    pub fn detached(
         id: impl Into<String>,
         path: NodePath,
         attrs: FieldAttrs,
@@ -130,29 +79,35 @@ impl WidgetProps {
         errors: ErrorsByPath,
         classes: Rc<Classes>,
     ) -> Self {
-        Self {
-            common: WidgetCommon {
-                id: id.into(),
-                path,
-                label: None,
-                help_text: None,
-                errors: ErrorsView(Store::new(
-                    errors
-                        .into_iter()
-                        .map(|(path, messages)| (path, Some(messages)))
-                        .collect(),
-                )),
-                classes,
-            },
-            base_attrs: attrs,
-            extra_attrs: Vec::new(),
+        let form = FormWide {
+            // No form, so no form id. Nothing reads it from here: a bound
+            // field takes its page id from `id`, not from the form's.
+            form_id: String::new(),
             contents: Contents {
                 values: Store::new(values.into_iter().collect()),
                 files: FilesSignal::default(),
                 resets: Signal::default(),
             },
-            choices: None,
+            errors: ErrorsView(Store::new(
+                errors
+                    .into_iter()
+                    .map(|(path, messages)| (path, Some(messages)))
+                    .collect(),
+            )),
+            on_edit: Callback::new(|_| {}),
             on_field_event: OnFieldEvent::unreported(),
+            // Nothing reads it from here either: a bound field never does,
+            // and `VariantSelect` is handed its casing as a prop. The
+            // built-in, from the one place the built-ins live, rather than a
+            // `LabelCase::default()`, which would invite skipping the cascade.
+            label_case: Formoxus::default().label_case,
+            classes,
+        };
+        Self {
+            base_attrs: attrs,
+            extra_attrs: Vec::new(),
+            choices: None,
+            field: BoundField::new(id.into(), path, None, None, Rc::new(form)),
         }
     }
 
@@ -182,61 +137,62 @@ impl WidgetProps {
     /// is set, so a widget that renders the hint itself still passes it here.
     pub fn current_attrs(&self) -> FieldAttrs {
         self.base_attrs
-            .with_error_attrs(&self.id, self.help_text.as_deref(), self.validity())
+            .with_error_attrs(self.id(), self.help_text(), self.validity())
     }
 
     /// The form control's `class`: `part`'s slot, as the field's own `class`
     /// and `class_plus` replace or extend it.
     pub fn control_class<W: Widget>(&self, tag: Tag) -> Option<String> {
         self.base_attrs
-            .class(self.classes.part::<W>(tag), self.is_invalid())
+            .class(self.classes().part::<W>(tag), self.is_invalid())
     }
 
-    /// How this widget reads and writes its field's value: the only way to
-    /// write one. See [`FieldHandle`] for which method goes on which element.
-    ///
-    /// Call it while rendering, then move the closures its `on_*` methods
-    /// return into the element's event attributes. Each closure owns a clone
-    /// of the handle, so nothing borrows the props.
-    pub fn field_handle(&self) -> BoundField {
-        BoundField::new(&self.path, self.contents, self.on_field_event)
+    pub fn field(&self) -> BoundField {
+        self.field.clone()
+    }
+
+    pub fn with_label(self, label: impl Into<String>) -> Self {
+        Self {
+            field: self.field.with_label(label.into()),
+            ..self
+        }
+    }
+
+    pub fn with_help_text(self, help_text: impl Into<String>) -> Self {
+        Self {
+            field: self.field.with_help_text(help_text.into()),
+            ..self
+        }
     }
 }
 
 impl Deref for WidgetProps {
-    type Target = WidgetCommon;
+    type Target = BoundField;
 
-    fn deref(&self) -> &WidgetCommon {
-        &self.common
-    }
-}
-
-impl DerefMut for WidgetProps {
-    fn deref_mut(&mut self) -> &mut WidgetCommon {
-        &mut self.common
+    fn deref(&self) -> &BoundField {
+        &self.field
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SetWidgetProps {
-    pub common: WidgetCommon,
     pub choices: Vec<Choice>,
     pub chosen: Vec<String>,
     pub required: bool,
     pub max_items: Option<usize>,
-    pub on_edit: Callback<Edit>,
+    pub(crate) field: BoundField<Set>,
 }
 
-impl Deref for SetWidgetProps {
-    type Target = WidgetCommon;
-
-    fn deref(&self) -> &WidgetCommon {
-        &self.common
+impl SetWidgetProps {
+    pub fn field(&self) -> BoundField<Set> {
+        self.field.clone()
     }
 }
 
-impl DerefMut for SetWidgetProps {
-    fn deref_mut(&mut self) -> &mut WidgetCommon {
-        &mut self.common
+impl Deref for SetWidgetProps {
+    type Target = BoundField<Set>;
+
+    fn deref(&self) -> &BoundField<Set> {
+        &self.field
     }
 }

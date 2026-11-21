@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
 use formoxus_spec::{Attr, FieldType};
 
+use crate::bound_field::BoundField;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field::{Field, FieldValue, populate};
 use crate::field_attrs::FieldAttrs;
@@ -13,7 +14,7 @@ use crate::nodes::{Drafts, FieldValidator, FilesByPath, Shown};
 use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath, default_label};
 use crate::path::NodePath;
 use crate::stores::ErrorsByPath;
-use crate::widgets::widget_props::{WidgetCommon, WidgetProps};
+use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{AnyWidget, CheckboxInput, Choice, Widget};
 
 /// Everything the walk knows about a leaf when it builds one.
@@ -336,21 +337,17 @@ impl<F: Field> Node for FieldNode<F> {
                 .resolve_bounds(self.field_type());
 
         self.widget.render(WidgetProps {
-            common: WidgetCommon {
-                id: ctx.id(&self.name),
-                path: ctx.path(&self.name),
-                label: self
-                    .label(ctx.label_case)
-                    .or_else(|| ctx.label_if_unnamed.clone()),
-                help_text: self.help_text.clone(),
-                classes: ctx.classes.clone(),
-                errors: ctx.errors,
-            },
-            contents: ctx.contents,
-            choices: self.field.choices(),
             base_attrs,
             extra_attrs: Vec::new(),
-            on_field_event: ctx.on_field_event,
+            choices: self.field.choices(),
+            field: BoundField::new(
+                ctx.id(&self.name),
+                ctx.path(&self.name),
+                self.label(ctx.label_case)
+                    .or_else(|| ctx.label_if_unnamed.clone()),
+                self.help_text.clone(),
+                ctx.form.clone(),
+            ),
         })
     }
 

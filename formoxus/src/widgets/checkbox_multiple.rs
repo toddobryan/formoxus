@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use formoxus_spec::{AttrSet, HtmlElement, Tag, WidgetName};
 
 use crate::{
-    nodes::{Edit, ItemValue},
+    nodes::ItemValue,
     widgets::{
         FieldErrors, SetWidget, SetWidgetProps, Widget, described_by, field_help, required_marker,
     },
@@ -44,7 +44,7 @@ impl SetWidget for CheckboxMultiple {
 /// so that reading the set's errors subscribes it and not the whole form.
 #[component]
 pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
-    let props = widget_props;
+    let props = &widget_props;
 
     let field_class = props.part_class::<CheckboxMultiple>(Tag::Fieldset);
     let legend_class = props.part_class::<CheckboxMultiple>(Tag::Legend);
@@ -56,23 +56,16 @@ pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
         let chosen_index = props.chosen.iter().position(|e| *e == choice.value);
         let is_disabled =
             !is_checked && props.max_items.is_some_and(|max| props.chosen.len() >= max);
-        let path = props.path.clone();
         let value = choice.value.clone();
-        let on_edit = props.on_edit;
-        let id = format!("{}-{index}", props.id);
+        let id = format!("{}-{index}", props.id());
+        let field = props.field();
         let on_change = move |e: FormEvent| {
             if e.checked() {
-                on_edit.call(Edit::AddItem {
-                    path: path.clone(),
-                    before: None,
-                    value: Some(ItemValue::raw(value.clone())),
-                });
+                field.add(Some(ItemValue::raw(value.clone())));
             } else {
-                on_edit.call(Edit::RemoveItem {
-                    path: path.clone(),
-                    index: chosen_index
-                        .expect("an unticked box was ticked, so should be in chosen"),
-                });
+                field.remove(
+                    chosen_index.expect("an unticked box was ticked, so should be in chosen"),
+                );
             }
         };
         rsx! {
@@ -98,26 +91,26 @@ pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
         fieldset {
             class: field_class,
             aria_describedby: described_by(
-                &props.id,
-                props.help_text.is_some(),
+                props.id(),
+                props.help_text().is_some(),
                 props.is_invalid()
             ),
             legend {
                 class: legend_class,
-                if let Some(text) = props.label.clone() {
+                if let Some(text) = props.label().clone() {
                     "{text}"
                     if props.required {
-                        {required_marker(&props.classes)}
+                        {required_marker(props.classes())}
                     }
                 }
             }
-            {field_help(&props.id, props.help_text.as_deref(), &props.classes)}
+            {field_help(props.id(), props.help_text(), props.classes())}
             {choices.into_iter()}
             FieldErrors {
-                field_id: props.id.clone(),
-                paths: vec![props.path.clone()],
-                errors: props.errors,
-                classes: props.classes.clone(),
+                field_id: props.id(),
+                paths: vec![props.path().clone()],
+                errors: props.errors(),
+                classes: props.classes().clone(),
             }
         }
     }
