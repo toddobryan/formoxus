@@ -287,7 +287,7 @@ fn a_set_inside_an_enum_variant_round_trips() {
 
 #[component]
 fn TagAdder(props: AddItemProps) -> Element {
-    rsx! { span { id: "tag-adder", "adds to {props.path}, which has {props.item_count}" } }
+    rsx! { span { id: "tag-adder", "adds to {props.path()}, which has {props.item_count}" } }
 }
 
 #[component]

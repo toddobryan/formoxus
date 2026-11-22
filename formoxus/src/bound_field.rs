@@ -450,10 +450,63 @@ impl BoundField<Set> {
             index,
         });
     }
+
+    pub fn edit_item(&self, index: Option<usize>) {
+        self.send_edit(Edit::EditItem {
+            path: self.path.clone(),
+            index,
+        });
+    }
 }
 
 impl BoundField<Variant> {
     pub fn choose(&self, variant: Option<&str>) {
         self.send_edit(Edit::new_choose_variant(&self.path, variant));
+    }
+}
+
+impl BoundField<Items> {
+    pub fn add(&self, value: Option<ItemValue>) {
+        self.send_edit(Edit::AddItem {
+            path: self.path.clone(),
+            value,
+            // Append. `before` exists for mid-list insertion, which needs a
+            // widget between every pair of items — a UI question that hasn't
+            // been answered yet, not a limitation of the edit.
+            before: None,
+        });
+    }
+
+    pub fn remove(&self, index: usize) {
+        self.send_edit(Edit::RemoveItem {
+            path: self.path.clone(),
+            index,
+        });
+    }
+}
+
+impl From<BoundField<List>> for BoundField<Items> {
+    fn from(value: BoundField<List>) -> Self {
+        Self {
+            id: value.id,
+            path: value.path,
+            label: value.label,
+            help_text: value.help_text,
+            form: value.form,
+            _data: PhantomData,
+        }
+    }
+}
+
+impl From<BoundField<Set>> for BoundField<Items> {
+    fn from(value: BoundField<Set>) -> Self {
+        Self {
+            id: value.id,
+            path: value.path,
+            label: value.label,
+            help_text: value.help_text,
+            form: value.form,
+            _data: PhantomData,
+        }
     }
 }

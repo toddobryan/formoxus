@@ -24,7 +24,7 @@ use facet::Facet;
 #[cfg(feature = "server")]
 use formoxus::file::TemporaryFileUploadHandler;
 use formoxus::file::{FileUpload, Multipart};
-use formoxus::widgets::{LeafWidget, Validity, WidgetProps};
+use formoxus::widgets::{AddItemProps, LeafWidget, Validity, WidgetProps};
 use formoxus::{nodes::ItemValue, prelude::*};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -746,27 +746,19 @@ const SONGS: [&str; 3] = ["Alpha", "Bravo", "Charlie"];
 /// A custom adder (`adder:`): one button per song, each adding an item that
 /// arrives already holding it, in place of the blank item Add would make.
 #[component]
-fn SongPicker(props: formoxus::widgets::AddItemProps) -> Element {
+fn SongPicker(props: AddItemProps) -> Element {
+    let field = props.field();
     rsx! {
         for song in SONGS {
-            button { r#type: "button", onclick: pick(props.on_edit, props.path.clone(), song), "Add {song}" }
+            button {
+                r#type: "button",
+                onclick: {
+                    let field = field.clone();
+                    move |_| field.add(Some(ItemValue::new(song.to_string())))
+                },
+                "Add {song}"
+            }
         }
-    }
-}
-
-/// The click handler for one song's button, out here because an rsx `for`
-/// body cannot hold the `let` its clone would need.
-fn pick(
-    on_edit: Callback<formoxus::widgets::Edit>,
-    path: formoxus::path::NodePath,
-    song: &'static str,
-) -> impl FnMut(MouseEvent) {
-    move |_| {
-        on_edit.call(formoxus::widgets::Edit::AddItem {
-            path: path.clone(),
-            before: None,
-            value: Some(ItemValue::new(song.to_string())),
-        });
     }
 }
 

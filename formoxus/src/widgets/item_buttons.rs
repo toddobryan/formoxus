@@ -8,46 +8,51 @@
 //! taking [`AddItemProps`], held as a [`ItemAdder`]. [`AddItemButton`] is a
 //! list's default and [`DraftAdder`] a set's.
 
+use std::ops::Deref;
 use std::rc::Rc;
 use std::{fmt::Debug, ptr::fn_addr_eq};
 
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
+use crate::bound_field::{BoundField, Items, Set};
 use crate::path::NodePath;
-use crate::stores::ValuesView;
 use crate::{classes::Classes, nodes::Edit};
 
 use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Editing {
+    text: String,         // "rust", for `Replace "rust"`
+    set: BoundField<Set>, // the set it belongs to
+}
+
+impl Editing {
+    pub(crate) fn new(text: String, set: BoundField<Set>) -> Self {
+        Self { text, set }
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn cancel(&self) {
+        self.set.edit_item(None);
+    }
+}
+
 /// What a list's or a set's adder is handed: [`AddItemButton`],
 /// [`DraftAdder`], or a dev's own component named by `adder:` in `form!`.
 ///
-/// An adder appends an item by sending an [`Edit::AddItem`] through `on_edit`.
-/// With `value: Some(ItemValue::new(item))` it arrives filled in, and focus is
-/// left alone, so a user picking several choices in a row stays on the adder.
-/// With `value: None` it means "add what the adder holds": in a list a blank
-/// item, which takes focus, and in a set its `draft`.
+/// An adder appends an item by calling `add` on its bound field
+/// ([`field`](Self::field)), which addresses the edit to the list or set
+/// itself. With `Some(ItemValue::new(item))` the item arrives filled in, and
+/// focus is left alone, so a user picking several choices in a row stays on
+/// the adder. With `None` it means "add what the adder holds": in a list a
+/// blank item, which takes focus, and in a set its `draft`.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct AddItemProps {
-    /// The list's own path, which an `Edit::AddItem` is addressed to. Not a
-    /// item's: an adder acts on the list.
-    pub path: NodePath,
-    /// The list's own id, `{form}-{path}`, a base for the ids of the adder's
-    /// elements (a `<select>` and the `<label for>` naming it). Suffix it
-    /// rather than using it as-is: the list's `<fieldset>` already has it.
-    pub id: String,
-    /// The whole form's values. Add ignores it; an adder offering a fixed set
-    /// of choices can read the items already there, to leave those out. The
-    /// adder is a component of its own, so reading it re-renders only the
-    /// adder.
-    pub values: ValuesView,
-    /// Where the adder sends its `Edit`.
-    pub on_edit: Callback<Edit>,
-    /// The form's resolved classes, so a custom adder can borrow the
-    /// built-in Add's slot (`classes.fixed_class(FixedKey::AddItemButton, false)`)
-    /// and follow the app's preset.
-    pub classes: Rc<Classes>,
+    pub(crate) field: BoundField<Items>,
     /// How many items the list or set has now, for an adder that stops at a
     /// maximum.
     pub item_count: usize,
@@ -63,7 +68,21 @@ pub struct AddItemProps {
     /// holds, so Add would replace it: [`DraftAdder`] then says Replace,
     /// named `Replace "rust"`, and offers Cancel. `None` when nothing is
     /// being edited, and always for a list.
-    pub editing: Option<String>,
+    pub editing: Option<Editing>,
+}
+
+impl AddItemProps {
+    pub fn field(&self) -> BoundField<Items> {
+        self.field.clone()
+    }
+}
+
+impl Deref for AddItemProps {
+    type Target = BoundField<Items>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
 }
 
 /// A list's adder: the component that renders in place of Add.
@@ -110,9 +129,7 @@ impl PartialEq for ItemAdder {
 #[component]
 pub fn AddItemButton(props: AddItemProps) -> Element {
     let AddItemProps {
-        path,
-        on_edit,
-        classes,
+        field,
         item_count,
         max_items,
         ..
@@ -121,17 +138,12 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
     rsx! {
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::AddItemButton, false),
+            class: field.classes().fixed_class(FixedKey::AddItemButton, false),
             // Disabled, not hidden, so the layout holds still and the reason
             // can be given.
             disabled: full.is_some(),
             title: full,
-            onclick: move |_| {
-                // Append. `before` exists for mid-list insertion, which needs a
-                // widget between every pair of items — a UI question that hasn't
-                // been answered yet, not a limitation of the edit.
-                on_edit.call(Edit::AddItem { path: path.clone(), value: None, before: None });
-            },
+            onclick: move |_| field.add(None),
             // Icon and word: there is one Add per list, so the text costs
             // nothing, and a lone "+" under a list says less than "+ Add".
             {icon(PLUS)}
@@ -162,30 +174,25 @@ pub fn AddItemButton(props: AddItemProps) -> Element {
 #[component]
 pub fn DraftAdder(props: AddItemProps) -> Element {
     let AddItemProps {
-        path,
-        id,
-        on_edit,
-        classes,
+        field,
         draft,
         editing,
         item_count,
         max_items,
         ..
     } = props;
-    let draft_id = format!("{id}-draft");
-    let add_path = path.clone();
-    let add = move || {
-        on_edit.call(Edit::AddItem {
-            path: add_path.clone(),
-            value: None,
-            before: None,
-        });
+    let draft_id = format!("{}-draft", field.id());
+    let add = {
+        let field = field.clone();
+        move || field.add(None)
     };
-    let cancel = move || {
-        on_edit.call(Edit::EditItem {
-            path: path.clone(),
-            index: None,
-        });
+    let cancel = {
+        let editing = editing.clone();
+        move || {
+            if let Some(e) = &editing {
+                e.cancel();
+            }
+        }
     };
     let on_key = (add.clone(), cancel.clone());
     let focus_draft = move || {
@@ -194,15 +201,17 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         ));
     };
     let after_cancel = focus_draft.clone();
-    let replacing = editing.as_ref().map(|text| format!("Replace \"{text}\""));
+    let replacing = editing
+        .as_ref()
+        .map(|e| format!("Replace \"{}\"", e.text()));
     let is_editing = editing.is_some();
     // Full only for adding: a replacement leaves the count as it is.
     let full = at_most(item_count, max_items).filter(|_| !is_editing);
     let can_add = full.is_none();
     rsx! {
-        div { class: classes.fixed_class(FixedKey::SetAdder, false),
+        div { class: field.classes().fixed_class(FixedKey::SetAdder, false),
         div {
-            id: "{id}-draft",
+            id: "{field.id()}-draft",
             onkeydown: move |e: KeyboardEvent| {
                 if e.key() == Key::Enter {
                     e.prevent_default();
@@ -218,7 +227,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         }
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::AddItemButton, false),
+            class: field.classes().fixed_class(FixedKey::AddItemButton, false),
             aria_label: replacing,
             disabled: !can_add,
             title: full,
@@ -237,7 +246,7 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
         if is_editing {
             button {
                 r#type: "button",
-                class: classes.fixed_class(FixedKey::Button(formoxus_spec::ButtonType::Cancel), false),
+                class: field.classes().fixed_class(FixedKey::Button(formoxus_spec::ButtonType::Cancel), false),
                 onclick: move |_| {
                     cancel();
                     after_cancel();
@@ -296,15 +305,13 @@ pub fn EditItemButton(
 /// `<ol>` numbers on screen by default and a screen reader announces.
 #[component]
 pub fn RemoveItemButton(
-    path: NodePath,
+    field: BoundField<Items>,
     index: usize,
     /// The item as the user sees it, for the button's name.
     text: Option<String>,
     /// At the list's or set's `min_items`, where one fewer is too few.
     #[props(default)]
     disabled: bool,
-    on_edit: Callback<Edit>,
-    classes: Rc<Classes>,
 ) -> Element {
     // 1-based for humans: this is the only place an item's position is spoken
     // aloud, and it is never used as a path segment.
@@ -315,12 +322,10 @@ pub fn RemoveItemButton(
     rsx! {
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::RemoveItemButton, false),
+            class: field.classes().fixed_class(FixedKey::RemoveItemButton, false),
             aria_label: "{label}",
             disabled,
-            onclick: move |_| {
-                on_edit.call(Edit::RemoveItem { path: path.clone(), index });
-            },
+            onclick: move |_| field.remove(index),
             {icon(X)}
         }
     }

@@ -1726,24 +1726,24 @@ fn filled_option_items_keep_some_and_none() {
 /// adder leaving out the choices already in its list would.
 #[component]
 fn ProbeAdder(props: AddItemProps) -> Element {
-    let AddItemProps {
-        path,
-        id,
-        values,
-        on_edit,
-        item_count,
-        ..
-    } = props;
     // Through the values view (issue #22); box 4 moves this to the bound field.
-    let first = values.get(&NodePath::new(format!("{path}.#0")));
-    let stored = values.paths_under(&path).len();
-    let says = format!("{path} has {item_count}, first {first}, stored {stored}");
+    let first = props
+        .values()
+        .get(&NodePath::new(format!("{}.#0", props.path())));
+    let stored = props.values().paths_under(props.path()).len();
+    let says = format!(
+        "{} has {}, first {first}, stored {stored}",
+        props.path(),
+        props.item_count
+    );
+    let field = props.field().clone();
     rsx! {
         button {
             r#type: "button",
-            id: "{id}-add",
-            onclick: move |_| {
-                on_edit.call(add_item(path.as_str(), Some(ItemValue::new("gamma".to_string()))));
+            id: "{props.id()}-add",
+            onclick: {
+                let field = field.clone();
+                move |_| field.add(Some(ItemValue::new("gamma".to_string())))
             },
             "{says}"
         }

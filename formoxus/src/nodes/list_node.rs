@@ -4,13 +4,14 @@
 //! an item be inserted mid-list, removed, or reordered without renaming its
 //! neighbours. See `item_segment` for why renaming would be a data hazard.
 
+use crate::bound_field::{BoundField, List};
 use crate::error::FormAccessError;
 use crate::field_attrs::Validity;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Edit, Items, Node, SpecsByPath, default_label};
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
-use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath, ValuesView};
+use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
 use crate::widgets::field_row::required_marker;
 use crate::widgets::{
     AddItemProps, Choice, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton,
@@ -75,6 +76,15 @@ impl Node for ListNode {
         let list_item_class = ctx.classes.fixed_class(FixedKey::ListItem, false);
         let class_for_list_items = ctx.classes.fixed_class(FixedKey::ListItems, false);
         let nested = ctx.nested(&self.name);
+
+        let field = BoundField::<List>::new(
+            id.clone(),
+            path.clone(),
+            self.label(ctx.label_case),
+            self.help_text.clone(),
+            ctx.form.clone(),
+        );
+
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -114,7 +124,11 @@ impl Node for ListNode {
                             li { class: &list_item_class, key: "{item.name()}",
                                 MoveItemButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
                                 { item.render(&nested) }
-                                RemoveItemButton { path: path.clone(), index, disabled: self.items.at_min(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                RemoveItemButton {
+                                    field: field.clone().into(),
+                                    index,
+                                    disabled: self.items.at_min(),
+                                }
                             }
                         }
                     },
@@ -123,11 +137,7 @@ impl Node for ListNode {
                     DynamicNode::Component(VComponent::new(
                         self.adder.0,
                         AddItemProps {
-                            path: path.clone(),
-                            id: id.clone(),
-                            values: ValuesView(ctx.contents.values),
-                            on_edit: ctx.on_edit,
-                            classes: ctx.classes.clone(),
+                            field: field.clone().into(),
                             item_count: self.items.len(),
                             max_items: self.items.max_items(),
                             draft: None,

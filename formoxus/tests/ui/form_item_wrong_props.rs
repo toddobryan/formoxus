@@ -14,7 +14,7 @@ struct Post {
 
 #[component]
 fn NotAView(props: AddItemProps) -> Element {
-    rsx! { "{props.path}" }
+    rsx! { "{props.path()}" }
 }
 
 fn main() {

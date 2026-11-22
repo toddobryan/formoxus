@@ -23,7 +23,8 @@ use facet::{Def, Facet, Partial, Peek, ReflectError, ScalarType, Shape, Type, Us
 use formoxus_spec::FixedKey;
 use unicase::{Ascii, UniCase};
 
-use crate::bound_field::BoundField;
+use crate::bound_field::{BoundField, Set};
+use crate::widgets::item_buttons::Editing;
 use crate::{
     build::retain_first,
     error::FormAccessError,
@@ -575,6 +576,7 @@ impl SetNode {
     /// adder shows the draft Edit fills, and Remove.
     fn render_item(
         &self,
+        field: &BoundField<Set>,
         ctx: &NodeContext,
         item: &dyn Node,
         index: usize,
@@ -584,9 +586,9 @@ impl SetNode {
         let path = ctx.path(&self.name);
         let name = item.name();
         let text = item_text(item, ctx.label_case);
-        let editing = self.editing.as_deref() == Some(name.as_str());
         let mut paths = Vec::new();
         item.paths(&path, Drafts::Exclude, &mut paths);
+        let editing = self.editing.as_deref() == Some(name.as_str());
         rsx! {
             li { class: ctx.classes.fixed_class(FixedKey::SetItem, false), key: "{name}",
                 {
@@ -620,12 +622,10 @@ impl SetNode {
                     }
                 }
                 RemoveItemButton {
-                    path,
+                    field: field.clone().into(),
                     index,
                     text,
                     disabled: self.items.at_min(),
-                    on_edit: ctx.on_edit,
-                    classes: ctx.classes.clone(),
                 }
             }
         }
@@ -1030,6 +1030,14 @@ impl Node for SetNode {
         // dev's adder may leave the draft out (a search-to-add), and Edit
         // would then fill a box nobody can see.
         let editable = self.adder == ItemAdder(DraftAdder);
+
+        let field = BoundField::<Set>::new(
+            id.clone(),
+            path.clone(),
+            self.label(ctx.label_case),
+            self.help_text.clone(),
+            ctx.form.clone(),
+        );
         rsx! {
             fieldset {
                 class: fieldset_class,
@@ -1062,7 +1070,7 @@ impl Node for SetNode {
                         // it already has. The wrapper exists because a key has to sit
                         // on an element, and it is what pairs a item with its widget.
                         for (index, item) in self.items.iter().enumerate() {
-                            { self.render_item(ctx, &**item, index, editable) }
+                            { self.render_item(&field, ctx, &**item, index, editable) }
                         }
                     },
                 }
@@ -1070,19 +1078,13 @@ impl Node for SetNode {
                     DynamicNode::Component(VComponent::new(
                         self.adder.0,
                         AddItemProps {
-                            path: path.clone(),
-                            id: id.clone(),
-                            values: ValuesView(ctx.contents.values),
-                            on_edit: ctx.on_edit,
-                            classes: ctx.classes.clone(),
+                            field: field.clone().into(),
                             item_count: self.items.len(),
                             max_items: self.items.max_items(),
                             draft: Some(draft),
                             editing: self.editing.as_ref().and_then(|name| {
-                                self.items
-                                    .iter()
-                                    .find(|item| &item.name() == name)
-                                    .map(|item| item_text(&**item, ctx.label_case))
+                                self.items.iter().find(|item| &item.name() == name)
+                                .map(|item| Editing::new(item_text(&**item, ctx.label_case), field.clone()))
                             }),
                         },
                         "ItemAdder",

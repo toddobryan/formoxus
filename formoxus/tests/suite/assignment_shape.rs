@@ -97,21 +97,16 @@ impl LeafWidget for QuestionItem {
 /// `q9`, to whichever list it is the adder of.
 #[component]
 fn QuestionAdder(props: AddItemProps) -> Element {
-    let AddItemProps {
-        path, id, on_edit, ..
-    } = props;
+    let field = props.field().clone();
     rsx! {
         button {
             r#type: "button",
-            id: "{id}-add",
+            id: "{props.id()}-add",
             // Dynamic, so `Harness::labelled` can tell the three adders apart.
-            aria_label: "Add q9 to {path}",
-            onclick: move |_| {
-                on_edit.call(Edit::AddItem {
-                    path: path.clone(),
-                    before: None,
-                    value: Some(ItemValue::new("q9".to_string())),
-                });
+            aria_label: "Add q9 to {props.path()}",
+            onclick: {
+                let field =field.clone();
+                move |_| field.add(Some(ItemValue::new("q9".to_string())))
             },
             "Add q9"
         }

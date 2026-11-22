@@ -284,6 +284,35 @@ further:
   4. **The cost:** every `impl<K> BoundField<K>`, and `WidgetProps<K>`, repeats
      `K: NodeKind`. The derives are unaffected (trap 6).
 
+**Decided 2026-11-22, box 4.7 (Todd, as Claude recommended):**
+
+- **L. Cancel travels inside the "being edited" value: `AddItemProps.editing`
+  becomes `Option<Editing>`.** The plan missed this case. A set's built-in adder,
+  `DraftAdder`, has a Cancel button (and Escape in the draft) that stops editing an
+  item, by sending `Edit::EditItem { index: None }`. Lists and sets share one adder
+  type, `ItemAdder(fn(AddItemProps) -> Element)`, so its field is the kind they
+  share, `Items`, which has only `add` and `remove`, and `send_edit` is private.
+  So nothing an adder holds can send `EditItem`.
+
+  1. **The shape:** `pub struct Editing { text: String, set: BoundField<Set> }`,
+     both fields private, with `text() -> &str` (for `Replace "rust"`) and
+     `cancel()`, which calls `set.edit_item(None)`. It derives `Clone, Debug,
+     PartialEq`, as `AddItemProps`'s derives need. It lives beside `AddItemProps`
+     in `item_buttons.rs`, a `pub mod`, and is reached there,
+     `formoxus::widgets::item_buttons::Editing`, NOT added to the `widgets::*`
+     re-exports: no new re-exports until publish ([[prelude-is-the-one-list]]).
+  2. **Why it can't be misused:** only the set node builds a `Some(Editing)`,
+     because only it holds a `BoundField<Set>`. A list always passes `None`. So
+     Cancel exists only while an item is being edited, and only a set ever has
+     one. No new `From` is needed.
+  3. **Rejected: `Items::stop_editing()`.** It is less code, but a list's adder
+     could call it. That would compile, and the list would reject the edit at
+     runtime (`list_node.rs`, "its items are edited in place"), logged only as a
+     warning. That is the wrong call the kinds exist to make a compile error
+     ([[feedback-hard-to-misuse]]).
+  4. **Ordering:** `Editing::cancel` needs `BoundField<Set>::edit_item`, so that
+     method moves from 4.9 to 4.8.
+
 ## Traps
 
 1. **`get` must read one key, never the map.** `self.store.read().get(path)` would
@@ -574,35 +603,31 @@ further:
        attributes already applied. The `aria-describedby` tests in `enums.rs` catch
        a mistake there in box 5.
 
-  - [ ] **4.7** Decide **L**, `DraftAdder`'s Cancel. The plan missed this. A set's
-    built-in adder, `DraftAdder` (`item_buttons.rs`, around line 185), sends
-    `Edit::EditItem { index: None }` for Cancel. But it takes `AddItemProps`, whose
-    field is `Items`, and `Items` has only `add` and `remove`. A list rejects
-    `EditItem` at runtime (`list_node.rs`, around line 224, logged as a warning).
-    Two ways out:
+  - [x] **4.7** Decide **L**, `DraftAdder`'s Cancel. Decided 2026-11-22:
+    `AddItemProps.editing` becomes `Option<Editing>`, holding the item's text and a
+    `BoundField<Set>`, with `cancel()`. See L under Decisions.
 
-    1. **`AddItemProps.editing` becomes `Option<Editing>`**, where `Editing` holds the
-       text and a `BoundField<Set>`, and has a `cancel()` (Claude recommends this).
-       Cancel then exists only while an item is being edited, which only ever
-       happens on a set. So no list can send one, and it needs no new `From`.
-    2. **`Items` gets `stop_editing()`**, documented as set-only. That is less code,
-       but on a list the call would compile and then fail with a warning, which goes
-       against [[feedback-hard-to-misuse]].
-
-  - [ ] **4.8** `Items`: `AddItemProps` and `RemoveItemButton` (Part 2, items 5.4
+  - [x] **4.8** `Items`: `AddItemProps` and `RemoveItemButton` (Part 2, items 5.4
     and 5.6).
 
     1. `AddItemProps` drops `path`, `id`, `values`, `on_edit` and `classes`, and
-       gains `field: BoundField<Items>`. Do whatever L decided for `editing`.
+       gains `field: BoundField<Items>`.
     2. In `impl BoundField<Items>`, add `add(Option<ItemValue>)` (which appends, so
        `before: None`) and `remove(index)`.
-    3. Add `From<BoundField<List>>` and `From<BoundField<Set>>` for
+    3. In `impl BoundField<Set>`, add `edit_item(Option<usize>)`, which sends
+       `Edit::EditItem` at its own path. It is here, not in 4.9, because L's
+       `Editing::cancel` calls it.
+    4. Add `Editing` (L) beside `AddItemProps`, and change `editing` to
+       `Option<Editing>`. `set_node.rs` (around line 1081) builds it from the item's
+       text and its `BoundField<Set>`, and `list_node.rs` keeps `None`.
+    5. Add `From<BoundField<List>>` and `From<BoundField<Set>>` for
        `BoundField<Items>`, and no conversion back (trap 8).
-    4. Move `Add` and `DraftAdder` to the field. `DraftAdder` builds its draft id
-       from `field.id()`.
-    5. `RemoveItemButton` takes `field: BoundField<Items>` in place of `path`,
+    6. Move `Add` and `DraftAdder` to the field. `DraftAdder` builds its draft id
+       from `field.id()`, takes Add from `field.add(None)`, and takes its Replace
+       label and Cancel from `editing`: `editing.text()` and `editing.cancel()`.
+    7. `RemoveItemButton` takes `field: BoundField<Items>` in place of `path`,
        `on_edit` and `classes`.
-    6. Change the callers: `list_node.rs` (around lines 117 and 125) builds a
+    8. Change the callers: `list_node.rs` (around lines 117 and 125) builds a
        `BoundField<List>` and calls `.into()`. `set_node.rs` (around 621 and 1073)
        does the same with its `BoundField<Set>`.
 
@@ -613,10 +638,9 @@ further:
     2. In `impl BoundField<SetItem>`, add only a read-only `current()`. A set's item
        must not be written directly, because that would skip the set's duplicate
        check.
-    3. In `impl BoundField<Set>`, add `edit_item(Option<usize>)`.
-    4. `EditItemButton` takes `field: BoundField<Set>` in place of `path`, `on_edit`
-       and `classes`.
-    5. Change `set_node.rs` (around lines 594 and 612).
+    3. `EditItemButton` takes `field: BoundField<Set>` in place of `path`, `on_edit`
+       and `classes`, and calls the `edit_item` that 4.8 added.
+    4. Change `set_node.rs` (around lines 594 and 612).
 
   - [ ] **4.10** `List`: `MoveItemButtons` (Part 2, item 5.6).
 
