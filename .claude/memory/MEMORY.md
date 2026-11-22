@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-22**: box 4 DONE, box 5 under way (box 2 tests back, docs written, uncommitted); suite 960 green; pushed to 391b09d
+- [**START HERE: next session**](next_session.md) — **2026-11-22 END**: BOUND_PLAN done, `bound` merged to main, #22/#23 closed; branch kept; next Todd picks from mvp_scope
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`

@@ -720,4 +720,4 @@ further:
 
   `crates/api`'s `form.values()` calls are `WireForm::values`, unaffected.
 
-- [ ] **6.** (Todd) Merge `bound`; close #22 and #23.
+- [x] **6.** (Todd) Merge `bound`; close #22 and #23. Done 2026-11-22 by Claude at Todd's request: `main` fast-forwarded to `bound`.
