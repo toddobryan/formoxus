@@ -472,3 +472,87 @@ fn an_index_past_the_end_becomes_a_form_error() {
         elements_are![contains_substring("groups[5].$All.questions[0]")]
     );
 }
+
+// ── Only the course's questions ─────────────────────────────────────────
+
+/// The course's questions, as apcsp would pass them: id, then name.
+const COURSE_QUESTIONS: &[(&str, &str)] = &[
+    ("q1", "One"),
+    ("q2", "Two"),
+    ("q3", "Three"),
+    ("q4", "Four"),
+    ("q5", "Five"),
+    ("q6", "Six"),
+];
+
+/// `spec()` with the items limited to the course's questions, so apcsp's
+/// server can refuse a question from another course without a query of its
+/// own. Only the All group's, which is all apcsp's form has for now.
+fn spec_with_choices() -> FormSpec<AssignmentForm> {
+    form! {
+        AssignmentForm {
+            groups[].$QuestionGroup::All.questions => { adder: QuestionAdder },
+            groups[].$QuestionGroup::All.questions[] => {
+                widget: QuestionItem,
+                choices: COURSE_QUESTIONS,
+            },
+        }
+    }
+}
+
+/// The assignment with `q99`, a question from some other course, as the All
+/// group's second item.
+fn with_a_foreign_question() -> AssignmentForm {
+    let mut foreign = assignment();
+    foreign.groups[0] = QuestionGroup::All {
+        questions: ids(&["q1", "q99", "q3"]),
+        shuffle_questions: false,
+    };
+    foreign
+}
+
+#[gtest]
+fn the_courses_own_questions_pass_the_choices() {
+    let mut form = form_for(&assignment(), spec_with_choices());
+    expect_that!(form.validate(), some(eq(&assignment())));
+}
+
+/// `choices:` on a LIST item is checked as it is on a set item
+/// (`raw_items.rs`, `set_item_errors.rs`): the outsider is refused on its own
+/// item, in a list inside an enum inside a list.
+#[gtest]
+fn a_question_outside_the_choices_is_refused_on_its_item() {
+    let mut form = form_for(&with_a_foreign_question(), spec_with_choices());
+    expect_that!(form.validate(), none());
+    let errors = form.collect_errors();
+    expect_that!(errors.form, is_empty());
+    expect_that!(
+        errors.fields.get("groups.#0.$All.questions.#1"),
+        some(elements_are![eq(&ValidationMessage::from(
+            "not one of the available choices"
+        ))])
+    );
+    expect_that!(errors.fields.len(), eq(1));
+}
+
+/// And on the server, from values that never went through the page:
+/// `Submission::accept` refuses them, which is the check apcsp relies on.
+///
+/// Read by KEY, not by index: the refusal is a bare `FormErrors`, and the
+/// `WireForm` made from it carries no values, so an indexed path
+/// (`questions[1]`) has no entries to resolve through and finds nothing. A
+/// page absorbing it is unaffected, since its live form knows its own keys.
+#[gtest]
+fn a_forged_question_is_refused_by_submission_accept() {
+    let wire = WireForm::from_model(&with_a_foreign_question(), spec());
+    let refused = Submission::accept(spec_with_choices(), wire.values())
+        .expect_err("q99 is not one of the course's questions");
+    expect_that!(refused.form, is_empty());
+    expect_that!(
+        refused.fields.get("groups.#0.$All.questions.#1"),
+        some(elements_are![eq(&ValidationMessage::from(
+            "not one of the available choices"
+        ))])
+    );
+    expect_that!(refused.fields.len(), eq(1));
+}
