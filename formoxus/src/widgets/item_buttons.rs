@@ -20,10 +20,21 @@ use crate::bound_field::{BoundField, Items, List, Set};
 
 use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 
+/// The set item being edited, as a set's adder sees it in
+/// [`AddItemProps::editing`]: its text, so the adder can name what Add would
+/// now replace (`Replace "rust"`), and [`cancel`](Self::cancel), which stops
+/// editing.
+///
+/// It holds the set's own bound field because the adder's is a
+/// `BoundField<Items>`, which cannot edit an item, and a list's adder must
+/// not be able to. Only a set makes one, so only a set's adder can cancel.
+/// Only formoxus builds one.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Editing {
-    text: String,         // "rust", for `Replace "rust"`
-    set: BoundField<Set>, // the set it belongs to
+    /// The item as the user sees it, `rust` in `Replace "rust"`.
+    text: String,
+    /// The set the item belongs to, for `cancel`.
+    set: BoundField<Set>,
 }
 
 impl Editing {
@@ -31,10 +42,15 @@ impl Editing {
         Self { text, set }
     }
 
+    /// The edited item as the user sees it, as its view's
+    /// [`text`](crate::widgets::SetItemProps::text) has it.
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    /// Stop editing, leaving the item as it was, and empty the draft: the
+    /// set's [`edit_item`](crate::bound_field::BoundField::<Set>::edit_item)
+    /// with `None`.
     pub fn cancel(&self) {
         self.set.edit_item(None);
     }
@@ -63,14 +79,17 @@ pub struct AddItemProps {
     /// a list. An adder that sends its own value (a search-to-add) can leave
     /// it out.
     pub draft: Option<Element>,
-    /// The text of the item being edited (box 8), whose value the draft
-    /// holds, so Add would replace it: [`DraftAdder`] then says Replace,
-    /// named `Replace "rust"`, and offers Cancel. `None` when nothing is
-    /// being edited, and always for a list.
+    /// The item being edited, whose value the draft holds, so Add would
+    /// replace it: [`DraftAdder`] then says Replace, named with
+    /// [`Editing::text`] (`Replace "rust"`), and offers Cancel through
+    /// [`Editing::cancel`]. `None` when nothing is being edited, and always
+    /// for a list.
     pub editing: Option<Editing>,
 }
 
 impl AddItemProps {
+    /// The bound field, owned, for an event handler, which must be
+    /// `'static`. For a read, the props deref to it.
     pub fn field(&self) -> BoundField<Items> {
         self.field.clone()
     }

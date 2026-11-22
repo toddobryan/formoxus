@@ -94,38 +94,80 @@ mod sealed {
     pub trait Sealed {}
 }
 
+/// What kind of node a [`BoundField`] is bound to, and so which methods it
+/// has: one of the six markers in this module.
+///
+/// | marker      | the node                                              |
+/// |-------------|-------------------------------------------------------|
+/// | [`Leaf`]    | one value: a text box, a checkbox, a select. The default |
+/// | [`Variant`] | an enum, choosing which variant its value takes        |
+/// | [`List`]    | a `Vec`, whose items have an order                     |
+/// | [`Set`]     | a set, sorted and without duplicates                   |
+/// | [`Items`]   | a list or a set, for what both do: add and remove      |
+/// | [`SetItem`] | one item of a set, read-only                           |
+///
+/// [`BoundField`]'s own doc has which widget is handed each kind, and each
+/// kind's methods.
+///
+/// **Sealed:** only formoxus defines kinds, because a kind's methods are the
+/// edits its node accepts, and a kind from outside would have no node to
+/// send them to. The supertraits are there so `BoundField<K>`'s derives
+/// need no bounds of their own on `K`.
 pub trait NodeKind: sealed::Sealed + Clone + Copy + Debug + Default + PartialEq + Eq {}
 
+/// A node with one value of its own, as a leaf widget is handed it in
+/// [`WidgetProps`](crate::widgets::WidgetProps). The default kind, so a plain
+/// `BoundField` is a `BoundField<Leaf>`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Leaf;
 
 impl sealed::Sealed for Leaf {}
 impl NodeKind for Leaf {}
 
+/// An enum's node, as [`VariantSelect`](crate::widgets::VariantSelect) is
+/// handed it, to [`choose`](BoundField::<Variant>::choose) the variant.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Variant;
 
 impl sealed::Sealed for Variant {}
 impl NodeKind for Variant {}
 
+/// A list's node, a `Vec`, as [`MoveItemButtons`](crate::widgets::MoveItemButtons)
+/// is handed it, to [`move_item`](BoundField::<List>::move_item). Its adder
+/// and Remove buttons are handed it as [`Items`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct List;
 
 impl sealed::Sealed for List {}
 impl NodeKind for List {}
 
+/// A set's node, as a set widget is handed it in
+/// [`SetWidgetProps`](crate::widgets::SetWidgetProps), and
+/// [`EditItemButton`](crate::widgets::EditItemButton) too. Its adder and
+/// Remove buttons are handed it as [`Items`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Set;
 
 impl sealed::Sealed for Set {}
 impl NodeKind for Set {}
 
+/// What a list and a set have in common: adding an item and removing one.
+/// An adder is handed this kind in [`AddItemProps`](crate::widgets::AddItemProps),
+/// and so is [`RemoveItemButton`](crate::widgets::RemoveItemButton), so one
+/// of each serves both.
+///
+/// Made from a `BoundField<List>` or a `BoundField<Set>` with `into()`.
+/// Nothing converts back, so an adder can reach neither a list's
+/// `move_item` nor a set's `edit_item`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Items;
 
 impl sealed::Sealed for Items {}
 impl NodeKind for Items {}
 
+/// One item of a set, as its view is handed it in
+/// [`SetItemProps`](crate::widgets::SetItemProps): read-only, through
+/// [`current`](BoundField::<SetItem>::current).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SetItem;
 
@@ -216,14 +258,23 @@ impl<K: NodeKind> BoundField<K> {
         }
     }
 
+    /// The id of this node's element in the page: a leaf's form control, a
+    /// list's or a set's `<fieldset>`, a set item's own. It starts with the
+    /// form's id, so it is unique in the page, and so is an id a widget builds
+    /// from it, such as an adder's button's.
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// The node's path in the form (`answers.#0.text`): its key in the value
+    /// and error stores, and the `name` a leaf's form control carries.
     pub fn path(&self) -> &NodePath {
         &self.path
     }
 
+    /// The node's label, cased as the form says, or `None` for a node shown
+    /// without one: a variant select, whose legend already names it, or a
+    /// set's item.
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -235,6 +286,7 @@ impl<K: NodeKind> BoundField<K> {
         }
     }
 
+    /// The node's hint, `help_text:` in `form!`, or `None`.
     pub fn help_text(&self) -> Option<&str> {
         self.help_text.as_deref()
     }
@@ -246,14 +298,25 @@ impl<K: NodeKind> BoundField<K> {
         }
     }
 
+    /// The form's resolved classes: the app's, with the form's `classes:` and
+    /// `classes_plus:` applied. A widget's own parts take theirs through
+    /// [`part_class`](Self::part_class). This is for the rest, and for
+    /// passing on to [`FieldErrors`](crate::widgets::FieldErrors) as its
+    /// `classes`.
     pub fn classes(&self) -> &Rc<Classes> {
         &self.form.classes
     }
 
+    /// The form's error view, for a widget that shows errors beyond its own:
+    /// [`FieldErrors`](crate::widgets::FieldErrors) takes it. The node's own
+    /// standing is [`validity`](Self::validity).
     pub fn errors(&self) -> ErrorsView {
         self.form.errors
     }
 
+    /// The form's value view, for a widget that shows more than its own
+    /// value: an adder leaving out the choices already in its list, say.
+    /// Read-only, so a widget still writes only through its own bound field.
     pub fn values(&self) -> ValuesView {
         ValuesView(self.form.contents.values)
     }
@@ -498,12 +561,21 @@ impl BoundField<Set> {
         });
     }
 
+    /// The bound field of this set's item `name`, at the set's path joined
+    /// with it (`tags.#1`), with the item's page id `id`, which the caller
+    /// builds because the id format is `NodeContext`'s. No label or hint: an
+    /// item has none of its own.
     pub(crate) fn item(&self, name: &str, id: String) -> BoundField<SetItem> {
         BoundField::<SetItem>::new(id, self.path.join(name), None, None, self.form.clone())
     }
 }
 
 impl BoundField<List> {
+    /// Move the item at `from` to `to`, both places in the list as it is
+    /// now. `to` is the item's place AFTER the move, so the items between
+    /// shift to close the gap: in `a,b,c`, `0` to `2` gives `b,c,a`, not the
+    /// swap `c,b,a`. [`MoveItemButtons`](crate::widgets::MoveItemButtons)
+    /// sends one place up or down.
     pub fn move_item(&self, from: usize, to: usize) {
         self.send_edit(Edit::MoveItem {
             path: self.path.clone(),
@@ -514,12 +586,20 @@ impl BoundField<List> {
 }
 
 impl BoundField<Variant> {
+    /// Choose the variant named `variant`, or with `None` no variant, what a
+    /// select that is not required offers as its empty option. The form
+    /// beneath the enum is rebuilt: the chosen variant's fields appear, and
+    /// the last one's go.
     pub fn choose(&self, variant: Option<&str>) {
         self.send_edit(Edit::new_choose_variant(&self.path, variant));
     }
 }
 
 impl BoundField<Items> {
+    /// Add an item: with `Some(value)` filled in with `value`, which must be of
+    /// the item type (see [`ItemValue::new`]); with `None`, what the adder
+    /// holds, which is a blank item in a list and the draft in a set. A list
+    /// appends it. A set puts it in its sorted place and refuses a duplicate.
     pub fn add(&self, value: Option<ItemValue>) {
         self.send_edit(Edit::AddItem {
             path: self.path.clone(),
@@ -531,6 +611,7 @@ impl BoundField<Items> {
         });
     }
 
+    /// Remove the item at `index`, its place in the list or set as it is now.
     pub fn remove(&self, index: usize) {
         self.send_edit(Edit::RemoveItem {
             path: self.path.clone(),

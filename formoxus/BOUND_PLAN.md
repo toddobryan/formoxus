@@ -679,11 +679,45 @@ further:
 
     The push waits for box 5 (Todd, 2026-11-22).
 
-- [ ] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
+- [x] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
   docs (each view, `BoundField` and each kind's methods, `WidgetProps`, the
   custom-widget walkthrough in `widgets.rs`, and the adder and item-view docs);
   memory (a `bound_field` file with the "why not one plain type" reasoning, the
   renames line in `MEMORY.md`, which also records the moves from `nodes::` and
   `form::` to `stores::`); a note for apcsp's catch-up when Todd opens it.
+
+  **As built so far (2026-11-22, Claude).**
+
+  1. **Tests:** box 2's `tests/suite/bound.rs` and the five `bound_*` goldens are back
+     (`391b09d`), all green; each `.stderr` is "no method named …", the intended error.
+     Two fixes to box 2's own test widget: its view takes `widget_props`, and it renders
+     `FieldErrors`. The restored keystroke test found that `paths_under` subscribed
+     deeply; Todd fixed it with the store's shallow `iter()`.
+  2. **Docs:** the two views and their methods, `NodeKind` and each marker, the
+     `BoundField` getters and every kind's methods, `Editing`, `WidgetProps` and
+     `SetWidgetProps` with their fields, the props' `field()` methods, and
+     `SetItemProps`. `cargo doc` and `-W missing_docs` are clean for `bound_field`,
+     `stores`, `widget_props`, `item_buttons` and `set_item`. The `widgets.rs`
+     walkthrough was redone in 4.11.
+  3. **Memory:** `.claude/memory/bound_field.md` (with the "why not one plain type"
+     reasoning), the renames line in `MEMORY.md`, and the handoff.
+  4. **`just e2e`:** 85/85 green on this branch.
+
+  **For apcsp, when Todd opens it** (it points at `../formoxus/formoxus` by path, so it
+  builds against whatever branch is checked out here). It already fails against `main`
+  for the 2026-11-11 `Widget`/`LeafWidget` split; on top of that, `bound` breaks two
+  places, both small:
+
+  1. `crates/ui/src/markdown.rs`, `MarkdownView`: `props.field_handle()` becomes
+     `props.field()`, or drop `handle` and call through the props (`props.current()`,
+     `props.on_input()`, `props.on_blur()`); `props.id` and `props.path` become
+     `props.id()` and `props.path()`.
+  2. `crates/web/src/views/form_demo.rs`, the "value store" debug table: `ValuesView` has
+     no `read()`, so the whole map can no longer be read at once. Build the rows from
+     `form.values().paths_under(&NodePath::root())`, each value by `get`. It still
+     re-renders on every keystroke, since it shows every value, so its NOTE comment
+     about moving the table into a child still holds.
+
+  `crates/api`'s `form.values()` calls are `WireForm::values`, unaffected.
 
 - [ ] **6.** (Todd) Merge `bound`; close #22 and #23.

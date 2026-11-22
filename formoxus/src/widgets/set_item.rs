@@ -18,6 +18,11 @@ use crate::bound_field::{BoundField, SetItem};
 /// No typed value: a set holds only single values (a string, a number, a
 /// unit enum, a newtype over one), so `text` already is the value, written
 /// out: a newtype's inner value, a unit enum's variant name.
+///
+/// The props deref to the item's bound field, a `BoundField<SetItem>`:
+/// `props.current()` is the item's raw value as its leaf holds it, and
+/// `props.path()` its path (`tags.#1`). Read-only, as a view only shows; a
+/// view that shows more than its own item reads `props.values()`.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct SetItemProps {
     pub(crate) field: BoundField<SetItem>,
@@ -31,6 +36,8 @@ pub struct SetItemProps {
 }
 
 impl SetItemProps {
+    /// The item's bound field, owned, for an event handler or a child
+    /// component. For a read, the props deref to it: `props.current()`.
     pub fn field(&self) -> BoundField<SetItem> {
         self.field.clone()
     }

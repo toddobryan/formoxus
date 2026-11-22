@@ -17,6 +17,21 @@ use crate::stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath};
 use crate::widgets::types::Choice;
 use crate::widgets::widget::Widget;
 
+/// What a widget is handed to render one node: its bound field, which these
+/// props deref to, so `props.current()` and `props.on_input()` work
+/// directly; the attributes for its form control; and its choices.
+///
+/// The node builds these on every render, so they always hold the field's
+/// current label, attributes and choices. A widget that renders another
+/// widget passes its own props on, cloned, rather than building new ones;
+/// [`detached`](Self::detached) is for a widget outside any form.
+///
+/// `K` is the node's kind, [`Leaf`] unless said otherwise: every
+/// [`LeafWidget`](crate::widgets::LeafWidget) takes `WidgetProps`, and
+/// [`VariantSelect`](crate::widgets::VariantSelect) takes
+/// `WidgetProps<Variant>`.
+///
+/// [`Leaf`]: crate::bound_field::Leaf
 #[derive(Clone, Debug, PartialEq)]
 pub struct WidgetProps<K: NodeKind = Leaf> {
     /// The field's attributes BEFORE its errors are applied: its own, its
@@ -33,6 +48,10 @@ pub struct WidgetProps<K: NodeKind = Leaf> {
     /// attributes ALREADY applied, as its select's `help_text` is `None`
     /// (see there), and `VariantSelect` spreads this as is.
     pub(crate) base_attrs: FieldAttrs,
+    /// Attributes beyond the field's own, for the form control. Empty from
+    /// the form: they are how a widget that renders another adds attributes
+    /// to the inner one's element. A widget merges them into what it
+    /// spreads, as [`current_attrs`](Self::current_attrs) shows.
     pub extra_attrs: Vec<Attribute>,
     /// The field's choices, read from it on every render (`Field::choices`),
     /// so a field whose choices change is shown with the new ones. `None` for
@@ -111,6 +130,8 @@ impl WidgetProps {
         }
     }
 
+    /// [`detached`](Self::detached) props with a label, which the widget
+    /// shows as its caption.
     pub fn with_label(self, label: impl Into<String>) -> Self {
         Self {
             field: self.field.with_label(label.into()),
@@ -118,6 +139,8 @@ impl WidgetProps {
         }
     }
 
+    /// [`detached`](Self::detached) props with a hint, which the widget shows
+    /// and its control's `aria-describedby` names.
     pub fn with_help_text(self, help_text: impl Into<String>) -> Self {
         Self {
             field: self.field.with_help_text(help_text.into()),
@@ -171,21 +194,37 @@ impl<K: NodeKind> WidgetProps<K> {
             .class(self.classes().part::<W>(tag), self.is_invalid())
     }
 
+    /// The bound field, owned, for an event handler, which must be `'static`.
+    /// For a read, the props deref to it.
     pub fn field(&self) -> BoundField<K> {
         self.field.clone()
     }
 }
 
+/// What a set widget is handed to render a whole set as one control: its
+/// [`SetWidget`](crate::widgets::SetWidget)'s `render` takes these, as
+/// [`CheckboxMultiple`](crate::widgets::CheckboxMultiple) and
+/// [`SelectMultiple`](crate::widgets::SelectMultiple) do. They deref to the
+/// set's bound field, which is how the widget adds and removes items.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SetWidgetProps {
+    /// Every value the set may hold, each one a box to tick or an option to
+    /// select.
     pub choices: Vec<Choice>,
+    /// The values the set holds now, as raw strings, in its sorted order.
     pub chosen: Vec<String>,
+    /// Whether the set needs at least one item (`min_items:` above zero),
+    /// for the required marker.
     pub required: bool,
+    /// The most items it may hold (`max_items:`), for a widget that stops
+    /// offering more there.
     pub max_items: Option<usize>,
     pub(crate) field: BoundField<Set>,
 }
 
 impl SetWidgetProps {
+    /// The set's bound field, owned, for an event handler, which must be
+    /// `'static`. For a read, the props deref to it.
     pub fn field(&self) -> BoundField<Set> {
         self.field.clone()
     }
