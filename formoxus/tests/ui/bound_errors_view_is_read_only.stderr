@@ -1,0 +1,5 @@
+error[E0599]: no method named `insert` found for struct `ErrorsView` in the current scope
+  --> tests/ui/bound_errors_view_is_read_only.rs:13:19
+   |
+13 |     form.errors().insert(NodePath::new("name"), None);
+   |                   ^^^^^^ method not found in `ErrorsView`

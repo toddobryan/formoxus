@@ -484,7 +484,7 @@ further:
     `ValuesView`, since a `pub(crate)` alias trips `private_intra_doc_links`.
   - `just ci` green, 1589.
 
-- [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the six
+- [x] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the six
   markers, moved from `widgets/field_handle.rs` to a new top-level `pub mod
   bound_field` in `src/bound_field.rs` (K), with `BoundField` in the `widgets::*` kit
   in place of `FieldHandle` (H); `WidgetCommon` folded
@@ -656,7 +656,7 @@ further:
     3. Change `list_node.rs` (around line 115), reusing the `BoundField<List>` from
        4.8.
 
-  - [ ] **4.11** Loose ends, then commit and push.
+  - [x] **4.11** Loose ends, then commit and push.
 
     1. Fix the doc links that still name `WidgetCommon`, `FieldHandle` or
        `field_handle`: `widgets.rs` (lines 62, 63 and 82), `field_attrs.rs` (299),
@@ -674,6 +674,8 @@ further:
        swap for `FieldHandle`, which was there, so not a new re-export. Found
        2026-11-22: 1-4 are done (and the unused `Struct` marker is deleted), but
        this was not, so a dev's widget needs a second `use` to name the type.
+       **Deferred (Todd, 2026-11-22)** to the re-export audit before publishing
+       (`.claude/memory/pre_publish_checklist.md`, item 5), so 4.11 is done without it.
 
     The push waits for box 5 (Todd, 2026-11-22).
 

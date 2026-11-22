@@ -1,0 +1,5 @@
+error[E0599]: no method named `insert` found for struct `ValuesView` in the current scope
+  --> tests/ui/bound_values_view_is_read_only.rs:14:19
+   |
+14 |     form.values().insert(NodePath::new("name"), "Ada".to_string());
+   |                   ^^^^^^ method not found in `ValuesView`

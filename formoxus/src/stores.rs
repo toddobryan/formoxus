@@ -19,10 +19,9 @@ impl ValuesView {
 
     pub fn paths_under(&self, path: &NodePath) -> Vec<NodePath> {
         self.0
-            .read()
-            .keys()
+            .iter()
+            .map(|(key, _)| key)
             .filter(|p| p.starts_with(path))
-            .cloned()
             .collect()
     }
 }

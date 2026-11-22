@@ -2475,8 +2475,8 @@ fn the_tags_preset_is_one_class_on_the_set() {
 /// A view that shows everything it was handed.
 #[component]
 fn TagChip(props: formoxus::widgets::SetItemProps) -> Element {
-    // Through the values view (issue #22); box 4 moves this to the bound field.
-    let stored = props.values().get(props.path());
+    // Through the item's own bound field, read-only (`BOUND_PLAN.md`).
+    let stored = props.current();
     let says = format!(
         "{} at {} #{} editing={} stored={stored}",
         props.text,

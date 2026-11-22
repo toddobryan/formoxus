@@ -1,0 +1,7 @@
+error[E0599]: no method named `move_item` found for struct `BoundField<formoxus::bound_field::Set>` in the current scope
+ --> tests/ui/bound_set_has_no_move.rs:6:11
+  |
+6 |     field.move_item(0, 1);
+  |           ^^^^^^^^^ method not found in `BoundField<formoxus::bound_field::Set>`
+  |
+  = note: the method was found for `BoundField<formoxus::bound_field::List>`

@@ -1722,25 +1722,25 @@ fn filled_option_items_keep_some_and_none() {
 
 /// An adder that says what it was handed, and adds a filled `"gamma"` item
 /// when clicked. `first` is item `#0`'s value as the store has it, and
-/// `stored` how many store entries it finds under the list, read whole, as an
-/// adder leaving out the choices already in its list would.
+/// `stored` how many store entries it finds under the list, as an adder
+/// leaving out the choices already in its list would: both through its bound
+/// field's read-only `values()`, and the add through the field too, which
+/// addresses it to the list (`BOUND_PLAN.md`).
 #[component]
 fn ProbeAdder(props: AddItemProps) -> Element {
-    // Through the values view (issue #22); box 4 moves this to the bound field.
-    let first = props
-        .values()
-        .get(&NodePath::new(format!("{}.#0", props.path())));
-    let stored = props.values().paths_under(props.path()).len();
+    let field = props.field();
+    let values = field.values();
+    let first = values.get(&NodePath::new(format!("{}.#0", field.path())));
+    let stored = values.paths_under(field.path()).len();
     let says = format!(
         "{} has {}, first {first}, stored {stored}",
-        props.path(),
+        field.path(),
         props.item_count
     );
-    let field = props.field().clone();
     rsx! {
         button {
             r#type: "button",
-            id: "{props.id()}-add",
+            id: "{field.id()}-add",
             onclick: {
                 let field = field.clone();
                 move |_| field.add(Some(ItemValue::new("gamma".to_string())))

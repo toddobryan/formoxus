@@ -101,6 +101,11 @@ seldom names the type (only in a helper's signature, importing the marker from
 `formoxus::bound_field`). In both lists, the next export change would have to be made
 twice, the drift that ended the flat root list.
 
+**Not done yet, held for this pass (2026-11-22, Todd):** `BoundField` is NOT in the
+kit. H's swap for `FieldHandle` was never made in box 4, and Todd chose to leave it for
+this audit rather than add it then. Until it is, a dev's widget imports
+`formoxus::bound_field::BoundField`, and the `bound_*` trybuild goldens do too.
+
 ## 6. Scan the built docs for dead links — no lint can see two kinds
 
 Added 2026-11-09 (Todd: "checklist", not a `just docs` step, for now). rustdoc's

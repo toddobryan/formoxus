@@ -1,0 +1,7 @@
+error[E0599]: no method named `input` found for struct `BoundField<formoxus::bound_field::SetItem>` in the current scope
+ --> tests/ui/bound_set_item_has_no_input.rs:7:11
+  |
+7 |     field.input("rust".to_string());
+  |           ^^^^^ method not found in `BoundField<formoxus::bound_field::SetItem>`
+  |
+  = note: the method was found for `BoundField`
