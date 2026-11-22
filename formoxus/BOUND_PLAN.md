@@ -642,10 +642,12 @@ further:
        and `classes`, and calls the `edit_item` that 4.8 added.
     4. Change `set_node.rs` (around lines 594 and 612).
 
-  - [ ] **4.10** `List`: `MoveItemButtons` (Part 2, item 5.6).
+  - [x] **4.10** `List`: `MoveItemButtons` (Part 2, item 5.6).
 
-    1. In `impl BoundField<List>`, add `add`, `remove(index)` and
-       `move_item(from, to)`.
+    1. In `impl BoundField<List>`, add only `move_item(from, to)`. A list's adder
+       and its Remove buttons go through `BoundField<Items>` (4.8), so a list's own
+       `add` and `remove` would be near-duplicates with no caller. (`Set` keeps
+       its own, because `SelectMultiple` takes a `BoundField<Set>`.)
     2. `MoveItemButtons` takes `field: BoundField<List>` in place of `path`, `on_edit`
        and `classes`.
     3. Change `list_node.rs` (around line 115), reusing the `BoundField<List>` from

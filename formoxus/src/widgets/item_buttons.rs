@@ -9,15 +9,12 @@
 //! list's default and [`DraftAdder`] a set's.
 
 use std::ops::Deref;
-use std::rc::Rc;
 use std::{fmt::Debug, ptr::fn_addr_eq};
 
 use dioxus::prelude::*;
 use formoxus_spec::FixedKey;
 
-use crate::bound_field::{BoundField, Items, Set};
-use crate::path::NodePath;
-use crate::{classes::Classes, nodes::Edit};
+use crate::bound_field::{BoundField, Items, List, Set};
 
 use super::icons::{CHECK, CHEVRON_DOWN, CHEVRON_UP, PENCIL, PLUS, X, icon};
 
@@ -336,36 +333,37 @@ pub fn RemoveItemButton(
 /// meets the same buttons in each.
 #[component]
 pub fn MoveItemButtons(
-    path: NodePath,
+    field: BoundField<List>,
     index: usize,
     /// How many items the list has, which is what says this one is the last.
     count: usize,
-    on_edit: Callback<Edit>,
-    classes: Rc<Classes>,
 ) -> Element {
     let ordinal = index + 1;
-    let up_path = path.clone();
     rsx! {
-        div { class: classes.fixed_class(FixedKey::MoveItemButtons, false),
+        div { class: field.classes().fixed_class(FixedKey::MoveItemButtons, false),
             button {
                 r#type: "button",
-                class: classes.fixed_class(FixedKey::MoveItemUpButton, false),
+                class: field.classes().fixed_class(FixedKey::MoveItemUpButton, false),
                 aria_label: "Move item {ordinal} up",
                 disabled: index == 0,
-                onclick: move |_| {
-                    if let Some(to) = index.checked_sub(1) {
-                        on_edit.call(Edit::MoveItem { path: up_path.clone(), from: index, to });
+                onclick: {
+                    let field = field.clone();
+                    move |_| {
+                        if let Some(to) = index.checked_sub(1) {
+                            field.move_item(index, to);
+                        }
                     }
                 },
                 {icon(CHEVRON_UP)}
             }
             button {
                 r#type: "button",
-                class: classes.fixed_class(FixedKey::MoveItemDownButton, false),
+                class: field.classes().fixed_class(FixedKey::MoveItemDownButton, false),
                 aria_label: "Move item {ordinal} down",
                 disabled: index + 1 == count,
-                onclick: move |_| {
-                    on_edit.call(Edit::MoveItem { path: path.clone(), from: index, to: index + 1 });
+                onclick: {
+                    let field = field.clone();
+                    move |_| field.move_item(index, index + 1)
                 },
                 {icon(CHEVRON_DOWN)}
             }

@@ -474,6 +474,16 @@ impl BoundField<Set> {
     }
 }
 
+impl BoundField<List> {
+    pub fn move_item(&self, from: usize, to: usize) {
+        self.send_edit(Edit::MoveItem {
+            path: self.path.clone(),
+            from,
+            to,
+        });
+    }
+}
+
 impl BoundField<Variant> {
     pub fn choose(&self, variant: Option<&str>) {
         self.send_edit(Edit::new_choose_variant(&self.path, variant));

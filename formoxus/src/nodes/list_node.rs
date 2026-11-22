@@ -122,7 +122,7 @@ impl Node for ListNode {
                             // Move buttons on the left, Remove on the right, so Remove
                             // is never next to a move (D in `ORDERED_LISTS_PLAN.md`).
                             li { class: &list_item_class, key: "{item.name()}",
-                                MoveItemButtons { path: path.clone(), index, count: self.items.len(), on_edit: ctx.on_edit, classes: ctx.classes.clone() }
+                                MoveItemButtons { field: field.clone(), index, count: self.items.len() }
                                 { item.render(&nested) }
                                 RemoveItemButton {
                                     field: field.clone().into(),
