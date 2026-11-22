@@ -349,12 +349,12 @@ impl formoxus::widgets::SetWidget for PropsAsText {
             .collect::<Vec<_>>()
             .join(",");
         let chosen = props.chosen.join(",");
-        let label = props.label.clone().unwrap_or_default();
+        let label = props.label().unwrap_or_default();
         let max_items = props
             .max_items
             .map_or(String::new(), |mi| format!(" max_items {mi}"));
         rsx! {
-            div { id: "{props.id}", "data-path": "{props.path}",
+            div { id: "{props.id()}", "data-path": "{props.path()}",
                 "choices [{choices}] chosen [{chosen}] required {props.required}{max_items} label [{label}]"
             }
         }

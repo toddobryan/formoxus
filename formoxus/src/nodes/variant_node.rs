@@ -269,7 +269,6 @@ impl Node for VariantNode {
                 VariantSelect {
                     variants: self.variants(),
                     selected: self.chosen(),
-                    on_edit: ctx.on_edit,
                     label_case: ctx.label_case,
                     props: WidgetProps {
                         base_attrs,

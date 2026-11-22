@@ -97,7 +97,7 @@ pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
             ),
             legend {
                 class: legend_class,
-                if let Some(text) = props.label().clone() {
+                if let Some(text) = props.label() {
                     "{text}"
                     if props.required {
                         {required_marker(props.classes())}

@@ -204,11 +204,11 @@ impl Widget for ClassProbe {
 impl LeafWidget for ClassProbe {
     fn render(&self, props: WidgetProps) -> Element {
         let form = props
-            .classes
+            .classes()
             .fixed_class(FixedKey::Form, false)
             .unwrap_or_default();
         let select = props
-            .classes
+            .classes()
             .part_class::<Select>(Tag::Select, false)
             .unwrap_or_default();
         rsx! {
@@ -256,8 +256,8 @@ impl Widget for Notes {
 impl LeafWidget for Notes {
     fn render(&self, props: WidgetProps) -> Element {
         let invalid = props.is_invalid();
-        let div = props.classes.part_class::<Notes>(Tag::Div, invalid);
-        let textarea = props.classes.part_class::<Notes>(Tag::Textarea, invalid);
+        let div = props.classes().part_class::<Notes>(Tag::Div, invalid);
+        let textarea = props.classes().part_class::<Notes>(Tag::Textarea, invalid);
         rsx! {
             div { class: div, textarea { class: textarea } }
         }

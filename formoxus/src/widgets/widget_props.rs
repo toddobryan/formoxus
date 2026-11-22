@@ -6,7 +6,7 @@ use dioxus::signals::Signal;
 use dioxus::stores::Store;
 use formoxus_spec::Tag;
 
-use crate::bound_field::{BoundField, OnFieldEvent, Set};
+use crate::bound_field::{BoundField, Leaf, NodeKind, OnFieldEvent, Set};
 use crate::classes::Classes;
 use crate::defaults::Formoxus;
 use crate::field_attrs::FieldAttrs;
@@ -18,7 +18,7 @@ use crate::widgets::types::Choice;
 use crate::widgets::widget::Widget;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WidgetProps {
+pub struct WidgetProps<K: NodeKind = Leaf> {
     /// The field's attributes BEFORE its errors are applied: its own, its
     /// constraints and `required`, which the node can work out in the form's
     /// scope. [`current_attrs`](Self::current_attrs) adds `aria-invalid` and
@@ -38,7 +38,7 @@ pub struct WidgetProps {
     /// so a field whose choices change is shown with the new ones. `None` for
     /// a field without any; a chooser over a `bool` then offers true/false.
     pub choices: Option<Vec<Choice>>,
-    pub(crate) field: BoundField,
+    pub(crate) field: BoundField<K>,
 }
 
 impl WidgetProps {
@@ -111,6 +111,30 @@ impl WidgetProps {
         }
     }
 
+    pub fn with_label(self, label: impl Into<String>) -> Self {
+        Self {
+            field: self.field.with_label(label.into()),
+            ..self
+        }
+    }
+
+    pub fn with_help_text(self, help_text: impl Into<String>) -> Self {
+        Self {
+            field: self.field.with_help_text(help_text.into()),
+            ..self
+        }
+    }
+}
+
+impl<K: NodeKind> Deref for WidgetProps<K> {
+    type Target = BoundField<K>;
+
+    fn deref(&self) -> &BoundField<K> {
+        &self.field
+    }
+}
+
+impl<K: NodeKind> WidgetProps<K> {
     /// The field's attributes as its form control should carry them: its own
     /// from `form!` and its constraints, `required`, and then the two that
     /// follow its errors, `aria-invalid` and `aria-describedby`. A widget spreads
@@ -147,30 +171,8 @@ impl WidgetProps {
             .class(self.classes().part::<W>(tag), self.is_invalid())
     }
 
-    pub fn field(&self) -> BoundField {
+    pub fn field(&self) -> BoundField<K> {
         self.field.clone()
-    }
-
-    pub fn with_label(self, label: impl Into<String>) -> Self {
-        Self {
-            field: self.field.with_label(label.into()),
-            ..self
-        }
-    }
-
-    pub fn with_help_text(self, help_text: impl Into<String>) -> Self {
-        Self {
-            field: self.field.with_help_text(help_text.into()),
-            ..self
-        }
-    }
-}
-
-impl Deref for WidgetProps {
-    type Target = BoundField;
-
-    fn deref(&self) -> &BoundField {
-        &self.field
     }
 }
 

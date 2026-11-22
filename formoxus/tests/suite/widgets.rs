@@ -178,7 +178,7 @@ const ID: &str = "rand0123-name";
 /// because nothing upstream computes it, which is the point: these pin the
 /// widget boundary independently of how the nodes wire it up.
 fn plain_props(values: ValuesByPath, path: &str, label: Option<&str>) -> WidgetProps {
-    let mut props = WidgetProps::new(
+    let props = WidgetProps::detached(
         ID,
         NodePath::new(path),
         FieldAttrs::default(),
@@ -186,8 +186,10 @@ fn plain_props(values: ValuesByPath, path: &str, label: Option<&str>) -> WidgetP
         ErrorsByPath::new(),
         Rc::new(Classes::default()),
     );
-    props.label = label.map(str::to_string);
-    props
+    match label {
+        Some(label) => props.with_label(label),
+        None => props,
+    }
 }
 
 #[component]
@@ -551,13 +553,13 @@ fn a_hidden_input_renders_without_a_label_or_marker() {
 /// The echo is the only way to observe the write: the input itself must NOT show
 /// the value, so the rendered `value=` attribute cannot be the evidence.
 ///
-/// The props are built once, in `use_hook`: `WidgetProps::new` makes its own
+/// The props are built once, in `use_hook`: `WidgetProps::detached` makes its own
 /// store, so props built on every render would hand the re-render a new, empty
 /// one, and the echo would never see the keystroke.
 #[component]
 fn PasswordWithEcho() -> Element {
     let props = use_hook(|| plain_props(ValuesByPath::new(), "secret", Some("Secret")));
-    let stored = props.field_handle().current();
+    let stored = props.field().current();
     rsx! {
         {PasswordInput.render(props)}
         p { class: "echo", "{stored}" }

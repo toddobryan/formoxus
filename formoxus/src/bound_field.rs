@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -89,26 +90,53 @@ impl OnFieldEvent {
     }
 }
 
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait NodeKind: sealed::Sealed + Clone + Copy + Debug + Default + PartialEq + Eq {}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Leaf;
+
+impl sealed::Sealed for Leaf {}
+impl NodeKind for Leaf {}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Variant;
 
+impl sealed::Sealed for Variant {}
+impl NodeKind for Variant {}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct List;
+
+impl sealed::Sealed for List {}
+impl NodeKind for List {}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Set;
 
+impl sealed::Sealed for Set {}
+impl NodeKind for Set {}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Items;
+
+impl sealed::Sealed for Items {}
+impl NodeKind for Items {}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SetItem;
 
+impl sealed::Sealed for SetItem {}
+impl NodeKind for SetItem {}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Struct;
+
+impl sealed::Sealed for Struct {}
+impl NodeKind for Struct {}
 
 /// How a widget reads and writes its field's value, from
 /// [`WidgetProps::field_handle`](crate::widgets::WidgetProps::field_handle).
@@ -141,7 +169,7 @@ pub struct Struct;
 /// call [`input`](Self::input), [`change`](Self::change) and
 /// [`blur`](Self::blur) from a handler of your own.
 #[derive(Clone, Debug, PartialEq)]
-pub struct BoundField<K = Leaf> {
+pub struct BoundField<K: NodeKind = Leaf> {
     id: String,
     path: NodePath,
     label: Option<String>,
@@ -150,7 +178,7 @@ pub struct BoundField<K = Leaf> {
     _data: PhantomData<K>,
 }
 
-impl<K> BoundField<K> {
+impl<K: NodeKind> BoundField<K> {
     pub(crate) fn new(
         id: String,
         path: NodePath,
@@ -211,7 +239,7 @@ impl<K> BoundField<K> {
     }
 
     fn send_edit(&self, edit: Edit) {
-        (self.form.on_edit)(edit)
+        (self.form.on_edit)(edit);
     }
 
     /// Whether the field has errors to show: [`validity`](Self::validity) is
@@ -242,7 +270,7 @@ impl<K> BoundField<K> {
     }
 }
 
-impl BoundField {
+impl BoundField<Leaf> {
     /// The field's raw value, or `""` if it has none yet. Reading it while
     /// rendering subscribes the reader to this one field.
     ///
@@ -421,5 +449,11 @@ impl BoundField<Set> {
             path: self.path.clone(),
             index,
         });
+    }
+}
+
+impl BoundField<Variant> {
+    pub fn choose(&self, variant: Option<&str>) {
+        self.send_edit(Edit::new_choose_variant(&self.path, variant));
     }
 }

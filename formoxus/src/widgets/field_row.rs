@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 use formoxus_spec::{FixedKey, Tag};
 
-use crate::bound_field::BoundField;
+use crate::bound_field::{BoundField, NodeKind};
 use crate::classes::Classes;
 use crate::widgets::{FieldErrors, Widget, field_help};
 
@@ -42,7 +42,7 @@ pub enum LabelSide {
 /// `&props` and the `Deref` hands it over, and a set widget with one control
 /// (`SelectMultiple`) uses it too.
 pub fn field_row<W: Widget>(
-    field: &BoundField<impl Sized>,
+    field: &BoundField<impl NodeKind>,
     marked: bool,
     side: LabelSide,
     control: Element,
@@ -56,7 +56,7 @@ pub fn field_row<W: Widget>(
     );
     let captioned = rsx! {
         {label}
-        {field_help(field.id(), field.help_text(), &field.classes())}
+        {field_help(field.id(), field.help_text(), field.classes())}
     };
     let (before, after) = match side {
         LabelSide::Before => (captioned, rsx! {}),

@@ -79,15 +79,15 @@ impl Widget for QuestionItem {
 
 impl LeafWidget for QuestionItem {
     fn render(&self, props: WidgetProps) -> Element {
-        let current = props.field_handle().current();
+        let current = props.field().current();
         rsx! {
-            input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
+            input { r#type: "hidden", id: "{props.id()}", name: "{props.path()}", value: "{current}" }
             span { class: "question", "{current}" }
             FieldErrors {
-                field_id: props.id.clone(),
-                paths: vec![props.path.clone()],
-                errors: props.errors,
-                classes: props.classes.clone()
+                field_id: props.id(),
+                paths: vec![props.path().clone()],
+                errors: props.errors(),
+                classes: props.classes().clone()
             }
         }
     }

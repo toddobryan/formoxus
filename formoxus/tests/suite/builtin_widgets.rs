@@ -82,16 +82,16 @@ fn values() -> ValuesByPath {
 }
 
 fn through_widget((widget, choices): (AnyWidget, Option<Vec<Choice>>)) -> Element {
-    let mut props = WidgetProps::new(
+    let mut props = WidgetProps::detached(
         ID,
         NodePath::new(PATH),
         field_attrs(),
         values(),
         ErrorsByPath::from([(NodePath::new(PATH), errors())]),
         Rc::new(Classes::fx()),
-    );
-    props.label = Some("Title".into());
-    props.help_text = Some(HELP.into());
+    )
+    .with_label("Title")
+    .with_help_text(HELP);
     props.extra_attrs = extra_attrs();
     props.choices = choices;
     widget.render(props)

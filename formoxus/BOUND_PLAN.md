@@ -259,6 +259,31 @@ further:
      `formoxus::bound_field::…` (box 5), and the crate's intra-doc links to
      `crate::widgets::FieldHandle` go to `crate::bound_field::BoundField`.
 
+**Decided 2026-11-21, during box 4 (Todd):**
+
+- **M. The seven markers implement a sealed trait, `NodeKind`**
+  (`formoxus::bound_field::NodeKind`), and `BoundField<K: NodeKind = Leaf>` is
+  bounded by it. Todd asked whether an empty trait should keep anyone from writing
+  `BoundField<String>`.
+
+  1. **Sealed, not just empty.** A dev can implement a plain `pub trait` with no
+     items for any type, `String` included, which would undo the point. It follows
+     the crate's existing pattern in `fields/number_fields.rs`: a private
+     `mod sealed { pub trait Sealed {} }`, with `NodeKind: sealed::Sealed`, so only
+     this crate can add a kind.
+  2. **What it buys is better errors and docs, not safety.** Nobody can get a value
+     of type `BoundField<String>` anyway, because the constructor is `pub(crate)`
+     (trap 7). With the bound, writing that type fails where it is written, and not
+     later as a missing method. Rustdoc lists a trait's implementors, so
+     `NodeKind`'s page is the one place a dev finds all seven kinds; its doc carries
+     Part 2's table of which kind each prop uses. Bounds also say what they mean:
+     `field_row`'s `&BoundField<impl Sized>` becomes `&BoundField<impl NodeKind>`.
+  3. **Named `NodeKind`, not `Kind`.** The markers name the kind of node a path is.
+     `field_kind.rs` already has a private `enum Kind`, and `FieldEventKind` is in
+     the same file as the trait, so a bare `Kind` would be ambiguous to read.
+  4. **The cost:** every `impl<K> BoundField<K>`, and `WidgetProps<K>`, repeats
+     `K: NodeKind`. The derives are unaffected (trap 6).
+
 ## Traps
 
 1. **`get` must read one key, never the map.** `self.store.read().get(path)` would
@@ -534,14 +559,18 @@ further:
     5. Delete `WidgetCommon`, and its re-export in `widgets.rs`.
     6. **The lib compiles. Commit.**
 
-  - [ ] **4.6** `Variant`: `VariantSelect` (Part 2, item 5.2).
+  - [x] **4.6** `Variant`: `VariantSelect` (Part 2, item 5.2).
 
-    1. `WidgetProps` becomes `WidgetProps<K = Leaf>`, holding `BoundField<K>`.
-       `LeafWidget::render` still takes plain `WidgetProps`.
-    2. In `impl BoundField<Variant>`, add `choose(Option<&str>)`, which sends
+    1. Add `NodeKind` (M) in `bound_field.rs`: the private `sealed` module, the
+       trait, and an impl of both for each of the seven markers. Bound the struct
+       and `impl<K>` by `K: NodeKind`, and change `field_row`'s parameter to
+       `&BoundField<impl NodeKind>`.
+    2. `WidgetProps` becomes `WidgetProps<K: NodeKind = Leaf>`, holding
+       `BoundField<K>`. `LeafWidget::render` still takes plain `WidgetProps`.
+    3. In `impl BoundField<Variant>`, add `choose(Option<&str>)`, which sends
        `Edit::new_choose_variant` at its own path.
-    3. `VariantSelect` takes `WidgetProps<Variant>`, and drops its `on_edit` prop.
-    4. Keep trap 4 in mind: `variant_node.rs` passes the attributes with the error
+    4. `VariantSelect` takes `WidgetProps<Variant>`, and drops its `on_edit` prop.
+    5. Keep trap 4 in mind: `variant_node.rs` passes the attributes with the error
        attributes already applied. The `aria-describedby` tests in `enums.rs` catch
        a mistake there in box 5.
 

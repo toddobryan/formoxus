@@ -367,10 +367,10 @@ impl LeafWidget for Probe {
 #[component]
 fn ProbeView(field: WidgetProps) -> Element {
     bump(&PROBE_RENDERS);
-    let handle = field.field_handle();
+    let handle = field.field();
     let validity = field.validity();
     rsx! {
-        input { id: "{field.id}", oninput: handle.on_input(), onblur: handle.on_blur() }
+        input { id: "{field.id()}", oninput: handle.on_input(), onblur: handle.on_blur() }
         span { class: "probe", "{validity:?}" }
     }
 }

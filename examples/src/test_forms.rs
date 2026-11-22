@@ -24,7 +24,7 @@ use facet::Facet;
 #[cfg(feature = "server")]
 use formoxus::file::TemporaryFileUploadHandler;
 use formoxus::file::{FileUpload, Multipart};
-use formoxus::widgets::LeafWidget;
+use formoxus::widgets::{LeafWidget, Validity, WidgetProps};
 use formoxus::{nodes::ItemValue, prelude::*};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -1026,7 +1026,7 @@ impl formoxus::widgets::Widget for HandledText {
 
 impl LeafWidget for HandledText {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
-        rsx! { DevText { field: props, with_blur: true } }
+        rsx! { DevText { widget_props: props, with_blur: true } }
     }
 }
 
@@ -1044,41 +1044,42 @@ impl formoxus::widgets::Widget for InputOnlyText {
 
 impl LeafWidget for InputOnlyText {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
-        rsx! { DevText { field: props, with_blur: false } }
+        rsx! { DevText { widget_props: props, with_blur: false } }
     }
 }
 
 /// Both dev widgets' body, in a component of its own, as a widget reading the
 /// store must be.
 #[component]
-fn DevText(field: formoxus::widgets::WidgetProps, with_blur: bool) -> Element {
-    let handle = field.field_handle();
-    let label = field.label.clone().unwrap_or_default();
-    let invalid = field.validity() == formoxus::widgets::Validity::Invalid;
+fn DevText(widget_props: WidgetProps, with_blur: bool) -> Element {
+    let props = widget_props;
+    let field = props.field();
+    let label = props.label().unwrap_or_default();
+    let invalid = props.validity() == Validity::Invalid;
     rsx! {
         div {
-            label { r#for: "{field.id}", "{label}" }
+            label { r#for: "{props.id()}", "{label}" }
             if with_blur {
                 input {
-                    id: "{field.id}",
-                    value: handle.current(),
+                    id: "{props.id()}",
+                    value: field.current(),
                     aria_invalid: invalid.then_some("true"),
-                    oninput: handle.on_input(),
-                    onblur: handle.on_blur(),
+                    oninput: field.on_input(),
+                    onblur: field.on_blur(),
                 }
             } else {
                 input {
-                    id: "{field.id}",
-                    value: handle.current(),
+                    id: "{props.id()}",
+                    value: field.current(),
                     aria_invalid: invalid.then_some("true"),
-                    oninput: handle.on_input(),
+                    oninput: field.on_input(),
                 }
             }
             formoxus::widgets::FieldErrors {
-                field_id: field.id.clone(),
-                paths: vec![field.path.clone()],
-                errors: field.errors,
-                classes: field.classes.clone(),
+                field_id: props.id(),
+                paths: vec![props.path().clone()],
+                errors: props.errors(),
+                classes: props.classes().clone(),
             }
         }
     }

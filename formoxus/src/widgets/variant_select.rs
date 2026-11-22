@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 use formoxus_spec::{Attr, Tag};
 
+use crate::bound_field::Variant;
 use crate::label_case::{LabelCase, ToCase};
-use crate::nodes::Edit;
 use crate::widgets::Select;
 use crate::widgets::widget_props::WidgetProps;
 
@@ -15,23 +15,24 @@ use super::select::ABSENT_DISPLAY;
 /// variant a value takes.
 ///
 /// A SHAPE choice, not a value choice — contrast [`Select`],
-/// which picks one of a field's legal values and is a leaf. This one carries no
-/// `name`, because the answer is not a value to submit: it goes out as an
-/// [`Edit`] and rebuilds the form beneath it.
+/// which picks one of a field's legal values and is a leaf. The answer is not
+/// a leaf's value but the enum's structure: it goes out as an
+/// [`Edit`](crate::nodes::Edit), through the bound field's `choose`, and
+/// rebuilds the form beneath it. It still has a `name`, the enum's own path,
+/// so a native post carries the choice and a test can find the select (#17).
 #[component]
 pub fn VariantSelect(
     variants: Vec<&'static str>,
     selected: Option<String>,
-    on_edit: Callback<Edit>,
     /// The form's resolved casing, for the variant names below. A prop rather
     /// than a `defaults()` call, so the per-form tier is not skipped — see
     /// [`crate::buttons::ButtonSpec::label`].
     label_case: LabelCase,
-    props: WidgetProps,
+    props: WidgetProps<Variant>,
 ) -> Element {
     let required = props.base_attrs.contains(Attr::Required);
-    let path = props.path().clone();
     let attrs: Vec<Attribute> = props.base_attrs.merge_with_attrs(props.extra_attrs.clone());
+    let field = props.field();
 
     let control = rsx! {
         select {
@@ -45,7 +46,7 @@ pub fn VariantSelect(
             onchange: move |e: FormEvent| {
                 let v = e.value();
                 let variant = (!v.is_empty()).then_some(v);
-                on_edit.call(Edit::new_choose_variant(&path, variant.as_deref()));
+                field.choose(variant.as_deref());
             },
             ..attrs,
             // Required + unchosen: an unselectable placeholder that keeps the browser's

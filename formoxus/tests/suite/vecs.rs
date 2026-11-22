@@ -1972,9 +1972,9 @@ impl formoxus::widgets::Widget for Shown {
 
 impl formoxus::widgets::LeafWidget for Shown {
     fn render(&self, props: formoxus::widgets::WidgetProps) -> Element {
-        let current = props.field_handle().current();
+        let current = props.field().current();
         rsx! {
-            input { r#type: "hidden", id: "{props.id}", name: "{props.path}", value: "{current}" }
+            input { r#type: "hidden", id: "{props.id()}", name: "{props.path()}", value: "{current}" }
             span { class: "shown", "{current}" }
         }
     }

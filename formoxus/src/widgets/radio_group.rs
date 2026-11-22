@@ -174,13 +174,13 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                 if let Some(text) = props.label() {
                     "{text}"
                     if required {
-                        {required_marker(&props.classes())}
+                        {required_marker(props.classes())}
                     }
                 }
             }
             // After the legend, as `field_row` puts it after a caption; the
             // fieldset's `aria-describedby`, from `current_attrs`, names it.
-            {field_help(props.id(), props.help_text(), &props.classes())}
+            {field_help(props.id(), props.help_text(), props.classes())}
             { radios.into_iter() }
             FieldErrors {
                 field_id: props.id(),
