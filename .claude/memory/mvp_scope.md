@@ -1,6 +1,6 @@
 ---
 name: mvp-scope
-description: "The agreed MVP scope and ORDER for formoxus. CURRENT as of 2026-11-04: ErrorsStore + live validation, then range/checkbox_multiple/select_multiple/file (file is for apcsp's assignment uploads), then docs. First settled 2026-09-29 on one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are still deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
+description: "The agreed MVP scope and ORDER for formoxus. CURRENT as of 2026-11-22: A1 grammar docs, then the re-export audit, then A2 doc pass, then A4 wasm-opt; #26 after publishing. First settled 2026-09-29 on one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are still deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
 metadata:
   type: project
 ---
@@ -19,7 +19,27 @@ describes the deleted derive path). The survey this was drawn from is
    documenting the `form!` grammar comes *after* the three items that add
    grammar to it (C6, C4, C5), not before.
 
-## ROAD TO PUBLISH — Todd, 2026-11-09, supersedes everything below
+## ROAD TO PUBLISH — Todd, 2026-11-22, supersedes everything below
+
+Everything up to and including #22 + #23 is DONE (`bound` merged 2026-11-22). Left, in
+order:
+
+1. **A1, the `form!` grammar docs** (the TODO at `formoxus-macros/src/lib.rs:39`). Safe
+   now: nothing planned changes the grammar.
+2. **The public-API and re-export audit**, [[pre-publish-checklist]] item 5. Placed here
+   by Todd: the grammar docs do not depend on export paths, but the doc pass does,
+   since the audit decides which items are public and need docs. Waiting on it:
+   `BoundField` in the `widgets::*` kit, `ErrorsByPath` back in the prelude.
+3. **A2, the doc pass**: 258 undocumented public items on 2026-11-22. Ends with
+   `#![warn(missing_docs)]`.
+4. **A4, `wasm-opt`.**
+
+Plus the rest of [[pre-publish-checklist]] (size check, upload-error logging, dead-link
+scan, `use` style), and A3 (facet) still waits for 0.50 stable. **After publishing:**
+#18, #8, #19, **#26** (readable `max_size:`, Todd 2026-11-22: after, since the string
+form is additive), dates/times/`Decimal`/`Uuid`; #24 left alone.
+
+## ROAD TO PUBLISH — Todd, 2026-11-09, (history, superseded above)
 
 ErrorsStore + live validation DONE (ERRORS_PLAN, merged `ca0e731`). Then:
 
