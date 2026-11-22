@@ -32,7 +32,7 @@ use crate::{
     label_case::LabelCase,
     nodes::{Drafts, Edit, Items, Node, NodeContext, RawValue, Shown, SpecsByPath, default_label},
     path::NodePath,
-    stores::{ErrorsByPath, FilesByPath, ValuesByPath, ValuesView},
+    stores::{ErrorsByPath, FilesByPath, ValuesByPath},
     widgets::{
         AddItemProps, Choice, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
         RemoveItemButton, SetItemProps, SetWidgetProps, described_by, field_help,
@@ -595,12 +595,10 @@ impl SetNode {
                     DynamicNode::Component(VComponent::new(
                         self.item_view.0,
                         SetItemProps {
+                            field: field.item(&name, ctx.nested(&self.name).id(&name)),
                             text: text.clone(),
-                            path: path.join(&name),
                             index,
                             editing,
-                            values: ValuesView(ctx.contents.values),
-                            classes: ctx.classes.clone(),
                         },
                         "ItemView",
                     ))
@@ -613,12 +611,10 @@ impl SetNode {
                 }
                 if editable {
                     EditItemButton {
-                        path: path.clone(),
+                        field: field.clone(),
                         index,
                         text: text.clone(),
                         editing,
-                        on_edit: ctx.on_edit,
-                        classes: ctx.classes.clone(),
                     }
                 }
                 RemoveItemButton {

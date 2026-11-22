@@ -5,14 +5,12 @@
 //! the item's own errors, and Edit and Remove, so a dev's chip can neither
 //! drop the buttons nor lose their names (`Edit "rust"`).
 
-use std::rc::Rc;
+use std::ops::Deref;
 use std::{fmt::Debug, ptr::fn_addr_eq};
 
 use dioxus::prelude::*;
 
-use crate::classes::Classes;
-use crate::path::NodePath;
-use crate::stores::ValuesView;
+use crate::bound_field::{BoundField, SetItem};
 
 /// What an item's view is handed: [`ItemText`], or a dev's own component
 /// named by `item:`.
@@ -22,20 +20,28 @@ use crate::stores::ValuesView;
 /// out: a newtype's inner value, a unit enum's variant name.
 #[derive(Debug, Props, Clone, PartialEq)]
 pub struct SetItemProps {
+    pub(crate) field: BoundField<SetItem>,
     /// The item as the user sees it: its value as its leaf would show it, or
     /// its choice's label when the item's field has choices.
     pub text: String,
-    /// The item's own path (`tags.#1`), whose leaf in `values` holds `text`.
-    pub path: NodePath,
     /// The item's place in the set as it is sorted now.
     pub index: usize,
     /// Whether the item is the one being edited, its value in the draft.
     pub editing: bool,
-    /// The whole form's values, for a view that shows more than its own item.
-    pub values: ValuesView,
-    /// The form's resolved classes, so a dev's view can follow the app's
-    /// preset.
-    pub classes: Rc<Classes>,
+}
+
+impl SetItemProps {
+    pub fn field(&self) -> BoundField<SetItem> {
+        self.field.clone()
+    }
+}
+
+impl Deref for SetItemProps {
+    type Target = BoundField<SetItem>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
 }
 
 /// A set's item view: the component that shows an item's text.

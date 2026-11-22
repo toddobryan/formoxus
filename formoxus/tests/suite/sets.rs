@@ -2476,10 +2476,13 @@ fn the_tags_preset_is_one_class_on_the_set() {
 #[component]
 fn TagChip(props: formoxus::widgets::SetItemProps) -> Element {
     // Through the values view (issue #22); box 4 moves this to the bound field.
-    let stored = props.values.get(&props.path);
+    let stored = props.values().get(props.path());
     let says = format!(
         "{} at {} #{} editing={} stored={stored}",
-        props.text, props.path, props.index, props.editing
+        props.text,
+        props.path(),
+        props.index,
+        props.editing
     );
     rsx! { span { class: "chip", "{says}" } }
 }

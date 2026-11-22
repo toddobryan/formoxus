@@ -266,26 +266,22 @@ pub fn DraftAdder(props: AddItemProps) -> Element {
 /// names nothing a user can see.
 #[component]
 pub fn EditItemButton(
-    path: NodePath,
+    field: BoundField<Set>,
     index: usize,
     /// The item as the user sees it, for the button's name.
     text: String,
     /// Whether this item is the one being edited.
     editing: bool,
-    on_edit: Callback<Edit>,
-    classes: Rc<Classes>,
 ) -> Element {
     rsx! {
         button {
             r#type: "button",
-            class: classes.fixed_class(FixedKey::EditItemButton, false),
+            class: field.classes().fixed_class(FixedKey::EditItemButton, false),
             aria_label: "Edit \"{text}\"",
             aria_pressed: if editing { "true" } else { "false" },
-            onclick: move |_| {
-                on_edit.call(Edit::EditItem {
-                    path: path.clone(),
-                    index: (!editing).then_some(index),
-                });
+            onclick: {
+                let field = field.clone();
+                move |_| field.edit_item((!editing).then_some(index))
             },
             {icon(PENCIL)}
         }

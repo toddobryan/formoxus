@@ -268,6 +268,18 @@ impl<K: NodeKind> BoundField<K> {
     pub fn part_class<W: Widget>(&self, tag: Tag) -> Option<String> {
         self.form.classes.part_class::<W>(tag, self.is_invalid())
     }
+
+    /// The raw value at this field's path, or `""` if the store has none.
+    /// Reading it while rendering subscribes the reader to this one key.
+    ///
+    /// Private, and shared by the kinds that hold a value of their own: each
+    /// exposes it as `current()`, documented with why a value may be absent
+    /// for that kind. A container's path holds no leaf value (it holds the
+    /// variant name, or nothing), so a container kind has no `current()`.
+    fn read_value(&self) -> String {
+        let slot = self.form.contents.values.get_unchecked(self.path.clone());
+        slot.try_read().map(|v| v.clone()).unwrap_or_default()
+    }
 }
 
 impl BoundField<Leaf> {
@@ -279,8 +291,7 @@ impl BoundField<Leaf> {
     /// never given a value. An absent key reads as `""`, the same "empty IS
     /// absence" rule the form applies when it validates.
     pub fn current(&self) -> String {
-        let slot = self.form.contents.values.get_unchecked(self.path.clone());
-        slot.try_read().map(|v| v.clone()).unwrap_or_default()
+        self.read_value()
     }
 
     /// The user typed: write `raw`, then report it. A field that shows an
@@ -457,6 +468,10 @@ impl BoundField<Set> {
             index,
         });
     }
+
+    pub(crate) fn item(&self, name: &str, id: String) -> BoundField<SetItem> {
+        BoundField::<SetItem>::new(id, self.path.join(name), None, None, self.form.clone())
+    }
 }
 
 impl BoundField<Variant> {
@@ -482,6 +497,22 @@ impl BoundField<Items> {
             path: self.path.clone(),
             index,
         });
+    }
+}
+
+impl BoundField<SetItem> {
+    /// The item's raw value, as its leaf would hold it. Reading it while
+    /// rendering subscribes the reader to this one item.
+    ///
+    /// **Read-only, on purpose.** A set has no duplicates, and the set
+    /// enforces that when it adds an item or replaces one. Writing an item
+    /// in place would skip that check, so there is no `input` or `change`
+    /// here. To change an item, go through the set: its
+    /// [`edit_item`](BoundField::<Set>::edit_item) puts the item in the
+    /// draft, where the set checks the new value before it goes back, and
+    /// its [`remove`](BoundField::<Set>::remove) takes it out.
+    pub fn current(&self) -> String {
+        self.read_value()
     }
 }
 

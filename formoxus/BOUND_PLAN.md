@@ -631,7 +631,7 @@ further:
        `BoundField<List>` and calls `.into()`. `set_node.rs` (around 621 and 1073)
        does the same with its `BoundField<Set>`.
 
-  - [ ] **4.9** `SetItem`: `SetItemProps` and `EditItemButton` (Part 2, item 5.5).
+  - [x] **4.9** `SetItem`: `SetItemProps` and `EditItemButton` (Part 2, item 5.5).
 
     1. `SetItemProps` drops `path`, `values` and `classes`, and gains
        `field: BoundField<SetItem>`.
@@ -660,7 +660,9 @@ further:
        hold the whole `FormWide`" because that would hand it the form's callbacks.
        That is no longer true: a bound field holds it, behind private fields. Say
        why `classes` is still an `Rc` of its own, or stop it being one.
-    3. Run `cargo clippy -p formoxus --lib` and `cargo doc -p formoxus --no-deps`
+    3. Give `BoundField<Set>::edit_item` a doc: what `Some(index)` and `None`
+       do, and that `Editing::cancel` and `EditItemButton` are its callers.
+    4. Run `cargo clippy -p formoxus --lib` and `cargo doc -p formoxus --no-deps`
        until both are clean. The rest of `just ci` is box 5's.
 
 - [ ] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
