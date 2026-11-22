@@ -133,7 +133,6 @@ an id and errors. What differs is only which writes make sense.
    | `Set` | `SetWidgetProps`, a set's Remove and Edit | `add`, `remove(index)`, `edit_item(Option<index>)`. No move: a set is sorted. |
    | `Items` | `AddItemProps` | `add`, `remove(index)`. One `ItemAdder` serves lists and sets alike, so its field needs a kind both share; `From<BoundField<List>>` and `From<BoundField<Set>>` make one. |
    | `SetItem` | `SetItemProps` | `current()`, read-only. Not `Leaf`: writing a set's item directly would skip the set's duplicate check. |
-   | `Struct` | the internal nodes, for now | none |
 
 4. **What stays on the props**: what the node works out on each render, which is
    not the field's live state. `choices`, `chosen`, `selected`, `item_count`,
@@ -161,9 +160,13 @@ an id and errors. What differs is only which writes make sense.
       of the kind their edits need: `Items`, `Set` and `List`.
 
 6. **The container nodes** (struct, list, variant) render themselves inside the
-   crate, reading `ctx.errors.at(path)`. They may switch to a `BoundField<Struct>`
-   (and `List`, `Variant`) built from the `NodeContext` now or later: it is internal
-   and breaks nobody, so box 4 does not require it.
+   crate, reading `ctx.errors.at(path)`. They may switch to a `BoundField<List>` or
+   `<Variant>` built from the `NodeContext` now or later: it is internal and breaks
+   nobody, so box 4 does not require it. **No `Struct` kind (2026-11-22):** it was
+   planned for the struct node and had no methods; nothing used it, a struct has no
+   edits, and no widget is handed one, so it was deleted in 4.11. Adding it back is
+   additive (`NodeKind` is sealed), for a dev-replaceable fieldset or a node that
+   reads through one.
 7. **Not one plain `BoundField` with every method on it**, because the wrong call
    would then compile: `input()` on the variant select, `move_item` on a set. With
    the kind parameter each is a compile error.
@@ -190,7 +193,7 @@ further:
   (`tests/suite/widgets.rs:556`) then sees its write through `props.current()`.
 - **H.** `widgets::*` swaps the two store aliases for the two views, and
   `FieldHandle` for `BoundField`: a swap, not a new re-export
-  ([[prelude-is-the-one-list]]). The seven kind markers are `pub` where they are
+  ([[prelude-is-the-one-list]]). The six kind markers are `pub` where they are
   defined and re-exported nowhere.
 
 **Raised by F, decided 2026-11-19 (Todd: "probably right"):**
@@ -233,7 +236,7 @@ further:
 
 **Decided 2026-11-19, at the start of box 4 (Todd):**
 
-- **K. `BoundField` and its seven kind markers get their own top-level `pub mod
+- **K. `BoundField` and its six kind markers get their own top-level `pub mod
   bound_field`** (`src/bound_field.rs`), neither in `widgets` (where `FieldHandle`
   lives today, `widgets/field_handle.rs`) nor in `fields`.
 
@@ -242,18 +245,18 @@ further:
      `NumberField`): the side that parses and validates. A bound field is not one of
      those. It binds a NODE to the live form state (its path, the two views, the
      `on_edit` and `on_field_event` writers), and under F most of its kinds
-     (`Variant`, `List`, `Set`, `Items`, `Struct`) are not fields at all. Putting it
+     (`Variant`, `List`, `Set`, `Items`) are not fields at all. Putting it
      there would blur the Field/Widget split the design came from
      ([[django-parallel-design]]).
   2. **Not `widgets`:** under F it is not only a widget's. The container nodes may hold
-     a `BoundField<Struct>`, `<List>` or `<Variant>` too, so widgets are its main
+     a `BoundField<List>` or `<Variant>` too, so widgets are its main
      users, not its owner.
   3. **Django does the same:** its `BoundField` lives in `django.forms.boundfield`,
      beside fields and widgets rather than in either.
   4. **What stays the same:** the `widgets::*` kit still exports `BoundField` itself, as
      H says, a swap for `FieldHandle`, so no new re-export. The markers are reached at
      their defining module only: `formoxus::bound_field::{Leaf, Variant, List, Set,
-     Items, SetItem, Struct}`.
+     Items, SetItem}`.
   5. **The cost:** three imports in the set-aside box 2 tests change from
      `formoxus::widgets::bound_field::{Set, SetItem, Variant}` to
      `formoxus::bound_field::…` (box 5), and the crate's intra-doc links to
@@ -261,7 +264,7 @@ further:
 
 **Decided 2026-11-21, during box 4 (Todd):**
 
-- **M. The seven markers implement a sealed trait, `NodeKind`**
+- **M. The six markers implement a sealed trait, `NodeKind`**
   (`formoxus::bound_field::NodeKind`), and `BoundField<K: NodeKind = Leaf>` is
   bounded by it. Todd asked whether an empty trait should keep anyone from writing
   `BoundField<String>`.
@@ -275,7 +278,7 @@ further:
      of type `BoundField<String>` anyway, because the constructor is `pub(crate)`
      (trap 7). With the bound, writing that type fails where it is written, and not
      later as a missing method. Rustdoc lists a trait's implementors, so
-     `NodeKind`'s page is the one place a dev finds all seven kinds; its doc carries
+     `NodeKind`'s page is the one place a dev finds all six kinds; its doc carries
      Part 2's table of which kind each prop uses. Bounds also say what they mean:
      `field_row`'s `&BoundField<impl Sized>` becomes `&BoundField<impl NodeKind>`.
   3. **Named `NodeKind`, not `Kind`.** The markers name the kind of node a path is.
@@ -437,7 +440,7 @@ further:
   5. `AddItemProps.field` and `SetItemProps.field`, `pub`, as the other props fields
      are; `props.field()` on `WidgetProps`, a clone.
   6. The markers at `formoxus::widgets::bound_field::{Leaf, Variant, List, Set,
-     Items, SetItem, Struct}`, so `widgets/field_handle.rs` becomes a `pub mod
+     Items, SetItem}`, so `widgets/field_handle.rs` becomes a `pub mod
      bound_field` (it is a private `mod` today), and `BoundField` itself in the
      `widgets::*` kit (H). **Changed by K:** the module is top-level,
      `formoxus::bound_field::…`, so box 5 changes the tests' three marker imports.
@@ -481,7 +484,7 @@ further:
     `ValuesView`, since a `pub(crate)` alias trips `private_intra_doc_links`.
   - `just ci` green, 1589.
 
-- [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the seven
+- [ ] **4.** (Todd) Part 2: `FieldHandle` → `BoundField<K = Leaf>` and the six
   markers, moved from `widgets/field_handle.rs` to a new top-level `pub mod
   bound_field` in `src/bound_field.rs` (K), with `BoundField` in the `widgets::*` kit
   in place of `FieldHandle` (H); `WidgetCommon` folded
@@ -496,7 +499,7 @@ further:
 
   - [x] **4.1** Started (2026-11-20, `524e173` and `6ba3d3a`).
     `widgets/field_handle.rs` moved to `src/bound_field.rs`, and `FieldHandle` was
-    renamed `BoundField` at every use. The seven markers are `pub` unit structs
+    renamed `BoundField` at every use. The six markers are `pub` unit structs
     deriving `Clone, Copy, Debug, Default, PartialEq, Eq` (trap 6). The struct is
     `BoundField<K = Leaf> { id, path, label, help_text, form: Rc<FormWide>, _data }`.
     `FormWide` derives `PartialEq`. A new `Contents::write_value` exists, and `absorb`
@@ -666,6 +669,13 @@ further:
        do, and that `Editing::cancel` and `EditItemButton` are its callers.
     4. Run `cargo clippy -p formoxus --lib` and `cargo doc -p formoxus --no-deps`
        until both are clean. The rest of `just ci` is box 5's.
+    5. Put `BoundField` in the `widgets::*` kit, `pub use
+       crate::bound_field::BoundField;` in `widgets.rs`, as H decided. It is the
+       swap for `FieldHandle`, which was there, so not a new re-export. Found
+       2026-11-22: 1-4 are done (and the unused `Struct` marker is deleted), but
+       this was not, so a dev's widget needs a second `use` to name the type.
+
+    The push waits for box 5 (Todd, 2026-11-22).
 
 - [ ] **5.** (Claude) The suite, the examples and the e2e crate compile and pass; the
   docs (each view, `BoundField` and each kind's methods, `WidgetProps`, the

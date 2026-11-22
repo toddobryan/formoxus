@@ -67,8 +67,8 @@ pub type ErrorsByPath = IndexMap<NodePath, Vec<ValidationMessage>>;
 pub(crate) type ValuesStore = Store<HashMap<NodePath, String>>;
 
 /// The form's file table: each file the user picked, keyed by its file
-/// leaf's qualified path. Only [`FieldHandle::pick_file`] writes it, and
-/// [`FieldHandle::picked_file`] reads one entry.
+/// leaf's qualified path. Only [`BoundField::pick_file`] writes it, and
+/// [`BoundField::picked_file`] reads one entry.
 ///
 /// One `Signal`, not a `Store`, so a pick re-renders every file widget in
 /// the form (`WIDGETS_PLAN.md` decision KK). A store's `remove` and `clear` wake
@@ -76,8 +76,8 @@ pub(crate) type ValuesStore = Store<HashMap<NodePath, String>>;
 /// re-rendering would need `Option` values set to `None` instead. Crate-
 /// private, so that choice can change without breaking anyone.
 ///
-/// [`FieldHandle::pick_file`]: crate::widgets::FieldHandle::pick_file
-/// [`FieldHandle::picked_file`]: crate::widgets::FieldHandle::picked_file
+/// [`BoundField::pick_file`]: crate::bound_field::BoundField::pick_file
+/// [`BoundField::picked_file`]: crate::bound_field::BoundField::picked_file
 pub(crate) type FilesSignal = Signal<IndexMap<NodePath, FileData>>;
 
 /// Client home for field errors. Held in a store so that an error on one

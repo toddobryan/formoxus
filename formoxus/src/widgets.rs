@@ -37,9 +37,10 @@
 //!
 //! # Writing a widget of your own
 //!
-//! **Its value goes through a [`FieldHandle`],** from
-//! [`WidgetProps::field_handle`]: [`current`](FieldHandle::current) to read
-//! it, and one of two handler pairs to write it, by what the element is.
+//! **Its value goes through a [`BoundField`],** which its props hold and
+//! deref to, and which [`WidgetProps::field`] hands out as an owned copy for
+//! a handler: [`current`](crate::bound_field::BoundField::current) to read the value, and one of
+//! two handler pairs to write it, by what the element is.
 //!
 //! - Something the user TYPES into (an `<input>`, a `<textarea>`, an editor):
 //!   `oninput: field.on_input()` and `onblur: field.on_blur()`. Both: the form
@@ -51,16 +52,16 @@
 //!   so it counts as leaving the field, and is checked at once.
 //!
 //! An element whose event does not carry the value as `event.value()` calls
-//! [`input`](FieldHandle::input), [`change`](FieldHandle::change) and
-//! [`blur`](FieldHandle::blur) from a handler of its own. The handle is the
+//! [`input`](crate::bound_field::BoundField::input), [`change`](crate::bound_field::BoundField::change) and
+//! [`blur`](crate::bound_field::BoundField::blur) from a handler of its own. The bound field is the
 //! only way to write: it is what tells the form a value changed, so a widget
 //! gets the form's checking as the user goes (`live_validation:`) for free.
 //!
 //! **Its errors come from the same props.** [`current_attrs`](WidgetProps::current_attrs)
 //! has `aria-invalid` and `aria-describedby` already set from them, so a
 //! widget that spreads it onto its element needs nothing else;
-//! [`validity`](WidgetCommon::validity) is the three-way answer under it, and
-//! [`is_invalid`](WidgetCommon::is_invalid) the yes-or-no a class wants.
+//! [`validity`](crate::bound_field::BoundField::validity) is the three-way answer under it, and
+//! [`is_invalid`](crate::bound_field::BoundField::is_invalid) the yes-or-no a class wants.
 //! [`FieldErrors`] renders the messages, as every built-in does, under the
 //! element. Each of these reads only this field's errors, so another field's
 //! error never wakes it.
@@ -78,9 +79,11 @@
 //!   [`LeafWidget`] trait for one that renders one value and [`SetWidget`] for
 //!   one that renders a whole set, and [`AnyWidget`] and [`AnySetWidget`], the
 //!   forms a field holds them in.
-//! - `widget_props` (re-exported as [`WidgetProps`], [`SetWidgetProps`] and
-//!   [`WidgetCommon`]) — what each kind of widget is handed, and the part every
-//!   widget's props share, which both deref to.
+//! - `widget_props` (re-exported as [`WidgetProps`] and [`SetWidgetProps`]) —
+//!   what a leaf widget and a set widget are handed. Both hold a
+//!   [`BoundField`], of the kind for that widget, and deref to it; the bound
+//!   field itself lives in the top-level [`bound_field`](crate::bound_field)
+//!   module, with its kinds.
 //! - [`field_row`](mod@field_row) — the row a one-control widget renders
 //!   around its control: wrapper, caption and required marker, errors. Public
 //!   so a dev's widget can look like a built-in one without copying the layout.
@@ -93,6 +96,8 @@
 //! - [`variant_select`] and [`item_buttons`] — the widgets that change a form's
 //!   SHAPE rather than a value: which variant is chosen, and the items of a list.
 //! - [`errors`] — the error list rendered under every widget.
+//!
+//! [`BoundField`]: crate::bound_field::BoundField
 
 pub mod checkbox_multiple;
 pub mod errors;

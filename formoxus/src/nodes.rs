@@ -410,13 +410,20 @@ pub struct FormWide {
     /// then the form's `classes:` and `classes_plus:`), shared by every node
     /// and widget of one render.
     ///
-    /// **An `Rc` of its own, inside the `Rc<FormWide>`,** because a node hands
-    /// it on to [`WidgetCommon`](crate::widgets::WidgetCommon), which holds
-    /// `classes` and must not hold the whole `FormWide`: that would give every
-    /// widget the form's callbacks.
+    /// **An `Rc` of its own, inside the `Rc<FormWide>`,** for the components
+    /// that are handed only the classes, as a prop:
+    /// [`FieldErrors`](crate::widgets::FieldErrors) above all, which a dev's
+    /// widget renders with `classes: props.classes().clone()`. That clone is a
+    /// count bump rather than a copy of every slot, and it leaves
+    /// `FieldErrors` taking the one thing it needs, not a `FormWide` a dev
+    /// could not build. [`WidgetProps::detached`](crate::widgets::WidgetProps::detached)
+    /// takes one for the same reason, so a test can share one preset across
+    /// many props. A widget's [`BoundField`](crate::bound_field::BoundField)
+    /// holds the whole `Rc<FormWide>`, behind private fields, so the
+    /// callbacks stay out of a widget's reach without this.
     ///
     /// **`Rc` only in render-side types:** this one, the `Rc<FormWide>` in
-    /// [`NodeContext`], and `WidgetCommon`'s. Dioxus renders on one thread, so
+    /// [`NodeContext`], and the one in a bound field. Dioxus renders on one thread, so
     /// `Arc` would only add an atomic count. But an `Rc` must never go into
     /// `FormSpec` or `FormState`: both reach the server, where `Submission`
     /// rebuilds a `FormState` and a handler's future must be `Send`. They hold

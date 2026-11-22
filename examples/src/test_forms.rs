@@ -1005,7 +1005,7 @@ struct LiveCustomModel {
     input_only: String,
 }
 
-/// A dev's text widget through its `FieldHandle`, with both handlers a text
+/// A dev's text widget through its `BoundField`, with both handlers a text
 /// box wants.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct HandledText;

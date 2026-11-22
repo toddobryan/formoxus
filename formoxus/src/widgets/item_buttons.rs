@@ -1,8 +1,10 @@
-//! The buttons that add, remove and move a list's items.
+//! The buttons that add, remove, move and edit the items of a list or a set.
 //!
 //! None reads the value store. Adding or dropping an item changes the form's
-//! SHAPE, and moving one changes its order, so all any of them does is put an [`Edit`] on the wire and let
-//! [`ListNode`](crate::nodes::ListNode) rebuild itself.
+//! SHAPE, and moving one changes its order, so all any of them does is call
+//! its bound field, which puts an [`Edit`](crate::nodes::Edit) on the wire,
+//! and let [`ListNode`](crate::nodes::ListNode) or
+//! [`SetNode`](crate::nodes::SetNode) rebuild itself.
 //!
 //! Add is the one a dev can replace: `adder:` in `form!` names a component
 //! taking [`AddItemProps`], held as a [`ItemAdder`]. [`AddItemButton`] is a
@@ -118,9 +120,10 @@ impl PartialEq for ItemAdder {
 
 /// The widget that appends an item to a list, and the default [`ItemAdder`].
 ///
-/// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the value store — adding an item
-/// is a change to the form's *shape*, so all it does is put an [`Edit`] on the
-/// wire. `type="button"` is load-bearing: inside a `<form>` a bare `<button>`
+/// Like [`VariantSelect`](super::VariantSelect), it reads nothing from the
+/// value store — adding an item is a change to the form's *shape*, so all it
+/// does is call [`add`](crate::bound_field::BoundField::<Items>::add), which
+/// puts an [`Edit`](crate::nodes::Edit) on the wire. `type="button"` is load-bearing: inside a `<form>` a bare `<button>`
 /// defaults to `type="submit"`, so omitting it would submit the form instead of
 /// adding an item.
 #[component]

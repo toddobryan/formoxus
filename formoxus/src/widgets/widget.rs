@@ -49,7 +49,7 @@ pub trait Widget: Clone + Debug + PartialEq + Default + Send + Sync + 'static {
 
 /// A widget that renders one leaf: a single value, handed to it as one
 /// [`WidgetProps`], read and written through its
-/// [`FieldHandle`](crate::widgets::FieldHandle). Every built-in is one.
+/// [`BoundField`](crate::bound_field::BoundField). Every built-in is one.
 ///
 /// What `form!`'s type checks read (`ACCEPTS` and the two after it, which is
 /// why they are consts), and what an [`AnyWidget`] holds. A widget of your

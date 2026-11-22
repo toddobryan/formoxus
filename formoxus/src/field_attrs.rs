@@ -296,7 +296,7 @@ pub(crate) fn int_bound(bound: Bound, which: &str) -> i128 {
 /// with [`Invalid`](Self::Invalid) and treats the other two alike.
 ///
 /// A widget gets its field's from
-/// [`WidgetCommon::validity`](crate::widgets::WidgetCommon::validity).
+/// [`BoundField::validity`](crate::bound_field::BoundField::validity).
 /// `#[non_exhaustive]` so a state can be added, a pending server check say,
 /// without breaking a custom widget's `match`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

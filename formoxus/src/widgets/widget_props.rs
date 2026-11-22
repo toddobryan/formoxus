@@ -157,7 +157,7 @@ impl<K: NodeKind> WidgetProps<K> {
     /// widgets do (`TextareaView`, `SelectView`). Then an error re-renders only
     /// that field.
     ///
-    /// `aria-describedby` names the hint only when [`help_text`](WidgetCommon::help_text)
+    /// `aria-describedby` names the hint only when [`help_text`](BoundField::help_text)
     /// is set, so a widget that renders the hint itself still passes it here.
     pub fn current_attrs(&self) -> FieldAttrs {
         self.base_attrs

@@ -38,9 +38,9 @@ pub enum LabelSide {
 /// type as `W`: that keys the wrapper's and caption's classes to the widget's
 /// slots in `Classes`, so a custom widget is styled like any other.
 ///
-/// It takes the [`WidgetCommon`] part of the props, so a leaf widget passes
+/// It takes the props' [`BoundField`], of any kind, so a leaf widget passes
 /// `&props` and the `Deref` hands it over, and a set widget with one control
-/// (`SelectMultiple`) uses it too.
+/// (`SelectMultiple`) and `VariantSelect` use it too.
 pub fn field_row<W: Widget>(
     field: &BoundField<impl NodeKind>,
     marked: bool,

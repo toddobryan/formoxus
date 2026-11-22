@@ -54,13 +54,13 @@ pub(crate) struct FieldEvent {
 /// [`WidgetProps`](crate::widgets::WidgetProps).
 ///
 /// Crate-private, and so are both its fields, so that only the form can build
-/// one. A widget never sees it: it gets a [`FieldHandle`], which sends through
+/// one. A widget never sees it: it gets a [`BoundField`], which sends through
 /// this after every write.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OnFieldEvent {
     /// The form's callback, from `use_form`. `None` for props not connected to
-    /// a form ([`WidgetProps::new`](crate::widgets::WidgetProps::new)), whose
-    /// events go nowhere.
+    /// a form ([`WidgetProps::detached`](crate::widgets::WidgetProps::detached)),
+    /// whose events go nowhere.
     pub(crate) callback: Option<Callback<FieldEvent>>,
     /// Whether the form checks fields as the user goes. Set once, in
     /// `root_ctx`, from the form's `live_validation:`.
@@ -132,20 +132,40 @@ pub struct SetItem;
 impl sealed::Sealed for SetItem {}
 impl NodeKind for SetItem {}
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Struct;
-
-impl sealed::Sealed for Struct {}
-impl NodeKind for Struct {}
-
-/// How a widget reads and writes its field's value, from
-/// [`WidgetProps::field_handle`](crate::widgets::WidgetProps::field_handle).
+/// One node of a form as a widget sees it: its page id, its path, its label
+/// and hint, and what it may do to the form. A widget's props hold one and
+/// deref to it, so `props.current()` and `props.id()` work directly; take an
+/// owned one with `props.field()` for an event handler, which must be
+/// `'static`.
 ///
-/// **The only way a widget can write a value.** Every write goes on to tell
+/// **The only way a widget changes the form.** Every write goes on to tell
 /// the form, which is what checks a field as the user goes: once they leave a
 /// field they typed into, and on every keystroke once it shows an error. A
 /// widget that wrote the value store directly would never be checked before
-/// submit. That is why this type exists rather than a bare `write_value`.
+/// submit. That is why the form's stores and callbacks sit behind private
+/// fields here rather than in the props.
+///
+/// # Kinds
+///
+/// `K` says what kind of node this is, and so which methods it has. Every
+/// kind has the getters (`id`, `path`, `label`, `help_text`, `classes`) and
+/// the error reads (`validity`, `is_invalid`, `errors`). Beyond those:
+///
+/// | `K`         | handed to                                   | its own methods |
+/// |-------------|---------------------------------------------|-----------------|
+/// | [`Leaf`]    | a leaf widget, in [`WidgetProps`](crate::widgets::WidgetProps) | `current`, `input`, `change`, `blur` and their `on_*` handlers; the file methods |
+/// | [`Variant`] | [`VariantSelect`](crate::widgets::VariantSelect) | `choose` |
+/// | [`Set`]     | a set widget, in [`SetWidgetProps`](crate::widgets::SetWidgetProps); [`EditItemButton`](crate::widgets::EditItemButton) | `add`, `remove`, `edit_item` |
+/// | [`List`]    | [`MoveItemButtons`](crate::widgets::MoveItemButtons) | `move_item` |
+/// | [`Items`]   | an adder, in [`AddItemProps`](crate::widgets::AddItemProps); [`RemoveItemButton`](crate::widgets::RemoveItemButton) | `add`, `remove` |
+/// | [`SetItem`] | an item view, in [`SetItemProps`](crate::widgets::SetItemProps) | `current`, read-only |
+///
+/// [`Items`] is what a list and a set have in common, so one adder or Remove
+/// button serves both: a `BoundField<List>` or `BoundField<Set>` converts
+/// into one with `into()`, and there is no conversion back. The default is
+/// [`Leaf`], so a plain `BoundField` is a leaf's.
+///
+/// # A leaf's handlers
 ///
 /// Which handlers go on which element:
 ///
@@ -155,7 +175,7 @@ impl NodeKind for Struct {}
 /// | a chooser (`<select>`, a checkbox, a radio)  | `onchange: field.on_change()` |
 ///
 /// ```ignore
-/// let field = props.field_handle();
+/// let field = props.field();
 /// rsx! {
 ///     input {
 ///         value: field.current(),
@@ -462,6 +482,15 @@ impl BoundField<Set> {
         });
     }
 
+    /// Start or stop editing an item. `Some(index)` marks the item at that
+    /// place in the set, as sorted now, and puts its value into the set's
+    /// draft; [`add`](Self::add) with `None` then replaces the item with what
+    /// the draft holds, unless that duplicates another item. `None` stops
+    /// editing, leaving the item as it was, and empties the draft.
+    ///
+    /// [`EditItemButton`](crate::widgets::EditItemButton) sends both, as a
+    /// toggle, and [`Editing::cancel`](crate::widgets::item_buttons::Editing::cancel)
+    /// sends `None`.
     pub fn edit_item(&self, index: Option<usize>) {
         self.send_edit(Edit::EditItem {
             path: self.path.clone(),
