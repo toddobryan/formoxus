@@ -705,18 +705,20 @@ further:
 
   **For apcsp, when Todd opens it** (it points at `../formoxus/formoxus` by path, so it
   builds against whatever branch is checked out here). It already fails against `main`
-  for the 2026-11-11 `Widget`/`LeafWidget` split; on top of that, `bound` breaks two
-  places, both small:
+  for the 2026-11-11 `Widget`/`LeafWidget` split; on top of that, `bound` breaks one
+  place, small (a second, below, turned out not to be one):
 
   1. `crates/ui/src/markdown.rs`, `MarkdownView`: `props.field_handle()` becomes
      `props.field()`, or drop `handle` and call through the props (`props.current()`,
      `props.on_input()`, `props.on_blur()`); `props.id` and `props.path` become
      `props.id()` and `props.path()`.
-  2. `crates/web/src/views/form_demo.rs`, the "value store" debug table: `ValuesView` has
-     no `read()`, so the whole map can no longer be read at once. Build the rows from
-     `form.values().paths_under(&NodePath::root())`, each value by `get`. It still
-     re-renders on every keystroke, since it shows every value, so its NOTE comment
-     about moving the table into a child still holds.
+  2. ~~`crates/web/src/views/form_demo.rs`'s debug table~~ **Not a break after all**
+     (corrected 2026-11-22): apcsp's `origin/main` (`a1dc0ed`) already shows
+     `form.to_wire().values()` instead of reading the store; this note was first
+     written against a checkout two commits behind.
+
+  The complete list, from a `cargo check` of apcsp with `markdown.rs` patched, is in
+  apcsp's own `.claude/memory/formoxus_catch_up.md` (2026-11-22 section).
 
   `crates/api`'s `form.values()` calls are `WireForm::values`, unaffected.
 

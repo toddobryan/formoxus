@@ -10,8 +10,8 @@ metadata:
 Boxes 5 and 6 done by Claude (Todd asked). `main` fast-forwarded to `bound` and pushed;
 #22 and #23 closed with a comment each. The `bound` branch is deleted, locally and on
 origin (Todd, same day). Open from this plan: `BoundField` in the
-`widgets::*` kit, deferred to the pre-publish re-export audit; apcsp's two small breaks,
-listed in box 5's as-built (on top of its older `LeafWidget` break). Next: Todd picks
+`widgets::*` kit, deferred to the pre-publish re-export audit; apcsp's catch-up, now written up
+in apcsp's own `.claude/memory/formoxus_catch_up.md` (2026-11-22 section). Next: Todd picks
 (the MVP list in [[mvp-scope]]).
 
 ## ▶ 2026-11-22 later: box 4 DONE, box 5 under way
