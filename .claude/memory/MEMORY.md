@@ -63,7 +63,7 @@
 - [CSS class vocabulary](css_class_vocabulary.md) — DECIDED 2026-09-29: `fx-` prefix, `fx-control` exception, the full class list
 - [Widgets declare parts, presets own classes](widgets_declare_parts_presets_own_classes.md) — DECIDED 2026-10-22: `PARTS: &[Tag]`, no `default_classes()`, slots keyed `(W::NAME, Tag)`, generic lookups only
 - [Emitted classes and strings](emitted_classes_and_strings.md) — QUEUED: classes and English into `Formoxus`; error text runs server-side, can't read `defaults()`
-- [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade
+- [Widget registry idea](widget_registry_idea.md) — PAUSED: type-keyed default widgets; superseded in part by the config cascade; widened into issue #28 (widget + text form + checks) 2026-11-22
 - [Attribute rules design](attribute_rules_design.md) — build order in `formoxus/ATTRIBUTES_PLAN.md`; ONE table in `formoxus-attrs`; custom widgets are a trait declaring ATTRS + default classes (2026-10-08, fn vs const open); DECIDED 2026-10-10: widget PARTS named by element
 - [HTML attributes reference](html_attributes_reference.md) — 2026-10-02, from the WHATWG spec: valid attributes per form element and `<input>` type, where each widget spreads, vs dioxus-html; for C6 and #4
 - [Formoxus widget survey](formoxus_widget_survey.md) — Django's Field/Widget split (constraints follow the value type); why a proc macro beat facet attrs

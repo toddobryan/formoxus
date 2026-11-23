@@ -144,3 +144,7 @@ with `try_use_context` inside the leaf component, which is where rendering
 already happens. It needs no signature changes (the objection to `RenderCtx`)
 and is properly scoped with no static mutable state (the objection to the
 global). See [[config-cascade]]; read it before picking this back up.
+
+## UPDATE 2026-11-22: filed as #28
+
+https://github.com/toddobryan/formoxus/issues/28 widens this to a type bringing three things: its default widget, its text form (parse/format, so `TimeLimit(u32)` holds seconds but is typed `1h15m`), and its checks. The issue notes the catch: context covers widgets, but parsing and checks must also run in `Submission::accept`, which has no Dioxus runtime. Motivating cases: apcsp's `Markdown` (5 `widget:` lines) and the assignment time limit.
