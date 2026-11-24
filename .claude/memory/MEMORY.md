@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-22 END**: BOUND_PLAN done, `bound` merged to main, #22/#23 closed, branch deleted; next Todd picks from mvp_scope
+- [**START HERE: next session**](next_session.md) — **2026-11-23**: custom fields (#28) DRAFTED in `formoxus/CUSTOM_FIELDS_PLAN.md`, Todd decides A-I; lands before A1
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -51,6 +51,8 @@
 - [Const shape walk blocked](const_shape_walk_blocked.md) — compile-time checks are FREE `const _` items with `shape_of`, not `const {}` in a generic fn
 - [Facet newtypes & custom widgets](facet_newtypes_and_custom_widgets.md) — newtypes are leaves; `WidgetType::Custom` is a fn pointer; `wrapper` side-channel
 - [facet re-export needs a direct dep](facet_reexport_needs_direct_dep.md) — users still need `facet` directly; the derive hard-codes `::facet` (facet#2662)
+- [Storage separate from models](storage_separate_from_models.md) — 2026-11-23: own repo `ithell`, split out after custom fields; models derive only Facet, `table!` does SurrealDB; orphan rule forces a facet walk
+- [facet proxy hook](facet_proxy_hook.md) — PROVEN 2026-11-23: `#[facet(formoxus::proxy = String)]` + TryFrom = own text form; own `formoxus::field` attr works too; launch contexts miss server fns
 - [facet 0.50 compatibility](facet_050_compatibility.md) — 0.50.0-rc.7 is a drop-in; stay on 0.46.5 until stable
 
 ## Widgets, choices, attributes

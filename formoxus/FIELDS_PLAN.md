@@ -1379,6 +1379,10 @@ widgets become ONE concept.
 
 ## Step 6: `field:` in `form!`, and the type → field registry
 
+**Moved to `formoxus/CUSTOM_FIELDS_PLAN.md` on 2026-11-23**, together with #28
+(types that bring their own widget, text form and checks). The boxes below are
+kept for their history; that plan is where the work is tracked.
+
 - [ ] **`field: ProgramSnippetField`** for a path, like `widget:`; built
   through Step 3's mechanism.
 - [ ] **`form!` emits `const _` checks** against `<F as Field>::KIND` (and
