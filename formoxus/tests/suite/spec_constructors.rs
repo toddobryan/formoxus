@@ -18,6 +18,7 @@ use formoxus::nodes::NodeCtor;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AnyWidget, TextInput};
+use formoxus_spec::FieldType;
 use googletest::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Facet)]
@@ -54,6 +55,8 @@ struct CapField {
 impl Field for CapField {
     type Value = u32;
     type Context = ();
+
+    const KIND: FieldType = FieldType::Int;
 
     fn check(&self, value: &u32) -> Vec<ValidationMessage> {
         if *value > self.max {

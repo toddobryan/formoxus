@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 
 use facet::{Facet, Peek};
+use formoxus_spec::FieldType;
 
+use crate::field_kind::field_type_of;
 use crate::{
     error::ValidationMessage,
     field::Field,
@@ -109,6 +111,8 @@ where
     type Value = T;
 
     type Context = ();
+
+    const KIND: FieldType = field_type_of(T::SHAPE);
 
     /// Membership. Not left to the widget: a submission that skipped the
     /// browser, or a list that changed while the form was open, can still send

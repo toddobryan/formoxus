@@ -754,6 +754,16 @@ enum Kind {
     Unknown,
 }
 
+pub(crate) const fn field_type_of(shape: &Shape) -> FieldType {
+    match kind(shape) {
+        Kind::Text => FieldType::Text,
+        Kind::Int => FieldType::Int,
+        Kind::Float => FieldType::Float,
+        Kind::Bool => FieldType::Bool,
+        _ => panic!("a choice field's value must be text, a number, or a bool")
+    }
+}
+
 const fn kind(shape: &Shape) -> Kind {
     // `OptionDef::t` is a plain `&'static Shape`, not a `ShapeRef`, so the
     // `Option` layer can be peeled here exactly as `option_node` does.

@@ -1,4 +1,4 @@
-use formoxus_spec::{Attr, AttrValue};
+use formoxus_spec::{Attr, AttrValue, FieldType};
 use regress::Regex;
 
 use crate::widgets::{AnyWidget, TextInput};
@@ -23,6 +23,8 @@ impl Field for StringField {
     type Value = String;
 
     type Context = ();
+
+    const KIND: FieldType = FieldType::Text;
 
     /// A text input, optional or not: an empty one is the absent value.
     fn default_widget(&self, _optional: bool) -> AnyWidget {

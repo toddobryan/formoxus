@@ -98,6 +98,8 @@ impl<T: Number> Field for NumberField<T> {
 
     type Context = ();
 
+    const KIND: FieldType = T::KIND;
+
     /// A text input, not a number input: `type="number"` hands back `""` for
     /// a half-typed value like `-` or `1e`, so `parse` could never say what
     /// was wrong with it.

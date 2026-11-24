@@ -1,4 +1,4 @@
-use formoxus_spec::{Attr, AttrValue};
+use formoxus_spec::{Attr, AttrValue, FieldType};
 
 use crate::widgets::{AnyWidget, CheckboxInput, Select};
 use crate::{error::ValidationMessage, field::Field, field_attrs::FieldAttrs};
@@ -20,6 +20,8 @@ impl Field for BoolField {
     type Value = bool;
 
     type Context = ();
+
+    const KIND: FieldType = FieldType::Bool;
 
     /// A checkbox, or for an `Option<bool>` a select: a checkbox has two
     /// states and an optional bool three, and the select's blank option is the

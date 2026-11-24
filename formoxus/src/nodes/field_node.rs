@@ -147,37 +147,12 @@ pub struct FieldNode<F: Field> {
 impl<F: Field> FieldNode<F> {
     /// The value family this field carries, and the constraints that apply to it.
     ///
-    /// Derived from `F::Value` on every read rather than stored, so it cannot go
-    /// stale and nothing about presentation is committed during the SHAPE walk.
-    ///
     /// Bounds on integers are i128, since that's the only type that can represent
     /// the max and min values on all other int types. Similarly, bounds on floats are
     /// f64s. In the form! macro (where we have access to the actual type of the field),
     /// we check to make sure the constraints fit.
     fn field_type(&self) -> FieldType {
-        // `None` is unreachable: `scalar_node` only builds a `FieldNode` for
-        // the scalars it recognises, and `node_for_shape` panics on the rest.
-        let scalar = <F::Value as Facet<'static>>::SHAPE
-            .scalar_type()
-            .expect("FieldNode is only constructed for scalar shapes");
-
-        match scalar {
-            ScalarType::String => FieldType::Text,
-            ScalarType::Bool => FieldType::Bool,
-            ScalarType::I8
-            | ScalarType::I16
-            | ScalarType::I32
-            | ScalarType::I64
-            | ScalarType::U8
-            | ScalarType::U16
-            | ScalarType::U32
-            | ScalarType::U64 => FieldType::Int,
-            ScalarType::F32 | ScalarType::F64 => FieldType::Float,
-            other => panic!(
-                "scalar type {other:?} is not supported in FieldNode (field {})",
-                self.name
-            ),
-        }
+        F::KIND
     }
 
     /// Whether this field renders as a checkbox, by its widget's name.
@@ -263,7 +238,7 @@ impl<F: Field> Node for FieldNode<F> {
             // bound on the value — the exact mirror of `parse_scalar` going the
             // other way. `{t:?}` would be wrong here: `Debug` quotes strings, and
             // `parse_scalar` faithfully parses those quotes back into the value.
-            FieldValue::Valid(t) => Peek::new(t).to_string(),
+            FieldValue::Valid(t) => self.field.format(t),
             FieldValue::Invalid { raw, .. } => raw.clone(),
         }
     }

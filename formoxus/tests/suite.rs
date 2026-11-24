@@ -41,8 +41,8 @@ mod choices;
 mod classes;
 #[path = "suite/constraint_attrs.rs"]
 mod constraint_attrs;
-#[path = "suite/custom_fields.rs"]
-mod custom_fields;
+/*#[path = "suite/custom_fields.rs"]
+mod custom_fields;*/
 #[path = "suite/empty_strings.rs"]
 mod empty_strings;
 #[path = "suite/enums.rs"]

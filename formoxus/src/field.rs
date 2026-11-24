@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use facet::{Facet, Partial, Peek};
+use formoxus_spec::FieldType;
 
 use crate::{
     error::ValidationMessage,
@@ -21,6 +22,12 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
 pub trait Field: Clone + Debug + PartialEq + 'static {
     type Value: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static;
     type Context;
+
+    const KIND: FieldType;
+
+    fn format(&self, value: &Self::Value) -> String {
+        Peek::new(value).to_string()
+    }
 
     fn parse(&self, raw: &str) -> Result<Self::Value, ValidationMessage> {
         parse_scalar(raw)
