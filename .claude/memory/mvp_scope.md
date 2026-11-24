@@ -1,6 +1,6 @@
 ---
 name: mvp-scope
-description: "The agreed MVP scope and ORDER for formoxus. CURRENT as of 2026-11-22: A1 grammar docs, then the re-export audit, then A2 doc pass, then A4 wasm-opt; #26 after publishing. First settled 2026-09-29 on one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are still deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
+description: "The agreed MVP scope and ORDER for formoxus. CURRENT as of 2026-11-24: custom fields (#28, CUSTOM_FIELDS_PLAN) first, then A1 grammar docs, then the re-export audit, then A2 doc pass, then A4 wasm-opt; #26 after publishing. First settled 2026-09-29 on one principle: everything that moves the public surface lands before the doc pass. Dates/Decimal/Uuid are still deliberately OUT. Supersedes formoxus_roadmap.md, which predates the reflection rewrite"
 metadata:
   type: project
 ---
@@ -24,8 +24,11 @@ describes the deleted derive path). The survey this was drawn from is
 Everything up to and including #22 + #23 is DONE (`bound` merged 2026-11-22). Left, in
 order:
 
+0. **Custom fields, #28** (`formoxus/CUSTOM_FIELDS_PLAN.md`). Added in FRONT of A1 by Todd
+   on 2026-11-24, by principle 2: it adds `field:` to `form!`'s grammar, so the grammar
+   docs wait for it.
 1. **A1, the `form!` grammar docs** (the TODO at `formoxus-macros/src/lib.rs:39`). Safe
-   now: nothing planned changes the grammar.
+   once #28 is in: nothing else planned changes the grammar.
 2. **The public-API and re-export audit**, [[pre-publish-checklist]] item 5. Placed here
    by Todd: the grammar docs do not depend on export paths, but the doc pass does,
    since the audit decides which items are public and need docs. Waiting on it:

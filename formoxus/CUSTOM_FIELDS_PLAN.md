@@ -1,7 +1,9 @@
 # Custom fields (#28, FIELDS_PLAN Step 6)
 
-Written 2026-11-23 by Claude, as a DRAFT: decisions A to I below are Todd's and none
-is taken yet. Decided the same day: this comes BEFORE the storage rewrite
+Written 2026-11-23 by Claude. **Decisions A to I DECIDED by Todd on 2026-11-24, all
+as recommended** (F's exact route is still worked out in box 2's tests, as F says).
+Also 2026-11-24: this lands before A1 on the road to publish
+(`.claude/memory/mvp_scope.md`). Decided the same day: this comes BEFORE the storage rewrite
 (`table!`, in a repo of its own), and assumes that rewrite's storage-agnostic
 `Ref<T>`. It replaces `FIELDS_PLAN.md`'s Step 6, which now points here.
 
@@ -184,7 +186,9 @@ G. **The newtype path.** `FIELDS_PLAN.md`'s decision E was to retire the runtime
 H. **The default widget's key and holder.** `with_widget_for::<T>` keyed on
    `T::SHAPE`, held in `Formoxus`. `Formoxus` derives `Clone + PartialEq` and
    must be `Send + Sync` for `with_context`, so the stored widget must be too.
-   Check whether `AnyWidget` is. Also decide the order: the per-field `widget:`,
+   Checked 2026-11-24: `Formoxus` is `Send + Sync` today, and `AnyWidget` is
+   already `Clone + PartialEq + Send + Sync`, which is everything
+   `with_context(impl Any + Clone + Send + Sync)` asks. Also decide the order: the per-field `widget:`,
    then the app's per-type widget, then the field's `default_widget`.
 
 I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
@@ -207,8 +211,10 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
 2. **`field_kind::kind` is a `const fn`, and it decides what `form!`'s compile-time
    checks allow.** A proxied type must classify as text there, or every `min:` and
    `widget:` check will refuse it. `format_proxies` is a `&'static` slice on the
-   shape, so a const scan using the crate's `str_eq` should work. Prove that
-   before relying on it.
+   shape, so a const scan using the crate's `str_eq` should work. PROVEN
+   2026-11-24 (facet 0.46.5): a `const fn` scanning `shape.format_proxies` for
+   `"formoxus"` is true for a proxied newtype, false for a plain one, and true
+   through `Option<T>` once `shape.inner` is peeled, all in a `const _` assert.
 3. **`""` is absence** (`.claude/memory/facet_form_design_decisions.md`). A
    `convert_out` that returns `""` must read as empty, as a `String` does, and
    `populate`'s check has to go through the new `format`.
@@ -225,9 +231,9 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
 
 ## Boxes
 
-- [ ] **1.** (Todd) Decide A to I.
+- [x] **1.** (Todd) Decide A to I. Done 2026-11-24: all as recommended.
 
-- [ ] **2.** (Claude) Tests first, on a branch, with no implementation:
+- [x] **2.** (Claude) Tests first, on a branch, with no implementation:
 
   1. A `TimeLimit` proxied to `String` in the suite: it renders one text input,
      parses `1h15m`, refuses `90` with the dev's own message, refills from an
@@ -244,6 +250,36 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
   6. `choices:` on a proxied list item, once F is decided.
   7. Trybuild goldens for `field:`'s compile errors (an unknown field type, a
      field whose `KIND` does not fit the widget).
+
+  **As built (2026-11-24, branch `custom-fields`).** `formoxus/tests/suite/custom_fields.rs`,
+  48 tests in four sections (proxy, `field:`, the app's per-type widget, `choices:` on
+  a proxied item), wired into `suite.rs`. The suite does NOT compile until boxes 3 to 6
+  exist, by design: today exactly 15 errors, all missing API (7 `field:` keys, 3
+  `Field::KIND`, 2 `Field::format`, 2 `with_widget_for`, 1 `choices:` on `Ref` needing
+  `DefaultField`). To get the rest of the suite back as a regression net while building,
+  comment out `mod custom_fields;` in `suite.rs`. Goldens 2.7 are three cases in
+  `formoxus/tests/ui-pending/` with no `.stderr` (`compile_fail.rs`'s `ui_pending`):
+  not a `Field`, a `Value` that is not the path's type, a `KIND` the widget cannot
+  render. **API the tests chose, for Todd to accept or change:**
+
+  1. `Field::KIND: FieldType`, a required associated const: what `form!` checks a
+     `widget:` against when `field:` is given. Needed because a dev's field may read a
+     struct (`Span`) from text, so the model type's own kind is the wrong one.
+  2. `fn format(&self, value: &Self::Value) -> String` on `Field`, defaulting to
+     facet's display.
+  3. `field:` takes an EXPRESSION (`ProgramSnippetField { max_lines }`, a local
+     captured), evaluated once where `form!` is written; `NodeCtor`'s closure clones it.
+  4. `Formoxus::with_widget_for::<T>(impl LeafWidget)`.
+  5. Decision H's order is pinned by
+     `the_apps_widget_for_a_type_beats_a_named_fields_default_widget`: the app's
+     per-type widget beats a `field:`'s `default_widget`. Flip that test if it reads wrong.
+  6. A non-`String` proxy panics with a message containing the type's name
+     (`should_panic(expected = "Minutes")`); wording left to box 5.
+
+  Not covered: `check_on_server`, which nothing in formoxus calls yet. F's ROUTE is
+  still open; the tests pin only what `form!` must do (`choices:` on
+  `questions[]: Vec<Ref<Question>>` checks the proxy's text, in the page and in
+  `Submission::accept`).
 
 - [ ] **3.** (Todd) `Field::format`, and the named field winning at the top of
       `node_for_shape`.
