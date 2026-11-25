@@ -815,7 +815,7 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        wherever it sits: a field, a list item, a variant's field, an
        `Option<T>`'s inside.
 
-  - [ ] **5.4** (Todd) The registry arm in `node_for_shape`, right after the
+  - [x] **5.4** (Todd) The registry arm in `node_for_shape`, right after the
     spec's constructor arm and before the file, scalar and newtype arms:
     look `shape` up in `registry()`, and on a hit `return
     ctor.build(leaf(peek, None, shape))`. After the `Option` arm for the same
@@ -824,6 +824,16 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
     for a built-in type, a `String` that always renders as a `MarkdownWidget`.
     3.4's assert stays as a backstop; `field_for`'s bound makes it
     unreachable.
+
+    **Done 2026-11-26** (Todd; comment by Claude). Not a separate arm: the
+    spec's constructor arm became
+    `spec.and_then(|s| s.node.as_ref()).or_else(|| TypeRegistry::field_ctor(shape))`,
+    so H reads as the `or_else`, and the two share one body and one comment.
+    `TypeRegistry::field_ctor(shape) -> Option<&'static NodeCtor>` is the
+    walk's only way in, and borrows rather than clones. Suite 1013 passed, 9
+    failing as expected: 7 on 6.2 (the registered widget), 1 on 5.6 (the
+    build-time widget check), 1 on 5.5 (the plain-newtype panic). Clippy and
+    fmt clean.
 
   - [ ] **5.5** (Todd) Retire the newtype unwrapping (N): delete the newtype
     arm, `newtype_inner`, `FieldNode::wrapper`, `LeafArgs.wrapper`, and the

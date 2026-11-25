@@ -192,6 +192,18 @@ impl TypeRegistry {
         registered.widget = Some(widget);
         self
     }
+
+    /// The constructor of the field registered for `shape`, or `None` if
+    /// nothing is installed or the type has no field. `'static` because the
+    /// installed registry is, so the walk borrows it rather than cloning.
+    pub(crate) fn field_ctor(shape: &Shape) -> Option<&'static NodeCtor> {
+        Self::registry()?
+            .types
+            .get(shape)?
+            .field
+            .as_ref()
+            .map(|tac| &tac.node_ctor)
+    }
 }
 
 /// One type's entry. The field and the widget are kept apart, not folded into

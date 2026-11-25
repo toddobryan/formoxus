@@ -16,6 +16,7 @@ use crate::nodes::{
     VariantChoice, VariantNode, is_file_upload,
 };
 use crate::path::{ITEM_SIGIL, NodePath, item_segment};
+use crate::type_registry::TypeRegistry;
 
 /// Which mode the whole walk is in — fixed at the root by which constructor the
 /// caller reached for, then threaded down unchanged.
@@ -393,12 +394,22 @@ pub(crate) fn node_for_shape(
     };
     if let Ok(option_def) = shape.def.into_option() {
         return option_node(option_def, name, peek, walk, prefix);
-    } else if let Some(ctor) = spec.and_then(|s| s.node.as_ref()) {
+    } else if let Some(ctor) = spec
+        .and_then(|s| s.node.as_ref())
+        .or_else(|| TypeRegistry::field_ctor(shape))
+    {
         // A spec that names this leaf with a constructor builds it, in place of the
         // default for its type. That is how `min: 3` reaches a typed field, and how
         // `field: X` changes the node's type, with nothing mutated afterwards.
         //
-        // It must come AFTER the `Option` arm, never before. `option_node` peels
+        // Failing that, the field the app registered for this type builds it. The
+        // spec comes first because a path is more specific than a type (decision
+        // H), so a `field:` on one `TimeLimit` path beats the registry's field for
+        // every `TimeLimit`. Both come BEFORE the file and scalar arms, so an app
+        // that registers a field for a built-in type (a `String`, say) replaces the
+        // built-in everywhere.
+        //
+        // Both must come AFTER the `Option` arm, never before. `option_node` peels
         // the `Option` and comes back here with the same path, the inner shape and
         // the inner peek, so a field on an `Option<Span>` path holds a `Span`, as
         // its `Value` says. Checked first, it would be handed the `Option`'s peek.
