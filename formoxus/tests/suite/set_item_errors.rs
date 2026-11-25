@@ -204,6 +204,7 @@ fn a_unit_enum_item_is_found_by_its_variant() {
 }
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[facet(transparent)]
 struct Tag(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]

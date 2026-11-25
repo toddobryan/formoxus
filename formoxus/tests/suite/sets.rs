@@ -456,6 +456,7 @@ fn with_set_widget_refuses_a_path_that_is_not_a_set() {
 // ── Order ────────────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[facet(transparent)]
 struct Tag(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]

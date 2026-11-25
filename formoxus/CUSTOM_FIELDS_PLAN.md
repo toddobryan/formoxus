@@ -635,7 +635,7 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
   - [x] **5.1** (Claude) Prove a registry filled in `main` reaches a server
     function. Done 2026-11-25, above.
 
-  - [ ] **5.2** (Claude) Tests first, rewriting box 2's proxy tests against the
+  - [x] **5.2** (Claude) Tests first, rewriting box 2's proxy tests against the
     registry: `TimeLimit` gets a `TimeLimitField` (`1h15m`), the stand-in
     `Ref<T>` a `RefField<T>`, and the `with_widget_for` tests become
     `widget_for` (P). One `fn registry()` in `tests/suite.rs` installs every
@@ -646,6 +646,53 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
     `field:` beating the registry; an unregistered newtype's panic message;
     a widget whose `ACCEPTS` misses the registered field's `KIND`. The suite
     will not compile until 5.3 exists, by design.
+
+    **As written, 2026-11-26.** `custom_fields.rs` rewritten; `mod
+    custom_fields;` is back in `suite.rs`, with `install_test_registry()` and
+    a `panic_message()` helper there. The suite fails to compile on 5 errors,
+    all the missing `TypeRegistry`; against a throwaway stub of it everything
+    else type-checks. With `custom_fields` stubbed out, today's code passes
+    970 and fails one: the plain-newtype panic below, which waits for 5.5.
+
+    The API the tests chose, for 5.3 to build or change:
+
+    1. `TypeRegistry` in the prelude, so `formoxus::TypeRegistry`.
+    2. `field_for(field)` with no turbofish: the type is the field's `Value`.
+       `widget_for::<T>(widget)` names the type, since a widget does not.
+    3. A type whose registered widget cannot render its registered field's
+       `KIND` panics in whichever of the two builder calls comes SECOND,
+       naming the type and the widget's form name (`number`). That is still
+       startup, since the registry is built in `main`, and it is testable,
+       where a check inside `install` would not be: `install` runs once per
+       process.
+    4. A second `install` panics with a message containing "installed".
+    5. The build-time check of O.2 (a `widget:` that cannot render the
+       registered field's `KIND`) names the path and the widget's form name.
+    6. 5.5's panic for an unregistered plain newtype names the type,
+       `TypeRegistry::field_for`, and `field:`.
+
+    Other changes:
+
+    1. Every test newtype outside this module (`sets`, `trim`, `form_macro`,
+       `field_validators`, `set_item_errors`) is now `#[facet(transparent)]`, and
+       still passes today.
+    2. `newtypes.rs` pins the transparent route, plus the new panic (`Headline`).
+    3. Q's three `choices:` tests are parked in `#[cfg(any())] mod deferred_q`.
+    4. Not covered: a registered field for a BUILT-IN type (5.4's last
+       sentence). The suite is one process, so registering one for `String`
+       would change every `String` in it.
+
+    Two traps the tests expose, for 5.4 to 6.2:
+
+    1. **A transparent type's widget is looked up by the OUTER type.** `Note`
+       and `Secret` are transparent, so the field carries the inner `String`
+       (3.4's assert compares `F::Value` with the inner shape), but the
+       registered widget is keyed on `Note`. So the walk has to keep the outer
+       shape for 6.2's lookup.
+    2. **The transparent write-back needs no stored wrapper.** facet has
+       `Partial::begin_inner()` and `Peek::innermost_peek()` for a transparent
+       type, so `FieldNode::wrapper` can still go (N), and the write-back works
+       it out from the shape.
 
   - [ ] **5.3** (Todd) The registry (M): its builder methods, `install`, and a
     `pub(crate) fn registry() -> Option<&'static TypeRegistry>` for the build. It

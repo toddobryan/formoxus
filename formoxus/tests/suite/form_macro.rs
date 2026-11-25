@@ -1103,6 +1103,7 @@ struct PriceRow {
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
+#[facet(transparent)]
 struct Blurb(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]

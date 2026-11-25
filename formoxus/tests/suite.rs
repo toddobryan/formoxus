@@ -41,8 +41,8 @@ mod choices;
 mod classes;
 #[path = "suite/constraint_attrs.rs"]
 mod constraint_attrs;
-/*#[path = "suite/custom_fields.rs"]
-mod custom_fields;*/
+#[path = "suite/custom_fields.rs"]
+mod custom_fields;
 #[path = "suite/empty_strings.rs"]
 mod empty_strings;
 #[path = "suite/enums.rs"]
@@ -133,6 +133,29 @@ where
     let wire = formoxus::WireForm::from_model(model, formoxus::FormSpec::default());
     formoxus::Submission::accept(formoxus::FormSpec::default(), wire.values())
         .map(formoxus::Submission::into_model)
+}
+
+/// Install the suite's `TypeRegistry`, once for the whole binary.
+///
+/// `install` is once per process (`CUSTOM_FIELDS_PLAN.md` decision M), and
+/// the suite is ONE process, so every module's registered types go into one
+/// registry here and every test that meets one calls this first. A test that
+/// needs a type the registry does not know uses a type of its own.
+pub fn install_test_registry() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| custom_fields::test_types().install());
+}
+
+/// The message `f` panics with. For a test that pins more than one part of a
+/// message, which `#[should_panic(expected = …)]` cannot.
+pub fn panic_message(f: impl FnOnce()) -> String {
+    let payload =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("expected a panic");
+    payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+        .unwrap_or_default()
 }
 
 pub fn render_to_html(app: fn() -> Element) -> String {

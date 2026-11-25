@@ -1,22 +1,30 @@
 //! Newtype wrappers as leaves.
 //!
-//! `struct Markdown(String)` is one input, not a fieldset around a field called
-//! `"0"`. The wrapper can't be the `Field`'s own type parameter — a
-//! concrete `T` is unrecoverable from a runtime `&'static Shape` — so the field
-//! carries the INNER scalar and remembers what to re-wrap it in. These pin both
-//! halves of that: the string-facing side behaves exactly like the bare scalar,
-//! and the value still rebuilds as the wrapper.
+//! A `#[facet(transparent)]` newtype, `struct Markdown(String)`, is one input,
+//! not a fieldset around a field called `"0"`: facet's own, consumer-agnostic
+//! statement that the type IS its inner value. The wrapper can't be the
+//! `Field`'s own type parameter — a concrete `T` is unrecoverable from a
+//! runtime `&'static Shape` — so the field carries the INNER scalar and the
+//! value is rebuilt through the wrapper. These pin both halves of that: the
+//! string-facing side behaves exactly like the bare scalar, and the value
+//! still rebuilds as the wrapper.
+//!
+//! A PLAIN newtype, with no `transparent`, is no longer guessed at
+//! (`CUSTOM_FIELDS_PLAN.md` decision N, 2026-11-25): building a form over one
+//! panics, naming the type and the two ways to give it a field.
 
-use super::across_the_wire;
+use super::{across_the_wire, panic_message};
 use facet::Facet;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
+#[facet(transparent)]
 struct Note(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]
+#[facet(transparent)]
 struct Count(u32);
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -42,8 +50,9 @@ struct Tally {
     count: Count,
 }
 
-/// A newtype around something that ISN'T a scalar — no single input could
-/// carry it, so it stays a struct.
+/// A plain one-field tuple struct around something that ISN'T a scalar — no
+/// single input could carry it, so it stays a struct, with nothing to panic
+/// about.
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Pair(Config);
 
@@ -64,7 +73,7 @@ fn paths_of(
 // ── The leaf, not a fieldset ─────────────────────────────────────────────
 
 #[gtest]
-fn a_newtype_is_one_leaf_at_the_fields_own_path() {
+fn a_transparent_newtype_is_one_leaf_at_the_fields_own_path() {
     let form = empty_form::<Doc>(FormSpec::default());
     expect_that!(
         paths_of(&form),
@@ -87,10 +96,38 @@ fn a_newtype_around_a_non_scalar_is_still_a_struct() {
     expect_that!(paths_of(&form), elements_are![eq("pair.0.name")]);
 }
 
+// ── A plain newtype over a scalar: no longer guessed at (decision N) ─────
+
+/// No `transparent`, no registered field.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Headline(String);
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Story {
+    headline: Headline,
+}
+
+/// The type is named, with both ways to give it a field: the app's registry
+/// for every path, or `field:` for this one.
+#[gtest]
+fn a_plain_newtype_without_a_registered_field_panics_naming_the_type() {
+    let message = panic_message(|| {
+        let _ = empty_form::<Story>(FormSpec::default());
+    });
+    expect_that!(
+        message,
+        all![
+            contains_substring("Headline"),
+            contains_substring("TypeRegistry::field_for"),
+            contains_substring("field:")
+        ]
+    );
+}
+
 // ── Round trips ──────────────────────────────────────────────────────────
 
 #[gtest]
-fn a_newtype_round_trips_through_edit_mode() {
+fn a_transparent_newtype_round_trips_through_edit_mode() {
     // Populating reads THROUGH the wrapper, and writing rebuilds it.
     let doc = Doc {
         title: "Unit 1".to_string(),
@@ -102,7 +139,7 @@ fn a_newtype_round_trips_through_edit_mode() {
 }
 
 #[gtest]
-fn a_populated_newtype_shows_its_inner_value_in_the_input() {
+fn a_populated_transparent_newtype_shows_its_inner_value_in_the_input() {
     let doc = Doc {
         title: "Unit 1".to_string(),
         body: Note("hello".to_string()),
@@ -122,7 +159,7 @@ fn a_populated_newtype_shows_its_inner_value_in_the_input() {
 }
 
 #[gtest]
-fn a_newtype_builds_from_submitted_values() {
+fn a_transparent_newtype_builds_from_submitted_values() {
     let mut form = empty_form::<Doc>(FormSpec::default());
     form.distribute_form_values(&[
         (NodePath::new("title"), "Unit 1".to_string()),
@@ -140,7 +177,7 @@ fn a_newtype_builds_from_submitted_values() {
 // ── The inner scalar's own rules still apply ─────────────────────────────
 
 #[gtest]
-fn a_numeric_newtype_parses_through_the_inner_vtable() {
+fn a_numeric_transparent_newtype_parses_through_the_inner_vtable() {
     let mut form = empty_form::<Tally>(FormSpec::default());
     form.distribute_form_values(&[
         (NodePath::new("label"), "Votes".to_string()),
@@ -177,7 +214,7 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
 }
 
 #[gtest]
-fn an_empty_newtype_field_is_required_like_any_other() {
+fn an_empty_transparent_newtype_field_is_required_like_any_other() {
     let mut form = empty_form::<Doc>(FormSpec::default());
     form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(form.validate(), none());
@@ -200,7 +237,7 @@ struct MaybeDoc {
 }
 
 #[gtest]
-fn an_absent_optional_newtype_round_trips_as_none() {
+fn an_absent_optional_transparent_newtype_round_trips_as_none() {
     let mut form = empty_form::<MaybeDoc>(FormSpec::default());
     form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(
@@ -213,7 +250,7 @@ fn an_absent_optional_newtype_round_trips_as_none() {
 }
 
 #[gtest]
-fn a_present_optional_newtype_round_trips_as_some() {
+fn a_present_optional_transparent_newtype_round_trips_as_some() {
     let doc = MaybeDoc {
         title: "Unit 1".to_string(),
         body: Some(Note("here".to_string())),

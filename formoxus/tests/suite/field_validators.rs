@@ -32,6 +32,7 @@ where
 // ── A leaf ───────────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq)]
+#[facet(transparent)]
 struct Bio(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]

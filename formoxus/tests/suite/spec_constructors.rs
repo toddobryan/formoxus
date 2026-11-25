@@ -410,8 +410,9 @@ struct MaybeHighlight {
     span: Option<Span>,
 }
 
-/// A newtype the default walk would build as a `u32` input with the newtype
-/// remembered as its wrapper.
+/// A plain newtype, which the default walk no longer unwraps (decision N of
+/// `CUSTOM_FIELDS_PLAN.md`): without the constructor it would panic, asking for
+/// a registered field.
 #[derive(Clone, Debug, PartialEq, Facet)]
 struct Minutes(u32);
 
