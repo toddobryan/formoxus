@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-26**: 5.4 DONE (registry arm), pushed; suite 1013 pass + 9 expected failures (6.2, 5.6, 5.5); next Todd 5.5
+- [**START HERE: next session**](next_session.md) — **2026-11-26**: W decided (transparent not special; `fields::Newtype<T, F>`), 5.5 rewritten; X decided; next Claude 5.5.1 tests
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -17,6 +17,7 @@
 - [Hard to misuse, then docs](feedback_hard_to_misuse.md) — a wrong use that compiles: reshape the API so it takes effort (pub(crate) + one method doing every step); docs are the fallback
 - [Raise parked gaps when built on](feedback_raise_parked_gaps_when_built_on.md) — new code on a path a known-limitation comment/`*_yet` test warns about: say so; #13 came from one
 - [Models stay plain](models_stay_plain.md) — no formoxus/storage-specific attributes on models, even dependency-free ones; consumer-agnostic constraints may sit on them
+- [Transparent not followed](transparent_not_followed.md) — DECIDED 2026-11-26 (W): no newtype is special; register via `fields::Newtype<T, F>`; fallback only if obnoxious
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan

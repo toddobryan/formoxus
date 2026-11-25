@@ -556,6 +556,39 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
      consumer-agnostic statement that the type IS its inner type, so honouring
      it is not a guess. An unregistered plain newtype panics at build, naming
      the type and saying how to register it. **DECIDED 2026-11-25: yes.**
+     **AMENDED 2026-11-26 by W:** `#[facet(transparent)]` is not special
+     either.
+
+  W. **No newtype is special, `#[facet(transparent)]` included.** DECIDED
+     2026-11-26 (Todd, amending N): explicit is better than implicit, so it
+     is less surprising. A transparent `Markdown(String)` is registered like
+     any newtype, through a small adapter formoxus ships,
+     `formoxus::fields::Newtype<T, F>`. It implements `Field<Value = T>` by
+     passing everything to an inner field `F` and wrapping and unwrapping
+     through facet reflection, so the model needs no `From` impls and stays
+     plain. (`Newtype`, one word, as Rust spells the idiom.)
+
+     What it costs a dev: one line per type,
+     `.field_for(Newtype::<Markdown, _>::new(StringField::default()))`,
+     instead of one attribute; and the type's widget and attribute checks
+     move from compile time to the build (V). What it buys:
+
+     1. One rule: a type the compiler cannot classify needs a field.
+     2. No `begin_inner` write-back, and no outer shape threaded through
+        `LeafArgs` for 6.2: a leaf's shape is always its path's own type.
+     3. Settings on a newtype path, which transparent never gave
+        (`form_setting_on_a_newtype`): `field: Newtype::<Blurb, _>::new(StringField
+        { max_length: Some(280), ..Default::default() })`, once X lets
+        `form!` take that call.
+     4. No `try_from` trap. facet lets a transparent type validate itself
+        through `try_from`, and formoxus would build one through
+        `begin_inner`, so a value the type refuses would fail inside
+        `write_value_into`, after `validate()` passed, with no field error
+        for the user. An explicit field refuses it in `parse`.
+
+     **Revisit if it proves obnoxious in use (Todd):** handle a transparent
+     wrapper over a `String`, `bool` or number automatically, AFTER the
+     registry check, so a registered field still wins.
 
   O. **What `form!` can still check on a registered type.** `form!` cannot see
      a registry filled at run time, so:
@@ -591,6 +624,9 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
         `TimeLimit`: being typed as `1h15m` is the form's concern, and storage
         keeps a `u32`. So a type whose text form is its registered field's
         stays `Unknown` to the compiler.
+        **SUPERSEDED 2026-11-26 by W:** `kind` no longer follows
+        `transparent`, so `Markdown` is `Unknown` too and is registered
+        through `fields::Newtype`.
      b. *Can the checks the compiler cannot make run when the registry is
         installed, so they fail at startup instead of at first use?* Partly.
         `install` sees everything the registry holds, so it can check each
@@ -697,6 +733,10 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        `Partial::begin_inner()` and `Peek::innermost_peek()` for a transparent
        type, so `FieldNode::wrapper` can still go (N), and the write-back works
        it out from the shape.
+
+    **Superseded 2026-11-26 by W:** both traps, and "Other changes" 1 and 2,
+    assumed `transparent` is followed. It is not, so 5.5.1 turns those test
+    newtypes back into plain ones registered through `fields::Newtype`.
 
   - [x] **5.3** (Todd) The registry (M), in `formoxus/src/type_registry.rs`.
 
@@ -835,106 +875,152 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
     build-time widget check), 1 on 5.5 (the plain-newtype panic). Clippy and
     fmt clean.
 
-  - [ ] **5.5** (Todd) Retire the newtype unwrapping (N). Expanded
-    2026-11-26 by Claude, after reading every place a newtype is special. The
-    one test that waits on this step is
+  - [ ] **5.5** (Todd, after Claude's tests) No newtype is special (N as
+    amended by W). Rewritten 2026-11-26 by Claude; it replaces a version from
+    earlier the same day that narrowed the newtype arm to transparent types
+    (in `15f19fb`). The test that waits on it today is
     `newtypes::a_plain_newtype_without_a_registered_field_panics_naming_the_type`.
-    Every other newtype test now uses `#[facet(transparent)]` and must stay
-    green.
 
-    1. **Narrow the newtype arm in `node_for_shape` to transparent types.**
-       The arm today takes any one-field tuple struct over a scalar
-       (`newtype_inner`). Make it take only a type whose `shape.inner` is
-       `Some` and is a scalar. `#[facet(transparent)]` is what fills in
-       `inner` on a user struct. Keep the scalar requirement, so a
-       transparent type around a struct still walks as a struct
-       (`Pair(Config)` in `newtypes.rs` pins that), and the change stays
-       one arm wide. Restrict it to `Type::User(UserType::Struct(_))` as
-       well: facet also fills `inner` on types like `NonZeroU32`, and
-       taking those in is a separate decision. The arm's peek can stay
-       `into_struct().field(0)`, since a transparent tuple struct is still a
-       tuple struct. `newtype_inner` becomes this test (or is renamed for
-       it, say `transparent_inner`), and its long doc about why a
-       one-field tuple struct counts becomes the reason only a transparent
-       one does now: decision N, `facet(transparent)` being facet's own,
-       consumer-agnostic statement that the type IS its inner type.
+    1. **(Claude) Tests first.** The suite will not compile until 2 exists,
+       by design.
+       1. **One registry for the whole suite.** `test_types()` moves from
+          `custom_fields.rs` to `suite.rs`, and each module that has
+          newtypes contributes a `register(TypeRegistry) -> TypeRegistry`.
+          Every test that builds a form over one calls
+          `install_test_registry()`.
+       2. **`newtypes.rs` is rewritten around `Newtype`.** The same
+          behaviours, now registered: one leaf at the field's own path,
+          round trips, refill shows the inner text, a bad inner value is
+          refused with the inner field's message, empty is required,
+          `Option` in both states. Plus: a `#[facet(transparent)]` type with
+          nothing registered panics like a plain one, and its message
+          mentions that `transparent` is not followed; `Pair(Config)` still
+          walks as a struct.
+       3. **`Newtype`'s own tests.** It takes `KIND`, `trims`, `check`,
+          `check_on_server` and `default_widget` from the inner field; a
+          setting reaches the leaf through `field:` (waits on X, so it may
+          be a `ui-pending` golden instead); `new` panics for a type that
+          is not a one-field struct, and for an inner field whose `Value`
+          is not the type's field's type, naming both types.
+       4. **The other modules' newtypes** (`Tag` in `sets` and
+          `set_item_errors`, `Bio` in `trim` and `field_validators`, `Blurb`
+          in `form_macro`) go back to plain and are registered through
+          `Newtype`, or become a `String` where the newtype is not what the
+          test is about. `set_item_errors`' `Tag` stays a newtype: its
+          `path!(Shelf.labels[= &old])` is exactly 5's case.
+       5. **`custom_fields.rs` section 3.** `Note` and `Secret` become plain,
+          registered with `Newtype` plus their widgets. `Remark`, the
+          unregistered control, gets a `Newtype` too, since unregistered it
+          would now panic.
 
-    2. **A plain newtype panics, and so does an unregistered struct over
-       nothing a walk can split.** With the arm narrowed, a plain
-       `Headline(String)` reaches the final `match`, lands on the struct
-       arm, and would quietly become a fieldset with a leaf at
-       `headline.0`. That is exactly the guess N retires. So before the
-       struct arm, refuse a one-field tuple struct over a scalar that got
-       this far: it had no `field:`, no registered field and no
-       `transparent`. The message names the type, `TypeRegistry::field_for`
-       and `field:` (the test checks for all three), for example "`Headline`
-       is a newtype formoxus will not guess at: register a field for it
-       with `TypeRegistry::field_for`, name one at this path with `field:`,
-       or mark it `#[facet(transparent)]` if it IS its inner value". A
-       many-field struct still becomes a fieldset as today: that is the
-       ordinary case, not a guess.
+    2. **(Todd) `formoxus::fields::Newtype<T, F>`.**
+       1. **Shape of the type.** It holds the inner field and a
+          `PhantomData<fn() -> T>`, which keeps it `Send + Sync` and
+          `'static` whatever `T` is. `Clone`, `Debug` and `PartialEq` can be
+          derived, because `T` is a `Value` and has them anyway. `Default`
+          must be written by hand, bounded on `F: Default` only: a derive
+          would also require `T: Default`, which `Markdown` need not have.
+       2. **`new(field: F) -> Self` checks the pairing.** That `T` is a
+          struct with exactly one field can be checked at build time with an
+          inline `const { assert!(…) }` on `T::SHAPE`, which fires when the
+          app is built (not under `cargo check`, see
+          `.claude/memory/const_shape_walk_blocked.md`). That the field's
+          type is `F::Value` has to be checked at run time, since a field's
+          shape sits behind a `ShapeRef` const code cannot call: panic
+          naming both types. One-field named structs are allowed as well as
+          tuple structs. The old argument for tuple-only was about formoxus
+          flattening a struct on its own; here the dev asked for it.
+       3. **The `Field` impl delegates everything.** `Value = T`,
+          `Context = F::Context`, `KIND = F::KIND`. `parse` parses with `F`
+          and wraps. `format`, `check` and `check_on_server` unwrap and call
+          `F`. `trims`, `widget_attrs`, `default_widget` and `choices` pass
+          straight through. **Trap:** every `Field` method with a default
+          body has to be listed, because one that is left out silently uses
+          the default instead of the inner field's (`trims` would quietly
+          stop trimming). Say so in a comment, so a method added to `Field`
+          later gets added here too.
+       4. **Wrapping and unwrapping.** Wrap by building `T` with facet's
+          `Partial`: `alloc::<T>()`, `begin_nth_field(0)`, `set`, `end`,
+          `build`, `materialize::<T>()` (all in facet-reflect 0.46.5).
+          Unwrap with `Peek::new(t).into_struct()`, `field(0)`, then a typed
+          borrow of `F::Value`. After `new`'s check, failure in either is a
+          bug, so `expect` with both types in the message.
+       5. **Docs**, for the module and the type: the registered route for
+          any newtype, the per-path route through `field:`, and why
+          `transparent` is not followed (W).
 
-    3. **`FieldNode::wrapper` goes; the write-back reads the partial
-       instead.** `write_value_into` is the only reader. The slot the
-       parent opened says what it wants: `partial.shape()`. If that is
-       `F::Value::SHAPE`, `set` as today. If not, and
-       `partial.shape().inner == Some(F::Value::SHAPE)`, descend with
-       `begin_inner()`, `set`, and `end()`. That is facet's own
-       transparent-wrapper entry point, and it honours a wrapper's
-       `try_from`, which `begin_nth_field(0)` would skip. Anything else is
-       a bug in the walk, so `unreachable!`/`expect` with both shapes in
-       the message. The test helper `node()` at the bottom of
-       `field_node.rs` loses its `wrapper: None`.
+    3. **(Todd) Delete the special-casing.** The newtype arm in
+       `node_for_shape`; `newtype_inner` and its long doc; `FieldNode::wrapper`
+       and its doc; `LeafArgs.wrapper`; the `begin_nth_field(0)` branch of
+       `write_value_into`, leaving a plain `set`; `scalar_node`'s wrapper
+       argument through `leaf(…)`; the "inner value for a newtype" comment
+       on `peek_value`; the test helper's `wrapper: None` at the bottom of
+       `field_node.rs`. Nothing replaces them: no `begin_inner`, no outer
+       shape. 6.2 keys on `LeafArgs.shape`, which is now always the path's
+       own type.
 
-    4. **`LeafArgs.wrapper` should stay, renamed, rather than go.** The
-       plan said to delete it, but 6.2 needs exactly what it holds: trap 1
-       in 5.2's note is that a transparent type's widget is registered
-       under the OUTER type (`Note`), while the leaf's `shape` is the inner
-       `String`. So `LeafArgs` has to carry the outer type to
-       `LeafArgs::node` anyway. Suggested: rename it to something like
-       `transparent: Option<&'static Shape>`, documented as "the
-       transparent type this leaf stands for, which the registry's widget
-       is keyed on", and stop copying it into `FieldNode`. If you'd rather
-       delete it here and add a field in 6.2, that works too; the point is
-       not to delete and re-add the same thing in two steps.
+    4. **(Todd) Refuse a newtype that reaches the struct arm.** With the arm
+       gone, a `Headline(String)` that has no `field:` and no registered
+       field would land on the struct arm and quietly become a fieldset with
+       a leaf at `headline.0`: exactly the guess N retires. So, before the
+       struct arm, panic for a one-field struct whose field is a scalar.
+       Keep that scalar condition: `Pair(Config)` still walks as a struct
+       (`a_newtype_around_a_non_scalar_is_still_a_struct`). The message names
+       the type, `TypeRegistry::field_for`, `field:` and `fields::Newtype`,
+       and when `shape.inner` is `Some`, adds that formoxus does not follow
+       `#[facet(transparent)]`.
 
-    5. **The two other callers of `newtype_inner`.**
-       1. `build.rs:185`, the runtime path check ("`{walked}` is a
-          `{shape}`, one input, which has no field"). With 1, a transparent
-          type is still one input. A plain newtype is no longer refused
-          here, so `path!(Story.headline.0)` would resolve, and the build
-          then panics with 2's message, which is the right one. But a
-          REGISTERED type is one input too, `TimeLimit` and `Ref<Question>`
-          alike, and today the check would let a path walk into its fields.
-          Make the test "a transparent leaf, or a type with a registered
-          field" (`TypeRegistry::field_ctor(shape).is_some()`). That
-          depends on the registry being installed before specs are built,
-          which `install`'s doc already requires. No test covers this; say
-          if you want one (Claude).
-       2. `path.rs:512`, `entry_text`, which writes the `[= v]` key a set
-          item is named by. Swap `newtype_inner` for 1's transparent test;
-          a transparent item still keys by its inner text. **Known gap,
-          raised rather than fixed:** a registered type as a set item would
-          key by `Display` (or by the walk's fallback), not by its
-          registered field's `format`, so `path!(M.set[= v])` could name
-          the wrong item. Nothing in the suite or apcsp puts a registered
-          type in a set yet. Recommended: park it with a `*_yet` test
-          (Claude), and fix it when `choices:` on a registered type (Q)
-          comes back, since that is when a set of `Ref<Question>` appears.
+    5. **(Todd) The set-item key, no longer parkable.** `entry_text`
+       (`path.rs`) writes the `[= v]` key that names a set item by its
+       value, and it must match the raw text the item's node holds, which
+       for a registered type is its field's `format`. Its newtype branch
+       goes, and a registered type must key through its field instead.
+       `set_item_errors` pins this with `Tag`. So the registry stores, next
+       to each field's constructor, an erased formatter built in
+       `field_for` (a boxed closure taking a `Peek`, borrowing the
+       `&F::Value` and calling `format`), and `entry_text` asks the registry
+       before anything else. `path!` runs wherever the dev writes it,
+       including in a server-side validator, which is fine because `install`
+       runs on both sides.
 
-    6. **`scalar_node`'s wrapper path** is the `Some(shape)` argument the
-       newtype arm passes through `leaf(…)`. With 3 and 4 it is gone, or
-       becomes 4's renamed field.
+    6. **(Todd) The runtime path check** (`build.rs:185`, "`{walked}` is a
+       `{shape}`, one input, which has no field"). Its test becomes "a type
+       with a registered field, or a file upload". A plain newtype is no
+       longer refused there, so `path!(Story.headline.0)` resolves and the
+       build then panics with 4's message, which is the right one. A
+       registered `TimeLimit` or `Ref<Question>` IS one input, so a path
+       into its fields is refused. This relies on `install` running before
+       specs are built, which its doc requires. Claude adds a test for the
+       registered case in 1.
 
-    7. **Reword the last-resort panic** (`other => panic!("field {name} has
-       unsupported type {other:?}")`) the same way as 2: name the type
-       with `{shape}` rather than `Debug` of its `Type`, and say
-       `TypeRegistry::field_for` or `field:`.
+    7. **(Todd) Reword the last-resort panic** (`other => panic!("field
+       {name} has unsupported type {other:?}")`) the same way as 4: name
+       the type with `{shape}` and point at `TypeRegistry::field_for` and
+       `field:`.
 
-    Then the suite should be 1014 passed and 8 failing (6.2's 7 and 5.6's
-    1). The lib's inline tests (`cargo test -p formoxus --lib`) are worth a
-    run here too: `field_kind.rs`'s tests don't depend on this step, but
-    `path.rs`'s item-key tests touch `entry_text`.
+    Afterwards the only failures should be 6.2's 7, 5.6's 1, and any of 1's
+    tests that wait on X. Run `cargo test -p formoxus --lib` too: `path.rs`'s
+    item-key tests touch `entry_text`.
+
+    **Letter for Todd (2026-11-26, Claude recommends; DECIDED the same
+    day):**
+
+    X. **`field:` with a `Newtype`.** Box 4 lets `field:` take only a struct
+       expression or a unit struct, because `form!` reads the field's type
+       off the expression for its `const _` checks, and refuses a call
+       (`form_field_not_a_struct_expression`). `Newtype::<Blurb, _>::new(…)`
+       is a call, so W's third point needs one of:
+       1. **Recommended:** `form!` also takes a call whose callee is a type
+          path, `Newtype::<Blurb, StringField>::new(…)`. It reads the type
+          off the callee, so the generics have to be written in full, and
+          pins it by checking that the call's value has that type. This is
+          a generalisation of box 4's rule, and it would also take
+          `SnippetField::new(10)`, which box 4 refused. Claude, in 5.8.
+       2. `Newtype` has public fields and is written as a struct expression,
+          `Newtype::<Blurb, StringField> { field: StringField { … },
+          ..Default::default() }`. No macro change, but it exposes the
+          `PhantomData` and reads worse.
+       **DECIDED 2026-11-26 (Todd): 1, as recommended.**
 
   - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2). Expanded
     2026-11-26 by Claude. Two halves: loosen the compile-time checks for a
@@ -948,7 +1034,9 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        struct's field shape sits behind a `ShapeRef` fn pointer const code
        cannot call. What changes is the last `else`: a
        `Type::User(UserType::Struct(_))` gives `Unknown` instead of
-       `Other`. Not every `Other`: an unsupported primitive (`usize`,
+       `Other`. And, by W, a transparent struct gives `Unknown` too: drop
+       the `shape.inner` following in `kind` (the `is_newtype` arm) and in
+       `is_unit_enum`, so `Markdown` is judged like any other user struct. Not every `Other`: an unsupported primitive (`usize`,
        `char`) and anything else that can never be registered stays
        `Other`. Rewrite `Unknown`'s doc: it now means "a type the compiler
        cannot judge, because the app may register a field for it at run
@@ -992,7 +1080,7 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           would become a fieldset inside a set, which the set's rendering
           and its `[= v]` keys do not expect. Assert, once, before building
           items, that the item shape is something a leaf is built from:
-          a scalar, a transparent leaf, a unit enum, or a registered type.
+          a scalar, a unit enum, or a registered type.
           The message names the type and `TypeRegistry::field_for`. Needed
           because of U.
        3. **A registered field's widget and attributes, in
@@ -1044,7 +1132,9 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
 
   - [ ] **5.8** (Claude) `form!`'s side: J's dispatch with Q's fallback, O.1's
     note on the settings route, and the goldens that change (O.2). Then the
-    suite is green.
+    suite is green. Added 2026-11-26: X's call form for `field:` (decided); the goldens and inline `field_kind` test 5.6
+    turns red (5.6.2); `form_setting_on_a_newtype`'s note pointing at
+    `fields::Newtype`.
 
 - [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
@@ -1055,12 +1145,12 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
     compile-time half: check the widget against `T` with an inline `const {
     assert!(field_kind::renders::<W>(T::SHAPE, false)) }`, which fires when the
     app is built (not under `cargo check`; see
-    `.claude/memory/const_shape_walk_blocked.md`). This only catches
-    something for a type `kind` can classify, such as a transparent `Note`
-    whose inner type is `String`. For a plain newtype or a struct, `kind`
-    gives `Unknown` after 5.6, so `renders` returns `true`, and 5.3.3 and
-    5.3.4's run-time check against the registered field's `KIND` is the only
-    check.
+    `.claude/memory/const_shape_walk_blocked.md`). After W this only catches
+    something for a BUILT-IN type, `widget_for::<bool>(Textarea)` say,
+    since every user type is `Unknown` to `kind` and `renders` lets it
+    through. That case is still worth it: a built-in type has no registered
+    field, so 5.3.3 and 5.3.4's run-time check never sees it, and V's build
+    check is only for `Unknown` leaves.
 
   - [ ] **6.2** (Todd) Choose in `LeafArgs::node`: `spec.widget`, else the
     registry's widget for `self.shape` (the path's own type: `Note` for a
