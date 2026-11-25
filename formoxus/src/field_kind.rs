@@ -754,13 +754,14 @@ enum Kind {
     Unknown,
 }
 
+/// Returns the `FieldType` based on the `Shape`
 pub(crate) const fn field_type_of(shape: &Shape) -> FieldType {
     match kind(shape) {
         Kind::Text => FieldType::Text,
         Kind::Int => FieldType::Int,
         Kind::Float => FieldType::Float,
         Kind::Bool => FieldType::Bool,
-        _ => panic!("a choice field's value must be text, a number, or a bool")
+        _ => panic!("a choice field's value must be text, a number, or a bool"),
     }
 }
 

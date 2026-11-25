@@ -379,15 +379,37 @@ pub(crate) fn node_for_shape(
     prefix: &NodePath,
     optional: bool,
 ) -> Box<dyn Node> {
+    let spec = walk.spec_for(prefix);
+    // Every leaf is built from one of these. `prefix` is already the leaf's own
+    // full path, with `name` qualified on.
+    let leaf = |peek, wrapper, shape| LeafArgs {
+        name,
+        path: prefix,
+        peek,
+        optional,
+        wrapper,
+        spec,
+        shape,
+    };
     if let Ok(option_def) = shape.def.into_option() {
         return option_node(option_def, name, peek, walk, prefix);
+    } else if let Some(ctor) = spec.and_then(|s| s.node.as_ref()) {
+        // A spec that names this leaf with a constructor builds it, in place of the
+        // default for its type. That is how `min: 3` reaches a typed field, and how
+        // `field: X` changes the node's type, with nothing mutated afterwards.
+        //
+        // It must come AFTER the `Option` arm, never before. `option_node` peels
+        // the `Option` and comes back here with the same path, the inner shape and
+        // the inner peek, so a field on an `Option<Span>` path holds a `Span`, as
+        // its `Value` says. Checked first, it would be handed the `Option`'s peek.
+        //
+        // No wrapper: the named field holds the path's own type, so a `field:` on
+        // a `Note` path gets a `Note`, not the `String` inside it.
+        return ctor.build(leaf(peek, None, shape));
     } else if is_file_upload(shape) {
         return Box::new(file_node(name, peek, walk, prefix, optional));
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_node(
-            scalar, name, peek, walk, prefix, optional, /* wrapper */ None,
-        )
-        .unwrap_or_else(|| {
+        return scalar_node(scalar, leaf(peek, None, shape)).unwrap_or_else(|| {
             panic!("scalar type {scalar:?} is not supported in Field (field {name})")
         });
     } else if let Some(inner) = newtype_inner(shape) {
@@ -400,16 +422,11 @@ pub(crate) fn node_for_shape(
         let inner_peek = peek
             .and_then(|p| p.into_struct().ok())
             .and_then(|s| s.field(0).ok());
-        return scalar_node(
-            scalar,
-            name,
-            inner_peek,
-            walk,
-            prefix,
-            optional,
-            Some(shape),
-        )
-        .unwrap_or_else(|| {
+        // The field carries the INNER type (`Field<String>` for a `Markdown`),
+        // because a concrete `T` cannot be recovered from a runtime `Shape`, so
+        // the newtype goes in as the wrapper and is re-applied when the value is
+        // written back. `inner` is the shape the field's `Value` must match.
+        return scalar_node(scalar, leaf(inner_peek, Some(shape), inner)).unwrap_or_else(|| {
             panic!(
                 "newtype {shape} wraps {scalar:?}, which is not supported in Field (field {name})"
             )
@@ -418,7 +435,7 @@ pub(crate) fn node_for_shape(
 
     match shape.def {
         Def::Set(set_def) => set_node(set_def.t, name, peek, walk, prefix, optional),
-        Def::List(list_def) if walk.spec_for(prefix).is_some_and(|spec| spec.treat_as_set) => {
+        Def::List(list_def) if spec.is_some_and(|spec| spec.treat_as_set) => {
             set_node(list_def.t, name, peek, walk, prefix, optional)
         }
         Def::List(list_def) => list_node(list_def.t, name, peek, walk, prefix, optional),
@@ -486,9 +503,9 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
     inner.scalar_type().map(|_| inner)
 }
 
-/// The closed set of scalar types with a built-in widget. Anything else needs
-/// a custom widget and returns `None` here, which `node_for_shape` turns into
-/// a panic naming the type.
+/// The closed set of scalar types with a built-in field. Anything else needs a
+/// field of its own, named with `field:` or `with_node`, and returns `None`
+/// here, which `node_for_shape` turns into a panic naming the type.
 ///
 /// **`usize` and `isize` are left out on purpose, not by oversight.** Their
 /// width is target-dependent — 32 bits on the wasm client, 64 on the server —
@@ -506,36 +523,7 @@ pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
 /// carries, and the only thing the walk contributes is `optional` — a
 /// structural fact (`Option` peeling) that no later reader can recover,
 /// because `bool` and `Option<bool>` both arrive as `Field<bool>`.
-fn scalar_node(
-    scalar: ScalarType,
-    name: &str,
-    peek: Option<Peek<'_, 'static>>,
-    walk: Walk<'_>,
-    // This leaf's own full path: `node_for_shape`'s `prefix` already has the
-    // name qualified on.
-    path: &NodePath,
-    optional: bool,
-    // The newtype this scalar is wrapped in, if any. The field carries the
-    // INNER type (`Field<String>` for a `Markdown`), because a concrete `T`
-    // cannot be recovered from a runtime `Shape` — so the wrapper is remembered
-    // here and re-applied when the value is written back.
-    wrapper: Option<&'static Shape>,
-) -> Option<Box<dyn Node>> {
-    let args = LeafArgs {
-        name,
-        path,
-        peek,
-        optional,
-        wrapper,
-        spec: walk.spec_for(path),
-    };
-    // A spec that names this leaf with a constructor builds it, in place of the
-    // default for its type. That is how `min: 3` reaches a typed field, and how
-    // `field: X` changes the node's type, with nothing mutated afterwards.
-    if let Some(ctor) = args.spec.and_then(|s| s.node.as_ref()) {
-        return Some(ctor.build(args));
-    }
-
+fn scalar_node(scalar: ScalarType, args: LeafArgs<'_>) -> Option<Box<dyn Node>> {
     // The variant and the type can't be collapsed into one token: `ScalarType`
     // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
     // has no way to change an identifier's case. So each arm names both, and the

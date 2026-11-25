@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use facet::{Facet, Peek};
+use facet::Facet;
 use formoxus_spec::FieldType;
 
 use crate::field_kind::field_type_of;
@@ -17,10 +17,11 @@ use crate::{
 /// in Rust, where the value already has a type.
 ///
 /// **The strings a widget writes are derived, never written by hand.** Each
-/// value is formatted through facet's display vtable, the same one
-/// [`Node::raw_value`](crate::nodes::Node::raw_value) uses, so what a
-/// `<select>` submits is exactly what `parse` reads back. A hand-written
-/// `Choice` could say `"True"` for a `bool` and never match.
+/// value is written with this field's [`format`](crate::field::Field::format),
+/// the same call [`Node::raw_value`](crate::nodes::Node::raw_value) makes, so
+/// what a `<select>` submits is exactly what `parse` reads back, and the value
+/// a form is filled with matches its choice. A hand-written `Choice` could say
+/// `"True"` for a `bool` and never match.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChoiceField<T> {
     /// Each value with the label the user reads, in display order.
@@ -33,26 +34,27 @@ where
 {
     /// # Panics
     ///
-    /// If a value displays as `""`. An empty input IS absence in formoxus, so
-    /// a choice that submits `""` could never be told apart from no answer.
-    /// The "no value" entry belongs to the widget, not to the list.
+    /// If `format` writes a value as `""`. An empty input IS absence in
+    /// formoxus, so a choice that submits `""` could never be told apart from
+    /// no answer. The "no value" entry belongs to the widget, not to the list.
     pub fn new(choices: impl IntoIterator<Item = impl IntoChoice<T>>) -> Self {
         let choices: Vec<(T, String)> = choices.into_iter().map(IntoChoice::into_choice).collect();
-        for (value, label) in &choices {
+        let cf = Self { choices };
+        for (value, label) in &cf.choices {
             assert!(
-                !raw(value).is_empty(),
-                "the choice labelled {label:?} has a value that displays as \"\", \
+                !cf.format(value).is_empty(),
+                "the choice labelled {label:?} has a value that is written as \"\", \
                  which formoxus reads as no answer at all"
             );
         }
-        Self { choices }
+        cf
     }
 
     /// The list as a widget renders it: each value as the string it submits.
     pub fn as_choices(&self) -> Vec<Choice> {
         self.choices
             .iter()
-            .map(|(value, label)| Choice::new(raw(value), label.clone()))
+            .map(|(value, label)| Choice::new(self.format(value), label.clone()))
             .collect()
     }
 }
@@ -97,11 +99,6 @@ impl<T, V: ChoiceValue<T> + Clone, L: Into<String> + Clone> IntoChoice<T> for &(
     fn into_choice(self) -> (T, String) {
         (self.0.clone().into_value(), self.1.clone().into())
     }
-}
-
-/// `value` as the string a widget submits for it.
-fn raw<T: for<'f> Facet<'f>>(value: &T) -> String {
-    Peek::new(value).to_string()
 }
 
 impl<T> Field for ChoiceField<T>
@@ -199,7 +196,7 @@ mod tests {
 
     #[gtest]
     #[should_panic(expected = "reads as no answer at all")]
-    fn a_value_that_displays_as_empty_is_refused() {
+    fn a_value_that_is_written_as_empty_is_refused() {
         let _ = ChoiceField::new([(String::new(), "Nothing"), ("x".to_string(), "X")]);
     }
 

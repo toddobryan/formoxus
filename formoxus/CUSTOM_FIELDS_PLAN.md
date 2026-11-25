@@ -281,28 +281,18 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
   `questions[]: Vec<Ref<Question>>` checks the proxy's text, in the page and in
   `Submission::accept`).
 
-- [ ] **3.** (Todd) `Field::KIND`, `Field::format`, and the named field winning at
+- [x] **3.** (Todd) `Field::KIND`, `Field::format`, and the named field winning at
       the top of `node_for_shape`. Expanded 2026-11-24 by Claude. Everything here
       is in `field.rs`, `fields/`, `nodes/field_node.rs` and `build.rs`; nothing in
       `form!` changes yet (that is box 4).
 
-  **Progress, 2026-11-24 school END (Todd, committed WIP on `custom-fields`).** 3.1
-  done except 3.1.5 (the `KIND` docs); 3.2.1 and 3.2.2 done. Lib 276 and suite 963
-  green with `mod custom_fields;` commented out (it is, in the commit); with it back,
-  15 errors became 10, as expected. Tidy-ups Claude found, still to do:
-
-  1. `nodes/field_node.rs:4`: `Facet` and `ScalarType` are now unused imports.
-  2. Clippy `unused_self` on `FieldNode::field_type(&self)`, which only returns
-     `F::KIND`: delete it, write `F::KIND` at its two callers (`LeafArgs::node`
-     and `render`), and move its i128/f64 bounds note to `resolve_bounds` or `KIND`.
-  3. The comment above `raw_value`'s `Valid` arm (facet display, not `Debug`) now
-     describes `Field::format`'s default body; move it there (most of 3.2.5).
-  4. `tests/suite/spec_constructors.rs` imports `formoxus_spec::FieldType`; use
-     `formoxus::attrs::FieldType`, the public route a dev has.
-  5. `field_kind::field_type_of` needs a doc comment, and `cargo fmt` wants a
-     trailing comma after its `panic!` arm.
-
-  Next: those, 3.1.5, then 3.2.3 to 3.2.5, then 3.3.
+  **Done, 2026-11-24 evening.** 3.1 to 3.5 all built (Todd 3.1 to 3.4; Claude
+  the docs on `KIND` and `format` and 3.5's 7 tests in
+  `tests/suite/spec_constructors.rs`). `scalar_node` now takes `(scalar, args)`:
+  `node_for_shape` looks the spec up once and builds every leaf's `LeafArgs`
+  through one closure. The 3.4 assert reads "mismatched types at {path},
+  expected {path's type}, given {field's Value}". Lib 276, suite 970, goldens,
+  clippy and fmt all clean, with `mod custom_fields;` still commented out.
 
   **How to check it while the suite does not compile.** Comment out
   `mod custom_fields;` in `tests/suite.rs`. Then `cargo test -p formoxus --lib` and
@@ -311,7 +301,7 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
   `KIND` and 2 `format` errors in `custom_fields.rs` should be gone, leaving the 7
   `field:` keys, the 2 `with_widget_for`s and the 1 `choices:` on `Ref`.
 
-  - [ ] **3.1** Add `const KIND: FieldType` to the `Field` trait, with no default.
+  - [x] **3.1** Add `const KIND: FieldType` to the `Field` trait, with no default.
 
     Why it is needed: `FieldNode::field_type()` (`field_node.rs`, around line 157)
     works out the field's kind from `F::Value`'s shape, and `expect`s that shape to
@@ -347,7 +337,7 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
        the field's TEXT, not its `Value` (a `SpanField` is `Text`, though `Span`
        is a struct).
 
-  - [ ] **3.2** Add `fn format(&self, value: &Self::Value) -> String` to `Field`,
+  - [x] **3.2** Add `fn format(&self, value: &Self::Value) -> String` to `Field`,
     the reverse of `parse`.
 
     Why: a field that parses text its own way has to write the text back the same
@@ -381,7 +371,7 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
     5. Document `format` on the trait, saying it must round-trip with `parse`:
        `parse(&format(v)) == Ok(v)`.
 
-  - [ ] **3.3** A named field wins over any shape: move the constructor check from
+  - [x] **3.3** A named field wins over any shape: move the constructor check from
     `scalar_node` to `node_for_shape`.
 
     Why: today `scalar_node` (around line 535) is the only place that reads the
@@ -411,7 +401,7 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
        through `node_for_shape` too (`build.rs` around line 748), so `choices:` on
        set items still reaches them.
 
-  - [ ] **3.4** (Recommended, optional) Panic clearly when a named field's `Value`
+  - [x] **3.4** (Recommended, optional) Panic clearly when a named field's `Value`
     is not the path's type.
 
     Why: `form!` will refuse a mismatch at compile time (box 4, the
@@ -428,7 +418,7 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
     2. In `LeafArgs::node`, `assert!` that `F::Value::SHAPE` matches `self.shape`
        (compare `.id`), with a message naming the path and both types.
 
-  - [ ] **3.5** (Claude, if wanted) A few `with_node` tests in
+  - [x] **3.5** (Claude, if wanted) A few `with_node` tests in
     `tests/suite/spec_constructors.rs` for 3.3, with no `form!`: a constructor on a
     struct-shaped path builds one leaf, on an `Option<Span>` path it sees the
     inner value, and on a newtype path it sees the newtype. They prove 3.3 now,

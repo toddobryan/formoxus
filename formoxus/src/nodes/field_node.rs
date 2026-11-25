@@ -1,8 +1,8 @@
 //! The leaf node: one [`Field`] plus the tree state every field shares.
 
 use dioxus::prelude::*;
-use facet::{Facet, Partial, Peek, ReflectError, ScalarType, Shape};
-use formoxus_spec::{Attr, FieldType};
+use facet::{Facet, Partial, Peek, ReflectError, Shape};
+use formoxus_spec::Attr;
 
 use crate::bound_field::BoundField;
 use crate::error::{FormAccessError, ValidationMessage};
@@ -32,6 +32,8 @@ pub struct LeafArgs<'a> {
     pub wrapper: Option<&'static Shape>,
     /// The spec that names this leaf, if any.
     pub spec: Option<&'a FieldSpec>,
+    /// The type the walk is building at this path, which the field's `Value` must be.
+    pub shape: &'static Shape,
 }
 
 impl LeafArgs<'_> {
@@ -43,6 +45,13 @@ impl LeafArgs<'_> {
     /// what the spec says. `attrs` is taken whole: nothing derives one, so
     /// there is nothing for the spec's to merge with.
     pub fn node<F: Field>(self, field: F) -> FieldNode<F> {
+        assert!(
+            F::Value::SHAPE == self.shape,
+            "mismatched types at {}, expected {}, given {}",
+            self.path,
+            self.shape,
+            F::Value::SHAPE,
+        );
         let spec = self.spec;
         let mut node = FieldNode {
             name: self.name.to_string(),
@@ -55,7 +64,7 @@ impl LeafArgs<'_> {
                 .and_then(|s| s.widget.clone())
                 .unwrap_or_else(|| field.default_widget(self.optional)),
             wrapper: self.wrapper,
-            value: populate::<F::Value>(self.peek),
+            value: populate(&field, self.peek),
             field,
         };
         // A field with no value whose widget cannot show "empty" starts at what
@@ -68,7 +77,7 @@ impl LeafArgs<'_> {
                 .field
                 .widget_attrs()
                 .then(&node.attrs)
-                .resolve_bounds(node.field_type());
+                .resolve_bounds(F::KIND);
             if let Some(raw) = node.widget.value_when_empty(&attrs) {
                 node.take_raw(&raw);
             }
@@ -145,16 +154,6 @@ pub struct FieldNode<F: Field> {
 }
 
 impl<F: Field> FieldNode<F> {
-    /// The value family this field carries, and the constraints that apply to it.
-    ///
-    /// Bounds on integers are i128, since that's the only type that can represent
-    /// the max and min values on all other int types. Similarly, bounds on floats are
-    /// f64s. In the form! macro (where we have access to the actual type of the field),
-    /// we check to make sure the constraints fit.
-    fn field_type(&self) -> FieldType {
-        F::KIND
-    }
-
     /// Whether this field renders as a checkbox, by its widget's name.
     fn is_checkbox(&self) -> bool {
         self.widget.name() == CheckboxInput::NAME
@@ -234,10 +233,6 @@ impl<F: Field> Node for FieldNode<F> {
     fn raw_value(&self) -> String {
         match &self.value {
             FieldValue::Empty => String::new(),
-            // Formatted through facet's display vtable rather than a `Display`
-            // bound on the value — the exact mirror of `parse_scalar` going the
-            // other way. `{t:?}` would be wrong here: `Debug` quotes strings, and
-            // `parse_scalar` faithfully parses those quotes back into the value.
             FieldValue::Valid(t) => self.field.format(t),
             FieldValue::Invalid { raw, .. } => raw.clone(),
         }
@@ -309,7 +304,7 @@ impl<F: Field> Node for FieldNode<F> {
         };
         let base_attrs =
             FieldAttrs::with_owned_attrs(self.is_checkbox(), ctx.required, &own.then(&self.attrs))
-                .resolve_bounds(self.field_type());
+                .resolve_bounds(F::KIND);
 
         self.widget.render(WidgetProps {
             base_attrs,

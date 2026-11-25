@@ -10,6 +10,7 @@
 //! and revealed by `ChooseVariant` inside an item.
 
 use facet::Facet;
+use formoxus::attrs::FieldType;
 use formoxus::error::ValidationMessage;
 use formoxus::field::Field;
 use formoxus::field_kind::choice_field_for;
@@ -18,7 +19,6 @@ use formoxus::nodes::NodeCtor;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::widgets::{AnyWidget, TextInput};
-use formoxus_spec::FieldType;
 use googletest::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Facet)]
@@ -350,4 +350,249 @@ fn choices_reach_an_item() {
         ),
         elements_are![eq("not one of the available choices")]
     );
+}
+
+// ── A named field wins over any shape ───────────────────────────────────
+//
+// `node_for_shape` asks the spec before it looks at the shape, so a
+// constructor builds the leaf on any path, not only a scalar one: a struct
+// becomes one input instead of a fieldset, and a newtype hands the field the
+// newtype itself instead of the scalar inside it. These go through
+// `with_node`, with no `form!`, so they prove the walk on its own.
+
+/// A struct the default walk would build as a fieldset of two inputs.
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct Span {
+    start: u32,
+    end: u32,
+}
+
+/// Reads and writes a `Span` as ONE text input, `3-7`.
+#[derive(Clone, Debug, PartialEq)]
+struct SpanField;
+
+impl Field for SpanField {
+    type Value = Span;
+    type Context = ();
+
+    const KIND: FieldType = FieldType::Text;
+
+    fn parse(&self, raw: &str) -> Result<Span, ValidationMessage> {
+        let not_a_span = || ValidationMessage::from("expected start-end, like 3-7");
+        let (start, end) = raw.split_once('-').ok_or_else(not_a_span)?;
+        Ok(Span {
+            start: start.parse().map_err(|_| not_a_span())?,
+            end: end.parse().map_err(|_| not_a_span())?,
+        })
+    }
+
+    fn format(&self, span: &Span) -> String {
+        format!("{}-{}", span.start, span.end)
+    }
+
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        TextInput.into()
+    }
+}
+
+fn span_field() -> NodeCtor {
+    NodeCtor::new(|args| Box::new(args.node(SpanField)))
+}
+
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct Highlight {
+    note: String,
+    span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct MaybeHighlight {
+    span: Option<Span>,
+}
+
+/// A newtype the default walk would build as a `u32` input with the newtype
+/// remembered as its wrapper.
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct Minutes(u32);
+
+/// Reads and writes `Minutes` as `15m`, so its `Value` is the newtype itself.
+#[derive(Clone, Debug, PartialEq)]
+struct MinutesField;
+
+impl Field for MinutesField {
+    type Value = Minutes;
+    type Context = ();
+
+    const KIND: FieldType = FieldType::Text;
+
+    fn parse(&self, raw: &str) -> Result<Minutes, ValidationMessage> {
+        raw.strip_suffix('m')
+            .and_then(|n| n.parse().ok())
+            .map(Minutes)
+            .ok_or_else(|| ValidationMessage::from("expected minutes, like 15m"))
+    }
+
+    fn format(&self, minutes: &Minutes) -> String {
+        format!("{}m", minutes.0)
+    }
+
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        TextInput.into()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Facet)]
+struct Break {
+    length: Minutes,
+}
+
+/// Every path the form sends, with its raw text, in order.
+fn values_of<T>(state: &FormState<T>) -> Vec<(String, String)>
+where
+    T: Clone + std::fmt::Debug + PartialEq + Facet<'static>,
+{
+    state
+        .collect_values()
+        .into_iter()
+        .map(|(path, raw)| (path.to_string(), raw))
+        .collect()
+}
+
+/// The model after submitting `values`, or `None` if it did not validate.
+fn submit<T>(mut state: FormState<T>, values: &[(&str, &str)]) -> Option<T>
+where
+    T: Clone + std::fmt::Debug + PartialEq + Facet<'static>,
+{
+    let values: Vec<(NodePath, String)> = values
+        .iter()
+        .map(|(k, v)| (NodePath::new(k.to_string()), v.to_string()))
+        .collect();
+    state.distribute_form_values(&values);
+    state.validate()
+}
+
+/// The control: with no constructor, a struct is a fieldset of its fields.
+#[gtest]
+fn without_a_constructor_a_struct_is_its_fields() {
+    let highlight = Highlight {
+        note: "x".into(),
+        span: Span { start: 3, end: 7 },
+    };
+    let state = form_for(&highlight, FormSpec::default());
+    expect_that!(
+        values_of(&state),
+        elements_are![
+            eq(&("note".to_string(), "x".to_string())),
+            eq(&("span.start".to_string(), "3".to_string())),
+            eq(&("span.end".to_string(), "7".to_string())),
+        ]
+    );
+}
+
+/// On a struct-shaped path the constructor builds ONE leaf, filled with the
+/// field's own `format`.
+#[gtest]
+fn a_constructor_on_a_struct_path_builds_one_leaf() {
+    let highlight = Highlight {
+        note: "x".into(),
+        span: Span { start: 3, end: 7 },
+    };
+    let spec = FormSpec::default().with_node(&path!(Highlight.span), span_field());
+    let state = form_for(&highlight, spec);
+    expect_that!(
+        values_of(&state),
+        elements_are![
+            eq(&("note".to_string(), "x".to_string())),
+            eq(&("span".to_string(), "3-7".to_string())),
+        ]
+    );
+}
+
+/// And that one leaf reads the struct back through the field's own `parse`.
+#[gtest]
+fn a_struct_built_by_a_constructor_reads_back_through_its_parse() {
+    let spec = FormSpec::default().with_node(&path!(Highlight.span), span_field());
+    expect_that!(
+        submit(
+            empty_form::<Highlight>(spec),
+            &[("note", "x"), ("span", "5-9")]
+        ),
+        some(eq(&Highlight {
+            note: "x".into(),
+            span: Span { start: 5, end: 9 },
+        }))
+    );
+}
+
+/// On an `Option<Span>` path the constructor sees what is inside the
+/// `Option`: the walk peels it first, so the field's `Value` is `Span`.
+#[gtest]
+fn a_constructor_on_an_optional_path_sees_the_inner_value() {
+    let spec = || FormSpec::default().with_node(&path!(MaybeHighlight.span?), span_field());
+    let some_span = MaybeHighlight {
+        span: Some(Span { start: 3, end: 7 }),
+    };
+    expect_that!(
+        values_of(&form_for(&some_span, spec())),
+        elements_are![eq(&("span".to_string(), "3-7".to_string()))]
+    );
+    expect_that!(
+        submit(empty_form::<MaybeHighlight>(spec()), &[("span", "5-9")]),
+        some(eq(&MaybeHighlight {
+            span: Some(Span { start: 5, end: 9 }),
+        }))
+    );
+}
+
+/// An empty input on an optional path is `None`, the field never asked.
+#[gtest]
+fn an_empty_optional_path_with_a_constructor_is_none() {
+    let spec = FormSpec::default().with_node(&path!(MaybeHighlight.span?), span_field());
+    let none = MaybeHighlight { span: None };
+    let state = form_for(&none, spec);
+    expect_that!(
+        values_of(&state),
+        elements_are![eq(&("span".to_string(), String::new()))]
+    );
+    expect_that!(
+        submit(state, &[("span", "")]),
+        some(eq(&MaybeHighlight { span: None }))
+    );
+}
+
+/// On a newtype path the constructor's field holds the newtype itself, not
+/// the `u32` inside it, and writes it back without wrapping it a second time.
+#[gtest]
+fn a_constructor_on_a_newtype_path_sees_the_newtype() {
+    let spec = || {
+        FormSpec::default().with_node(&path!(Break.length), {
+            NodeCtor::new(|args| Box::new(args.node(MinutesField)))
+        })
+    };
+    let fifteen = Break {
+        length: Minutes(15),
+    };
+    expect_that!(
+        values_of(&form_for(&fifteen, spec())),
+        elements_are![eq(&("length".to_string(), "15m".to_string()))]
+    );
+    expect_that!(
+        submit(empty_form::<Break>(spec()), &[("length", "20m")]),
+        some(eq(&Break {
+            length: Minutes(20),
+        }))
+    );
+}
+
+/// A hand-built spec can name a field whose `Value` is not the path's type,
+/// which `form!` would refuse at compile time. The walk refuses it as it builds
+/// the leaf, naming the path and both types, even with no value to fill.
+#[gtest]
+#[should_panic(expected = "mismatched types at size, expected u8, given String")]
+fn a_constructor_whose_value_is_not_the_paths_type_panics() {
+    let spec = FormSpec::default().with_node(
+        &path!(Order.size),
+        NodeCtor::new(|args| Box::new(args.node(formoxus::fields::StringField::default()))),
+    );
+    let _ = empty_form::<Order>(spec);
 }
