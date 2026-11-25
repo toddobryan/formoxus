@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-24 evening**: CUSTOM_FIELDS_PLAN box 3 DONE (uncommitted), suite 970; next Claude box 4, `form!`'s `field:`
+- [**START HERE: next session**](next_session.md) — **2026-11-24 late**: box 4 (`field:`) DONE+pushed; boxes 5, 6 expanded (uncommitted), Todd decides J-L, then 5.1
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
