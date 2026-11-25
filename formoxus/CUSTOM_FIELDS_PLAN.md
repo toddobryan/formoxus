@@ -835,19 +835,209 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
     build-time widget check), 1 on 5.5 (the plain-newtype panic). Clippy and
     fmt clean.
 
-  - [ ] **5.5** (Todd) Retire the newtype unwrapping (N): delete the newtype
-    arm, `newtype_inner`, `FieldNode::wrapper`, `LeafArgs.wrapper`, and the
-    `begin_nth_field(0)` branch of the write-back. `scalar_node` loses its
-    wrapper path. Keep `#[facet(transparent)]` working through `shape.inner`.
-    Reword the "unsupported type" panic: name the type and say
-    `TypeRegistry::field_for` or `field:`.
+  - [ ] **5.5** (Todd) Retire the newtype unwrapping (N). Expanded
+    2026-11-26 by Claude, after reading every place a newtype is special. The
+    one test that waits on this step is
+    `newtypes::a_plain_newtype_without_a_registered_field_panics_naming_the_type`.
+    Every other newtype test now uses `#[facet(transparent)]` and must stay
+    green.
 
-  - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2): a user struct and
-    a plain newtype give `Kind::Unknown`, with a doc saying the compiler
-    cannot see the registry. In `LeafArgs::node`, assert the chosen widget
-    accepts `F::KIND` (if `AnyWidget` cannot say, it needs `accepts()`, read
-    from the widget's `ACCEPTS` when it is made). The old 5.1's proxy scan is
-    not needed.
+    1. **Narrow the newtype arm in `node_for_shape` to transparent types.**
+       The arm today takes any one-field tuple struct over a scalar
+       (`newtype_inner`). Make it take only a type whose `shape.inner` is
+       `Some` and is a scalar. `#[facet(transparent)]` is what fills in
+       `inner` on a user struct. Keep the scalar requirement, so a
+       transparent type around a struct still walks as a struct
+       (`Pair(Config)` in `newtypes.rs` pins that), and the change stays
+       one arm wide. Restrict it to `Type::User(UserType::Struct(_))` as
+       well: facet also fills `inner` on types like `NonZeroU32`, and
+       taking those in is a separate decision. The arm's peek can stay
+       `into_struct().field(0)`, since a transparent tuple struct is still a
+       tuple struct. `newtype_inner` becomes this test (or is renamed for
+       it, say `transparent_inner`), and its long doc about why a
+       one-field tuple struct counts becomes the reason only a transparent
+       one does now: decision N, `facet(transparent)` being facet's own,
+       consumer-agnostic statement that the type IS its inner type.
+
+    2. **A plain newtype panics, and so does an unregistered struct over
+       nothing a walk can split.** With the arm narrowed, a plain
+       `Headline(String)` reaches the final `match`, lands on the struct
+       arm, and would quietly become a fieldset with a leaf at
+       `headline.0`. That is exactly the guess N retires. So before the
+       struct arm, refuse a one-field tuple struct over a scalar that got
+       this far: it had no `field:`, no registered field and no
+       `transparent`. The message names the type, `TypeRegistry::field_for`
+       and `field:` (the test checks for all three), for example "`Headline`
+       is a newtype formoxus will not guess at: register a field for it
+       with `TypeRegistry::field_for`, name one at this path with `field:`,
+       or mark it `#[facet(transparent)]` if it IS its inner value". A
+       many-field struct still becomes a fieldset as today: that is the
+       ordinary case, not a guess.
+
+    3. **`FieldNode::wrapper` goes; the write-back reads the partial
+       instead.** `write_value_into` is the only reader. The slot the
+       parent opened says what it wants: `partial.shape()`. If that is
+       `F::Value::SHAPE`, `set` as today. If not, and
+       `partial.shape().inner == Some(F::Value::SHAPE)`, descend with
+       `begin_inner()`, `set`, and `end()`. That is facet's own
+       transparent-wrapper entry point, and it honours a wrapper's
+       `try_from`, which `begin_nth_field(0)` would skip. Anything else is
+       a bug in the walk, so `unreachable!`/`expect` with both shapes in
+       the message. The test helper `node()` at the bottom of
+       `field_node.rs` loses its `wrapper: None`.
+
+    4. **`LeafArgs.wrapper` should stay, renamed, rather than go.** The
+       plan said to delete it, but 6.2 needs exactly what it holds: trap 1
+       in 5.2's note is that a transparent type's widget is registered
+       under the OUTER type (`Note`), while the leaf's `shape` is the inner
+       `String`. So `LeafArgs` has to carry the outer type to
+       `LeafArgs::node` anyway. Suggested: rename it to something like
+       `transparent: Option<&'static Shape>`, documented as "the
+       transparent type this leaf stands for, which the registry's widget
+       is keyed on", and stop copying it into `FieldNode`. If you'd rather
+       delete it here and add a field in 6.2, that works too; the point is
+       not to delete and re-add the same thing in two steps.
+
+    5. **The two other callers of `newtype_inner`.**
+       1. `build.rs:185`, the runtime path check ("`{walked}` is a
+          `{shape}`, one input, which has no field"). With 1, a transparent
+          type is still one input. A plain newtype is no longer refused
+          here, so `path!(Story.headline.0)` would resolve, and the build
+          then panics with 2's message, which is the right one. But a
+          REGISTERED type is one input too, `TimeLimit` and `Ref<Question>`
+          alike, and today the check would let a path walk into its fields.
+          Make the test "a transparent leaf, or a type with a registered
+          field" (`TypeRegistry::field_ctor(shape).is_some()`). That
+          depends on the registry being installed before specs are built,
+          which `install`'s doc already requires. No test covers this; say
+          if you want one (Claude).
+       2. `path.rs:512`, `entry_text`, which writes the `[= v]` key a set
+          item is named by. Swap `newtype_inner` for 1's transparent test;
+          a transparent item still keys by its inner text. **Known gap,
+          raised rather than fixed:** a registered type as a set item would
+          key by `Display` (or by the walk's fallback), not by its
+          registered field's `format`, so `path!(M.set[= v])` could name
+          the wrong item. Nothing in the suite or apcsp puts a registered
+          type in a set yet. Recommended: park it with a `*_yet` test
+          (Claude), and fix it when `choices:` on a registered type (Q)
+          comes back, since that is when a set of `Ref<Question>` appears.
+
+    6. **`scalar_node`'s wrapper path** is the `Some(shape)` argument the
+       newtype arm passes through `leaf(…)`. With 3 and 4 it is gone, or
+       becomes 4's renamed field.
+
+    7. **Reword the last-resort panic** (`other => panic!("field {name} has
+       unsupported type {other:?}")`) the same way as 2: name the type
+       with `{shape}` rather than `Debug` of its `Type`, and say
+       `TypeRegistry::field_for` or `field:`.
+
+    Then the suite should be 1014 passed and 8 failing (6.2's 7 and 5.6's
+    1). The lib's inline tests (`cargo test -p formoxus --lib`) are worth a
+    run here too: `field_kind.rs`'s tests don't depend on this step, but
+    `path.rs`'s item-key tests touch `entry_text`.
+
+  - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2). Expanded
+    2026-11-26 by Claude. Two halves: loosen the compile-time checks for a
+    type the compiler cannot judge, then make the build check what they no
+    longer do. The test that waits on it is
+    `a_widget_that_cannot_render_the_registered_fields_kind_panics_at_build`.
+
+    1. **`kind` gives `Unknown` for every user struct.** A plain newtype
+       already gets `Unknown` today: `is_newtype` with no `inner` (the
+       `None => Kind::Unknown` arm, `field_kind.rs:811`), because a tuple
+       struct's field shape sits behind a `ShapeRef` fn pointer const code
+       cannot call. What changes is the last `else`: a
+       `Type::User(UserType::Struct(_))` gives `Unknown` instead of
+       `Other`. Not every `Other`: an unsupported primitive (`usize`,
+       `char`) and anything else that can never be registered stays
+       `Other`. Rewrite `Unknown`'s doc: it now means "a type the compiler
+       cannot judge, because the app may register a field for it at run
+       time, and `form!` cannot see the registry", with the newtype case
+       as one instance of that.
+
+    2. **What 1 loosens.** Each const check that reads `kind` treats
+       `Unknown` as "let it through". So for a struct path:
+       1. `is_single_value` (`field_kind.rs:392`): `widget:` on a struct
+          compiles. Golden `form_widget_on_a_struct` stops failing.
+       2. `applies`/the attribute check (`:334`): `max_length:` and even
+          `class` on a struct compile. Golden
+          `form_constraint_on_a_struct` stops failing, and the inline test
+          `a_struct_and_a_list_still_take_nothing_not_even_class` fails for
+          `Address`.
+       3. `is_leaf`/`is_list_of_leaves` (`:476`): `set` on a
+          `Vec<Answer>` compiles. Golden `form_set_on_a_list_of_structs`
+          stops failing. **This one is not in O.2's text**, which names only
+          `widget:` and table attributes. It follows from the same rule (a
+          registered struct IS a leaf, so a set of `Ref<Question>` must be
+          allowed), but say if you would rather keep it a compile error at
+          the cost of a set of registered structs; see letter U.
+       4. `renders` (`:526`) and `field_type` (`:860`) already treat
+          `Other` and `Unknown` alike, so nothing changes there.
+
+       The goldens and the inline test are Claude's, in 5.8, so expect
+       `just ci` to be red on trybuild and that one lib test between this
+       step and 5.8.
+
+    3. **Then the build refuses what the compiler let through.** Each check
+       lives where the walk already decides what a struct path is:
+       1. **An unregistered struct with a widget or attributes.**
+          `struct_node` already asserts `spec.widget.is_none()`
+          (`build.rs:809`). Add `spec.attrs` being empty to the same
+          assert, and reword its message to name the type and say
+          `TypeRegistry::field_for` or `field:`. Today's message ("did you
+          mean `label`?") is still the right hint for a struct the dev
+          meant as a fieldset, so keep it as the second half.
+       2. **A set over items that are not leaves.** `set_node` builds each
+          item through `node_for_shape`, so an unregistered struct item
+          would become a fieldset inside a set, which the set's rendering
+          and its `[= v]` keys do not expect. Assert, once, before building
+          items, that the item shape is something a leaf is built from:
+          a scalar, a transparent leaf, a unit enum, or a registered type.
+          The message names the type and `TypeRegistry::field_for`. Needed
+          because of U.
+       3. **A registered field's widget and attributes, in
+          `LeafArgs::node`.** After the widget is chosen, assert that it
+          renders `F::KIND`: `widget.accepts().contains(F::KIND)`, mirroring
+          `renders`, so `|| (TAKES_CHOICES && has_choices)` once Q is back.
+          `AnyWidget::accepts()` already exists (`pub(crate)`, from the
+          upload work), so the parenthesis in the old text is moot. The
+          message names the path and `widget.name()`; the test checks for
+          `limit` and `int_only`. Likewise for attributes: each
+          `spec.attrs` key must apply to `F::KIND`, the run-time twin of
+          `applies`. Scope these to the leaves the compiler could not
+          judge, `kind(self.shape)` being `Unknown` (expose a
+          `pub(crate) const fn is_unknown`). See letter V for why not every
+          leaf.
+
+    4. **The old 5.1's proxy scan is not needed**, as before: there is no
+       proxy.
+
+    Then the suite should be 1015 passed, with only 6.2's 7 failing, plus
+    the 5.8 goldens and the one inline test.
+
+    **Letters for Todd (2026-11-26, Claude recommends; both DECIDED the same
+    day):**
+
+    U. **A set of structs compiles (2.3).** Recommended: yes, as `Unknown`
+       implies, with 3.2's run-time assert. A registered struct is a leaf,
+       and the motivating case, a set of `Ref<Question>`, needs this.
+       Alternative: a separate kind for user structs that every check but
+       `is_leaf` treats as `Unknown`, which keeps `set` on a `Vec<Answer>`
+       a compile error and makes a set of registered structs impossible
+       until #18 can check against the registry.
+       **DECIDED 2026-11-26 (Todd): yes, as recommended.**
+
+    V. **The run-time widget and attribute checks only where the compiler
+       could not judge (3.3).** Recommended, because it is what O.2 says
+       and because it changes nothing for a hand-built `FormSpec` over
+       ordinary types: `field_kind.rs:381-385` records that a pair `form!`
+       refuses still renders from a hand-built spec, on purpose.
+       Alternative: check every leaf. That is one rule rather than two and
+       is harder to misuse, since a hand-built spec would get the same
+       refusal `form!` gives, but it is a behaviour change for hand-built
+       specs, and any suite test that builds a refused pair by hand would
+       start to panic. The suite would tell us how many in one run.
+       **DECIDED 2026-11-26 (Todd): yes, only the `Unknown` leaves.**
 
   - [ ] **5.7** (Todd, DEFERRED with Q) Q's run-time side: `FieldText<P>`, the registry storing
     it, and the choice field over `P` that reads it.
