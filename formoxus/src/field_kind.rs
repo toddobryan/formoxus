@@ -72,6 +72,21 @@ where
     choice_node::<P, C>(choices)
 }
 
+/// The leaf constructor for `field:`: the dev's own field, on a path whose
+/// type is the field's `Value`.
+///
+/// The projection pins the path's type `P` (through the path's last `?`, so a
+/// field for `Span` fits an `Option<Span>`), and the bound says the field
+/// holds exactly that, so a field for `u32` on a `String` is rustc's own type
+/// mismatch, naming both. `form!` evaluates `field` once, where it is written,
+/// and every leaf the constructor builds gets a clone of it.
+pub fn named_field<M, P, F>(_: fn(&M) -> &P, field: F) -> NodeCtor
+where
+    F: Field<Value = P> + Send + Sync,
+{
+    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+}
+
 /// [`choice_field_for`]'s constructor, by the field's type rather than a
 /// projection to it: what a set widget's `choices:` builds for the set's ITEMS.
 fn choice_node<P, C>(choices: impl IntoIterator<Item = C>) -> NodeCtor

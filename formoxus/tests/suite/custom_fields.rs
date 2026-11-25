@@ -214,6 +214,7 @@ fn the_inner_values_text_form_is_refused() {
     // `u32`. The proxy replaces the inner type's text form; it does not add to it.
     let mut form = empty_form::<Quiz>(FormSpec::default());
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "4500")]));
+    expect_that!(form.validate(), none());
     expect_that!(
         errors_at(&form, "limit"),
         elements_are![eq(&not_a_time("4500"))]
@@ -415,6 +416,7 @@ fn a_proxied_field_in_a_variant_parses_and_refills() {
 fn a_proxied_field_in_a_variant_refuses_bad_text() {
     let mut form = empty_form::<Paced>(FormSpec::default());
     form.distribute_form_values(&typed(&[("pace", "Timed"), ("pace.$Timed.limit", "90")]));
+    expect_that!(form.validate(), none());
     expect_that!(
         errors_at(&form, "pace.$Timed.limit"),
         elements_are![eq(&not_a_time("90"))]
@@ -588,6 +590,7 @@ fn a_named_fields_setting_is_an_expression_from_the_call_site() {
     let spec = form! { Lesson { snippet => { field: ProgramSnippetField { max_lines } } } };
     let mut form = empty_form(spec);
     form.distribute_form_values(&typed(&[("title", "Loops"), ("snippet", "a()\nb()")]));
+    expect_that!(form.validate(), none());
     expect_that!(
         errors_at(&form, "snippet"),
         elements_are![eq("at most 1 lines, not 2")]
@@ -635,6 +638,7 @@ fn a_widget_on_the_path_keeps_the_named_fields_check() {
     };
     let mut form = empty_form(spec);
     form.distribute_form_values(&typed(&[("title", "Loops"), ("snippet", "(")]));
+    expect_that!(form.validate(), none());
     expect_that!(errors_at(&form, "snippet"), elements_are![eq(UNBALANCED)]);
 }
 
@@ -731,10 +735,12 @@ fn a_named_field_parses_a_struct_from_text() {
 fn a_named_fields_parse_error_and_check_both_reach_the_path() {
     let mut form = empty_form(highlight_spec());
     form.distribute_form_values(&typed(&[("note", "the loop"), ("span", "seven")]));
+    expect_that!(form.validate(), none());
     expect_that!(errors_at(&form, "span"), elements_are![eq(NOT_A_SPAN)]);
 
     let mut form = empty_form(highlight_spec());
     form.distribute_form_values(&typed(&[("note", "the loop"), ("span", "7-3")]));
+    expect_that!(form.validate(), none());
     expect_that!(errors_at(&form, "span"), elements_are![eq(BACKWARDS)]);
 }
 

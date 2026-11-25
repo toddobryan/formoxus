@@ -725,6 +725,14 @@ impl FieldSpec {
             quote! { &::formoxus::path::ModelPath::<#model>::__new(#items) }
         };
         let (leaf_widget, set_widget) = match (&self.body.widget, fit) {
+            // Beside `field:` the path is one leaf, so its widget is a leaf
+            // widget whatever the path's type, a dev's included: `with_widget`'s
+            // bound is the check. A set widget by name is refused at the parse.
+            (Some(w), Some(_)) if self.body.field.is_some() => {
+                let at = w.name_span();
+                let w = w.expr();
+                (Some(quote_spanned! { at=> .with_widget(#key, #w) }), None)
+            }
             (Some(w), Some(WidgetFit::Leaf)) => {
                 let w = w.expr();
                 (Some(quote! { .with_widget(#key, #w) }), None)
@@ -768,6 +776,19 @@ impl FieldSpec {
         // A set widget's `choices:` are its items' (decision D), filed under
         // `key[]`, where the set's draft reads them. A widget the shape decides
         // files them through `WidgetSlot`, which picks the field or its items.
+        // `field:` refuses `choices:` and every validated key, so it is the
+        // one constructor when it is there. Through the path's last `?`, so a
+        // field for `Span` fits an `Option<Span>`, and spanned on the field, so
+        // a field whose `Value` is not the path's type is reported there.
+        if let Some(named) = &self.body.field {
+            let at = syn::spanned::Spanned::span(&named.expr);
+            let peeled = respan(project_peeled(&self.path.segments), at);
+            let field = &named.expr;
+            let node = quote_spanned! { at=>
+                .with_node(#key, ::formoxus::field_kind::named_field(|__m: &#model| &#peeled, #field))
+            };
+            return (leaf_widget, Some(node), set_widget);
+        }
         let node = match (&self.body.choices, fit) {
             // Through the slot the checks declared, which is `false` on a field
             // that is not a set, where the widget's check reports and this does

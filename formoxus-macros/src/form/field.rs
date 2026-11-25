@@ -31,6 +31,9 @@ pub(crate) struct FieldBody {
     /// borrowed from, as `label:`'s is.
     pub(crate) help_text: Option<Expr>,
     pub(crate) choices: Option<(Ident, Expr)>,
+    /// `field: SpanField`, the dev's own `Field` for this path, which builds
+    /// the leaf in place of the default for the path's type (`CUSTOM_FIELDS_PLAN.md`).
+    pub(crate) field: Option<NamedField>,
     /// `adder: SomeComponent`, the component that adds the list's items in
     /// place of the Add button. The key is kept for the list check's span.
     pub(crate) adder: Option<(Ident, syn::Path)>,
@@ -72,6 +75,47 @@ pub(crate) struct FieldBody {
     /// this body's path. `form!`'s parse flattens them into entries of their
     /// own, so nothing past the parse sees one.
     pub(crate) nested: Vec<(SpecPath, FieldBody)>,
+}
+
+/// `field:`'s value: the field, written as a struct expression
+/// (`ProgramSnippetField { max_lines: 10 }`, `ProgramSnippetField { max_lines }`)
+/// or a unit struct (`SpanField`).
+///
+/// An expression, so a setting can come from where `form!` is written, but
+/// only those two forms, because the checks need the field's TYPE and a free
+/// `const _` item can name a type but not reach a local's. Both forms start
+/// with it, so `ty` is read off the expression rather than written twice.
+#[derive(Debug)]
+pub(crate) struct NamedField {
+    /// The key, for the refusals' span.
+    pub(crate) key: Ident,
+    pub(crate) expr: Expr,
+    pub(crate) ty: syn::Path,
+}
+
+impl NamedField {
+    fn parse(key: Ident, body: ParseStream<'_>) -> Result<Self> {
+        let expr: Expr = body.parse()?;
+        let ty = match &expr {
+            Expr::Struct(s) => s.path.clone(),
+            Expr::Path(p) if p.qself.is_none() => p.path.clone(),
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "`field:` takes the field as a struct expression, `MyField { … }`, or a \
+                     unit struct, `MyField`, so that `form!` can read its type: the checks \
+                     on a `widget:` beside it need the field's `KIND`",
+                ));
+            }
+        };
+        Ok(Self { key, expr, ty })
+    }
+
+    /// The field's `KIND`, as a const expression.
+    fn kind(&self) -> TokenStream2 {
+        let ty = &self.ty;
+        quote_spanned! { self.ty.span()=> <#ty as ::formoxus::field::Field>::KIND }
+    }
 }
 
 /// `sort_by:`'s value: any expression of type `fn(&T, &T) -> Ordering`, and
@@ -416,6 +460,9 @@ impl FieldBody {
             }
         };
         let cast_lints = cast_lints();
+        if let Some(named) = &self.field {
+            return self.named_field_checks(named, &shape);
+        }
 
         let mut checks = Vec::new();
         // One check per table attribute, asking the table whether its row's
@@ -523,6 +570,57 @@ impl FieldBody {
 }
 
 impl FieldBody {
+    /// [`type_checks`](Self::type_checks) for a body with `field:`, where the
+    /// named field's `KIND` answers what the path's type answers otherwise: a
+    /// dev's field may read a struct from text, so the path's own type says
+    /// nothing about what is typed. Whether each attribute applies, whether a
+    /// `step` must be whole, and whether the widget renders the field all ask
+    /// the `KIND`. Whether the widget can render an `Option` is still the
+    /// path's question, and so is passing each attribute through. Everything
+    /// else `type_checks` asks is about a key `named_field_refusals` refuses.
+    fn named_field_checks(&self, named: &NamedField, shape: &TokenStream2) -> TokenStream2 {
+        let kind = named.kind();
+        let cast_lints = cast_lints();
+        let mut checks = Vec::new();
+        for (attr_id, parsed_attr) in &self.attrs.0 {
+            let AttrId::Std(attr) = attr_id else { continue };
+            let variant = Ident::new(attr.variant_name(), Span::call_site());
+            let message = format!(
+                "`{}` applies only to {}, and the field `field:` names is not one",
+                attr.variant_name().to_snake_case(),
+                field_types_phrase(*attr),
+            );
+            checks.push(quote_spanned! { parsed_attr.value_span()=>
+                const _: () = ::core::assert!(
+                    ::formoxus::attrs::Attr::#variant.applies_to(#kind),
+                    #message
+                );
+            });
+        }
+        if let Some(step) = self.attrs.expr(Attr::Step) {
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    ((#step) as f64) > 0.0,
+                    "`step` must be greater than zero"
+                );
+            });
+            checks.push(quote_spanned! { step.span()=>
+                #[allow(#cast_lints, clippy::assertions_on_constants)]
+                const _: () = ::core::assert!(
+                    !::core::matches!(#kind, ::formoxus::attrs::FieldType::Int)
+                        || ((#step) as f64) % 1.0 == 0.0,
+                    "`step` on an integer field must be a whole number"
+                );
+            });
+        }
+        if let Some(widget) = &self.widget {
+            checks.push(widget.named_field_checks(shape, &kind));
+            checks.push(self.extends_checks(widget));
+        }
+        quote! { #(#checks)* }
+    }
+
     /// The widget's own checks (`WidgetRef::checks`), whether it passes each
     /// attribute through (`extends_checks`), and whether it takes the
     /// `choices` written beside it. Nothing without a `widget:`.
@@ -818,6 +916,7 @@ impl Parse for FieldBody {
         if fb.is_empty() && fb.nested.is_empty() {
             return Err(syn::Error::new(braces.span.join(), "empty field body"));
         }
+        fb.named_field_refusals()?;
         if let (Some((_, min)), Some((max_key, max))) = (&fb.min_items, &fb.max_items)
             && let (Some(min), Some(max)) = (int_literal(min), int_literal(max))
             && min > max
@@ -855,8 +954,8 @@ impl Parse for FieldBody {
 }
 
 impl FieldBody {
-    /// One `key: value` (or bare flag) entry: `widget`, `label`, `help_text`, `validator`, `choices`,
-    /// `adder`, `set`, `sort_by`, `feedback`, `item`, a table attribute by its
+    /// One `key: value` (or bare flag) entry: `widget`, `label`, `help_text`, `validator`,
+    /// `choices`, `field`, `adder`, `set`, `sort_by`, `feedback`, `item`, a table attribute by its
     /// `snake_case` variant name, or a quoted key passed through as written.
     fn parse_entry(&mut self, body: ParseStream<'_>) -> Result<()> {
         if starts_nested(body) {
@@ -883,6 +982,14 @@ impl FieldBody {
         match name.as_str() {
             "widget" | "label" | "help_text" | "validator" | "choices" | "adder" | "feedback"
             | "item" | "min_items" | "max_items" | "max_size" => self.parse_keyed(&key, body),
+            "field" => {
+                body.parse::<Token![:]>()?;
+                if self.field.is_some() {
+                    return Err(syn::Error::new_spanned(&key, "`field` is given twice"));
+                }
+                self.field = Some(NamedField::parse(key, body)?);
+                Ok(())
+            }
             "sort_by" => {
                 body.parse::<Token![:]>()?;
                 if self.sort_by.is_some() {
@@ -1073,6 +1180,116 @@ impl FieldBody {
         Ok(())
     }
 
+    /// What `field:` leaves nothing for, reported at the key that is refused.
+    ///
+    /// The named field is the whole leaf: it parses, checks and trims its own
+    /// text. So a setting formoxus gives the DEFAULT field (`min:`, `no_trim`)
+    /// has no field to go on, and neither has `choices:`, which picks a field
+    /// of formoxus's own. And the path is one leaf, so a list's, a set's or a
+    /// file's keys have nothing to apply to, nor has a path written inside
+    /// its body.
+    fn named_field_refusals(&self) -> Result<()> {
+        let Some(named) = &self.field else {
+            return Ok(());
+        };
+        let refuse = |span: Span, message: String| Err(syn::Error::new(span, message));
+        let one_leaf = |key: &Ident, what: &str| {
+            refuse(
+                key.span(),
+                format!(
+                    "`{key}` cannot be combined with `field:`, which makes this path one leaf: \
+                     there is no {what} for it to apply to"
+                ),
+            )
+        };
+        if let Some((key, _)) = &self.choices {
+            return refuse(
+                key.span(),
+                "`choices` cannot be combined with `field:`: the named field decides which \
+                 values it takes, so give it the choices itself, or drop `field:` and formoxus \
+                 builds a `ChoiceField`"
+                    .to_string(),
+            );
+        }
+        for (attr_id, parsed) in &self.attrs.0 {
+            match attr_id {
+                AttrId::Std(Attr::Accept) => {
+                    return refuse(
+                        parsed.key_span,
+                        "`accept` cannot be combined with `field:`, which makes this path one \
+                         leaf: there is no file for it to apply to"
+                            .to_string(),
+                    );
+                }
+                AttrId::Std(attr) if attr.validated() => {
+                    return refuse(
+                        parsed.key_span,
+                        format!(
+                            "`{}` cannot be combined with `field:`: formoxus checks it as a \
+                             setting of the default field, which the named field replaces, so \
+                             give the setting to the field itself",
+                            attr.variant_name().to_snake_case()
+                        ),
+                    );
+                }
+                _ => {}
+            }
+        }
+        if let Some(key) = &self.no_trim {
+            return refuse(
+                key.span(),
+                "`no_trim` cannot be combined with `field:`: whether the text is trimmed is \
+                 the named field's own `trims`"
+                    .to_string(),
+            );
+        }
+        if let Some(key) = &self.set {
+            return one_leaf(key, "list to render as a set");
+        }
+        if let Some(sort_by) = &self.sort_by {
+            return one_leaf(&sort_by.key, "set");
+        }
+        let list_keys = [
+            self.adder.as_ref().map(|(key, _)| key),
+            self.item.as_ref().map(|(key, _)| key),
+            self.feedback.as_ref().map(|(key, _)| key),
+            self.min_items.as_ref().map(|(key, _)| key),
+            self.max_items.as_ref().map(|(key, _)| key),
+        ];
+        if let Some(key) = list_keys.into_iter().flatten().next() {
+            return one_leaf(key, "list or set");
+        }
+        if let Some((key, _)) = &self.max_size {
+            return one_leaf(key, "file");
+        }
+        if let Some(widget) = &self.widget
+            && let WidgetKind::Named { name, widget } = &widget.kind
+        {
+            if widget.renders_a_set() {
+                return refuse(
+                    name.span(),
+                    format!("`{name}` renders a whole set, and `field:` makes this path one leaf"),
+                );
+            }
+            if *widget == WidgetName::RangeInput {
+                return refuse(
+                    name.span(),
+                    "`range` cannot be combined with `field:`: it needs `min:` and `max:`, \
+                     which formoxus sets on the default field, and the named field replaces it"
+                        .to_string(),
+                );
+            }
+        }
+        if !self.nested.is_empty() {
+            return refuse(
+                named.key.span(),
+                "`field:` makes this path one leaf, so its body cannot hold a path below it"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+
     /// What `widget: range` needs and what only it takes (`WIDGETS_PLAN.md`
     /// decisions A and B), checked at parse time because the macro can see
     /// both: the widget's name and which keys were written. A float range's
@@ -1142,6 +1359,7 @@ impl FieldBody {
             && self.max_size.is_none()
             && self.attrs.0.is_empty()
             && self.choices.is_none()
+            && self.field.is_none()
             && self.adder.is_none()
             && self.set.is_none()
             && self.sort_by.is_none()
@@ -1609,9 +1827,9 @@ fn owned(attr: Attr) -> String {
     )
 }
 
-/// Every identifier key a field body accepts: `widget`, `label`, `help_text`, `validator`, `choices`,
-/// `adder`, `set`, `sort_by`, `feedback`, `item`, then each table attribute an author
-/// may set, in table order.
+/// Every identifier key a field body accepts: `widget`, `label`, `help_text`, `validator`,
+/// `choices`, `field`, `adder`, `set`, `sort_by`, `feedback`, `item`, then each table
+/// attribute an author may set, in table order.
 pub(crate) fn legal_keys() -> Vec<String> {
     [
         "widget".to_string(),
@@ -1624,6 +1842,7 @@ pub(crate) fn legal_keys() -> Vec<String> {
         "max_items".to_string(),
         "max_size".to_string(),
         "choices".to_string(),
+        "field".to_string(),
         "adder".to_string(),
         "set".to_string(),
         "sort_by".to_string(),
@@ -1930,6 +2149,7 @@ mod tests {
                 "help_text" => quote!(#ident: "A hint"),
                 "validator" => quote!(#ident: no_rust_please),
                 "choices" => quote!(#ident: STATES),
+                "field" => quote!(#ident: SpanField),
                 "adder" => quote!(#ident: SearchToAdd),
                 "set" | "no_trim" => quote!(#ident),
                 // Only on a `range`, which needs its bounds.
@@ -3069,6 +3289,143 @@ mod tests {
         expect_that!(
             err_of(quote! { Source { weight => { step: "0.5" } } }),
             contains_substring("`step` takes a number or `\"any\"`")
+        );
+    }
+
+    // ── `field:` ─────────────────────────────────────────────────────────
+
+    #[gtest]
+    fn a_field_is_a_struct_expression_or_a_unit_struct() {
+        expect_that!(
+            parse(quote! { Lesson { snippet => { field: ProgramSnippetField { max_lines } } } }),
+            ok(anything())
+        );
+        expect_that!(
+            parse(quote! { Highlight { span => { field: fields::SpanField } } }),
+            ok(anything())
+        );
+    }
+
+    #[gtest]
+    fn a_field_written_as_a_call_is_refused() {
+        expect_that!(
+            err_of(quote! { Lesson { snippet => { field: SnippetField::new(10) } } }),
+            contains_substring("`field:` takes the field as a struct expression")
+        );
+    }
+
+    #[gtest]
+    fn a_field_given_twice_is_refused() {
+        expect_that!(
+            err_of(quote! { Lesson { snippet => { field: A, field: B } } }),
+            eq("`field` is given twice")
+        );
+    }
+
+    /// `field:` builds the leaf through `named_field`, from the path through
+    /// its last `?`, and nothing through `field_for`.
+    #[gtest]
+    fn a_field_expands_to_named_field() {
+        let tokens = parse(quote! { Highlights { maybe? => { field: SpanField } } })
+            .unwrap()
+            .expand()
+            .to_string();
+        expect_that!(tokens, contains_substring("field_kind :: named_field"));
+        expect_that!(tokens, not(contains_substring("field_kind :: field_for")));
+    }
+
+    #[gtest]
+    fn a_field_refuses_choices_beside_it() {
+        expect_that!(
+            err_of(quote! { Order { size => { field: SizeField, choices: SIZES } } }),
+            contains_substring("`choices` cannot be combined with `field:`")
+        );
+    }
+
+    #[gtest]
+    fn a_field_refuses_a_setting_of_the_default_field() {
+        for setting in [quote!(min: 1), quote!(max_length: 5), quote!(pattern: "x")] {
+            expect_that!(
+                err_of(quote! { Venue { city => { field: CityField, #setting } } }),
+                contains_substring("cannot be combined with `field:`: formoxus checks it")
+            );
+        }
+    }
+
+    #[gtest]
+    fn a_field_refuses_no_trim() {
+        expect_that!(
+            err_of(quote! { Lesson { snippet => { field: SnippetField, no_trim } } }),
+            contains_substring("`no_trim` cannot be combined with `field:`")
+        );
+    }
+
+    /// The path is one leaf, so a list's, a set's or a file's keys have
+    /// nothing to apply to.
+    #[gtest]
+    fn a_field_refuses_the_keys_of_a_list_a_set_or_a_file() {
+        for (key, entry) in [
+            ("set", quote!(set)),
+            ("sort_by", quote!(sort_by: Tag::cmp)),
+            ("adder", quote!(adder: SearchToAdd)),
+            ("item", quote!(item: TagChip)),
+            ("feedback", quote!(feedback: |_| None)),
+            ("min_items", quote!(min_items: 1)),
+            ("max_items", quote!(max_items: 3)),
+            ("max_size", quote!(max_size: 1000)),
+            ("accept", quote!(accept: ".pdf")),
+        ] {
+            expect_that!(
+                err_of(quote! { Post { tags => { field: TagsField, #entry } } }),
+                contains_substring(format!(
+                    "`{key}` cannot be combined with `field:`, which makes this path one leaf"
+                ))
+            );
+        }
+    }
+
+    #[gtest]
+    fn a_field_refuses_a_set_widget() {
+        expect_that!(
+            err_of(quote! { Post { tags => { field: TagsField, widget: checkbox_multiple } } }),
+            contains_substring("`checkbox_multiple` renders a whole set")
+        );
+    }
+
+    #[gtest]
+    fn a_field_refuses_a_range() {
+        expect_that!(
+            err_of(quote! { Venue { capacity => { field: CapacityField, widget: range } } }),
+            contains_substring("`range` cannot be combined with `field:`")
+        );
+    }
+
+    #[gtest]
+    fn a_field_refuses_a_path_inside_its_body() {
+        expect_that!(
+            err_of(quote! { Highlight { span => { field: SpanField, start => { label: "S" } } } }),
+            contains_substring("its body cannot hold a path below it")
+        );
+    }
+
+    /// What it leaves alone: a label, a hint, a check of the dev's own, a
+    /// widget, and an attribute that only renders.
+    #[gtest]
+    fn a_field_takes_what_only_describes_or_renders_it() {
+        expect_that!(
+            parse(quote! {
+                Lesson {
+                    snippet => {
+                        field: SnippetField,
+                        label: "Code",
+                        help_text: "Python",
+                        validator: no_rust_please,
+                        widget: textarea,
+                        placeholder: "print()",
+                    }
+                }
+            }),
+            ok(anything())
         );
     }
 }

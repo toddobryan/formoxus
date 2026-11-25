@@ -422,6 +422,45 @@ impl WidgetRef {
         }
     }
 
+    /// Free `const _` assertions for a widget beside `field:`, with the caret
+    /// on the widget's name: that its `ACCEPTS` holds the named field's
+    /// `KIND` (`kind`, a const expression), and that it can render the path's
+    /// `Option` if there is one. What [`checks`](Self::checks) asks of a field
+    /// formoxus picks, with the field's `KIND` in place of the path's type.
+    ///
+    /// Always a leaf widget: `FieldBody` refuses a set widget by name beside
+    /// `field:`, and a dev's widget there goes through `with_widget`, whose
+    /// `LeafWidget` bound refuses one that is not.
+    pub(crate) fn named_field_checks(
+        &self,
+        shape: &TokenStream2,
+        kind: &TokenStream2,
+    ) -> TokenStream2 {
+        let ty = self.type_tokens();
+        let span = self.name_span();
+        let written = self.written();
+        let cannot_render = format!(
+            "`{written}` cannot render the field `field:` names: its `KIND` is not one \
+             `{written}` accepts"
+        );
+        let optional_refusal = match &self.kind {
+            WidgetKind::Named { widget, .. } => optional_refusal(*widget).to_string(),
+            WidgetKind::Path(_) => format!("`{written}` cannot render an optional field"),
+        };
+        quote_spanned! { span=>
+            #[allow(clippy::assertions_on_constants)]
+            const _: () = ::core::assert!(
+                <#ty as ::formoxus::widgets::LeafWidget>::ACCEPTS.contains(#kind),
+                #cannot_render
+            );
+            #[allow(clippy::assertions_on_constants)]
+            const _: () = ::core::assert!(
+                ::formoxus::field_kind::optional_is_okay::<#ty>(#shape),
+                #optional_refusal
+            );
+        }
+    }
+
     /// A dev's widget's checks: one `failure` const, whose bound is the kind
     /// check, then an `assert!` per message, each spanned where it belongs.
     /// Beside `set` it is a set widget; otherwise the field's shape decides,

@@ -425,8 +425,49 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
     in the half of the suite that compiles, instead of waiting for box 4's
     `field:`.
 
-- [ ] **4.** (Claude) `form!`'s side: a `field:` key, the `const _` checks
+- [x] **4.** (Claude) `form!`'s side: a `field:` key, the `const _` checks
       against `<F as Field>::KIND`, and whatever F needs.
+
+  **As built (2026-11-24 evening).**
+
+  1. **`field:` takes a struct expression or a unit struct**
+     (`ProgramSnippetField { max_lines }`, `SpanField`), and nothing else: the
+     checks need the field's TYPE, which a free `const _` item can name but cannot
+     reach through a local, so `form!` reads it off the expression. A call
+     (`SnippetField::new(10)`) is refused at the expression
+     (`form_field_not_a_struct_expression`). This narrows box 2's API item 3:
+     still an expression evaluated at the call site, but only those two forms.
+     Every test already wrote one of them.
+  2. **It emits `with_node(key, field_kind::named_field(projection, expr))`.**
+     `named_field<M, P, F>(_: fn(&M) -> &P, field: F) where F: Field<Value = P> +
+     Send + Sync` clones the field into each leaf. The projection goes through the
+     path's last `?`, so a `SpanField` fits `maybe?: Option<Span>`. A wrong `Value`
+     is rustc's own "expected `&u32`, found `&String`" at the field
+     (`form_field_value_mismatch`); something that is not a `Field` gets a new
+     `#[diagnostic::on_unimplemented]` on the trait (`form_field_not_a_field`).
+  3. **Refused beside `field:`, at the key** (`FieldBody::named_field_refusals`):
+     `choices:`, every validated key (`min`, `max`, `min_length`, `max_length`,
+     `pattern`, `required_true`: give the setting to the field itself), `no_trim`
+     (the field's own `trims`), the list, set and file keys (`set`, `sort_by`,
+     `adder`, `item`, `feedback`, `min_items`, `max_items`, `max_size`, `accept`:
+     the path is one leaf), a set widget by name, `range` (its required `min:`/`max:`
+     are default-field settings), and a path nested in the body. Kept: `label`,
+     `help_text`, `validator`, `widget`, and attributes that only render.
+  4. **The checks ask `<F as Field>::KIND` where the path's type is asked
+     otherwise** (`FieldBody::named_field_checks`): whether each attribute applies
+     (`Attr::applies_to(KIND)`), whether a `step` must be whole, and whether the
+     widget's `ACCEPTS` holds the `KIND` (`WidgetRef::named_field_checks`,
+     `form_field_kind_misfits_widget`). The path's own `Option` still decides
+     `ACCEPTS_OPTIONAL`. A dev's widget beside `field:` always goes through
+     `with_widget`, never `WidgetSlot`, since the path is one leaf.
+  5. **Tests.** 12 macro unit tests (each refusal, the expansion, what is kept),
+     `field` in `legal_keys`, 5 goldens (the 3 from `ui-pending/`, now empty, plus
+     2). `DefaultField`'s note no longer says `field:` is "not built yet"; 4
+     goldens moved by that line only. Box 2 had 5 tests reading errors without
+     `validate()` first (Claude's mistake); fixed. With `mod custom_fields;` put
+     back, the only errors are box 5's and 6's API (2 `with_widget_for`, 1
+     `choices:` on `Ref`); run against a stubbed copy, all 16 `field:` tests pass.
+     `just ci` green (1624), with the line still commented out.
 
 - [ ] **5.** (Todd) The proxied leaf: classification (trap 2), the node, the
       check through `convert_in` (D), the write-back, and the refill through

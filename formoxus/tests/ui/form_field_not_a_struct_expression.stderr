@@ -1,0 +1,5 @@
+error: `field:` takes the field as a struct expression, `MyField { … }`, or a unit struct, `MyField`, so that `form!` can read its type: the checks on a `widget:` beside it need the field's `KIND`
+  --> tests/ui/form_field_not_a_struct_expression.rs:39:34
+   |
+39 |             capacity => { field: CapacityField::new(500) },
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^

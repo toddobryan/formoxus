@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox` cannot render the field `field:` names: its `KIND` is not one `checkbox` accepts
+  --> tests/ui/form_field_kind_misfits_widget.rs:49:49
+   |
+49 |             span => { field: SpanField, widget: checkbox },
+   |                                                 ^^^^^^^^ evaluation of `main::_` failed here

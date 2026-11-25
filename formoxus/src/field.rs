@@ -19,6 +19,10 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
     },
 }
 
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a formoxus `Field`",
+    label = "`field:` takes a type that implements `formoxus::field::Field`"
+)]
 pub trait Field: Clone + Debug + PartialEq + 'static {
     type Value: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static;
     type Context;

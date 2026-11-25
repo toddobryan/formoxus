@@ -1,0 +1,8 @@
+error[E0308]: mismatched types
+  --> tests/ui/form_field_value_mismatch.rs:31:30
+   |
+31 |             city => { field: CapacityField },
+   |                              ^^^^^^^^^^^^^ expected `&u32`, found `&String`
+   |
+   = note: expected reference `&u32`
+              found reference `&std::string::String`

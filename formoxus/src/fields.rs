@@ -21,8 +21,8 @@ pub use string_field::StringField;
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no field that takes settings like `min` or `max_length`",
     label = "settings need a field formoxus knows",
-    note = "a struct, list or enum takes none; a newtype or another type of your own needs \
-            a field declared for it (`field:` in `form!`, not built yet)"
+    note = "a struct, list or enum takes none; for a newtype or another type of your own, \
+            write a `Field` that holds the setting and name it with `field:` in `form!`"
 )]
 pub trait DefaultField {
     type Field: crate::field::Field + Default + Send + Sync;

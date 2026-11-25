@@ -9,7 +9,7 @@ help: the trait `DefaultField` is not implemented for `Address`
    |
  7 | struct Address {
    | ^^^^^^^^^^^^^^
-   = note: a struct, list or enum takes none; a newtype or another type of your own needs a field declared for it (`field:` in `form!`, not built yet)
+   = note: a struct, list or enum takes none; for a newtype or another type of your own, write a `Field` that holds the setting and name it with `field:` in `form!`
    = help: the following other types implement trait `DefaultField`:
              bool
              f32

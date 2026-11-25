@@ -1,0 +1,5 @@
+error: `min` cannot be combined with `field:`: formoxus checks it as a setting of the default field, which the named field replaces, so give the setting to the field itself
+  --> tests/ui/form_field_with_a_setting.rs:32:49
+   |
+32 |             capacity => { field: CapacityField, min: 1 },
+   |                                                 ^^^
