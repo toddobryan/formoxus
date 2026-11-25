@@ -569,17 +569,17 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
      plain. (`Newtype`, one word, as Rust spells the idiom.)
 
      What it costs a dev: one line per type,
-     `.field_for(Newtype::<Markdown, _>::new(StringField::default()))`,
-     instead of one attribute; and the type's widget and attribute checks
+     `.newtype::<Markdown, String>()` on the registry (Z), instead of one
+     attribute; and the type's widget and attribute checks
      move from compile time to the build (V). What it buys:
 
      1. One rule: a type the compiler cannot classify needs a field.
      2. No `begin_inner` write-back, and no outer shape threaded through
         `LeafArgs` for 6.2: a leaf's shape is always its path's own type.
      3. Settings on a newtype path, which transparent never gave
-        (`form_setting_on_a_newtype`): `field: Newtype::<Blurb, _>::new(StringField
-        { max_length: Some(280), ..Default::default() })`, once X lets
-        `form!` take that call.
+        (`form_setting_on_a_newtype`): `bio => { newtype: String,
+        max_length: 280 }` (Y), with every compile-time check back, judged
+        against `String`.
      4. No `try_from` trap. facet lets a transparent type validate itself
         through `try_from`, and formoxus would build one through
         `begin_inner`, so a value the type refuses would fail inside
@@ -898,10 +898,13 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           walks as a struct.
        3. **`Newtype`'s own tests.** It takes `KIND`, `trims`, `check`,
           `check_on_server` and `default_widget` from the inner field; a
-          setting reaches the leaf through `field:` (waits on X, so it may
-          be a `ui-pending` golden instead); `new` panics for a type that
-          is not a one-field struct, and for an inner field whose `Value`
-          is not the type's field's type, naming both types.
+          setting reaches the leaf through a configured inner field given to
+          `field_for`; `new` panics for an inner field whose `Value` is not
+          the type's field's type, naming both types (the one-field check
+          is a build-time `const` assert, so it has no runtime test);
+          `TypeRegistry::newtype` (Z) registers the default inner field.
+          Tests of Y's `newtype:` key belong to 5.8, with the macro, so this
+          step's tests compile once 5.5.2 exists.
        4. **The other modules' newtypes** (`Tag` in `sets` and
           `set_item_errors`, `Bio` in `trim` and `field_validators`, `Blurb`
           in `form_macro`) go back to plain and are registered through
@@ -945,9 +948,14 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           Unwrap with `Peek::new(t).into_struct()`, `field(0)`, then a typed
           borrow of `F::Value`. After `new`'s check, failure in either is a
           bug, so `expect` with both types in the message.
-       5. **Docs**, for the module and the type: the registered route for
-          any newtype, the per-path route through `field:`, and why
-          `transparent` is not followed (W).
+       5. **`TypeRegistry::newtype::<T, V: DefaultField>(self) -> Self`**
+          (Z), in `type_registry.rs`: `self.field_for(Newtype::<T,
+          V::Field>::new(V::Field::default()))`. It inherits `field_for`'s
+          duplicate and mismatch panics.
+       6. **Docs**, for the module and the type: the registered route
+          (`newtype::<T, V>()`, or `field_for` with a configured or custom
+          inner field), the per-path route (`newtype:` in `form!`, Y), and
+          why `transparent` is not followed (W).
 
     3. **(Todd) Delete the special-casing.** The newtype arm in
        `node_for_shape`; `newtype_inner` and its long doc; `FieldNode::wrapper`
@@ -1020,7 +1028,43 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           `Newtype::<Blurb, StringField> { field: StringField { … },
           ..Default::default() }`. No macro change, but it exposes the
           `PhantomData` and reads worse.
-       **DECIDED 2026-11-26 (Todd): 1, as recommended.**
+       **DECIDED 2026-11-26 (Todd): 1, as recommended. SUPERSEDED the same
+       day by Y:** `form!` builds the `Newtype` itself, so it never needs to
+       take a call, and box 4's rule (a struct expression or a unit struct)
+       stays as it is.
+
+    Y. **A `newtype:` key in `form!`.** `bio => { newtype: String,
+       max_length: 280 }` says the path's type is a newtype over `String`,
+       and the other keys read as if the path were a `String`. `form!`
+       already builds a configured built-in field for a `String` path
+       (`field_kind::field_for`, bounded on `DefaultField`); here it does
+       the same for the named inner type and wraps the result:
+       `Newtype::<_, <String as DefaultField>::Field>::new(configured)`.
+       The `_` is the path's own type, inferred through `named_field`'s
+       `F: Field<Value = P>` bound, so the dev never repeats `Blurb`. And
+       because the macro names the inner type, its settings, widget and
+       attribute checks run against `String::SHAPE` instead of the path's
+       `Unknown`, so `widget: checkbox` or `min: 3` on `bio` is a compile
+       error again. A key of its own rather than `field: Newtype<Blurb,
+       String>`: no type name to recognise (an alias would break it), `T`
+       comes from the path, and `field:` keeps its one meaning, beside which
+       box 4 refuses every setting. `newtype:` and `field:` together are
+       refused. The value is a value type with a `DefaultField` (`String`,
+       `bool`, a number), not a field type; a newtype over a field of the
+       dev's own is written `field: Newtype::<…>` in Rust or registered.
+       Claude, in 5.8. **DECIDED 2026-11-26 (Todd).**
+
+    Z. **`TypeRegistry::newtype::<T, V>()`**, the app-wide twin of Y:
+       `field_for(Newtype::<T, <V as DefaultField>::Field>::new(Default::default()))`,
+       so both places say "`Markdown` is a newtype over `String`" the same
+       way. Todd, in 5.5.2. **DECIDED 2026-11-26 (Todd).**
+
+    Why `Newtype<T, F>` itself keeps a FIELD as its second parameter, while
+    Y and Z take a value type: a dev must be able to wrap a field of their
+    own (`Newtype<Wrapper, TimeLimitField>`), and one trait covering both
+    value types and field types would hit Rust's rule against overlapping
+    impls. The value-type spelling lives only where formoxus can translate
+    it through `DefaultField`.
 
   - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2). Expanded
     2026-11-26 by Claude. Two halves: loosen the compile-time checks for a
@@ -1132,7 +1176,8 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
 
   - [ ] **5.8** (Claude) `form!`'s side: J's dispatch with Q's fallback, O.1's
     note on the settings route, and the goldens that change (O.2). Then the
-    suite is green. Added 2026-11-26: X's call form for `field:` (decided); the goldens and inline `field_kind` test 5.6
+    suite is green. Added 2026-11-26: Y's `newtype:` key, with its tests
+    and goldens (it replaces X's call form, which is not built); the goldens and inline `field_kind` test 5.6
     turns red (5.6.2); `form_setting_on_a_newtype`'s note pointing at
     `fields::Newtype`.
 

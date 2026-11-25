@@ -22,12 +22,16 @@ weighing it:
    transparent type's widget is keyed on the outer type) and a `begin_inner`
    write-back. Without it, a leaf's shape is always its path's own type.
 3. Transparent never gave settings anyway (`max_length:` on a newtype path
-   needs `DefaultField`, which no newtype has); `field: Newtype::<..>::new(..)`
-   does, once `form!` accepts that call (decision X).
+   needs `DefaultField`, which no newtype has). Decision Y gives them:
+   `bio => { newtype: String, max_length: 280 }` in `form!` builds the
+   `Newtype` from `<String as DefaultField>::Field` and runs every compile-time
+   check against `String`. Z is its registry twin,
+   `TypeRegistry::newtype::<Markdown, String>()`. Value types there, but
+   `Newtype<T, F>` itself keeps a FIELD parameter so a dev can wrap their own.
 
 **Cost accepted:** one registration line per newtype instead of one
-attribute, and the type's widget/attribute checks move from compile time to
-the build (V).
+attribute, and, on the registry route only, the type's widget/attribute checks
+move from compile time to the build (V). The `newtype:` route keeps them.
 
 **How to apply:** do not "helpfully" re-add transparent support. Todd's
 agreed fallback, only if it proves obnoxious in real use: follow a
