@@ -656,12 +656,16 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
 
     The API the tests chose, for 5.3 to build or change:
 
-    1. `TypeRegistry` in the prelude, so `formoxus::TypeRegistry`.
+    1. `TypeRegistry` imported from `formoxus::type_registry`, not the
+       prelude (no new re-exports until publish; Todd's edit of the tests,
+       2026-11-26).
     2. `field_for(field)` with no turbofish: the type is the field's `Value`.
        `widget_for::<T>(widget)` names the type, since a widget does not.
     3. A type whose registered widget cannot render its registered field's
        `KIND` panics in whichever of the two builder calls comes SECOND,
-       naming the type and the widget's form name (`number`). That is still
+       naming the type and the widget's form name (`int_only`, a test widget
+       that accepts only `Int`; `number` was wrong here, since every
+       text-like input accepts text). That is still
        startup, since the registry is built in `main`, and it is testable,
        where a check inside `install` would not be: `install` runs once per
        process.
@@ -694,13 +698,122 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        type, so `FieldNode::wrapper` can still go (N), and the write-back works
        it out from the shape.
 
-  - [ ] **5.3** (Todd) The registry (M): its builder methods, `install`, and a
-    `pub(crate) fn registry() -> Option<&'static TypeRegistry>` for the build. It
-    holds `Vec<(&'static Shape, NodeCtor)>` (a `Vec`: an app registers a
-    handful of types; `Shape`'s `PartialEq` compares type ids), and
-    registering a type twice in one builder replaces the entry. Its doc says
-    the order (P) and that a registered type is found by shape wherever it
-    sits: a field, a list item, a variant's field, an `Option<T>`'s inside.
+  - [x] **5.3** (Todd) The registry (M), in `formoxus/src/type_registry.rs`.
+
+    **Done 2026-11-26** (Todd; docs by Claude). As listed below, with these
+    differences. A field is stored as `TypeAndCtor { field_type, node_ctor }`.
+    `NodeCtor::for_field(field)` is the one place a field becomes a
+    constructor, shared with `field_kind::named_field`; it takes the field by
+    value, which is what cleared clippy's `needless_pass_by_value` on both
+    callers. B DECIDED (Todd): a second field or a second widget for one type
+    panics. Claude's tests follow: three duplicate tests, and the mismatch
+    tests use a test widget `IntOnly`, since no built-in refuses text except
+    by needing `min:`/`max:`. Suite 1000 passed, 22 failing as expected: 21
+    wait on 5.4 to 6.2 and one on 5.5. `just clippy` is red only on
+    `registry()` and `node_ctor`, which 5.4 reads.
+    Expanded 2026-11-26 by Claude from Todd's questions that day; this
+    replaces a one-sentence version that said `Vec` and "a second
+    registration replaces the first", both now superseded. What 5.2's tests
+    need from it, in the order they are worth building:
+
+    1. **Storage.** `TypeRegistry` holds a private
+       `HashMap<&'static Shape, Registered>`. A map rather than a `Vec`
+       because the walk looks a type up at every leaf it builds. It works
+       as a key because facet's `Shape` implements `Eq` and `Hash` by its
+       type id, not its address (`facet-core` `shape.rs:284-299`), and
+       `&'static Shape` hashes through to that. `Registered` holds the
+       type's field and its widget SEPARATELY: an
+       `Option<(FieldType, NodeCtor)>` and an `Option<AnyWidget>`. They
+       cannot be merged into one `NodeCtor`, for three reasons the tests
+       pin. `Topic` registers both. `Note` registers only a widget, which
+       goes on the inner `String`'s default field. And a named `field:`
+       beats the registered field while the registered widget still beats
+       that field's default (`NoteField` on `Memo`). A built `NodeCtor` is
+       a closure, so the widget could never be taken back out of it. The
+       field is erased as a `NodeCtor` because `Field` is not
+       dyn-compatible: it has an associated type, an associated const and
+       an `impl Future` return. `KIND` is copied out beside it because the
+       closure hides it and the mismatch check in 3 and 4 needs it. Both
+       `TypeRegistry` and `Registered` derive `Debug` and `Default` and
+       nothing else. `Send` and `Sync` are auto traits, which cannot be
+       derived and are not needed: `NodeCtor` and `AnyWidget` are both
+       already `Send + Sync`. Leave out `Clone`, because nothing copies a
+       registry once it is installed. Leave out `PartialEq`, because
+       `NodeCtor`'s equality is `Arc` identity, so two registries built
+       the same way would compare unequal. `Registered` and its fields can
+       be `pub(crate)`, since nothing outside the crate reads them.
+
+    2. **`new()`.** Returns `Self::default()`. Both stay, because clippy's
+       `new_without_default` fires on a `new()` with no `Default`, and the
+       tests call both.
+
+    3. **`field_for<F: Field + Send + Sync>(self, field: F) -> Self`.** No
+       turbofish: the key is `F::Value::SHAPE`, so a field for the wrong
+       type cannot be registered at all. It needs `Send + Sync` because the
+       field is captured in a `NodeCtor`. Build the constructor exactly as
+       `field_kind::named_field` does,
+       `NodeCtor::new(move |args| Box::new(args.node(field.clone())))`, so
+       a registered field and a `field:` field go through the same
+       `LeafArgs::node`; consider factoring that out of `named_field` so it
+       exists once. If the type already has a widget, check
+       `widget.accepts().contains(F::KIND)` and panic if not, naming the
+       type (`Shape`'s `Display` gives `TimeLimit`) and `widget.name()`
+       (the form name, `number`).
+       `registering_the_field_after_a_widget_it_cannot_use_panics_too` pins
+       this order.
+
+    4. **`widget_for::<T: Facet<'static>>(self, widget: impl LeafWidget) ->
+       Self`.** Moved here from 6.1, because `test_types()` calls it, so
+       the suite cannot compile without it. The key is `T::SHAPE`, and the
+       widget is stored as `AnyWidget::new(widget)`. If the type already
+       has a field, make the same check as 3 the other way round, with the
+       same message. `registering_a_widget_that_cannot_render_the_types_field_panics`
+       pins this order. The check runs in the builder call, not in
+       `install`, so that both tests can make it: `install` runs once per
+       process. It is still startup for an app, because the registry is
+       built in `main`.
+
+    5. **Registering a type twice.** DECIDED 2026-11-26 (Todd): panic, as
+       recommended, for a field and for a widget.
+       Recommended: panic, naming the type, through the map's entry API
+       rather than an `insert` that silently drops the first registration.
+       Two registrations of one type are a mistake, and without a panic
+       nothing would show which one won (the hard-to-misuse rule). A type
+       with one field and one widget is not a duplicate. There is no test
+       yet; Claude adds one once this is decided.
+
+    6. **`install(self)`.** A private
+       `static REGISTRY: OnceLock<TypeRegistry> = OnceLock::new();` in this
+       module, which is a plain `static` because `OnceLock::new` is a
+       `const fn`. The map is built at runtime, in `main`, before `install`
+       is called. `install` calls `REGISTRY.set(self)` and panics if it
+       returns `Err`, with a message containing "installed"
+       (`installing_a_second_registry_panics`). A `static` needs a `Sync`
+       type, and `OnceLock<T>` is `Sync` only when `T` is `Send + Sync`, so
+       a non-`Send` thing in `Registered` would fail to compile on this
+       line.
+
+    7. **`registry() -> Option<&'static TypeRegistry>`, `pub(crate)`.** It
+       is `REGISTRY.get()`, with `None` meaning an empty registry. It must
+       NOT be `get_or_init(TypeRegistry::default)`. The first form built
+       before `install` would lock in the empty registry, and the real
+       `install` in `main` would then panic with "already installed". The
+       suite would hit this, because tests that never call
+       `install_test_registry()` build forms in a random order alongside
+       the ones that do. A form over built-in types has to work with no
+       registry at all, so `None` is not an error either. Put the lookups
+       on the registry, for example a field and a widget by `&Shape`, so
+       5.4 and 6.2 never touch the map or the `Option` directly.
+
+    8. **Exports.** None new. The tests import
+       `formoxus::type_registry::TypeRegistry` from its own module, under
+       the rule against new re-exports until publish
+       (`.claude/memory/prelude_is_the_one_list.md`). Whether it joins the
+       prelude is a question for the publish-time API pass.
+
+    9. **Doc.** The order (P), and that a registered type is found by shape
+       wherever it sits: a field, a list item, a variant's field, an
+       `Option<T>`'s inside.
 
   - [ ] **5.4** (Todd) The registry arm in `node_for_shape`, right after the
     spec's constructor arm and before the file, scalar and newtype arms:
@@ -737,12 +850,17 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
       2026-11-24, in `a8463e0`) is superseded with L.
 
-  - [ ] **6.1** (Todd) `TypeRegistry::widget_for::<T: Facet<'static>>(self,
-    widget: impl LeafWidget) -> Self`, replacing an existing entry for `T`.
-    Check the widget against `T` there with an inline `const {
+  - [ ] **6.1** (Todd) `widget_for` itself moved to 5.3.4 on 2026-11-26,
+    because the suite's registry calls it. What is left here is the
+    compile-time half: check the widget against `T` with an inline `const {
     assert!(field_kind::renders::<W>(T::SHAPE, false)) }`, which fires when the
     app is built (not under `cargo check`; see
-    `.claude/memory/const_shape_walk_blocked.md`).
+    `.claude/memory/const_shape_walk_blocked.md`). This only catches
+    something for a type `kind` can classify, such as a transparent `Note`
+    whose inner type is `String`. For a plain newtype or a struct, `kind`
+    gives `Unknown` after 5.6, so `renders` returns `true`, and 5.3.3 and
+    5.3.4's run-time check against the registered field's `KIND` is the only
+    check.
 
   - [ ] **6.2** (Todd) Choose in `LeafArgs::node`: `spec.widget`, else the
     registry's widget for `self.shape` (the path's own type: `Note` for a

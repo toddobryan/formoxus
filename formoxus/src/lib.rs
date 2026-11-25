@@ -82,6 +82,7 @@ pub mod nodes;
 pub mod path;
 pub mod stores;
 pub mod submission;
+pub mod type_registry;
 pub mod widgets;
 pub mod wire;
 

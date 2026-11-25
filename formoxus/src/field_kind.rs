@@ -84,7 +84,7 @@ pub fn named_field<M, P, F>(_: fn(&M) -> &P, field: F) -> NodeCtor
 where
     F: Field<Value = P> + Send + Sync,
 {
-    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+    NodeCtor::for_field(field)
 }
 
 /// [`choice_field_for`]'s constructor, by the field's type rather than a

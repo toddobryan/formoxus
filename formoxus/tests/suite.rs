@@ -154,7 +154,11 @@ pub fn panic_message(f: impl FnOnce()) -> String {
     payload
         .downcast_ref::<String>()
         .cloned()
-        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+        .or_else(|| {
+            payload
+                .downcast_ref::<&str>()
+                .map(std::string::ToString::to_string)
+        })
         .unwrap_or_default()
 }
 

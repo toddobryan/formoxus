@@ -26,12 +26,13 @@
 use super::{FORM_ID, across_the_wire, install_test_registry, panic_message, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
-use formoxus::attrs::{AttrSet, FieldType, Tag};
+use formoxus::attrs::{AttrSet, FieldType, FieldTypeSet, Tag};
 use formoxus::error::ValidationMessage;
 use formoxus::field::Field;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::stores::ValuesByPath;
+use formoxus::type_registry::TypeRegistry;
 use formoxus::widgets::{
     AnyWidget, LeafWidget, NumberInput, PasswordInput, TextInput, Textarea, Widget, WidgetProps,
 };
@@ -40,7 +41,7 @@ use std::marker::PhantomData;
 
 /// Every type this module registers, for `super::install_test_registry`.
 pub(crate) fn test_types() -> TypeRegistry {
-    TypeRegistry::new()
+    TypeRegistry::default()
         .field_for(TimeLimitField)
         .field_for(TopicField)
         .widget_for::<Topic>(Textarea)
@@ -490,18 +491,38 @@ fn form_accepts_a_text_widget_on_a_registered_type() {
     expect_that!(html, contains_substring("Time allowed"));
 }
 
-/// The other half of O.2: `number` compiles on a `TimeLimit` path, because
+/// A widget that renders only integers, standing in for a stepper. No
+/// built-in fits: every text-like input accepts text, since the field parses
+/// what is typed, and `range` needs `min:` and `max:`.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct IntOnly;
+
+impl Widget for IntOnly {
+    const NAME: &'static str = "int_only";
+    const EXTENDS: AttrSet = AttrSet::EMPTY;
+    const PARTS: &'static [Tag] = &[];
+}
+
+impl LeafWidget for IntOnly {
+    const ACCEPTS: FieldTypeSet = FieldTypeSet::EMPTY.with(FieldType::Int);
+
+    fn render(&self, _props: WidgetProps) -> Element {
+        rsx! { div { class: "int-only" } }
+    }
+}
+
+/// The other half of O.2: `IntOnly` compiles on a `TimeLimit` path, because
 /// the compiler cannot see that its registered field reads text, and the
 /// build refuses it. The message names the path and the widget.
 #[gtest]
 fn a_widget_that_cannot_render_the_registered_fields_kind_panics_at_build() {
     install_test_registry();
     let message = panic_message(|| {
-        let _ = empty_form(form! { Quiz { limit => { widget: number } } });
+        let _ = empty_form(form! { Quiz { limit => { widget: IntOnly } } });
     });
     expect_that!(
         message,
-        all![contains_substring("limit"), contains_substring("number")]
+        all![contains_substring("limit"), contains_substring("int_only")]
     );
 }
 
@@ -553,19 +574,19 @@ fn a_named_field_beats_the_registered_field_for_its_type() {
 
 /// Checked when the type's widget is registered, so the app fails at startup
 /// rather than when a form first meets the type: `TimeLimitField` reads
-/// text, and a number input cannot render it.
+/// text, and `IntOnly` renders only integers.
 #[gtest]
 fn registering_a_widget_that_cannot_render_the_types_field_panics() {
     let message = panic_message(|| {
         let _ = TypeRegistry::new()
             .field_for(TimeLimitField)
-            .widget_for::<TimeLimit>(NumberInput);
+            .widget_for::<TimeLimit>(IntOnly);
     });
     expect_that!(
         message,
         all![
             contains_substring("TimeLimit"),
-            contains_substring("number")
+            contains_substring("int_only")
         ]
     );
 }
@@ -574,16 +595,55 @@ fn registering_a_widget_that_cannot_render_the_types_field_panics() {
 fn registering_the_field_after_a_widget_it_cannot_use_panics_too() {
     let message = panic_message(|| {
         let _ = TypeRegistry::new()
-            .widget_for::<TimeLimit>(NumberInput)
+            .widget_for::<TimeLimit>(IntOnly)
             .field_for(TimeLimitField);
     });
     expect_that!(
         message,
         all![
             contains_substring("TimeLimit"),
-            contains_substring("number")
+            contains_substring("int_only")
         ]
     );
+}
+
+/// Decision B (2026-11-26): a type registered twice is a mistake, and a
+/// silent replacement would hide which registration won.
+#[gtest]
+fn registering_a_second_field_for_a_type_panics_naming_the_type() {
+    let message = panic_message(|| {
+        let _ = TypeRegistry::new()
+            .field_for(TimeLimitField)
+            .field_for(MinutesOnlyField);
+    });
+    expect_that!(
+        message,
+        all![
+            contains_substring("TimeLimit"),
+            contains_substring("already")
+        ]
+    );
+}
+
+#[gtest]
+fn registering_a_second_widget_for_a_type_panics_naming_the_type() {
+    let message = panic_message(|| {
+        let _ = TypeRegistry::new()
+            .widget_for::<Topic>(Textarea)
+            .widget_for::<Topic>(TextInput);
+    });
+    expect_that!(
+        message,
+        all![contains_substring("Topic"), contains_substring("already")]
+    );
+}
+
+/// One field and one widget for the same type is not a duplicate.
+#[gtest]
+fn a_field_and_a_widget_for_the_same_type_are_not_duplicates() {
+    let _ = TypeRegistry::new()
+        .field_for(TopicField)
+        .widget_for::<Topic>(Textarea);
 }
 
 /// `install` is once per process: a second registry would leave the client

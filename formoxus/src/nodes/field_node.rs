@@ -105,6 +105,14 @@ impl NodeCtor {
     pub(crate) fn build(&self, args: LeafArgs<'_>) -> Box<dyn Node> {
         (self.0)(args)
     }
+
+    /// The constructor for a leaf read through `field`, with the spec's
+    /// label, attributes and widget applied by [`LeafArgs::node`]: what a
+    /// `field:` builds and what a registered field is stored as, so both
+    /// assemble a leaf the same way.
+    pub(crate) fn for_field<F: Field + Send + Sync>(field: F) -> Self {
+        NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+    }
 }
 
 impl std::fmt::Debug for NodeCtor {
