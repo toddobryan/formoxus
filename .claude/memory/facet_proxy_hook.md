@@ -1,6 +1,6 @@
 ---
 name: facet-proxy-hook
-description: "2026-11-23, PROVEN in a scratch probe on facet 0.46.5: `#[facet(formoxus::proxy = String)]` + TryFrom both ways gives a type its own text form, seen from Shape alone, no runtime; derive never fills vtable `parse` from FromStr; `formoxus::field` (own grammar, fn_ptr) also PROVEN, generics too; launch contexts do NOT reach server fns"
+description: "REJECTED as formoxus's route 2026-11-25 (Todd: models stay plain; registry in main instead, proven to reach server fns). 2026-11-23, PROVEN in a scratch probe on facet 0.46.5: `#[facet(formoxus::proxy = String)]` + TryFrom both ways gives a type its own text form, seen from Shape alone, no runtime; derive never fills vtable `parse` from FromStr; `formoxus::field` (own grammar, fn_ptr) also PROVEN, generics too; launch contexts do NOT reach server fns"
 metadata:
   type: project
 ---
@@ -80,3 +80,5 @@ the type → field map. `Formoxus` + `provide_defaults` already exist; see
 
 Probe sources: the 2026-11-23 session scratchpad (`proxyprobe/`, `fieldprobe/`), not kept.
 Relates to [[facet-newtypes-and-custom-widgets]], [[django-parallel-design]].
+
+**2026-11-25: not used.** Todd ruled out formoxus-specific attributes on models ([[models-stay-plain]]). Replaced by an app-wide type registry installed in `main`: a `static OnceLock` set before `launch` IS seen by server functions (probed in a scratch copy of `examples`, `POST /api/probe` returned it), which answers the "launch contexts don't reach server fns" gap without a context. See CUSTOM_FIELDS_PLAN box 5.

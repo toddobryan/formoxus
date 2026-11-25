@@ -2,6 +2,11 @@
 
 Written 2026-11-23 by Claude. **Decisions A to I DECIDED by Todd on 2026-11-24, all
 as recommended** (F's exact route is still worked out in box 2's tests, as F says).
+**2026-11-25: A, B, D, E, F, G and the proxy design REVERSED.** Todd: no
+formoxus-specific attributes on models, not even `formoxus::proxy`. A type gets
+its field from an app-wide registry installed in `main` (box 5, decisions M to
+Q), proven to reach server functions. Sections below that describe the proxy are
+kept as history and marked.
 Also 2026-11-24: this lands before A1 on the road to publish
 (`.claude/memory/mvp_scope.md`). Decided the same day: this comes BEFORE the storage rewrite
 (`table!`, in a repo of its own), and assumes that rewrite's storage-agnostic
@@ -98,6 +103,9 @@ Three consequences:
 A custom type gets its behaviour from up to three places, chosen by who needs to
 see it.
 
+**SUPERSEDED 2026-11-25** by box 5's registry: points 1 and 2 now both live in
+the app's registry, installed in `main`, and point 3 stands.
+
 1. **Its text form, on the type: `formoxus::proxy`.** Server-reachable for free,
    with no dependency on formoxus. formoxus treats any shape with a formoxus proxy
    as ONE leaf, the way it treats a newtype today. The field carries the PROXY type
@@ -133,14 +141,16 @@ refill its input from an existing value, which is the whole of apcsp's edit page
 
 ## Decisions
 
-A. **A proxied type is a built-in leaf.** Any shape with a `formoxus` proxy to
+A. **SUPERSEDED 2026-11-25 by M.** **A proxied type is a built-in leaf.** Any shape with a `formoxus` proxy to
    `String` becomes a text leaf whose field carries the `String`, checked through
    `convert_in`. Recommended, because it is the only mechanism here that needs
    nothing from formoxus in the model's crate. Alternatives: no proxy support,
    leaving `field:` as the only route, so `TimeLimit` needs a `field:` on every
    path that holds one.
 
-B. **Where a type → field default lives, when one is wanted at all.**
+B. **DECIDED 2026-11-25: (c), without the passing.** The app's registry,
+   installed once in `main`, which the server sees because it runs the same
+   `main` (box 5.1). **Where a type → field default lives, when one is wanted at all.**
    (a) Nowhere for now: the proxy covers text form, `field:` covers the rest.
    (b) `#[facet(formoxus::field = …)]` on the type, which is server-reachable but
    makes the model's crate depend on formoxus (apcsp's `models` does not).
@@ -154,18 +164,18 @@ C. **One registration or three (#28's question C).** With A and B(a), the answer
    path declares its field. Each lives where the thing it needs is visible.
    Confirm, or pull them together.
 
-D. **The proxy's error text.** facet wraps the dev's message: "Custom
+D. **MOOT 2026-11-25 (no proxy).** **The proxy's error text.** facet wraps the dev's message: "Custom
    deserialization of shape 'String' into 'TimeLimit' failed: "90": expected like
    1h15m at \<root>". Recommended: call `ProxyDef::convert_in` directly, which
    hands back the dev's own `String`, rather than going through `Partial`. That
    means a few lines of `unsafe` in formoxus around an uninitialised slot.
    The other route is to unwrap the error kind from `ReflectError`.
 
-E. **Proxy types other than `String`.** A `u32`-proxied type could keep a number
+E. **MOOT 2026-11-25 (no proxy).** **Proxy types other than `String`.** A `u32`-proxied type could keep a number
    input. Recommended: `String` only at first, with the others refused by a clear
    panic naming the type. Everything apcsp needs is text.
 
-F. **`choices:` on a proxied leaf** (`Ref<Question>` in `groups[].questions[]`).
+F. **SUPERSEDED 2026-11-25 by Q.** **`choices:` on a proxied leaf** (`Ref<Question>` in `groups[].questions[]`).
    The field carries the proxy's `String`, so the `(id, label)` choices apcsp
    passes today (`COURSE_QUESTIONS` in `tests/suite/assignment_shape.rs`) would
    compare as text unchanged. But `form!`'s `choice_field_for` requires
@@ -176,14 +186,15 @@ F. **`choices:` on a proxied leaf** (`Ref<Question>` in `groups[].questions[]`).
    that the shape has a proxy; or a `ChoiceField` typed by the proxy. To work out
    in box 2's tests.
 
-G. **The newtype path.** `FIELDS_PLAN.md`'s decision E was to retire the runtime
+G. **SUPERSEDED 2026-11-25 by N (retire the unwrapping now).** **The newtype path.** `FIELDS_PLAN.md`'s decision E was to retire the runtime
    newtype unwrapping once `field:` exists. With A, a newtype could instead keep
    working as it does (`Markdown` needs nothing more than that), or become "a
    newtype is proxied by its inner value". Recommended: leave newtypes alone in
    this plan. One wrapper type in `FieldNode`, `enum Wrapper { Newtype(&Shape),
    Proxy(&ProxyDef) }`, is a fair place for them to meet.
 
-H. **The default widget's key and holder.** `with_widget_for::<T>` keyed on
+H. **Holder changed 2026-11-25 by P:** the registry, not `Formoxus`; the
+   order stands. **The default widget's key and holder.** `with_widget_for::<T>` keyed on
    `T::SHAPE`, held in `Formoxus`. `Formoxus` derives `Clone + PartialEq` and
    must be `Send + Sync` for `with_context`, so the stored widget must be too.
    Checked 2026-11-24: `Formoxus` is `Send + Sync` today, and `AnyWidget` is
@@ -198,11 +209,22 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
    `String`, which is what the proxy and `choices:` see, or a small key type the
    storage layer interprets. Recommended: the storage repo's core crate with a
    `String` key, decided when that repo is planned. This plan needs only its
-   shape: `Ref<T>` derives `Facet`, is proxied to `String`, and round-trips as
+   shape: `Ref<T>` derives `Facet`, gets a field from the registry (since
+   2026-11-25; it was a `String` proxy before), and round-trips as
    `"question:abc"` or whatever the storage layer prints. Until then, the
    suite's tests use a stand-in `Ref<T>` of exactly that shape.
 
+J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
+   Their full text is in box 5 and 6 of `a8463e0`. J (`form!` reaches a type
+   with no `DefaultField` by the autoref dispatch `validator:` uses): the
+   dispatch stands for `choices:`, its fallback is now Q's, and its settings
+   fallback is dropped (O.1). K (`LeafArgs` gains the proxy): moot. L (the
+   per-type widget is render-only, four built-ins refused): superseded by P.
+
 ## Traps
+
+**Traps 1 to 3 and 6's proxy half are moot since 2026-11-25** (no proxy). 4 and
+5 still hold; 5 is why the registry is a process-wide static.
 
 1. **`begin_custom_deserialization_with_format` is the wrong method.** It reads a
    FIELD-level proxy and fails at the root with "not currently processing a
@@ -469,221 +491,222 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
      `choices:` on `Ref`); run against a stubbed copy, all 16 `field:` tests pass.
      `just ci` green (1624), with the line still commented out.
 
-- [ ] **5.** (Todd, with Claude on `form!`'s side) The proxied leaf:
-      classification (trap 2), the node, the check through `convert_in` (D), the
-      write-back, and the refill through `convert_out`. Expanded 2026-11-24 by
-      Claude. Decide J and K first.
+- [ ] **5.** (Todd, with Claude on tests and `form!`'s side) The type registry:
+      a field per TYPE, registered once in `main`, read by every build on both
+      sides. Rewritten 2026-11-25 by Claude, replacing the proxied leaf (the
+      2026-11-24 version is in `a8463e0`), after Todd ruled out
+      formoxus-specific attributes on models. M, N, O and P DECIDED 2026-11-25,
+      Q DEFERRED.
 
-  **Where it stands.** With `mod custom_fields;` back in, the suite fails to
-  compile only on box 6's `with_widget_for` (2) and on `choices:` over
-  `Vec<Ref<Question>>` (1, decision J). Run against a copy with those stubbed, 21
-  tests fail, and all of them are this box's or box 6's. The proxy tests that
-  pass today pass by accident: `TimeLimit(u32)` is still read as a newtype over
-  its number, which is one leaf, round-trips `4500`, and is required when empty;
-  and `widget: textarea` compiles only because the `const _` checks cannot see
-  inside a newtype.
+  **Why the change.** `#[facet(formoxus::proxy = String)]` needs no formoxus
+  dependency, but it still writes formoxus into the model, and Todd wants the
+  model to be just the model (2026-11-25): what formoxus or a storage layer
+  needs is added in those layers. Facts about the model that any consumer
+  cares about, like bounds and lengths, may still sit on it, in a neutral
+  vocabulary (box 10). That leaves the app as the place a type gets its
+  field, which the plan had ruled out only because Dioxus contexts do not
+  reach server functions (trap 5). A process-wide registry does not need a
+  context.
 
-  **What facet gives, concretely (facet-core and facet-reflect 0.46.5).**
-  `shape.format_proxy("formoxus")` is `Option<&'static ProxyDef>`. A `ProxyDef`
-  holds `shape` (the PROXY's shape, `String`'s here), `convert_in` and
-  `convert_out`, both `unsafe fn` over raw pointers, returning `Result<PtrMut,
-  String>`; the `String` is the dev's own `TryFrom` error, which is decision D.
-  `Peek::custom_serialization_with_proxy(def)` runs `convert_out` and returns an
-  `OwnedPeek` of the `String`. `Partial::begin_custom_deserialization_from_shape_with_format(Some("formoxus"))`
-  is the container-level way in for the write-back (trap 1 names the wrong one).
+  **Proven 2026-11-25 (5.1).** In a scratch copy of `examples`, `main` set a
+  `static OnceLock<&str>` before `launch(App)`, and a `#[post("/api/probe")]`
+  server function read it back: the built server binary answered `POST
+  /api/probe` with the value set in `main`. The fullstack server runs the same
+  `main` in the same process, and the wasm client runs its own `main` before
+  `launch` too, so a registry installed there is seen by `use_form` on the
+  client, by server-side rendering, and by `Submission::accept`.
 
-  **New decisions (2026-11-24, Claude recommends; Todd decides).**
+  **What goes away.** The proxy and everything built on it: `convert_in`,
+  `convert_out`, the `unsafe` slot handling, the `OwnedPeek` lifetime, the
+  `String`-only rule, and the `Wrapper` enum. A registered field is an
+  ordinary `Field<Value = T>` whose own `parse` and `format` do the text form,
+  which is box 3's machinery unchanged: the registry stores the same
+  `NodeCtor` that `field:` builds (`field_kind::named_field`).
 
-  J. **How `form!` reaches a proxied type that has no `DefaultField`.** Decision F
-     left the route open. `choice_field_for` and `field_for` both need `P:
-     DefaultField`, which `Ref<T>`'s crate cannot implement (orphan rule), so
-     `questions[] => { choices: COURSE_QUESTIONS }` does not compile. Recommended:
-     the autoref dispatch `validator:` already uses (`(&&validator_for(…)).validator(…)`,
-     `field_kind::validators`). `form!` emits `(&&choices_for(|__m| &place)).choice_field(choices)`;
-     the impl on the nearer reference is for `P: DefaultField` and builds today's
-     `ChoiceField<ValueOf<P>>`, and the fallback, for any `P: Facet`, builds a
-     `ChoiceField<String>` over the proxy's text. A `const _` beside it asserts the
-     shape has a `String` proxy, so a struct with neither still gets
-     `DefaultField`'s note. The same two impls serve settings (`max_length: 10` on a
-     `TimeLimit` gets a `StringField`). This works because the projection makes
-     `P` concrete at the call site. Claude's part (`form!` and the two impls).
-     Alternative: a key of its own, which a dev would have to know to use.
+  **New decisions (2026-11-25, Claude recommends; Todd's answers the same day
+  are marked).**
 
-  K. **Where a proxied leaf learns it is proxied.** Recommended: `LeafArgs` gains
-     `proxy: Option<&'static ProxyDef>`, filled by `node_for_shape` from the path's
-     shape, and `LeafArgs::node::<F>` decides, since only it knows `F`. If
-     `F::Value` is the path's own type, the field holds it: no wrapper, the peek as
-     is (a `field:` whose field reads a `TimeLimit` itself). If `F::Value` is the
-     proxy's type, `String`, the leaf is proxied: `node` runs `convert_out` on the
-     peek and populates from that. Anything else is 3.4's mismatch panic. So
-     `StringField`, `ChoiceField<String>` and a dev's `Field<Value = String>` can
-     all sit on a proxied path, which J needs. The alternative, deciding in
-     `node_for_shape`, cannot see `F`, so a constructor's field would have to be
-     guessed.
+  M. **What the registry is and how it is installed.** Recommended: a type of
+     its own, not part of `Formoxus`, built in
+     `main` and installed once:
+     `TypeRegistry::new().field_for::<TimeLimit>(TimeLimitField).widget_for::<Markdown>(MarkdownWidget).install();`
+     then `launch` as today. `install` puts it in a `static OnceLock<TypeRegistry>`
+     and panics if one is already installed. Why not inside `Formoxus`:
+     `Formoxus` also goes into a subtree's context through `provide_defaults`,
+     and a field registered there would reach the client's build but never the
+     server's, so client and server would build different forms. Keeping the
+     registry a separate type that can only be installed makes that mistake
+     impossible rather than documented
+     (`.claude/memory/feedback_hard_to_misuse.md`). `field_for::<T, F>` takes
+     `F: Field<Value = T> + Send + Sync`, so a field for the wrong type does
+     not compile. A generic type registers per concrete type
+     (`Ref<Question>` and `Ref<Assignment>` separately), because a `Shape` is
+     per instantiation. Alternative: fields inside `Formoxus`, with a rule
+     that only the launch-level one counts. **DECIDED 2026-11-25: as
+     recommended, named `formoxus::TypeRegistry`.**
 
-  - [ ] **5.1** (Todd) Classify a proxied type as text in `field_kind::kind`
-    (trap 2).
+  N. **Retire the newtype unwrapping now** (`FIELDS_PLAN.md` decision E,
+     deferred by G). Recommended: yes, in this box. The registry is the
+     declared way to say what a `Markdown(String)` is, so the guess is no
+     longer needed, and `FieldNode::wrapper` disappears entirely, since there
+     is no proxy either. apcsp registers two: `Markdown` (five places, inside
+     variants and a list item) and `ChoiceId`; `Password` can then be a real
+     field instead of a `String` converted by hand (`api/src/auth.rs`).
+     `#[facet(transparent)]` is different and stays: it is facet's own,
+     consumer-agnostic statement that the type IS its inner type, so honouring
+     it is not a guess. An unregistered plain newtype panics at build, naming
+     the type and saying how to register it. **DECIDED 2026-11-25: yes.**
 
-    Why: `form!`'s `const _` checks call `kind`. Today a proxied `Ref<T>` is a
-    struct, `Kind::Other`, so `widget: textarea` and every attribute on it are
-    refused. A proxied `TimeLimit(u32)` is a newtype without `inner`, so
-    `Kind::Unknown`, which lets everything through, `widget: number` included.
+  O. **What `form!` can still check on a registered type.** `form!` cannot see
+     a registry filled at run time, so:
 
-    1. After the `Option` peel and before the list, set, file and
-       `module_path` tests, scan `shape.format_proxies` (a `&'static` slice, so a
-       `while` loop works in a `const fn`) for an entry whose `format` is
-       `"formoxus"` (`str_eq`). Proven in a `const _` on 2026-11-24 (trap 2).
-    2. If its `proxy.shape` is `String` (the same `type_identifier` and
-       `module_path` test `kind` already makes), return `Kind::Text`. Otherwise
-       return `Kind::Unknown`, so the checks let it through and 5.3's runtime
-       panic names the type (decision E).
-    3. Before the file test is fine: a `FileUpload` has no formoxus proxy.
+     1. **Settings stay compile-time.** `max_length: 10` on a path still needs
+        `DefaultField`, so on a `TimeLimit` path it is a compile error, whose
+        note now says to name a configured field with `field:` instead. The
+        registered field is one instance, and `form!` has no way to configure
+        it. This drops J's settings fallback.
+     2. **`widget:` and table attributes become run-time checks on a struct or
+        a plain newtype.** `kind` returns `Unknown` for both instead of
+        `Other`, so the `const _` checks let them through, and the build
+        asserts what the compiler no longer can: the widget's `ACCEPTS`
+        contains the registered field's `KIND`, and a path with a widget or
+        attribute but no field (an unregistered struct) panics naming the type.
+        The cost is that `widget: textarea` on a plain struct is caught when
+        the form is built instead of by the compiler; `form_constraint_on_a_struct`
+        and `form_setting_on_a_newtype` change.
+     Alternative: keep `Other` for structs and refuse `widget:` on any struct
+     path, which forces a `field:` next to every `widget:` on a `Ref`.
 
-  - [ ] **5.2** (Todd) `enum Wrapper { Newtype(&'static Shape), Proxy { shape:
-    &'static Shape, def: &'static ProxyDef } }` in `FieldNode`, replacing
-    `wrapper: Option<&'static Shape>` (decision G). `shape` is the proxied type's
-    own (`TimeLimit`), kept for box 6's lookup and for messages. `LeafArgs.wrapper`
-    becomes `Option<Wrapper>`, and `LeafArgs` gains `proxy` (K).
+     **Todd's two questions (2026-11-25), answered by Claude:**
 
-  - [ ] **5.3** (Todd) The proxy arm in `node_for_shape`.
+     a. *Could a type like `Markdown` declare `KIND = Text`, so its text
+        attributes are known?* Not on the type itself without writing formoxus
+        into the model. Two routes that keep it plain: `#[facet(transparent)]`,
+        which `kind` already follows through `shape.inner`, so a transparent
+        `Markdown(String)` IS `Text` to every compile-time check today, and
+        needs no registered field at all, only a registered widget; or a
+        type-level `facetous::text`, which a `const fn` can read (proven in
+        10.1). Recommended: `transparent` for `Markdown`, since "this type is
+        its string" is a fact every consumer shares. Not `facetous::text` for
+        `TimeLimit`: being typed as `1h15m` is the form's concern, and storage
+        keeps a `u32`. So a type whose text form is its registered field's
+        stays `Unknown` to the compiler.
+     b. *Can the checks the compiler cannot make run when the registry is
+        installed, so they fail at startup instead of at first use?* Partly.
+        `install` sees everything the registry holds, so it can check each
+        type that has both a field and a widget (`W::ACCEPTS` contains
+        `F::KIND`), and 6.1's const check covers a widget against its type.
+        But a per-path `widget:` lives in a form, and a form is built when it
+        is first used: `install` never sees it. Reaching those would need
+        `form!` to add every spec to a linker-collected list that `install`
+        walks (the `inventory` crate), whose wasm support is unverified.
+        Recommended: `install` checks the registry; a `FormSpec::check()`
+        builds a spec against the installed registry without rendering, so
+        each form is one line in a test; `inventory` only if proven on wasm.
 
-    1. Look the proxy up once, next to `spec`: `let proxy =
-       shape.format_proxy("formoxus");`. It goes into `leaf(…)` for the
-       constructor arm too, which is what lets K work on a `choices:` path.
-    2. A new arm right AFTER the constructor arm and BEFORE the file, scalar and
-       newtype arms (trap 4: `TimeLimit` is a newtype and `Ref` is a struct, so
-       either later arm would claim it): when `proxy` is `Some`, build
-       `StringField::default()` through `leaf(peek, None, shape)` with the proxy
-       in it, and `LeafArgs::node` does the rest (K).
-    3. A proxy whose `def.shape` is not `String` panics there, naming the type,
-       its proxy type and the path. The test asks only that the message contain
-       `Minutes` (decision E).
-    4. `Option<TimeLimit>`, list items and variant fields all arrive through
-       `node_for_shape`, so they need nothing more (trap 6, and the "met by
-       `Shape` alone" tests).
+     **DECIDED 2026-11-25: O as written (O.1, O.2, a, and `install` checking
+     the registry).** `FormSpec::check()` is DEFERRED to #18 (check a model's
+     whole shape up front), which is where checking every use early belongs.
 
-  - [ ] **5.4** (Todd) The refill, in `LeafArgs::node` when it picks
-    `Wrapper::Proxy`: `peek.custom_serialization_with_proxy(def)` gives an
-    `OwnedPeek` of the `String`, and `populate` runs on its `as_peek()`.
+  P. **The per-type widget moves into the registry and is chosen at build.**
+     Recommended. With the registry seen on both sides, the server can pick
+     the same widget the client does, so the widget is chosen once, in
+     `LeafArgs::node`, in decision H's order: the path's `widget:`, then the
+     registry's widget for the path's type, then the field's
+     `default_widget`. This supersedes L: `is_checkbox`, `is_password` and
+     `value_when_empty` read the chosen widget on both sides, so nothing has
+     to be refused. Box 6 shrinks to two steps. **DECIDED 2026-11-25.**
 
-    Trap: the `OwnedPeek` owns the `String` and the peek borrows it, so it must
-    live until `populate` has cloned the value: a local in `node`, not
-    something returned from a helper that drops it. A `convert_out` that fails
-    (the test's are `Infallible`) has nothing sensible to show; `expect` with
-    the type's name. Trap 3 holds unchanged: a `convert_out` of `""` is
-    `Empty`, because `populate` now asks `format`, which for a `String` is the
-    text itself.
+  Q. **`choices:` on a registered type** (`Ref<Question>` in
+     `groups[].questions[]`, replacing F and J's fallback). J's dispatch stays
+     for `DefaultField` types. Recommended fallback, for any other `P`: a
+     choice field over `P` whose text comes from `P`'s REGISTERED field, looked
+     up at build. Its `format` is the registered field's, and its `parse`
+     finds the choice whose text equals the input, so it never needs to parse
+     `P` itself. The registry has to hand that text out typed: next to the
+     `NodeCtor` it keeps an `Arc<dyn Any + Send + Sync>` holding an
+     `Arc<dyn FieldText<P>>` (`format`, `parse`), which the choice field
+     downcasts knowing only `P`. A `choices:` on an unregistered `P` panics at
+     build. Alternative: defer, since apcsp's ids stay `String`s until the
+     storage repo exists (box 8); box 2's `Ref` test would wait in
+     `ui-pending` style. **DEFERRED 2026-11-25 (Todd):** 5.7 and Q's part of
+     5.8 wait; 5.2 parks box 2's `choices:` over `Vec<Ref<Question>>` test.
 
-  - [ ] **5.5** (Todd) The check through `convert_in`, in `FieldNode::validate`.
+  - [x] **5.1** (Claude) Prove a registry filled in `main` reaches a server
+    function. Done 2026-11-25, above.
 
-    Why there: the dev's `TryFrom` is the parse, and its error is the message
-    the user must see (the tests compare it exactly), so it has to run where
-    errors are collected, before anything is written. The `String` itself is
-    always valid text, so `parse` cannot catch it.
+  - [ ] **5.2** (Claude) Tests first, rewriting box 2's proxy tests against the
+    registry: `TimeLimit` gets a `TimeLimitField` (`1h15m`), the stand-in
+    `Ref<T>` a `RefField<T>`, and the `with_widget_for` tests become
+    `widget_for` (P). One `fn registry()` in `tests/suite.rs` installs every
+    test type behind a `std::sync::Once`, and each test that needs it calls it
+    first: the suite is one binary, and `install` is once per process (M).
+    Tests that only made sense for a proxy go (the non-`String` proxy panic).
+    New: a registered type inside a variant, a list item and an `Option`;
+    `field:` beating the registry; an unregistered newtype's panic message;
+    a widget whose `ACCEPTS` misses the registered field's `KIND`. The suite
+    will not compile until 5.3 exists, by design.
 
-    1. When `value` is `Valid(text)` and the wrapper is `Proxy`, run
-       `convert_in`: allocate `wrapper.shape` (`shape.allocate()`), call
-       `(def.convert_in)` with a `PtrConst` to the `String` and that slot, and on
-       `Err(message)` push
-       `ValidationMessage(message)`. Decision D, so no facet wording.
-    2. **Trap: the scratch value must be dropped and freed on BOTH outcomes.** On
-       `Ok` it is a live `TimeLimit` (a `Ref` owns a `String`): drop it in place,
-       then deallocate. On `Err` nothing was built: deallocate only. Facet's own
-       `custom_serialization_with_proxy` (`peek/value.rs:983`) is the pattern to
-       copy for the `Err` side. Getting `Ok` wrong leaks, and dropping on `Err`
-       is undefined behaviour.
-    3. Run it after the field's own `check`, and only if that found nothing,
-       so a `ChoiceField<String>` refusing a key outside the list says only that.
-    4. `Submission::accept` validates the same nodes, so the server tests need
-       nothing more.
+  - [ ] **5.3** (Todd) The registry (M): its builder methods, `install`, and a
+    `pub(crate) fn registry() -> Option<&'static TypeRegistry>` for the build. It
+    holds `Vec<(&'static Shape, NodeCtor)>` (a `Vec`: an app registers a
+    handful of types; `Shape`'s `PartialEq` compares type ids), and
+    registering a type twice in one builder replaces the entry. Its doc says
+    the order (P) and that a registered type is found by shape wherever it
+    sits: a field, a list item, a variant's field, an `Option<T>`'s inside.
 
-  - [ ] **5.6** (Todd) The write-back, in `write_value_into`: for
-    `Wrapper::Proxy`, `p.begin_custom_deserialization_from_shape_with_format(Some("formoxus"))?`,
-    take `.0`, `set` the `String`, then `end()`. `end` runs `convert_in` again;
-    5.5 has already shown it succeeds, so an error here is unreachable, as for
-    the other arms. `Wrapper::Newtype` keeps today's `begin_nth_field(0)`.
+  - [ ] **5.4** (Todd) The registry arm in `node_for_shape`, right after the
+    spec's constructor arm and before the file, scalar and newtype arms:
+    look `shape` up in `registry()`, and on a hit `return
+    ctor.build(leaf(peek, None, shape))`. After the `Option` arm for the same
+    reason as the constructor (trap 6). After the constructor because a path
+    beats a type (H). Before the scalar arm, so an app can register a field
+    for a built-in type, a `String` that always renders as a `MarkdownWidget`.
+    3.4's assert stays as a backstop; `field_for`'s bound makes it
+    unreachable.
 
-  - [ ] **5.7** (Claude) J's `form!` side: `choices_for` with its two impls, the
-    settings route the same way, the `const _` that the fallback needs a `String`
-    proxy, and a golden for a struct with neither.
+  - [ ] **5.5** (Todd) Retire the newtype unwrapping (N): delete the newtype
+    arm, `newtype_inner`, `FieldNode::wrapper`, `LeafArgs.wrapper`, and the
+    `begin_nth_field(0)` branch of the write-back. `scalar_node` loses its
+    wrapper path. Keep `#[facet(transparent)]` working through `shape.inner`.
+    Reword the "unsupported type" panic: name the type and say
+    `TypeRegistry::field_for` or `field:`.
 
-  - [ ] **5.8** (Claude) Tests the box needs beyond box 2's: `widget: textarea` on
-    a `Ref<T>` path compiles (5.1 on a struct), `widget: number` on a `TimeLimit`
-    is refused (a golden), a proxied `Ref` inside an `Option` round-trips, and a
-    `field:` whose field reads `TimeLimit` itself gets no wrapper (K's first
-    case). Then put `mod custom_fields;` back for good once box 6 lands.
+  - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2): a user struct and
+    a plain newtype give `Kind::Unknown`, with a doc saying the compiler
+    cannot see the registry. In `LeafArgs::node`, assert the chosen widget
+    accepts `F::KIND` (if `AnyWidget` cannot say, it needs `accepts()`, read
+    from the widget's `ACCEPTS` when it is made). The old 5.1's proxy scan is
+    not needed.
 
-- [ ] **6.** (Todd) `Formoxus::with_widget_for` and its place in the widget
-      order (H), and `Formoxus: Send + Sync` for `with_context`. Expanded
-      2026-11-24 by Claude. Decide L first.
+  - [ ] **5.7** (Todd, DEFERRED with Q) Q's run-time side: `FieldText<P>`, the registry storing
+    it, and the choice field over `P` that reads it.
 
-  **Where it stands.** `Formoxus` is `Send + Sync` and `AnyWidget` is `Clone +
-  PartialEq + Send + Sync` (checked 2026-11-24), so nothing blocks `with_context`.
-  Today a leaf's widget is decided ONCE, in `LeafArgs::node` at build time
-  (`spec.widget`, else `field.default_widget(optional)`), and stored in
-  `FieldNode::widget`. The build runs on the server too (`Submission::accept`),
-  where there is no Dioxus context, so the app's per-type widget cannot be
-  chosen there. It has to be chosen at RENDER,
-  from what `Form` resolved, which is the config cascade's rule anyway: resolve
-  at the `Form` boundary, never call `defaults()` while rendering
-  (`.claude/memory/config_cascade.md`).
+  - [ ] **5.8** (Claude) `form!`'s side: J's dispatch with Q's fallback, O.1's
+    note on the settings route, and the goldens that change (O.2). Then the
+    suite is green.
 
-  **New decision (2026-11-24, Claude recommends; Todd decides).**
+- [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
+      2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
+      2026-11-24, in `a8463e0`) is superseded with L.
 
-  L. **What the build-time widget still decides.** Three things are read off
-     `FieldNode::widget` outside rendering: `is_checkbox` (an unticked checkbox
-     writes `false`, on the server too), `is_password` (a password is not
-     trimmed), and `value_when_empty` (a range starts at its midpoint). None of
-     them can see the app's per-type widget on the server. Recommended: the
-     per-type widget changes RENDERING only, and `with_widget_for` refuses the
-     four built-ins whose name changes what a value means (`CheckboxInput`,
-     `PasswordInput`, `RangeInput`, `FileInput`) with a panic at launch. A dev's
-     own widget, the real case (`MarkdownWidget`), is never one of them.
-     Alternative: allow them, and document that the server reads the field's
-     default.
+  - [ ] **6.1** (Todd) `TypeRegistry::widget_for::<T: Facet<'static>>(self,
+    widget: impl LeafWidget) -> Self`, replacing an existing entry for `T`.
+    Check the widget against `T` there with an inline `const {
+    assert!(field_kind::renders::<W>(T::SHAPE, false)) }`, which fires when the
+    app is built (not under `cargo check`; see
+    `.claude/memory/const_shape_walk_blocked.md`).
 
-  - [ ] **6.1** (Todd) `Formoxus` holds `widgets_for: Vec<(&'static Shape,
-    AnyWidget)>`, and gains `with_widget_for::<T: Facet<'static>>(self, widget:
-    impl LeafWidget) -> Self`, which replaces an existing entry for `T`.
-
-    1. Keyed by `Shape`, whose `PartialEq` compares type ids, so `Formoxus`'s
-       derived `PartialEq` still holds. A `Vec` is plenty: an app registers a
-       handful of types.
-    2. Check the widget against `T` there: `field_kind::renders::<W>(T::SHAPE,
-       false)` is a `const fn`, so an inline `const { assert!(…) }` in the
-       generic method fires when the app is BUILT (not under `cargo check`; see
-       `.claude/memory/const_shape_walk_blocked.md`). L's refusal goes beside it.
-    3. Its doc says the order (6.4) and that the per-type widget applies wherever
-       a `T` is met by shape: a field, a list item, a variant's field, an
-       `Option<T>`'s inside.
-
-  - [ ] **6.2** (Todd) Resolve it at the `Form` boundary: a
-    `Form::widgets_for()` reading `defaults()`, like `classes()` does, into a
-    `FormWide` field. There is no per-form tier, so nothing to fold.
-
-  - [ ] **6.3** (Todd) A leaf remembers what render needs to choose: whether its
-    widget came from the spec (`widget:` or `with_widget`), and the TYPE to look
-    up. The type is the path's own: `Wrapper::Newtype(s)` gives `s` (`Note`, not
-    the `String` the field holds), `Wrapper::Proxy { shape, .. }` gives `shape`
-    (`TimeLimit`), and no wrapper gives `F::Value::SHAPE` (`Note` for a
-    `field: NoteField`). Box 5's `Wrapper` is what makes the first two possible,
-    which is why 6 follows 5.
-
-  - [ ] **6.4** (Todd) Choose at render, in `FieldNode::render`: the spec's widget
-    if it came from the spec, else the `FormWide` entry for the leaf's type, else
-    the build-time widget (the field's `default_widget`). That is decision H's
-    order, and `the_apps_widget_for_a_type_beats_a_named_fields_default_widget`
-    pins its middle step. Use the chosen widget for `extends()` and `render`;
-    leave `is_checkbox`, `is_password` and `value_when_empty` on the build-time
-    one (L).
+  - [ ] **6.2** (Todd) Choose in `LeafArgs::node`: `spec.widget`, else the
+    registry's widget for `self.shape` (the path's own type: `Note` for a
+    `field: NoteField` on a `Note`), else `field.default_widget(optional)`.
+    `the_apps_widget_for_a_type_beats_a_named_fields_default_widget` pins the
+    middle step. Nothing else changes: the chosen widget is stored in
+    `FieldNode::widget` as today, on both sides.
 
     Trap: a set's draft input renders through the same leaf code, so a
     per-type widget for a set's item type renders in the draft too. That is
-    probably right (the draft is where a `Note` is typed); a test would say.
-
-  - [ ] **6.5** (Claude) Tests beyond box 2's: L's refusal, a per-type widget
-    inside a variant, and a set draft over a registered type. Then `mod
-    custom_fields;` goes back into `suite.rs` for good.
+    probably right (the draft is where a `Note` is typed); 5.2 has a test.
 
 - [ ] **7.** (Claude) Everything compiles and passes: suite, examples, e2e. A
       gallery example and an e2e pair (a time limit typed as `1h15m` that
@@ -691,16 +714,111 @@ I. **Where the storage-agnostic `Ref<T>` lives, and what its key is.** It must
 
 - [ ] **8.** (Todd) apcsp: `Facet` (and `#[repr(u8)]` on the enums) for
       `AssignmentData`, `AssignmentSettings`, `AssignmentLatePolicy` and
-      `QuestionGroup`; a `TimeLimit` newtype proxied to `String`;
-      `MarkdownWidget` registered once at launch and the five
-      `widget: MarkdownWidget` lines dropped; the hand-written converters
-      deleted. `QuestionGroup`'s deferred `Random` and `Streak` variants would
+      `QuestionGroup`; a `TimeLimit` with a `TimeLimitField` (`1h15m`); a
+      `TypeRegistry` installed in `main` with fields for `TimeLimit`, `Markdown`
+      and `ChoiceId` (N) and `MarkdownWidget` for `Markdown`, and the five
+      `widget: MarkdownWidget` lines dropped; `Password` as a real field in
+      `ChangePasswordForm`; the hand-written converters deleted. `QuestionGroup`'s deferred `Random` and `Streak` variants would
       then show in the form: accept that, or keep a narrower form type.
       **The question ids wait on the storage repo:** `groups[].questions[]`
       becomes the storage-agnostic `Ref<Question>` (decision I) only once that
-      repo's core crate exists. Until then apcsp keeps its ids as `String`s in
+      repo's core crate exists, and it is registered with a field there (Q). Until then apcsp keeps its ids as `String`s in
       that one place, which `choices:` already checks (`assignment_shape.rs`),
       and converts them where the model is saved. Do NOT add facet to today's
       surreal-table `Ref<T>` in the meantime: `table!` would only undo it.
 
 - [ ] **9.** (Todd) Merge, and close #28.
+
+- [ ] **10.** (Claude, then Todd) **Model constraints in a neutral vocabulary.**
+      Asked by Todd 2026-11-25: facts about the model that any consumer cares
+      about may sit ON the model, as long as nothing formoxus-specific does.
+      Probably its own plan after #28; recorded here because box 5's O.1 and
+      the registry are shaped around it. R, S and T DECIDED 2026-11-25. 10.1
+      done; 10.2 next.
+
+  **What exists.** `facet-validate` (facet 0.50 only, still a release
+  candidate) is facet's own grammar for this, on struct fields:
+  `validate::min`/`max` (`i64` only), `min_length`/`max_length`, `regex`,
+  `email`, `url`, `contains`, `custom = fn`. Todd found it too thin, and its
+  `regex` matches anywhere in the value while HTML's `pattern` matches the
+  whole, so browser and server would disagree
+  (`.claude/memory/facet_validate_crate.md`).
+
+  **What we would write.** Our own vocabulary in a small crate depending only
+  on facet, so the model depends on it and not on formoxus. Not through
+  `facet::define_attr_grammar!` but a hand-written `__attr!` (10.1 says why).
+  The derive expands `#[facet(facetous::min = 0)]` on a field to
+  `facetous::__attr!(@ns { facetous } min { size : u8 | = 0 })`, so the
+  namespace is a path the model can name: the crate, or a `use … as …`
+  alias. Coverage, from what formoxus validates
+  today: `min`, `max`, `min_length`, `max_length`, `pattern` (anchored),
+  `min_items`, `max_items`, and `check = fn(&T) -> Result<(), String>` (the
+  grammar has a `validator` payload kind for exactly that). formoxus reads
+  them at build and folds them into the leaf's field; `ithell` can read the
+  same for column constraints.
+
+  R. **Where the crate lives and its name.** Recommended: this workspace,
+     published with formoxus, under a name that does not say formoxus.
+     **DECIDED 2026-11-25: here for now, probably moved out later; named
+     `facetous`** ("like facet, but with some more stuff").
+
+  S. **A model and `form!` setting the same constraint.** Claude first
+     recommended that both apply, so a form can only tighten the model.
+     **Todd's option (2026-11-25): it is an error.** A constraint on the model
+     is one every consumer accepts; if storage and the form need different
+     ones, the model leaves it unstated and each layer declares its own. 10.1
+     showed `form!` can refuse it AT COMPILE TIME, so Claude now recommends
+     Todd's option: a `const _` reads the model field's `facetous` keys off
+     the parent's `Field` entry. **DECIDED 2026-11-25: an error, at compile
+     time.**
+     
+  T. **Whether formoxus also reads `facet-validate` once 0.50 is stable.**
+     Recommended: no; one vocabulary. **DECIDED 2026-11-25: no** (too
+     bare-bones).
+
+  - [x] **10.1** (Claude) Probe. Done 2026-11-25, on facet 0.46.5, in a
+    scratch workspace (`facetous`, a `model` crate depending only on facet and
+    `facetous`, and a `reader`). Findings:
+
+    1. **The derive hands a field-level attribute the field's TYPE**
+       (`$field:tt : $ty:ty`). `define_attr_grammar!` uses it only for
+       `predicate` and `validator`; its value kinds fix the payload type
+       (`i64`, `usize`), and `make_t` writes the literal with an untyped
+       `put`. A hand-written `__attr!` (about ten `macro_rules!` arms) can
+       type every value BY THE FIELD instead.
+    2. **Bounds are typed by the field.** `min = 1` on a `u8` is stored as a
+       `u8`, `-0.5` on an `f64` as an `f64`, and `10_000_000_000` on an
+       `Option<u64>` as a `u64`, through a `Numeric` trait whose `Bound` peels
+       `Option`. The reader compares a value with its bound through facet's
+       `partial_cmp`, knowing only the shapes.
+    3. **Every misuse is a compile error at the value or key**, with no
+       formoxus involved:
+       1. `max = 256` on a `u8`: rustc's "literal out of range for `u8`
+          … whose range is `0..=255`".
+       2. `min = 0.5` on a `u32`: "expected `u32`, found floating-point number".
+       3. `min` on a `String`: "`facetous::min` and `facetous::max` apply to
+          a number, and `String` is not one" (`on_unimplemented`).
+       4. `max_length` on a `u32`, `min_items` on a `String`: the same kind
+          of message from `Text` and `Items`.
+       5. `check = f` where `f` takes `&String` on a `u32`: rustc's "expected
+          fn pointer `fn(&u32) -> Result<_, _>`".
+       6. An unknown key: "facetous has no constraint `minimum`".
+    4. **`check = fn(&T) -> Result<(), String>`** is stored type-erased as
+       `unsafe fn(PtrConst) -> Result<(), String>`, so a reader holding only
+       the shape calls it. It cannot capture the field type of a GENERIC
+       struct (an inner `fn` cannot use the outer generics), as facet's own
+       `validator` cannot either. Untested: bounds on a generic field.
+    5. **The namespace resolves through an alias:** `use facetous as rules;`
+       then `#[facet(rules::min = …)]` works; the stored `ns` is the crate's
+       own string, `"facetous"`.
+    6. **A `const fn` reads them.** A type-level `#[facet(facetous::text)]`
+       is found in `shape.attributes`, and a field-level key on the parent's
+       `Field` entry (`st.fields[i].attributes`, by name), both in a `const
+       _` assert; a false assert fails the build. That is what lets `form!`
+       refuse S's duplicate at compile time.
+    7. **Not checked at compile time:** a `pattern`'s regex syntax (a `const`
+       cannot compile a regex; a small proc macro could, as formoxus-macros
+       does with `regress`), and `min` above `max` across two attributes,
+       which a per-attribute macro never sees together. Both could be checked
+       where formoxus reads them, at install or build.
+  - [ ] **10.2** (Claude) Expand into steps (R to T are decided).

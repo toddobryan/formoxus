@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-24 late**: box 4 (`field:`) DONE+pushed; boxes 5, 6 expanded (uncommitted), Todd decides J-L, then 5.1
+- [**START HERE: next session**](next_session.md) — **2026-11-25 end**: M-P, R-T decided, Q deferred, committed; next Claude 5.2 tests (TypeRegistry) after Todd's reboot
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -16,6 +16,7 @@
 - [One function, not two](feedback_one_function_not_two.md) — extend an existing function (tag/param/enum) over adding a near-duplicate; migration cost alone does not win
 - [Hard to misuse, then docs](feedback_hard_to_misuse.md) — a wrong use that compiles: reshape the API so it takes effort (pub(crate) + one method doing every step); docs are the fallback
 - [Raise parked gaps when built on](feedback_raise_parked_gaps_when_built_on.md) — new code on a path a known-limitation comment/`*_yet` test warns about: say so; #13 came from one
+- [Models stay plain](models_stay_plain.md) — no formoxus/storage-specific attributes on models, even dependency-free ones; consumer-agnostic constraints may sit on them
 - [No PR per change](no_pr_per_change.md) — commit/push only when told; no standalone memory commits; `just hooks` once per machine for the fmt pre-commit hook
 
 ## Plan
@@ -52,8 +53,10 @@
 - [Facet newtypes & custom widgets](facet_newtypes_and_custom_widgets.md) — newtypes are leaves; `WidgetType::Custom` is a fn pointer; `wrapper` side-channel
 - [facet re-export needs a direct dep](facet_reexport_needs_direct_dep.md) — users still need `facet` directly; the derive hard-codes `::facet` (facet#2662)
 - [Storage separate from models](storage_separate_from_models.md) — 2026-11-23: own repo `ithell`, split out after custom fields; models derive only Facet, `table!` does SurrealDB; orphan rule forces a facet walk
-- [facet proxy hook](facet_proxy_hook.md) — PROVEN 2026-11-23: `#[facet(formoxus::proxy = String)]` + TryFrom = own text form; own `formoxus::field` attr works too; launch contexts miss server fns
+- [facet proxy hook](facet_proxy_hook.md) — REJECTED for formoxus 2026-11-25 (models stay plain). PROVEN 2026-11-23: `#[facet(formoxus::proxy = String)]` + TryFrom = own text form; own `formoxus::field` attr works too; launch contexts miss server fns
 - [facet 0.50 compatibility](facet_050_compatibility.md) — 0.50.0-rc.7 is a drop-in; stay on 0.46.5 until stable
+- [facet-validate crate](facet_validate_crate.md) — facet 0.50-only consumer-agnostic field constraints (min/max i64, lengths, regex, custom); fields only, not types; formoxus could read them
+- [facetous probe](facetous_probe.md) — PROVEN 2026-11-25: hand-written `facetous::__attr!` types constraints by the field; misuse = compile errors; const fn reads them
 
 ## Widgets, choices, attributes
 - [Widget table & what a Choice is](widget_table_and_choice.md) — unrenderable (kind, widget) pairs are compile errors; shape choice vs value choice
