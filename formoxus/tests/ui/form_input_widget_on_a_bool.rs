@@ -1,6 +1,6 @@
 //! An `<input>` widget cannot render a bool field.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Settings {

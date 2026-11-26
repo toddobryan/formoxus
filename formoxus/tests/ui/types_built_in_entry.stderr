@@ -1,0 +1,13 @@
+error: `String` is built in and reads the same in every form, so no list can give it a field. For a `String` that reads differently, declare a type of your own (`struct Shouty(String);`) and list that
+ --> tests/ui/types_built_in_entry.rs:7:5
+  |
+7 |     String => field StringField,
+  |     ^^^^^^
+
+warning: unused import: `formoxus::fields::StringField`
+ --> tests/ui/types_built_in_entry.rs:3:5
+  |
+3 | use formoxus::fields::StringField;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

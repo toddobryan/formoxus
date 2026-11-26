@@ -67,6 +67,13 @@ use crate::field::Field;
 use crate::nodes::NodeCtor;
 use crate::widgets::{AnyWidget, LeafWidget};
 
+formoxus_macros::types! {
+    /// The built-in types and nothing else: the list a form with none of its
+    /// own reads (decisions AC and AD), and the prelude's `FormoxusTypes`.
+    /// Every other list holds these too, and none can change them (AF).
+    pub struct BuiltIns;
+}
+
 /// Set once, by [`TypeRegistry::install`]. Empty until then, which is not an
 /// error: a form over built-in types needs no registry.
 static REGISTRY: OnceLock<TypeRegistry> = OnceLock::new();
@@ -261,7 +268,9 @@ impl Debug for FieldInfo {
 
 #[diagnostic::on_unimplemented(
     message = "`{V}` has no field in `{Self}`",
-    note = "list it in `{Self}`'s `formoxus::types!`: `{V} => newtype String`, or `{V} => field YourField`"
+    note = "`{Self}` is the `FormoxusTypes` in scope here. List `{V}` in a `formoxus::types!` \
+            (`{V} => newtype String`, or `{V} => field YourField`) and point this module's \
+            `FormoxusTypes` at that list, or name a field for this path with `field:`"
 )]
 pub trait FieldFor<V> {
     /// What a path's settings in `form!` configure: the field
@@ -273,4 +282,14 @@ pub trait FieldFor<V> {
 
     /// The field, from settings.
     fn build(settings: Self::Settings) -> Self::Field;
+}
+
+/// Every type a list holds beside the built-ins, with its field's
+/// [`KIND`](crate::field::Field::KIND): what `form!`'s compile-time widget
+/// checks judge a listed type by, in place of its shape (decision AB.10.3).
+/// `types!` writes it; a `const fn` can read a const but cannot ask whether a
+/// trait is implemented, so the list is spelled out as data.
+#[doc(hidden)]
+pub trait TypeKinds {
+    const KINDS: &'static [(&'static Shape, FieldType)];
 }

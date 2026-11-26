@@ -1,7 +1,7 @@
 //! Only `file` renders a `FileUpload` field.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::file::FileUpload;
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Assignment {

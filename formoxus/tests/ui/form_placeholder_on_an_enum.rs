@@ -1,7 +1,7 @@
 //! An attribute the variant `<select>` cannot carry is refused on an enum
 //! field, even though formoxus does not validate it.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

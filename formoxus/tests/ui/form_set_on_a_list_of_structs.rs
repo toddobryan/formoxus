@@ -1,7 +1,7 @@
 //! A set's items are shown, not edited, so each must be one value; an
 //! `Answer` is a struct, several.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Answer {

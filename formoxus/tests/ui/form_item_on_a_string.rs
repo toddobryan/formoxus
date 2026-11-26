@@ -1,7 +1,7 @@
 //! `item` shows a set's items, so it applies only to a set.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::widgets::ItemText;
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Profile {

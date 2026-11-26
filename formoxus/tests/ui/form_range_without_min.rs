@@ -2,8 +2,8 @@
 //! the midpoint between them, and without them that would be the browser's
 //! 0 to 100, which nobody chose. The error points at `range` and names the
 //! missing `min:`.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Mixer {

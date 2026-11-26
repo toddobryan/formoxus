@@ -1,11 +1,11 @@
 //! An item view takes `SetItemProps`; a component taking anything else is
 //! reported where it is named.
-use std::collections::BTreeSet;
+#![allow(unused_imports)] use std::collections::BTreeSet;
 
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::widgets::AddItemProps;
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Post {

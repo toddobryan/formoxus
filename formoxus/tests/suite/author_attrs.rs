@@ -195,7 +195,7 @@ fn a_custom_widget_receives_the_fields_attributes() {
             .with_widget(&path!(Person.name), Spreading)
             .with_node(
                 &path!(Person.name),
-                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+                field_for::<FormoxusTypes, _, _>(|m: &Person| &m.name, |f| f.max_length = Some(10))
             )
             .with_attrs(
                 &path!(Person.name),
@@ -455,7 +455,7 @@ fn an_author_attribute_overrides_a_constraint_attribute() {
         FormSpec::<Person>::new()
             .with_node(
                 &path!(Person.name),
-                field_for(|m: &Person| &m.name, |f| f.max_length = Some(10))
+                field_for::<FormoxusTypes, _, _>(|m: &Person| &m.name, |f| f.max_length = Some(10))
             )
             .with_attrs(
                 &path!(Person.name),

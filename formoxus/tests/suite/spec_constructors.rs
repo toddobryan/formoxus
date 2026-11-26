@@ -261,7 +261,10 @@ fn choices_over_a_number_field_are_that_number() {
     let spec = || {
         FormSpec::default().with_node(
             &path!(Order.size),
-            choice_field_for(|m: &Order| &m.size, [(1, "Small"), (2, "Large")]),
+            choice_field_for::<FormoxusTypes, _, _, _>(
+                |m: &Order| &m.size,
+                [(1, "Small"), (2, "Large")],
+            ),
         )
     };
     expect_that!(
@@ -280,7 +283,10 @@ fn an_optional_field_chooses_among_what_it_holds() {
     let spec = || {
         FormSpec::default().with_node(
             &path!(Order.gift_wrap?),
-            choice_field_for(|m: &Order| &m.gift_wrap, [(1, "Paper"), (2, "Box")]),
+            choice_field_for::<FormoxusTypes, _, _, _>(
+                |m: &Order| &m.gift_wrap,
+                [(1, "Paper"), (2, "Box")],
+            ),
         )
     };
     let with_wrap = [("size", "1"), ("gift_wrap", "9"), ("state", "AL")];
@@ -305,7 +311,7 @@ fn a_const_str_table_serves_a_string_field() {
     let spec = || {
         FormSpec::default().with_node(
             &path!(Order.state),
-            choice_field_for(|m: &Order| &m.state, STATES),
+            choice_field_for::<FormoxusTypes, _, _, _>(|m: &Order| &m.state, STATES),
         )
     };
     expect_that!(
@@ -337,7 +343,7 @@ fn choices_reach_an_item() {
     };
     let spec = FormSpec::default().with_node(
         &path!(Trip.venues[].city),
-        choice_field_for(
+        choice_field_for::<FormoxusTypes, _, _, _>(
             |m: &Trip| &formoxus::field_kind::item(m.venues.iter()).city,
             [("Paris", "Paris"), ("Rome", "Rome")],
         ),

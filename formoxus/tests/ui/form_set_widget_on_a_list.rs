@@ -1,7 +1,7 @@
 //! A `Vec` is a list, whose order and duplicates a set widget cannot show:
 //! it takes one only with `set` beside it.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Trip {

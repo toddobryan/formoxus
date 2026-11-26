@@ -1,8 +1,8 @@
 //! A slider cannot be unset, so it cannot say `None`: `range` on an
 //! `Option<i32>` is refused with `optional_refusal`'s sentence for it,
 //! as `checkbox` on an `Option<bool>` is.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Mixer {

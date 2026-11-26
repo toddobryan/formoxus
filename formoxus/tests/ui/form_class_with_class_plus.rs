@@ -1,7 +1,7 @@
 //! `class` replaces formoxus's classes and `class_plus` appends to them, so
 //! a field takes one or the other, never both.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

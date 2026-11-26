@@ -1,6 +1,6 @@
 //! `accept` is the file types a file field takes, so it applies to nothing else.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Assignment {

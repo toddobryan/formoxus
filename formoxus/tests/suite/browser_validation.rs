@@ -1,7 +1,9 @@
 //! `browser_validation: off` and `Form::reset`.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::{Formoxus, empty_form, form, form_for, path, provide_defaults, use_form, using_fns};
 use googletest::prelude::*;
 

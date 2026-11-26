@@ -121,7 +121,7 @@ where
 {
     form.collect_values()
         .into_iter()
-        .find_map(|(p, v)| (p.to_string() == path).then_some(v))
+        .find_map(|(p, v)| (p == path).then_some(v))
 }
 
 fn paths_of<T>(form: &FormState<T>) -> Vec<String>

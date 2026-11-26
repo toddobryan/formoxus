@@ -6,8 +6,10 @@
 //! crate can check the other — formoxus-macros does not depend on formoxus —
 //! so a test written from outside is what keeps them honest.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::label_case::{LabelCase, ToCase};
 use formoxus::using_fns;
 use formoxus::{Formoxus, defaults, empty_form, form, provide_defaults, use_form};

@@ -134,7 +134,9 @@ impl SpecPath {
                 "[{}]".to_string()
             }
             Selector::Value(value) => {
-                arguments.push(quote! { ::formoxus::path::item_value_key(#value) });
+                arguments.push(
+                    quote! { ::formoxus::path::item_value_key(FormoxusTypes::registry(), #value) },
+                );
                 "{}".to_string()
             }
         });
@@ -767,7 +769,7 @@ mod tests {
         expect_that!(format, eq("groups[{}].tags{}"));
         expect_that!(
             arguments[1].to_string(),
-            eq(":: formoxus :: path :: item_value_key (& t)")
+            eq(":: formoxus :: path :: item_value_key (FormoxusTypes :: registry () , & t)")
         );
     }
 

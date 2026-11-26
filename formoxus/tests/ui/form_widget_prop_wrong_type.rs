@@ -1,12 +1,12 @@
 //! A prop of the wrong type is reported at its value, which goes through
 //! `Into::into`. A `bool` prop, because rustc lists every `From` impl of the
 //! target, and `u32`'s list names types from dependencies.
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{LeafWidget, Widget};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Survey {

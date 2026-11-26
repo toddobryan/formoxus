@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `checkbox` can only render a bool field
+  --> tests/ui/form_widget_cannot_render_a_listed_type.rs:44:58
+   |
+44 |     let _ = empty_form(form! { Quiz { limit => { widget: checkbox } } });
+   |                                                          ^^^^^^^^ evaluation of `main::_` failed here

@@ -398,9 +398,12 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
 /// Whether the field is one value, and so can have a widget at all. A struct,
 /// list or enum is several, and a widget on one is either rejected at runtime
 /// (a struct or list asserts) or silently ignored (an enum always renders its
-/// variant picker).
-pub const fn is_single_value(shape: &Shape) -> bool {
-    !matches!(kind(shape), Kind::List | Kind::Other | Kind::Enum)
+/// variant picker). A type the list holds is one value whatever its shape,
+/// since its field reads it from one: `kinds` is the list's
+/// [`TypeKinds::KINDS`](crate::type_registry::TypeKinds::KINDS).
+pub const fn is_single_value(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    listed_kind(kinds, shape).is_some()
+        || !matches!(kind(shape), Kind::List | Kind::Other | Kind::Enum)
 }
 
 /// Whether the field is a list (`Vec` or `Option<Vec>`)
@@ -521,6 +524,10 @@ const fn is_bare_unit_enum(shape: &Shape) -> bool {
 /// Whether the widget `W` can render a single-value field of this type.
 /// `has_choices` is whether `form!` was given `choices` for it.
 ///
+/// A type the list holds (`kinds`, as for [`is_single_value`]) is judged by
+/// its field's `KIND`, not its shape (decision AB.10.3): a listed
+/// `TimeLimit(u32)` read as text takes a text widget, not a number one.
+///
 /// `true` for anything [`is_single_value`] rejects, so a widget on a struct
 /// reports once, from there. `true` for a newtype whose inside is out of reach,
 /// for the reason `Kind::Unknown` gives. Everything else is the field's
@@ -532,7 +539,15 @@ const fn is_bare_unit_enum(shape: &Shape) -> bool {
 /// Generic rather than taking a widget value, so `form!` can ask it in a free
 /// `const _` in the dev's crate, where `W`'s consts are visible: a `const fn`
 /// can read a trait's consts but not call its methods.
-pub const fn renders<LW: LeafWidget>(shape: &Shape, has_choices: bool) -> bool {
+pub const fn renders<LW: LeafWidget>(
+    kinds: &[(&Shape, FieldType)],
+    shape: &Shape,
+    has_choices: bool,
+) -> bool {
+    if let Some(field_type) = listed_kind(kinds, shape) {
+        return LW::ACCEPTS.contains(field_type)
+            || (!matches!(field_type, FieldType::File) && LW::TAKES_CHOICES && has_choices);
+    }
     let field_type = match kind(shape) {
         Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => {
             return true;
@@ -596,15 +611,16 @@ impl WidgetSlot<false> {
     /// fails as a [`slot_failure`] number. The same parameters as the set
     /// impl's, since `form!` writes one call for either.
     pub const fn failure<LW: LeafWidget>(
+        kinds: &[(&Shape, FieldType)],
         shape: &Shape,
         _marked_set: bool,
         has_choices: bool,
     ) -> u8 {
-        if !is_single_value(shape) {
+        if !is_single_value(kinds, shape) {
             slot_failure::NOT_A_SINGLE_VALUE
         } else if !optional_is_okay::<LW>(shape) {
             slot_failure::OPTIONAL
-        } else if !renders::<LW>(shape, has_choices) {
+        } else if !renders::<LW>(kinds, shape, has_choices) {
             slot_failure::CANNOT_RENDER
         } else if has_choices && !LW::TAKES_CHOICES {
             slot_failure::TAKES_NO_CHOICES
@@ -624,7 +640,9 @@ impl WidgetSlot<false> {
     /// A set widget's `choices:` on a field that is not a set: nothing, since
     /// the widget's own check has said what is wrong, and reaching for the
     /// items of a `String` would add rustc's "no `iter`" to it.
-    pub fn set_choices<M: Clone + std::fmt::Debug + Facet<'static>, P, C>(
+    // `Reg` unused, but first in all four choice methods: `form!` names it
+    // by turbofish on one call that reaches either impl.
+    pub fn set_choices<Reg, M: Clone + std::fmt::Debug + Facet<'static>, P, C>(
         spec: FormSpec<M>,
         _items: &ModelPath<M>,
         _: fn(&M) -> &P,
@@ -634,7 +652,7 @@ impl WidgetSlot<false> {
     }
 
     /// `choices:` beside the widget: the field's own, as for any leaf.
-    pub fn choices<Model, Reg, TypeAtPath, Choice>(
+    pub fn choices<Reg, Model, TypeAtPath, Choice>(
         spec: FormSpec<Model>,
         path: &ModelPath<Model>,
         _items: &ModelPath<Model>,
@@ -654,7 +672,12 @@ impl WidgetSlot<false> {
 impl WidgetSlot<true> {
     /// Decision E's check, as [`set_widget_renders`]; the bound is the kind
     /// check. The parameters are the leaf impl's.
-    pub const fn failure<SW: SetWidget>(shape: &Shape, marked_set: bool, has_choices: bool) -> u8 {
+    pub const fn failure<SW: SetWidget>(
+        _kinds: &[(&Shape, FieldType)],
+        shape: &Shape,
+        marked_set: bool,
+        has_choices: bool,
+    ) -> u8 {
         if set_widget_renders(shape, marked_set, has_choices) {
             slot_failure::NONE
         } else {
@@ -776,10 +799,11 @@ enum Kind {
     /// Something that is not one value: a struct, or a scalar
     /// formoxus does not support.
     Other,
-    /// A newtype whose inner type is out of reach. A tuple struct's field shape
-    /// sits behind a `ShapeRef` fn pointer, and const code cannot call one. The
-    /// runtime sees the inner type, so the constraint may well apply; saying
-    /// "no" here would reject `Markdown(String)` with `max_length`.
+    /// A newtype, which only its field can classify. A tuple struct's field
+    /// shape sits behind a `ShapeRef` fn pointer, and const code cannot call
+    /// one; a transparent one's `inner` is in reach, but formoxus ignores
+    /// `transparent` (decision W). The field may well take the constraint, so
+    /// saying "no" here would reject `Markdown(String)` with `max_length`.
     Unknown,
 }
 
@@ -819,11 +843,7 @@ const fn kind(shape: &Shape) -> Kind {
             if str_eq(shape.type_identifier, "String") && str_eq(module, "alloc::string") {
                 Kind::Text
             } else if is_newtype(shape) {
-                // `#[facet(transparent)]` fills in `inner`, which IS reachable.
-                match shape.inner {
-                    Some(inner) => kind(inner),
-                    None => Kind::Unknown,
-                }
+                Kind::Unknown
             } else if matches!(shape.ty, Type::User(UserType::Enum(_))) {
                 Kind::Enum
             } else {
@@ -875,6 +895,54 @@ const fn field_type(shape: &Shape) -> Option<FieldType> {
     }
 }
 
+/// The `KIND` the list gives `shape`'s type, `Option` peeled, or `None` when
+/// the list does not hold it.
+const fn listed_kind(kinds: &[(&Shape, FieldType)], shape: &Shape) -> Option<FieldType> {
+    let shape = match &shape.def {
+        Def::Option(option) => option.t,
+        _ => shape,
+    };
+    let mut i = 0;
+    while i < kinds.len() {
+        if same_type(kinds[i].0, shape) {
+            return Some(kinds[i].1);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Whether two shapes are one type, by name: module, identifier and every
+/// type parameter, so `Ref<Question>` is not `Ref<Assignment>`. A `TypeId`
+/// would be exact, but comparing one is not const (`ConstTypeId` holds a fn
+/// pointer); two types with one module, name and parameters cannot both
+/// exist.
+const fn same_type(a: &Shape, b: &Shape) -> bool {
+    if !str_eq(a.type_identifier, b.type_identifier) {
+        return false;
+    }
+    match (a.module_path, b.module_path) {
+        (Some(x), Some(y)) => {
+            if !str_eq(x, y) {
+                return false;
+            }
+        }
+        (None, None) => {}
+        _ => return false,
+    }
+    if a.type_params.len() != b.type_params.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.type_params.len() {
+        if !same_type(a.type_params[i].shape, b.type_params[i].shape) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// `==` on `str` is a trait method, which const code cannot call.
 const fn str_eq(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
@@ -897,10 +965,11 @@ mod tests {
 
     use super::{
         applies, is_enum, is_list_of_leaves, is_optional, is_single_value, renders,
-        required_is_not_optional, takes_bound, takes_length, takes_pattern, takes_required,
+        required_is_not_optional, same_type, takes_bound, takes_length, takes_pattern,
+        takes_required,
     };
-    use facet::Facet;
-    use formoxus_spec::Attr;
+    use facet::{Facet, Shape};
+    use formoxus_spec::{Attr, FieldType};
     use googletest::prelude::*;
 
     #[derive(Facet)]
@@ -1029,41 +1098,41 @@ mod tests {
     #[gtest]
     fn an_input_renders_text_and_numbers_but_not_a_bool() {
         for shape in [std::string::String::SHAPE, u32::SHAPE, f64::SHAPE] {
-            expect_that!(renders::<TextInput>(shape, false), eq(true), "{shape}");
+            expect_that!(renders::<TextInput>(&[], shape, false), eq(true), "{shape}");
         }
-        expect_that!(renders::<TextInput>(bool::SHAPE, false), eq(false));
+        expect_that!(renders::<TextInput>(&[], bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_textarea_renders_only_text() {
         expect_that!(
-            renders::<Textarea>(std::string::String::SHAPE, false),
+            renders::<Textarea>(&[], std::string::String::SHAPE, false),
             eq(true)
         );
-        expect_that!(renders::<Textarea>(u32::SHAPE, false), eq(false));
-        expect_that!(renders::<Textarea>(bool::SHAPE, false), eq(false));
+        expect_that!(renders::<Textarea>(&[], u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Textarea>(&[], bool::SHAPE, false), eq(false));
     }
 
     #[gtest]
     fn a_checkbox_renders_only_a_bool_optional_or_not() {
-        expect_that!(renders::<CheckboxInput>(bool::SHAPE, false), eq(true));
+        expect_that!(renders::<CheckboxInput>(&[], bool::SHAPE, false), eq(true));
         expect_that!(
-            renders::<CheckboxInput>(<Option<bool>>::SHAPE, false),
+            renders::<CheckboxInput>(&[], <Option<bool>>::SHAPE, false),
             eq(true)
         );
         expect_that!(
-            renders::<CheckboxInput>(std::string::String::SHAPE, false),
+            renders::<CheckboxInput>(&[], std::string::String::SHAPE, false),
             eq(false)
         );
     }
 
     #[gtest]
     fn a_chooser_needs_choices_except_for_a_bool() {
-        expect_that!(renders::<Select>(bool::SHAPE, false), eq(true));
-        expect_that!(renders::<Select>(u32::SHAPE, false), eq(false));
-        expect_that!(renders::<Select>(u32::SHAPE, true), eq(true));
+        expect_that!(renders::<Select>(&[], bool::SHAPE, false), eq(true));
+        expect_that!(renders::<Select>(&[], u32::SHAPE, false), eq(false));
+        expect_that!(renders::<Select>(&[], u32::SHAPE, true), eq(true));
         expect_that!(
-            renders::<Select>(std::string::String::SHAPE, true),
+            renders::<Select>(&[], std::string::String::SHAPE, true),
             eq(true)
         );
     }
@@ -1081,11 +1150,11 @@ mod tests {
 
     #[gtest]
     fn only_a_single_value_can_have_a_widget() {
-        expect_that!(is_single_value(std::string::String::SHAPE), eq(true));
-        expect_that!(is_single_value(<Option<bool>>::SHAPE), eq(true));
-        expect_that!(is_single_value(Markdown::SHAPE), eq(true));
+        expect_that!(is_single_value(&[], std::string::String::SHAPE), eq(true));
+        expect_that!(is_single_value(&[], <Option<bool>>::SHAPE), eq(true));
+        expect_that!(is_single_value(&[], Markdown::SHAPE), eq(true));
         expect_that!(
-            is_single_value(<Vec<std::string::String>>::SHAPE),
+            is_single_value(&[], <Vec<std::string::String>>::SHAPE),
             eq(false)
         );
     }
@@ -1094,8 +1163,55 @@ mod tests {
     #[gtest]
     fn renders_leaves_structs_and_opaque_newtypes_to_other_checks() {
         let list = <Vec<std::string::String>>::SHAPE;
-        expect_that!(renders::<Textarea>(list, false), eq(true));
-        expect_that!(renders::<CheckboxInput>(Markdown::SHAPE, false), eq(true));
+        expect_that!(renders::<Textarea>(&[], list, false), eq(true));
+        expect_that!(
+            renders::<CheckboxInput>(&[], Markdown::SHAPE, false),
+            eq(true)
+        );
+    }
+
+    /// A listed type is judged by its field's `KIND` (AB.10.3), `Option`
+    /// peeled, and is one value even when it is a struct; an unlisted one
+    /// beside it, of the same shape, is not affected.
+    #[gtest]
+    fn a_listed_type_is_judged_by_its_fields_kind() {
+        let kinds: &[(&Shape, FieldType)] = &[
+            (Markdown::SHAPE, FieldType::Bool),
+            (Address::SHAPE, FieldType::Text),
+        ];
+        expect_that!(
+            renders::<CheckboxInput>(kinds, Markdown::SHAPE, false),
+            eq(true)
+        );
+        expect_that!(
+            renders::<Textarea>(kinds, Markdown::SHAPE, false),
+            eq(false)
+        );
+        expect_that!(
+            renders::<Textarea>(kinds, <Option<Markdown>>::SHAPE, false),
+            eq(false)
+        );
+        expect_that!(renders::<Textarea>(kinds, Slug::SHAPE, false), eq(true));
+        expect_that!(is_single_value(kinds, Address::SHAPE), eq(true));
+        expect_that!(is_single_value(&[], Address::SHAPE), eq(false));
+        expect_that!(renders::<Textarea>(kinds, Address::SHAPE, false), eq(true));
+    }
+
+    /// Names, module and every type parameter: `Vec<Markdown>` is not
+    /// `Vec<Slug>`, though both are `Vec` from `alloc::vec`.
+    #[gtest]
+    fn same_type_compares_type_parameters() {
+        expect_that!(same_type(Markdown::SHAPE, Markdown::SHAPE), eq(true));
+        expect_that!(same_type(Markdown::SHAPE, Slug::SHAPE), eq(false));
+        expect_that!(
+            same_type(<Vec<Markdown>>::SHAPE, <Vec<Markdown>>::SHAPE),
+            eq(true)
+        );
+        expect_that!(
+            same_type(<Vec<Markdown>>::SHAPE, <Vec<Slug>>::SHAPE),
+            eq(false)
+        );
+        expect_that!(same_type(bool::SHAPE, Markdown::SHAPE), eq(false));
     }
 
     #[gtest]
@@ -1209,14 +1325,14 @@ mod tests {
     #[gtest]
     fn an_enum_still_takes_no_widget() {
         for shape in [Shipping::SHAPE, Footprint::SHAPE, <Option<Shipping>>::SHAPE] {
-            expect_that!(is_single_value(shape), eq(false), "{shape}");
+            expect_that!(is_single_value(&[], shape), eq(false), "{shape}");
             expect_that!(
-                renders::<Textarea>(shape, false),
+                renders::<Textarea>(&[], shape, false),
                 eq(true),
                 "Textarea on {shape}"
             );
             expect_that!(
-                renders::<CheckboxInput>(shape, false),
+                renders::<CheckboxInput>(&[], shape, false),
                 eq(true),
                 "CheckboxInput on {shape}"
             );
@@ -1255,21 +1371,25 @@ mod tests {
         use crate::file::FileUpload;
         use crate::widgets::FileInput;
         for shape in [<FileUpload>::SHAPE, <Option<FileUpload>>::SHAPE] {
-            expect_that!(renders::<FileInput>(shape, false), eq(true), "{shape}");
-            expect_that!(renders::<TextInput>(shape, false), eq(false), "{shape}");
-            expect_that!(renders::<Textarea>(shape, false), eq(false), "{shape}");
-            expect_that!(renders::<Select>(shape, true), eq(false), "{shape}");
-            expect_that!(is_single_value(shape), eq(true), "{shape}");
+            expect_that!(renders::<FileInput>(&[], shape, false), eq(true), "{shape}");
+            expect_that!(
+                renders::<TextInput>(&[], shape, false),
+                eq(false),
+                "{shape}"
+            );
+            expect_that!(renders::<Textarea>(&[], shape, false), eq(false), "{shape}");
+            expect_that!(renders::<Select>(&[], shape, true), eq(false), "{shape}");
+            expect_that!(is_single_value(&[], shape), eq(true), "{shape}");
         }
         expect_that!(
-            renders::<FileInput>(std::string::String::SHAPE, false),
+            renders::<FileInput>(&[], std::string::String::SHAPE, false),
             eq(false)
         );
         expect_that!(
-            renders::<FileInput>(std::string::String::SHAPE, true),
+            renders::<FileInput>(&[], std::string::String::SHAPE, true),
             eq(false)
         );
-        expect_that!(renders::<FileInput>(bool::SHAPE, false), eq(false));
+        expect_that!(renders::<FileInput>(&[], bool::SHAPE, false), eq(false));
     }
 
     /// A file field takes what its `<input>` can carry, and not what a
@@ -1335,11 +1455,14 @@ mod tests {
         expect_that!(takes_bound(Markdown::SHAPE), eq(true));
     }
 
+    /// formoxus ignores `#[facet(transparent)]` (decision W), so a transparent
+    /// newtype is as opaque here as a plain one, though its `inner` is in
+    /// reach: what it takes is up to its field.
     #[gtest]
-    fn a_transparent_newtype_is_classified_by_what_it_wraps() {
+    fn a_transparent_newtype_is_not_looked_through() {
         expect_that!(takes_length(Slug::SHAPE), eq(true));
-        expect_that!(takes_bound(Slug::SHAPE), eq(false));
-        expect_that!(takes_length(Flag::SHAPE), eq(false));
+        expect_that!(takes_bound(Slug::SHAPE), eq(true));
+        expect_that!(takes_length(Flag::SHAPE), eq(true));
     }
 
     /// Names are compared, so a user type must not pass for the real one.

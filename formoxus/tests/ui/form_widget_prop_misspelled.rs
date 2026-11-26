@@ -1,12 +1,12 @@
 //! A misspelled prop is rustc's "no field", pointing at the prop. No "did you
 //! mean `rows`": the `..Default::default()` `form!` adds counts as assigning
 //! every field, and rustc suggests only unassigned ones.
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{LeafWidget, Widget};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Survey {

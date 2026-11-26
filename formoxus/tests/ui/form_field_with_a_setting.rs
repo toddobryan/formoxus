@@ -2,11 +2,11 @@
 //! (`min:` here). The named field replaces that field, so there is nothing for
 //! the setting to go on: refused at the key, saying to give the setting to the
 //! field itself.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::attrs::FieldType;
 use formoxus::field::Field;
 use formoxus::widgets::{AnyWidget, TextInput};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Venue {

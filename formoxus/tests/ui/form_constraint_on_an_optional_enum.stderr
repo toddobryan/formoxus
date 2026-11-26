@@ -1,31 +1,30 @@
-error[E0277]: `Shipping` has no field that takes settings like `min` or `max_length`
+error[E0277]: `Shipping` has no field in `BuiltIns`
   --> tests/ui/form_constraint_on_an_optional_enum.rs:21:13
    |
 21 |             shipping? => { min_length: 2 },
-   |             ^^^^^^^^ settings need a field formoxus knows
+   |             ^^^^^^^^ the trait `FieldFor<Shipping>` is not implemented for `BuiltIns`
    |
-help: the trait `DefaultField` is not implemented for `Shipping`
-  --> tests/ui/form_constraint_on_an_optional_enum.rs:8:1
-   |
- 8 | enum Shipping {
-   | ^^^^^^^^^^^^^
-   = note: a struct, list or enum takes none; for a newtype or another type of your own, write a `Field` that holds the setting and name it with `field:` in `form!`
-   = help: the following other types implement trait `DefaultField`:
-             bool
-             f32
-             f64
-             i16
-             i32
-             i64
-             i8
-             std::option::Option<T>
-           and $N others
-   = note: required for `std::option::Option<Shipping>` to implement `DefaultField`
+   = note: `BuiltIns` is the `FormoxusTypes` in scope here. List `Shipping` in a `formoxus::types!` (`Shipping => newtype String`, or `Shipping => field YourField`) and point this module's `FormoxusTypes` at that list, or name a field for this path with `field:`
+   = help: `BuiltIns` implements trait `FieldFor<V>`:
+             FieldFor<bool>
+             FieldFor<f32>
+             FieldFor<f64>
+             FieldFor<i16>
+             FieldFor<i32>
+             FieldFor<i64>
+             FieldFor<i8>
+             FieldFor<std::option::Option<T>>
+             FieldFor<std::string::String>
+             FieldFor<u16>
+             FieldFor<u32>
+             FieldFor<u64>
+             FieldFor<u8>
+   = note: required for `BuiltIns` to implement `FieldFor<std::option::Option<Shipping>>`
 note: required by a bound in `formoxus::field_kind::field_for`
   --> src/field_kind.rs
    |
-   | pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor {
-   |                        ^^^^^^^^^^^^ required by this bound in `field_for`
+   | pub fn field_for<Reg: FieldFor<TypeAtPath>, Model, TypeAtPath>(
+   |                       ^^^^^^^^^^^^^^^^^^^^ required by this bound in `field_for`
 
 error[E0080]: evaluation panicked: `min_length` cannot go on an enum field: it renders a variant picker, which submits no value to check
   --> tests/ui/form_constraint_on_an_optional_enum.rs:21:40

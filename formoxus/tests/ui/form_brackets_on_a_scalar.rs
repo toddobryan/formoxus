@@ -1,7 +1,7 @@
 //! `[]` means "every item of this list", so it only makes sense on something
 //! iterable. On a `String` the witness's `.iter()` is what catches it.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

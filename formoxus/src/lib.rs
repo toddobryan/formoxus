@@ -144,6 +144,10 @@ pub use formoxus_macros::path;
 ///
 /// Writing a custom widget is a different audience with its own glob:
 /// `use formoxus::widgets::*`.
+// `types!` writes `::formoxus::…` paths, and formoxus declares `BuiltIns`
+// with it, so those paths must resolve inside formoxus too.
+extern crate self as formoxus;
+
 pub mod prelude {
     // `Classes` alone: a `form!` author writes `classes: Classes::bare()`. The
     // `Slot` and `FixedKey` that build a custom one are in `formoxus::classes`.
@@ -164,7 +168,11 @@ pub mod prelude {
     // both the module and the macro, so re-exporting it that way would put the
     // MODULE into every glob import of this prelude too. `formoxus_macros::form`
     // is only ever the macro.
-    pub use formoxus_macros::{form, path, using_fns};
+    pub use formoxus_macros::{form, path, types, using_fns};
+    // The list `form!` and `path!` read in a module that names none of its
+    // own: a glob import, so `use AppTypes as FormoxusTypes;` shadows it
+    // (decision AC, an agreed exception to "no new re-exports").
+    pub use crate::type_registry::BuiltIns as FormoxusTypes;
 }
 
 pub use prelude::*;

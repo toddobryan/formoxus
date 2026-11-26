@@ -1620,6 +1620,91 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        5. Memory: the probe file, `next_session.md`, and a new entry for
           the lookup order if the docs alone do not carry it.
 
+    **Progress 2026-11-26 night (Claude, alone, UNCOMMITTED): 4 and 5 done,
+    most of 6.** `types!` is built (`formoxus-macros/src/types.rs`), with
+    `BuiltIns` declared through it, the prelude exporting `types` and
+    `FormoxusTypes`, and `extern crate self as formoxus;`. `form!` and
+    `path!` read `FormoxusTypes` (`with_types` on every spec,
+    `field_for::<FormoxusTypes, _, _>`, the choice helpers, and
+    `item_value_key(FormoxusTypes::registry(), …)`). The refusal message
+    names `types!`. State: suite 1045 passed, 1 failed (5.5.6's, expected),
+    8 ignored (AH); lib 276; macros 295; goldens all pass (5 `.stderr`
+    re-blessed with the new `FieldFor` wording, read; 5 `types_*` cases
+    moved from `ui-pending/` and blessed); clippy and rustdoc clean
+    workspace-wide. Not done: 6.2 (module docs rewrite), 6.5 (memory beyond
+    this note), and e2e (needs a browser).
+
+    **Questions from that night, ANSWERED by Todd 2026-11-26: every one as
+    recommended.** A, B, E, F, H: keep as built. C: wait for 3.2.4. D: 3.9
+    is Todd's. G, I and J were done the same day:
+    G: `types!` writes a hidden `TypeKinds::KINDS` (each non-built-in
+    entry's shape and its field's `KIND`), and `is_single_value`, `renders`
+    and `WidgetSlot::failure` take it first, so a widget on a listed type is
+    judged by its field's `KIND` (`form_widget_cannot_render_a_listed_type`
+    blessed). Shapes are compared by module, name and type parameters,
+    since a `TypeId` cannot be compared in const. Only the widget checks
+    read the list; the settings checks (`takes_length` and the rest) still
+    go by shape, which says "may apply" for any newtype. The other pending
+    case, `form_unlisted_type`, STAYS a build-time refusal: a const cannot
+    tell `Wrapper(Address)` (walked as a struct) from `Shade(String)`
+    (refused), because a tuple struct's field shape is a fn pointer. I: no
+    replay macro for `BuiltIns`, and `include formoxus::BuiltIns` is
+    refused (`types_include_built_ins`). J: header rewritten.
+
+    QA. **`form!` and `path!` need a `FormoxusTypes` in scope.** A module
+        that imports `formoxus::{empty_form, form}` without the prelude glob
+        gets "cannot find type `FormoxusTypes`". A macro cannot fall back
+        to the built-ins when the name is missing (an inner glob import
+        would shadow the module's own list, the wrong way round). Done
+        tonight: 8 suite modules gained `use formoxus::FormoxusTypes;`, and
+        122 goldens gained `FormoxusTypes` in their existing `use formoxus::
+        {…}` line plus `#![allow(unused_imports)]` on that same line (so no
+        span moved). Options: accept it (the prelude glob is the documented
+        way in), or a `types:` key on `form!` (AB.11.4), or something
+        smarter.
+    QB. **`WidgetSlot`'s four choice methods take `Reg` first,** one of them
+        unused, because `form!` names it by turbofish on one call that
+        reaches either impl (`WidgetSlot::<#is_set>::choices::<FormoxusTypes,
+        _, _, _>`). Fine, or pass the list as a `PhantomData` argument?
+    QC. **Built-ins go through the public `field_for` for now.** 3.2.4's
+        hidden `__built_in`, `is_built_in` and `field_for`'s AF.1 refusal are
+        not built (run-time side, Todd's). When they are, `types!` switches
+        its built-in registrations to `__built_in` (one line in
+        `write_list`).
+    QD. **3.9 is now possible:** `BuiltIns` exists, so `find` can end in
+        `unwrap_or_else(BuiltIns::registry)` and the scalar arm and
+        `scalar_node` can go. Left for Todd.
+    QE. **A `pub` list's entries must be root names, `crate::…` or
+        `::other_crate::…` paths** (and so must their `newtype`/`field`
+        arguments, generics included), since the replay writes them
+        `$crate::…` and a macro cannot tell `models::X` (a module) from
+        `models::X` (a crate). Anything else is a compile error saying so.
+    QF. **Duplicates are caught by text only when the crate path is
+        spelled.** `replace` matches an included entry by crate name and
+        path from the root. A second entry for an included type is refused
+        with a message when written `krate::T`; written as an imported
+        `T`, and for a type listed twice, it is rustc's E0119
+        ("conflicting implementations of `FieldFor<T>`"), as the
+        `types_listed_twice` and `types_listed_and_included` goldens now
+        pin. Good enough, or worth a sharper check?
+    QG. **`form!`'s compile-time checks still classify by shape.** A
+        `widget:` that cannot render a LISTED type's field, and a
+        settings-free path whose type no list holds, are not compile errors
+        yet: the two `form_*` goldens stay in `ui-pending/`. Making them
+        compile errors means `form!`'s kind checks ask
+        `<FormoxusTypes as FieldFor<P>>::Field::KIND` instead of the shape
+        (the probe's `kind_of`), which is the rest of AB.10.3.
+    QH. **`FieldFor`'s note is now generic** ("`{Self}` is the
+        `FormoxusTypes` in scope here. List `{V}` in a `formoxus::types!`
+        … or name a field with `field:`"), because for a module with no
+        list `{Self}` is `BuiltIns`, which a dev cannot add to. The old
+        "a struct, list or enum takes none" hint is gone for settings on a
+        struct or enum.
+    QI. **`BuiltIns` is `pub`, so it writes a replay macro inside
+        formoxus.** Harmless; skip it for `BuiltIns`?
+    QJ. **`form_setting_on_a_newtype.rs`'s header comment is stale** ("its
+        field will be declared with `field:` once that exists").
+
     7. **(Todd) Review, then on to 5.5.6.** 5.5.6's path check and 5.5.7's
        message are unchanged by AB. 5.8 loses Y. Box 6 becomes widget
        entries in `types!` (AB.11.3), looked up in 3.7's order.

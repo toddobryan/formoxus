@@ -3,8 +3,8 @@
 //!
 //! The span must land on the author's own `headlne`, inside the `form!` call —
 //! if it ever points at the macro instead, the witness has stopped being useful.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

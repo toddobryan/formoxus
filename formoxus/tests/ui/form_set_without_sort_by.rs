@@ -1,7 +1,7 @@
 //! Only a set of scalars has a default order; a set of newtypes needs
 //! `sort_by`. Reported at the path.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

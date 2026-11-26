@@ -1,0 +1,11 @@
+error[E0119]: conflicting implementations of trait `FieldFor<Note>` for type `AppTypes`
+  --> tests/ui/types_listed_twice.rs:9:1
+   |
+ 9 | / formoxus::types! {
+10 | |     struct AppTypes;
+   | |                   ^
+   | |                   |
+   | |___________________first implementation here
+   |                     conflicting implementation for `AppTypes`
+   |
+   = note: this error originates in the macro `formoxus::types` (in Nightly builds, run with -Z macro-backtrace for more info)

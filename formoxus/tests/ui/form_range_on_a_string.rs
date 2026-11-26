@@ -4,8 +4,8 @@
 //! Its `min:` and `max:` are refused as well, since they apply only to a number
 //! field, and a range cannot be written without them, so this one golden shows
 //! five errors rather than one.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Profile {

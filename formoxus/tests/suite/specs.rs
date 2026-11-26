@@ -758,7 +758,10 @@ fn a_constraint_from_the_spec_reaches_validation() {
     let spec = || {
         FormSpec::<EventForCreate>::default().with_node(
             &path!(EventForCreate.title),
-            field_for(|m: &EventForCreate| &m.title, |f| f.max_length = Some(5)),
+            field_for::<FormoxusTypes, _, _>(
+                |m: &EventForCreate| &m.title,
+                |f| f.max_length = Some(5),
+            ),
         )
     };
 
@@ -780,7 +783,7 @@ fn a_constraint_from_the_spec_reaches_validation() {
 fn a_constraint_reaches_a_nested_leaf() {
     let spec = FormSpec::<EventForCreate>::default().with_node(
         &path!(EventForCreate.location.zip),
-        field_for(
+        field_for::<FormoxusTypes, _, _>(
             |m: &EventForCreate| &m.location.zip,
             |f| {
                 f.pattern = Some(r"\d{5}");

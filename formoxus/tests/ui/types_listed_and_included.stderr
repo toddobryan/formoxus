@@ -1,0 +1,14 @@
+error[E0119]: conflicting implementations of trait `FieldFor<Badge>` for type `AppTypes`
+ --> tests/ui/types_listed_and_included.rs:5:1
+  |
+5 | / formoxus::types! {
+6 | |     struct AppTypes;
+7 | |     include formoxus_fixture_lib::FixtureTypes;
+8 | |     Badge => newtype String,
+9 | | }
+  | | ^
+  | | |
+  | |_first implementation here
+  |   conflicting implementation for `AppTypes`
+  |
+  = note: this error originates in the macro `::formoxus::types` which comes from the expansion of the macro `formoxus::types` (in Nightly builds, run with -Z macro-backtrace for more info)

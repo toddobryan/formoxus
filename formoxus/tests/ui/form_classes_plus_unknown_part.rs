@@ -1,8 +1,8 @@
 //! A part that is no element at all: a parse error, with the caret on the part
 //! and the nearest tag suggested. A real tag the widget lacks is
 //! `form_classes_plus_part_the_widget_lacks`.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

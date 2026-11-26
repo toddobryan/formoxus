@@ -5,10 +5,12 @@
 //! borrow, and neither resolves inside the library itself. A test here is the
 //! only place the expansion is exercised as a caller meets it.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use super::models::Title;
 use super::{Harness, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::path::NodePath;
 use formoxus::{
     Form, FormErrors, FormSpec, Submission, ValidationMessage, WireForm, empty_form, form,

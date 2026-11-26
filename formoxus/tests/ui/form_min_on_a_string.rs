@@ -1,7 +1,7 @@
 //! A numeric bound on a text field is a compile error. `Option` is looked
 //! through, so this is caught on an optional field too.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Profile {

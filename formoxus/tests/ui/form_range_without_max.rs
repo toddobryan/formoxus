@@ -1,6 +1,6 @@
 //! As `form_range_without_min.rs`, for `max:`.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Mixer {

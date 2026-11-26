@@ -472,11 +472,11 @@ fn refuse_unregistered_newtype(shape: &'static Shape, st: &StructType, prefix: &
         String::new()
     };
     panic!(
-        "{prefix}: `{shape}` wraps a `{inner}`, and formoxus has no field for it. Register one \
-         in `main`, for every `{shape}` in the app: `TypeRegistry::new().newtype::<{shape}, \
-         {inner}>()` reads and writes it as its `{inner}`, or `TypeRegistry::field_for` takes \
-         a `fields::Newtype` around a field with settings. Or, for this path alone, name a \
-         field whose `Value` is `{shape}` with `field:` in `form!`.{transparent}"
+        "{prefix}: `{shape}` wraps a `{inner}`, and no list gives it a field. List it in \
+         the `formoxus::types!` this form reads through `FormoxusTypes`: \
+         `{shape} => newtype {inner},` reads and writes it as its `{inner}`, and \
+         `{shape} => field YourField,` gives it a field of your own. Or, for this path \
+         alone, name a field whose `Value` is `{shape}` with `field:` in `form!`.{transparent}"
     )
 }
 

@@ -46,7 +46,11 @@ fn post() -> Post {
 #[gtest]
 fn a_btree_set_round_trips() {
     expect_that!(
-        form_for(&post(), FormSpec::default()).validate(),
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry())
+        )
+        .validate(),
         some(eq(&post()))
     );
     expect_that!(across_the_wire(&post()), ok(eq(&post())));
@@ -59,7 +63,7 @@ fn an_empty_set_round_trips() {
         tags: BTreeSet::new(),
     };
     expect_that!(
-        form_for(&empty, FormSpec::default()).validate(),
+        form_for(&empty, FormSpec::default().with_types(SetTypes::registry())).validate(),
         some(eq(&empty))
     );
     expect_that!(across_the_wire(&empty), ok(eq(&empty)));
@@ -73,7 +77,7 @@ fn a_hash_set_round_trips() {
         tags: tags(&["alpha", "beta", "gamma"]),
     };
     expect_that!(
-        form_for(&bag, FormSpec::default()).validate(),
+        form_for(&bag, FormSpec::default().with_types(SetTypes::registry())).validate(),
         some(eq(&bag))
     );
     expect_that!(across_the_wire(&bag), ok(eq(&bag)));
@@ -83,7 +87,12 @@ fn a_hash_set_round_trips() {
 
 #[component]
 fn PostForm() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     form.render(using_fns! {})
 }
 
@@ -93,7 +102,12 @@ fn UntaggedPostForm() -> Element {
         title: "Hello".to_string(),
         tags: BTreeSet::new(),
     };
-    let form = use_form(|| form_for(&untagged, FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &untagged,
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     form.render(using_fns! {})
 }
 
@@ -155,7 +169,10 @@ fn add_tag(value: Option<ItemValue>) -> Edit {
 
 #[gtest]
 fn a_set_refuses_a_move() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&Edit::MoveItem {
             path: NodePath::new("tags"),
@@ -175,14 +192,20 @@ fn a_set_refuses_a_move() {
 /// user cannot fill in.
 #[gtest]
 fn a_set_adds_nothing_from_an_empty_draft() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(form.edit(&add_tag(None)), ok(none()));
     expect_that!(form.validate(), some(eq(&post())), "the set is unchanged");
 }
 
 #[gtest]
 fn a_set_takes_an_item_that_arrives_filled() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new("web".to_string())))),
         // `#2` is the draft's (box 7).
@@ -199,7 +222,10 @@ fn a_set_takes_an_item_that_arrives_filled() {
 
 #[gtest]
 fn a_set_refuses_an_item_of_the_wrong_type() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new(7_u8)))),
         err(displays_as(contains_substring(
@@ -213,7 +239,12 @@ fn a_set_refuses_an_item_of_the_wrong_type() {
 
 #[component]
 fn RemovedSetItemProbe() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     use_hook(|| {
         form.edit(&Edit::RemoveItem {
             path: NodePath::new("tags"),
@@ -249,7 +280,7 @@ fn a_set_behind_an_option_round_trips() {
         MaybeTagged { tags: None },
     ] {
         expect_that!(
-            form_for(&model, FormSpec::default()).validate(),
+            form_for(&model, FormSpec::default().with_types(SetTypes::registry())).validate(),
             some(eq(&model))
         );
         expect_that!(across_the_wire(&model), ok(eq(&model)));
@@ -277,7 +308,7 @@ fn a_set_inside_an_enum_variant_round_trips() {
         },
     };
     expect_that!(
-        form_for(&note, FormSpec::default()).validate(),
+        form_for(&note, FormSpec::default().with_types(SetTypes::registry())).validate(),
         some(eq(&note))
     );
     expect_that!(across_the_wire(&note), ok(eq(&note)));
@@ -295,7 +326,9 @@ fn CustomAdderPostForm() -> Element {
     let form = use_form(|| {
         form_for(
             &post(),
-            FormSpec::default().with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
+            FormSpec::default()
+                .with_types(SetTypes::registry())
+                .with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
         )
     });
     form.render(using_fns! {})
@@ -362,7 +395,9 @@ impl formoxus::widgets::SetWidget for PropsAsText {
 }
 
 fn triage_with_props_as_text() -> FormSpec<Triage> {
-    FormSpec::default().with_set_widget(&path!(Triage.levels), PropsAsText)
+    FormSpec::default()
+        .with_types(SetTypes::registry())
+        .with_set_widget(&path!(Triage.levels), PropsAsText)
 }
 
 fn low_and_high() -> Triage {
@@ -443,7 +478,9 @@ fn a_set_with_a_widget_still_round_trips() {
 fn a_leaf_widget_on_a_set_names_with_set_widget() {
     let _ = form_for(
         &low_and_high(),
-        FormSpec::default().with_widget(&path!(Triage.levels), formoxus::widgets::Textarea),
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .with_widget(&path!(Triage.levels), formoxus::widgets::Textarea),
     );
 }
 
@@ -489,7 +526,9 @@ fn by_length(a: &Tag, b: &Tag) -> Ordering {
 }
 
 fn shelf_spec() -> FormSpec<Shelf> {
-    FormSpec::default().with_sort_by(&path!(Shelf.tags), SetOrder::custom(by_length, "by_length"))
+    FormSpec::default()
+        .with_types(SetTypes::registry())
+        .with_sort_by(&path!(Shelf.tags), SetOrder::custom(by_length, "by_length"))
 }
 
 fn shelf(names: &[&str]) -> Shelf {
@@ -606,7 +645,9 @@ fn by_rank(a: &Pin, b: &Pin) -> Ordering {
 #[gtest]
 fn a_set_item_that_cannot_be_built_sorts_last_without_panicking() {
     let mut form = empty_form::<Board>(
-        FormSpec::default().with_sort_by(&path!(Board.pins), SetOrder::custom(by_rank, "by_rank")),
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .with_sort_by(&path!(Board.pins), SetOrder::custom(by_rank, "by_rank")),
     );
     form.distribute_values(&values(&[
         ("pins", "#0,#1,#2,#3"),
@@ -845,7 +886,7 @@ fn a_unit_enum_set_sorts_in_declaration_order_by_default() {
     let order = Order {
         sizes: all_sizes().into(),
     };
-    let form = form_for(&order, FormSpec::default());
+    let form = form_for(&order, FormSpec::default().with_types(SetTypes::registry()));
     expect_that!(
         entries(&form, "sizes"),
         elements_are![eq("Small"), eq("Medium"), eq("Large")]
@@ -859,7 +900,7 @@ fn a_unit_enum_hash_set_sorts_in_declaration_order_too() {
     let bin = Bin {
         sizes: all_sizes().into(),
     };
-    let form = form_for(&bin, FormSpec::default());
+    let form = form_for(&bin, FormSpec::default().with_types(SetTypes::registry()));
     expect_that!(
         entries(&form, "sizes"),
         elements_are![eq("Small"), eq("Medium"), eq("Large")]
@@ -873,7 +914,7 @@ fn an_added_unit_enum_item_takes_its_declared_place() {
         &Order {
             sizes: [Size::Small, Size::Large].into(),
         },
-        FormSpec::default(),
+        FormSpec::default().with_types(SetTypes::registry()),
     );
     expect_that!(
         form.edit(&Edit::AddItem {
@@ -897,7 +938,7 @@ fn a_unit_enum_draft_adds_in_declared_place() {
         &Order {
             sizes: [Size::Small, Size::Large].into(),
         },
-        FormSpec::default(),
+        FormSpec::default().with_types(SetTypes::registry()),
     );
     // The draft takes the next key after the two items'.
     expect_that!(
@@ -927,7 +968,7 @@ fn a_unit_enum_set_refuses_a_variant_it_has() {
     let order = Order {
         sizes: [Size::Small, Size::Large].into(),
     };
-    let mut form = form_for(&order, FormSpec::default());
+    let mut form = form_for(&order, FormSpec::default().with_types(SetTypes::registry()));
     expect_that!(
         form.edit(&Edit::AddItem {
             path: NodePath::new("sizes"),
@@ -960,7 +1001,7 @@ fn a_unit_enum_set_in_default_order_round_trips() {
         sizes: all_sizes().into(),
     };
     expect_that!(
-        form_for(&order, FormSpec::default()).validate(),
+        form_for(&order, FormSpec::default().with_types(SetTypes::registry())).validate(),
         some(eq(&order))
     );
     expect_that!(across_the_wire(&order), ok(eq(&order)));
@@ -985,7 +1026,9 @@ fn form_set_treats_the_list_as_a_set() {
         format!("{:?}", form! { Draft { tags => { set } } }),
         eq(&format!(
             "{:?}",
-            FormSpec::<Draft>::default().treat_as_set(&path!(Draft.tags))
+            FormSpec::<Draft>::default()
+                .with_types(SetTypes::registry())
+                .treat_as_set(&path!(Draft.tags))
         ))
     );
 }
@@ -1022,6 +1065,7 @@ fn a_list_treated_as_a_set_drops_its_duplicates_when_built() {
         &draft,
         FormSpec::default()
             .with_types(SetTypes::registry())
+            .with_types(SetTypes::registry())
             .treat_as_set(&path!(Draft.tags)),
     );
     expect_that!(
@@ -1057,6 +1101,7 @@ fn a_list_treated_as_a_set_drops_by_equality_not_by_its_order() {
         &list,
         FormSpec::default()
             .with_types(SetTypes::registry())
+            .with_types(SetTypes::registry())
             .treat_as_set(&path!(TagList.tags))
             .with_sort_by(
                 &path!(TagList.tags),
@@ -1087,8 +1132,14 @@ fn DraftAsSetForm() -> Element {
     let draft = Draft {
         tags: tags(&["dioxus", "rust"]),
     };
-    let form =
-        use_form(move || form_for(&draft, FormSpec::default().treat_as_set(&path!(Draft.tags))));
+    let form = use_form(move || {
+        form_for(
+            &draft,
+            FormSpec::default()
+                .with_types(SetTypes::registry())
+                .treat_as_set(&path!(Draft.tags)),
+        )
+    });
     form.render(using_fns! {})
 }
 
@@ -1118,7 +1169,9 @@ fn a_list_treated_as_a_set_renders_as_a_set() {
 fn draft_with(names: &[&str]) -> FormState<Draft> {
     form_for(
         &Draft { tags: tags(names) },
-        FormSpec::default().treat_as_set(&path!(Draft.tags)),
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .treat_as_set(&path!(Draft.tags)),
     )
 }
 
@@ -1165,7 +1218,11 @@ fn a_list_treated_as_a_set_puts_an_added_item_in_order() {
 /// re-render without it. Decision D: dropped quietly, not refused.
 #[gtest]
 fn a_list_treated_as_a_set_drops_a_duplicate_from_the_wire() {
-    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set(&path!(Draft.tags)));
+    let mut form = empty_form::<Draft>(
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .treat_as_set(&path!(Draft.tags)),
+    );
     form.distribute_values(&values(&[
         ("tags", "#0,#1,#2"),
         ("tags.#0", "rust"),
@@ -1186,7 +1243,7 @@ fn a_list_treated_as_a_set_drops_a_duplicate_from_the_wire() {
 /// kept both, so the screen showed an item the model did not have.
 #[gtest]
 fn a_set_drops_a_duplicate_from_the_wire_from_its_nodes_too() {
-    let mut form = empty_form::<Post>(FormSpec::default());
+    let mut form = empty_form::<Post>(FormSpec::default().with_types(SetTypes::registry()));
     form.distribute_values(&values(&[
         ("title", "Hello"),
         ("tags", "#0,#1"),
@@ -1202,7 +1259,11 @@ fn a_set_drops_a_duplicate_from_the_wire_from_its_nodes_too() {
 /// on them as it would anyway.
 #[gtest]
 fn blank_items_are_not_duplicates_of_each_other() {
-    let mut form = empty_form::<Draft>(FormSpec::default().treat_as_set(&path!(Draft.tags)));
+    let mut form = empty_form::<Draft>(
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .treat_as_set(&path!(Draft.tags)),
+    );
     form.distribute_values(&values(&[
         ("tags", "#0,#1,#2"),
         ("tags.#0", ""),
@@ -1248,6 +1309,7 @@ fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
     let _ = empty_form::<TagList>(
         FormSpec::default()
             .with_types(SetTypes::registry())
+            .with_types(SetTypes::registry())
             .treat_as_set(&path!(TagList.tags)),
     );
 }
@@ -1258,7 +1320,10 @@ fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
 /// `Ok(None)`, nothing added, nothing to log (decision C, box 6 B).
 #[gtest]
 fn a_set_refuses_a_duplicate_without_an_error() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new("rust".to_string())))),
         ok(none())
@@ -1321,7 +1386,10 @@ fn a_list_treated_as_a_set_refuses_a_duplicate() {
 /// type, not mistaken for an item that is there or not.
 #[gtest]
 fn a_wrong_type_is_still_an_error_not_a_duplicate() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&add_tag(Some(ItemValue::new(7_u8)))),
         err(displays_as(contains_substring(
@@ -1361,7 +1429,12 @@ fn a_sets_live_region_is_there_and_empty_before_any_edit() {
 
 #[component]
 fn AddProbe() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     use_hook(|| {
         form.edit(&add_tag(Some(ItemValue::new("web".to_string()))))
             .expect("a new value is added")
@@ -1371,7 +1444,12 @@ fn AddProbe() -> Element {
 
 #[component]
 fn RemoveProbe() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     use_hook(|| {
         form.edit(&Edit::RemoveItem {
             path: NodePath::new("tags"),
@@ -1384,7 +1462,12 @@ fn RemoveProbe() -> Element {
 
 #[component]
 fn DuplicateAddProbe() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     use_hook(|| {
         form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
             .expect("a duplicate is refused without an error")
@@ -1421,7 +1504,12 @@ fn the_region_follows_the_adder() {
 
 #[component]
 fn DuplicateThenAddProbe() -> Element {
-    let form = use_form(|| form_for(&post(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     use_hook(|| {
         form.edit(&add_tag(Some(ItemValue::new("rust".to_string()))))
             .expect("refused without an error");
@@ -1497,7 +1585,9 @@ fn DuplicateCustomAdderProbe() -> Element {
     let form = use_form(|| {
         form_for(
             &post(),
-            FormSpec::default().with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
+            FormSpec::default()
+                .with_types(SetTypes::registry())
+                .with_adder(&path!(Post.tags), ItemAdder(TagAdder)),
         )
     });
     use_hook(|| {
@@ -1670,13 +1760,15 @@ fn HandBuiltFeedbackProbe() -> Element {
     let form = use_form(|| {
         form_for(
             &post(),
-            FormSpec::default().with_feedback(
-                &path!(Post.tags),
-                SetFeedback::new(|event: SetEvent<'_, String>| match event {
-                    SetEvent::Added(tag) => Some(format!("+{tag}")),
-                    _ => None,
-                }),
-            ),
+            FormSpec::default()
+                .with_types(SetTypes::registry())
+                .with_feedback(
+                    &path!(Post.tags),
+                    SetFeedback::new(|event: SetEvent<'_, String>| match event {
+                        SetEvent::Added(tag) => Some(format!("+{tag}")),
+                        _ => None,
+                    }),
+                ),
         )
     });
     use_hook(|| {
@@ -1931,7 +2023,10 @@ fn reset_after_a_successful_absorb_clears_the_draft() {
 
 /// `post()` has two items, so its draft is `tags.#2`.
 fn post_with_draft(text: &str) -> FormState<Post> {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     form.distribute_values(&ValuesByPath::from_iter([(
         NodePath::new("tags.#2"),
         text.to_string(),
@@ -2077,7 +2172,12 @@ fn tagged() -> Tagged {
 
 #[component]
 fn TaggedWireForm() -> Element {
-    let form = use_form(|| form_for(&tagged(), FormSpec::default()));
+    let form = use_form(|| {
+        form_for(
+            &tagged(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        )
+    });
     with_wire(&form, rsx! {})
 }
 
@@ -2256,7 +2356,10 @@ fn editing_another_item_moves_the_edit() {
 /// and loses nothing; what the draft holds is not sent (box 7).
 #[gtest]
 fn an_item_being_edited_is_still_in_the_set() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&Edit::EditItem {
             path: NodePath::new("tags"),
@@ -2271,7 +2374,10 @@ fn an_item_being_edited_is_still_in_the_set() {
 /// text: Add would put it back, as a new item.
 #[gtest]
 fn removing_the_item_being_edited_ends_the_edit() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     form.edit(&Edit::EditItem {
         path: NodePath::new("tags"),
         index: Some(1),
@@ -2288,7 +2394,10 @@ fn removing_the_item_being_edited_ends_the_edit() {
 
 #[gtest]
 fn editing_an_item_that_is_not_there_is_refused() {
-    let mut form = form_for(&post(), FormSpec::default());
+    let mut form = form_for(
+        &post(),
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&Edit::EditItem {
             path: NodePath::new("tags"),
@@ -2348,7 +2457,10 @@ fn a_custom_adder_gets_no_edit() {
 #[component]
 fn ItemErrorForm() -> Element {
     let form = use_form(|| {
-        let mut state = form_for(&post(), FormSpec::default());
+        let mut state = form_for(
+            &post(),
+            FormSpec::default().with_types(SetTypes::registry()),
+        );
         state
             .push_field_error(&path!(Post.tags[= "rust"]), "Not that one.")
             .expect("item 1 exists");
@@ -2397,7 +2509,10 @@ fn feedback_hears_of_a_change() {
 
 #[gtest]
 fn a_list_refuses_an_item_edit() {
-    let mut form = form_for(&Draft { tags: tags(&["a"]) }, FormSpec::default());
+    let mut form = form_for(
+        &Draft { tags: tags(&["a"]) },
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         form.edit(&Edit::EditItem {
             path: NodePath::new("tags"),
@@ -2518,6 +2633,7 @@ fn HandBuiltChipForm() -> Element {
         form_for(
             &tagged(),
             FormSpec::default()
+                .with_types(SetTypes::registry())
                 .with_item_view(&path!(Tagged.tags), formoxus::widgets::ItemView(TagChip)),
         )
     });
@@ -2880,7 +2996,9 @@ fn a_placeholder_reaches_the_draft() {
 // written against before box 8. `form!`'s own tests are further down.
 
 fn triage_with(widget: impl Into<formoxus::widgets::AnySetWidget>) -> FormSpec<Triage> {
-    FormSpec::default().with_set_widget(&path!(Triage.levels), widget)
+    FormSpec::default()
+        .with_types(SetTypes::registry())
+        .with_set_widget(&path!(Triage.levels), widget)
 }
 
 /// Low and High of three, at least one and at most two: the limit is reached,
@@ -3197,7 +3315,9 @@ fn a_set_of_exactly_one_is_refused() {
 fn a_set_of_at_most_one_is_refused() {
     let _ = form_for(
         &low_and_high(),
-        FormSpec::default().with_max_items(&path!(Triage.levels), ONE),
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .with_max_items(&path!(Triage.levels), ONE),
     );
 }
 
@@ -3446,7 +3566,10 @@ fn the_server_holds_a_set_widgets_min_items() {
     let empty = Trip {
         cities: BTreeSet::new(),
     };
-    let wire = formoxus::WireForm::from_model(&empty, FormSpec::default());
+    let wire = formoxus::WireForm::from_model(
+        &empty,
+        FormSpec::default().with_types(SetTypes::registry()),
+    );
     expect_that!(
         formoxus::Submission::accept(trip_with_checkboxes(), wire.values()).is_err(),
         eq(true)

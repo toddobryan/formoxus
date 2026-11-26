@@ -1,7 +1,7 @@
 //! A comma inside a style value ends the declaration, so `serif` reads as the
 //! next property. The error lands on `serif` and says to quote the value.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

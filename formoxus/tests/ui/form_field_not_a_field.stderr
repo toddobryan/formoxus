@@ -9,28 +9,12 @@ help: the trait `formoxus::field::Field` is not implemented for `SnippetChecker`
    |
 14 | struct SnippetChecker;
    | ^^^^^^^^^^^^^^^^^^^^^
-help: the following other types implement trait `formoxus::field::Field`
-  --> src/fields/number_fields.rs
-   |
-   |   impl<T: Number> Field for NumberField<T> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `NumberField<T>`
-   |
-  ::: src/fields/choice_field.rs
-   |
-   | / impl<T> Field for ChoiceField<T>
-   | | where
-   | |     T: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static,
-   | |_______________________________________________________________^ `ChoiceField<T>`
-   |
-  ::: src/fields/bool_field.rs
-   |
-   |   impl Field for BoolField {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^ `BoolField`
-   |
-  ::: src/fields/string_field.rs
-   |
-   |   impl Field for StringField {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^ `StringField`
+   = help: the following other types implement trait `formoxus::field::Field`:
+             BoolField
+             ChoiceField<T>
+             Newtype<T, F>
+             NumberField<T>
+             StringField
 note: required by a bound in `formoxus::field_kind::named_field`
   --> src/field_kind.rs
    |

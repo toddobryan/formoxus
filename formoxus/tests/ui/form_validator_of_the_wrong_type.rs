@@ -1,8 +1,8 @@
 //! A field's `validator:` takes the field's own value, a `u8` here, so a
 //! check over another type is a compile error, at the check, not a panic at
 //! run time. A number's check takes it by value, so `&u8` is wrong too.
-use facet::Facet;
-use formoxus::{ValidationMessage, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, ValidationMessage, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

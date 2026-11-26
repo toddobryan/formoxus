@@ -1054,6 +1054,10 @@ struct Note(String);
 /// Stands in for apcsp's `MarkdownWidget`, which lives in a crate (`ui`)
 /// the model's crate cannot depend on.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[expect(
+    dead_code,
+    reason = "registered again in box 6, as a widget entry in `types!` (decision AH)"
+)]
 struct NoteWidget;
 
 impl Widget for NoteWidget {

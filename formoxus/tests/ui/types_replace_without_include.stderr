@@ -1,0 +1,13 @@
+error: `replace` supersedes an entry of an included list, named by its crate path (`replace their_crate::Badge => …`), and no included list has this type. To give a type of your own its field, list it without `replace`
+ --> tests/ui/types_replace_without_include.rs:8:13
+  |
+8 |     replace Stamp => newtype String,
+  |             ^^^^^
+
+warning: unused import: `formoxus_fixture_lib::Stamp`
+ --> tests/ui/types_replace_without_include.rs:4:5
+  |
+4 | use formoxus_fixture_lib::Stamp;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

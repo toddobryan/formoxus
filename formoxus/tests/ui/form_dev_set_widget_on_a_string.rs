@@ -1,11 +1,11 @@
 //! A dev's set widget on a field that is not a set: the field's shape picks
 //! the leaf widget's slot, and the widget is not one.
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::SetWidgetProps;
 use formoxus::widgets::{SetWidget, Widget};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Trip {

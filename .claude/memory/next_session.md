@@ -6,6 +6,29 @@ metadata:
 ---
 
 
+
+## ▶ 2026-11-26 DAY: QA-QJ answered, all as recommended; committed and pushed
+
+Todd answered every question in plan 5.9 as recommended. I then did G
+(the widget checks read the list through a hidden `TypeKinds::KINDS` that
+`types!` writes), I (no replay for `BuiltIns`; including it is refused)
+and J, and committed everything. Todd's own change the same day: `kind()`
+no longer follows a transparent newtype's `inner` (W). NEXT: Todd on 5.5.6
+(its suite test is the one expected failure); Claude's open items are 6.2
+(module docs) and the settings checks, which still go by shape.
+
+## 2026-11-26 NIGHT (Claude alone): types! BUILT, form!/path! on FormoxusTypes (now committed)
+
+Todd went to bed after `bf9dc6b` (pushed) and asked me to build `types!`
+and note questions. Done, UNCOMMITTED (he said commit only when told):
+`formoxus-macros/src/types.rs`, `BuiltIns`, prelude `types` +
+`FormoxusTypes`, `form!`/`path!` emitting `FormoxusTypes`, refusal message,
+suite + goldens fixed. Suite 1045/1 (5.5.6) /8 ignored; lib 276; macros
+295; goldens pass; clippy + rustdoc clean. Questions QA-QJ are in
+CUSTOM_FIELDS_PLAN box 5.9 above step 7 — FIRST thing: walk Todd through
+them, then ask to commit. Biggest: QA (FormoxusTypes must be in scope for
+form!; 122 goldens + 8 suite modules got an import).
+
 ## ▶ 2026-11-26, latest: AB decided, building it NOW (O.1); 5.5.1-5.5.4 committed 59c4a47
 
 1. 5.5.2 (Todd, Claude wrote parse/unwrap helpers, the four pass-through

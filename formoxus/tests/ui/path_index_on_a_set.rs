@@ -2,8 +2,8 @@
 //! be the order its items are shown in (`HashSet` in none, `BTreeSet` by
 //! `Ord`, which `sort_by` can disagree with), so an index into one could put
 //! an error on the wrong item. Refused, with the reason.
-use facet::Facet;
-use formoxus::path;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, path};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

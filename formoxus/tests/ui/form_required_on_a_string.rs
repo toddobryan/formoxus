@@ -1,7 +1,7 @@
 //! `required_true` means "must be true", so it applies only to a bool. Every
 //! other non-`Option` field is already required by its type.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Profile {

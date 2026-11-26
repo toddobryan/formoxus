@@ -112,6 +112,9 @@ impl FormSpecMeta {
 }
 
 impl FormSpecInput {
+    // One line over since the spec took its list (`with_types`, decision AB);
+    // it is the one place the whole expansion is assembled.
+    #[allow(clippy::too_many_lines)]
     fn expand(self) -> TokenStream2 {
         let mut fsm: FormSpecMeta = FormSpecMeta::new(self.target);
         for e in self.entries {
@@ -209,6 +212,7 @@ impl FormSpecInput {
                 #(#type_checks)*
 
                 ::formoxus::form::FormSpec::<#model_type>::new()
+                    .with_types(FormoxusTypes::registry())
                 #title
                 #label_case
                 #use_browser_validation
@@ -797,7 +801,7 @@ impl FieldSpec {
                 let is_set = WidgetRef::is_set_const(index);
                 let peeled = respan(project_peeled(&self.path.segments), span);
                 Some(quote_spanned! { span=>
-                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::set_choices(
+                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::set_choices::<FormoxusTypes, _, _, _>(
                         __spec, #items_key, |__m: &#model| &#peeled, #choices
                     ))
                 })
@@ -805,17 +809,17 @@ impl FieldSpec {
             (Some((_, choices)), Some(WidgetFit::ByShape)) => {
                 let is_set = WidgetRef::is_set_const(index);
                 Some(quote_spanned! { span=>
-                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::choices(
+                    .__then(|__spec| ::formoxus::field_kind::WidgetSlot::<#is_set>::choices::<FormoxusTypes, _, _, _>(
                         __spec, #key, #items_key, |__m: &#model| &#place, #choices
                     ))
                 })
             }
             (Some((_, choices)), _) => Some(quote_spanned! { span=>
-                .with_node(#key, ::formoxus::field_kind::choice_field_for(|__m: &#model| &#place, #choices))
+                .with_node(#key, ::formoxus::field_kind::choice_field_for::<FormoxusTypes, _, _, _>(|__m: &#model| &#place, #choices))
             }),
             (None, _) => self.body.settings_tokens(span).map(|set| {
                 quote_spanned! { span=>
-                    .with_node(#key, ::formoxus::field_kind::field_for(|__m: &#model| &#place, #set))
+                    .with_node(#key, ::formoxus::field_kind::field_for::<FormoxusTypes, _, _>(|__m: &#model| &#place, #set))
                 }
             }),
         };

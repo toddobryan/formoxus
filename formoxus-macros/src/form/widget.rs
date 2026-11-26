@@ -185,6 +185,13 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
     }
 }
 
+/// The `KINDS` of the list in scope at the `form!`, by its bare name as every
+/// other use of `FormoxusTypes` is: what the widget checks judge a listed type
+/// by (decision AB.10.3).
+fn kinds() -> TokenStream2 {
+    quote! { <FormoxusTypes as ::formoxus::type_registry::TypeKinds>::KINDS }
+}
+
 /// What a failed `renders` check says, by the widget's `ACCEPTS` and
 /// `TAKES_CHOICES`. Every widget listed, so a new one needs a message.
 /// Whether a built-in takes `choices`, for the message naming the ones that
@@ -353,6 +360,7 @@ impl WidgetRef {
         let ty = self.type_tokens();
         let span = self.name_span();
         let fk = quote! { ::formoxus::field_kind };
+        let kinds = kinds();
         let written = self.written();
         let set_items = format!(
             "`{written}` offers the set's items as choices, so it needs `choices:` unless the \
@@ -375,7 +383,7 @@ impl WidgetRef {
                     const _: () = ::core::assert!(!#is_a_set, #on_a_set);
                     #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
                     const _: () = ::core::assert!(
-                        #is_a_set || #fk::is_single_value(#shape),
+                        #is_a_set || #fk::is_single_value(#kinds, #shape),
                         "a widget applies only to a single-value field, not a struct, list or enum"
                     );
                     #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
@@ -385,7 +393,7 @@ impl WidgetRef {
                     );
                     #[allow(clippy::assertions_on_constants, clippy::nonminimal_bool)]
                     const _: () = ::core::assert!(
-                        #is_a_set || #fk::renders::<#ty>(#shape, #has_choices),
+                        #is_a_set || #fk::renders::<#ty>(#kinds, #shape, #has_choices),
                         #cannot_render
                     );
                 }
@@ -477,6 +485,7 @@ impl WidgetRef {
         let ty = self.type_tokens();
         let span = self.name_span();
         let fk = quote! { ::formoxus::field_kind };
+        let kinds = kinds();
         let written = self.written();
         let set_items = set_items.to_string();
         let slot = Self::is_set_const(index);
@@ -522,7 +531,7 @@ impl WidgetRef {
         quote_spanned! { span=>
             #declare_slot
             const #failure: u8 = #fk::WidgetSlot::<#slot>::failure::<#ty>(
-                #shape, #marked_set, #has_choices
+                #kinds, #shape, #marked_set, #has_choices
             );
             #(#asserts)*
         }
@@ -854,7 +863,7 @@ mod tests {
         expect_that!(
             spec.expand().to_string(),
             contains_substring(
-                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: choices (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes[]\") , | __m : & Source | & __m . notes , STATES))"
+                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: choices :: < FormoxusTypes , _ , _ , _ > (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes\") , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"notes[]\") , | __m : & Source | & __m . notes , STATES))"
             )
         );
     }
@@ -872,7 +881,7 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: set_choices (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"cities[]\") , | __m : & Source | & __m . cities , CITIES))"
+                ". __then (| __spec | :: formoxus :: field_kind :: WidgetSlot :: < __FX_IS_SET_0 > :: set_choices :: < FormoxusTypes , _ , _ , _ > (__spec , & :: formoxus :: path :: ModelPath :: < Source > :: __new (\"cities[]\") , | __m : & Source | & __m . cities , CITIES))"
             )
         );
         expect_that!(

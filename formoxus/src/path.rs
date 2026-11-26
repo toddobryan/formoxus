@@ -692,7 +692,7 @@ mod tests {
     /// A value is the item whose own entry is that text, whatever its place.
     #[gtest]
     fn a_value_becomes_the_key_of_the_item_holding_it() {
-        let key = super::item_value_key("rust");
+        let key = super::item_value_key(crate::type_registry::BuiltIns::registry(), "rust");
         expect_that!(key, eq("[=rust]"));
         expect_that!(
             resolve_indices(&format!("tags{key}"), &tags()),
@@ -704,7 +704,10 @@ mod tests {
     /// encoded, and decoded back before the match.
     #[gtest]
     fn a_value_with_a_dot_brackets_or_a_percent_still_resolves() {
-        let key = super::item_value_key("v1.2 [beta] 100%");
+        let key = super::item_value_key(
+            crate::type_registry::BuiltIns::registry(),
+            "v1.2 [beta] 100%",
+        );
         expect_that!(key, eq("[=v1%2E2 %5Bbeta%5D 100%25]"));
         expect_that!(
             resolve_indices(&format!("tags{key}"), &tags()),
@@ -740,12 +743,12 @@ mod tests {
         );
     }
 
-    /// A value's text is what its item node writes: a newtype's inner value,
-    /// a unit enum's variant name, a number's display.
+    /// A value's text is what its item node writes: a unit enum's variant
+    /// name, a built-in's field's `format`. A listed newtype's is its field's,
+    /// which needs a list, so the suite's `set_item_errors` and `type_lists`
+    /// test it.
     #[gtest]
     fn a_values_text_is_its_item_entry() {
-        #[derive(facet::Facet)]
-        struct Tag(String);
         #[derive(facet::Facet)]
         #[repr(u8)]
         #[allow(dead_code)]
@@ -754,12 +757,17 @@ mod tests {
             Friday,
         }
         expect_that!(
-            super::item_value_key(&Tag("rust".to_string())),
-            eq("[=rust]")
+            super::item_value_key(crate::type_registry::BuiltIns::registry(), &Day::Friday),
+            eq("[=Friday]")
         );
-        expect_that!(super::item_value_key(&Day::Friday), eq("[=Friday]"));
-        expect_that!(super::item_value_key(&7_u8), eq("[=7]"));
-        expect_that!(super::item_value_key(&1.5_f64), eq("[=1%2E5]"));
+        expect_that!(
+            super::item_value_key(crate::type_registry::BuiltIns::registry(), &7_u8),
+            eq("[=7]")
+        );
+        expect_that!(
+            super::item_value_key(crate::type_registry::BuiltIns::registry(), &1.5_f64),
+            eq("[=1%2E5]")
+        );
     }
 
     // ── NodePath ─────────────────────────────────────────────────────────

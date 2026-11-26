@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-26**: 5.5.1-5.5.4 committed 59c4a47; AB's build = box 5.9; 5.9.2 tests written (uncommitted); next Todd 5.9.3 run-time side; `type_registry.rs` uncommitted
+- [**START HERE: next session**](next_session.md) — **2026-11-26**: types! BUILT and committed; QA-QJ answered (plan 5.9); G = list-aware widget checks via `TypeKinds`; Todd on 5.5.6
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`

@@ -4,8 +4,10 @@
 //! `form!` and `using_fns!` both expand to `::formoxus::…` paths, which cannot
 //! resolve inside formoxus itself.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::{FormSpec, buttons::Fns, empty_form, use_form};
 use formoxus::{form, using_fns};
 use googletest::prelude::*;

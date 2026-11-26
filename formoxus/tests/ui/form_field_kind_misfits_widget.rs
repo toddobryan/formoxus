@@ -3,12 +3,12 @@
 //! check is against `<F as Field>::KIND`, not the model type's own kind,
 //! since a dev's field may read a struct from text. The error should point at
 //! the widget, as the existing "`checkbox` cannot render" checks do.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::attrs::FieldType;
 use formoxus::error::ValidationMessage;
 use formoxus::field::Field;
 use formoxus::widgets::{AnyWidget, TextInput};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Span {

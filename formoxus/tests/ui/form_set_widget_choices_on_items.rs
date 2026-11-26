@@ -1,7 +1,7 @@
 //! A set with a widget takes its choices on its own line, beside the widget
 //! that shows them (decision D), not on its items' line.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

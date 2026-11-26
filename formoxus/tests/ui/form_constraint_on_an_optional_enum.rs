@@ -1,7 +1,7 @@
 //! The enum refusal sees through an `Option`, as the rest of `field_kind` does,
 //! so an optional enum gets the same reason as a plain one.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

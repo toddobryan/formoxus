@@ -1,7 +1,7 @@
 //! `$TrueFalse` alone, the spelling the runtime path uses, is refused: the
 //! checks are a `match`, which has to name the enum.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

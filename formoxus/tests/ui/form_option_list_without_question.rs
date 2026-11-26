@@ -1,7 +1,7 @@
 //! `[]` on an `Option<Vec<T>>` without the `?` would type-check, because
 //! `Option` has an `.iter()` of its own; the const check refuses it.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Address {

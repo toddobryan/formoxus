@@ -1,8 +1,8 @@
 //! HTML ignores a `step` that is not greater than zero, leaving the implicit
 //! step in force, so a zero or negative one is refused rather than emitted to
 //! do nothing.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Reading {

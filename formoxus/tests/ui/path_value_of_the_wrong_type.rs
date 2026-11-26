@@ -1,7 +1,7 @@
 //! The value has to be one of the set's items, or something they borrow as
 //! (`&str` for a set of `String`s): a number is neither.
-use facet::Facet;
-use formoxus::path;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, path};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

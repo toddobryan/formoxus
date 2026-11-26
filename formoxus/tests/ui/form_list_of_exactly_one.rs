@@ -1,7 +1,7 @@
 //! A list held to exactly one item is one value: the field should be the
 //! item's own type. Reported at `max_items`.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Poll {

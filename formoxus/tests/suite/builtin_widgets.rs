@@ -2,8 +2,10 @@
 //! `Widget::render` on an `AnyWidget` directly, the way `FieldNode` does, so
 //! each is tested apart from the node that hands it its props.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::core::Attribute;
 use dioxus::prelude::*;
+use formoxus::FormoxusTypes;
 use formoxus::ValidationMessage;
 use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};

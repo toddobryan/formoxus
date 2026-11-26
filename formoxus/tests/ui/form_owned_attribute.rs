@@ -1,7 +1,7 @@
 //! `name` belongs to formoxus: it is the path the value submits under, so an
 //! author who set it would detach the field from its value.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

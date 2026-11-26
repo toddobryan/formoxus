@@ -1,12 +1,12 @@
 //! A dev's widget that sets `TAKES_CHOICES = false` is refused `choices`, at
 //! the key, like a built-in that takes none; before, a dev's widget took them
 //! all.
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{LeafWidget, Widget};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Survey {

@@ -1,7 +1,7 @@
 //! The widget-accepts check reaches a field inside a variant: the projection
 //! types the field through a `match`, so `checkbox` on a String still fails.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

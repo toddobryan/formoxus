@@ -7,8 +7,10 @@
 //! smallest thing that checks a field when the knob is on: a keystroke alone
 //! does not, until the field shows an error.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::{Formoxus, empty_form, form, form_for, provide_defaults, use_form, using_fns};
 use googletest::prelude::*;
 

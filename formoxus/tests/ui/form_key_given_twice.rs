@@ -1,7 +1,7 @@
 //! A form key given twice is refused at the second one, like a field's key.
 //! The error once pointed past the last entry, at the end of the form.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

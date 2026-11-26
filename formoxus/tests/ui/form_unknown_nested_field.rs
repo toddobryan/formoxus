@@ -1,6 +1,6 @@
 //! A dotted path is checked all the way down, not just at its first segment.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 use formoxus::empty_form;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

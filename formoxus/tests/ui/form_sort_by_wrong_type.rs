@@ -1,7 +1,7 @@
 //! The order's item type is the set's: a comparator over `Tag` does not fit
 //! a set of `String`, and rustc says so at the order.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 

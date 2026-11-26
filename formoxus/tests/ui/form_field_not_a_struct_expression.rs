@@ -1,11 +1,11 @@
 //! `field:` written as a call. `form!` reads the field's type off a struct
 //! expression or a unit struct, which the checks on a `widget:` beside it
 //! need, and cannot from a call: refused at the expression.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::attrs::FieldType;
 use formoxus::field::Field;
 use formoxus::widgets::{AnyWidget, TextInput};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Venue {

@@ -1,0 +1,11 @@
+error[E0080]: evaluation panicked: a `replace` must keep the kind of field the included list gave the type: that list's forms render it with a widget for that kind
+  --> tests/ui/types_replace_kind_mismatch.rs:28:1
+   |
+28 | / formoxus::types! {
+29 | |     struct AppTypes;
+30 | |     include formoxus_fixture_lib::FixtureTypes;
+31 | |     replace formoxus_fixture_lib::Stamp => field NumberedStamp,
+32 | | }
+   | |_^ evaluation of `_` failed here
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `formoxus::types` (in Nightly builds, run with -Z macro-backtrace for more info)

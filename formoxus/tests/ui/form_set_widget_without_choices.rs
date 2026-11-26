@@ -1,7 +1,7 @@
 //! A set widget offers the set's items as choices, so a set of strings needs
 //! `choices:` (decision E); only an enum without data brings its own.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

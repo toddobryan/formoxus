@@ -183,7 +183,9 @@ mod tests {
         );
         expect_that!(
             out,
-            contains_substring(":: formoxus :: path :: item_value_key (\"rust\")")
+            contains_substring(
+                ":: formoxus :: path :: item_value_key (FormoxusTypes :: registry () , \"rust\")"
+            )
         );
         expect_that!(out, not(contains_substring("fn __formoxus_path_witness")));
     }

@@ -1,7 +1,7 @@
 //! `set` makes a list of newtypes a set, which then needs `sort_by`.
 //! Reported at `set`.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Tag(String);

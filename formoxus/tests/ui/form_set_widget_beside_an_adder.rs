@@ -1,9 +1,9 @@
 //! A widget renders the whole set, adder included, so `adder:` beside one
 //! would do nothing (decision H).
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::widgets::AddItemProps;
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]

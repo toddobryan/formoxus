@@ -1,7 +1,7 @@
 //! `adder` applies only to list or set fields.
-use facet::Facet;
+#![allow(unused_imports)] use facet::Facet;
 use formoxus::widgets::AddItemButton;
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Profile {

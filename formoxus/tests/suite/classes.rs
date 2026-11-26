@@ -13,6 +13,7 @@
 
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::attrs::{AttrSet, Tag};
 use formoxus::classes::{FixedKey, Slot};
 use formoxus::widgets::WidgetProps;

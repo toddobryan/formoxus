@@ -54,5 +54,5 @@ help: the following other types implement trait `SetWidget`
 note: required by a bound in `formoxus::field_kind::WidgetSlot::<true>::failure`
   --> src/field_kind.rs
    |
-   |     pub const fn failure<SW: SetWidget>(shape: &Shape, marked_set: bool, has_choices: bool) -> u8 {
+   |     pub const fn failure<SW: SetWidget>(
    |                              ^^^^^^^^^ required by this bound in `WidgetSlot::<true>::failure`

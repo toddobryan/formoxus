@@ -6,8 +6,8 @@
 //! This is a SECOND assert, separate from the chooser rule: the list is
 //! supplied here, so `radio_group` passes the check it shares with `select`
 //! and fails only on the `Option`.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Address {

@@ -1,7 +1,7 @@
 //! A constraint on a path that is not a single input is a compile error. A
 //! struct has no one value to measure, and the runtime used to drop it.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Address {

@@ -19,8 +19,10 @@
 //!
 //! then read the diff before committing, as with the trybuild goldens.
 
+// `form!` and `path!` read the `FormoxusTypes` in scope (decision AC).
 use dioxus::prelude::*;
 use facet::Facet;
+use formoxus::FormoxusTypes;
 use formoxus::{
     Classes, FormSpec, ValidationError, empty_form, form, form_for, use_form, using_fns,
 };

@@ -1,7 +1,7 @@
 //! A bare class name cannot hold a `-`. The caret spans the whole name, and the
 //! message reads right even if `-mt-4` was meant as a second class.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {

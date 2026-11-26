@@ -92,6 +92,15 @@ pub fn path(input: TokenStream) -> TokenStream {
     path::impl_path(input.into()).into()
 }
 
+/// `types! { pub struct AppTypes; include lib::LibTypes; T => newtype V, … }`:
+/// one list of a crate's types, which `form!` reads at compile time through
+/// the `FormoxusTypes` in scope and each form carries at run time. See
+/// `formoxus::type_registry` for what a list is and what wins.
+#[proc_macro]
+pub fn types(input: TokenStream) -> TokenStream {
+    types::impl_types(input.into()).into()
+}
+
 /// The handlers for one `render`, keyed by button name — see
 /// [`using_fns`](macro@using_fns) for why this is a map and not a struct.
 #[proc_macro]

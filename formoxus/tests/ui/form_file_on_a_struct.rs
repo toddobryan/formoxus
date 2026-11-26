@@ -1,7 +1,7 @@
 //! `file` renders only a `FileUpload` field, not a struct of a dev's own,
 //! even one shaped like a file.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Attachment {

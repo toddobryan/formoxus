@@ -1,7 +1,7 @@
 //! `omit_value` leaves out a range's `<output>` (decision B), so on any other
 //! widget it would do nothing, and it is refused, as `no_trim` on a number is.
-use facet::Facet;
-use formoxus::form;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Mixer {

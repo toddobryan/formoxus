@@ -1,8 +1,8 @@
 //! An `Option` field is written with `?`, at the end of a path too. Nothing
 //! else would fail here, since the field is only borrowed, so a const check
 //! asks the shape.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Address {

@@ -1,7 +1,7 @@
 //! A path through an `Option<Struct>` without its `?`: rustc's own error, since
 //! there is no `city` on an `Option`.
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Address {

@@ -1,12 +1,12 @@
 //! A dev's widget is checked by its own consts, like a built-in: one that
 //! narrows `ACCEPTS` to `Text` is refused on a number field, at the widget,
 //! with the generic message naming it.
-use dioxus::prelude::*;
+#![allow(unused_imports)] use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, FieldType, FieldTypeSet, Tag};
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{LeafWidget, Widget};
-use formoxus::{empty_form, form};
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Survey {

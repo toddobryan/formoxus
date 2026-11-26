@@ -1,6 +1,6 @@
 //! `path!` checks a variant segment the same way `form!` does.
-use facet::Facet;
-use formoxus::path;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, path};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[repr(u8)]

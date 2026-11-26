@@ -1,0 +1,5 @@
+error: every `types!` list already holds the built-in types, so `BuiltIns` is never included
+ --> tests/ui/types_include_built_ins.rs:6:13
+  |
+6 |     include formoxus::BuiltIns;
+  |             ^^^^^^^^^^^^^^^^^^

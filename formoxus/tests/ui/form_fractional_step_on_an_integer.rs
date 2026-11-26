@@ -2,8 +2,8 @@
 //! field's `T` the way it does `min`. An integer field can only ever hold
 //! whole numbers, so a fractional step on one is a mistake. (A whole one,
 //! `2.0`, is fine.)
-use facet::Facet;
-use formoxus::{empty_form, form};
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, empty_form, form};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Order {

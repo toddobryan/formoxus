@@ -1,7 +1,7 @@
 //! An index is a `usize`, checked where it is written, so a wrong type is
 //! an error on the author's expression rather than inside `format!`.
-use facet::Facet;
-use formoxus::path;
+#![allow(unused_imports)] use facet::Facet;
+use formoxus::{FormoxusTypes, path};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Quiz {
