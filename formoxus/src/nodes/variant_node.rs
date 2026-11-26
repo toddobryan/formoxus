@@ -9,6 +9,7 @@ use crate::nodes::{Drafts, Edit, Node, SpecsByPath, default_label, no_such_path}
 use crate::nodes::{NodeContext, RawValue, Shown};
 use crate::path::NodePath;
 use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
+use crate::type_registry::TypeRegistry;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
 use crate::widgets::{Choice, VariantSelect, field_help};
@@ -58,6 +59,7 @@ pub struct VariantNode {
     pub enum_type: &'static EnumType,
     pub choice: VariantChoice,
     pub nodes: Vec<Box<dyn Node>>,
+    pub(crate) types: Option<&'static TypeRegistry>,
 }
 
 impl VariantNode {
@@ -118,6 +120,7 @@ impl VariantNode {
             Walk {
                 mode: FormMode::Blank,
                 specs,
+                types: self.types,
             },
             &my_path.join_variant(chosen.name),
             // As `enum_node` builds them: the enum may be an `Option`'s

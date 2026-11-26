@@ -23,36 +23,41 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use facet::{Def, Facet, Shape, StructKind, Type, UserType};
 use formoxus_spec::{Attr, FieldType, HtmlElement};
 
 use crate::field::Field;
-use crate::fields::{ChoiceField, DefaultField, IntoChoice};
+use crate::fields::{ChoiceField, IntoChoice};
 use crate::form::FormSpec;
 use crate::nodes::NodeCtor;
 use crate::nodes::{SetEvent, SetFeedback, SetOrder, is_file_upload};
 use crate::path::ModelPath;
+use crate::type_registry::FieldFor;
 use crate::widgets::widget::{LeafWidget, SetWidget};
 
 /// The shape of the field a projection reaches, with the field's type inferred
 /// from the closure. The closure is never called.
-pub const fn shape_of<M, F: for<'a> Facet<'a>>(_: fn(&M) -> &F) -> &'static Shape {
-    F::SHAPE
+pub const fn shape_of<Model, Field: for<'a> Facet<'a>>(_: fn(&Model) -> &Field) -> &'static Shape {
+    Field::SHAPE
 }
 
 /// The leaf constructor for a field `form!` gives settings to (`min: 13`).
 ///
 /// `form!` sees no types, so it never names the field: the projection pins the
-/// model field's type `P`, [`DefaultField`] picks the field for it, and `set`
-/// is the settings as assignments (`|f| { f.min = Some(13); }`), each typed by
-/// that field. So `min: 300` on a `u8` is rustc's own out-of-range error, and a
+/// type at the path, the list `Reg`'s [`FieldFor`] impl picks the field for
+/// it, and `set` is the settings as assignments (`|f| { f.min = Some(13); }`)
+/// on that impl's `Settings`, each typed by it. So `min: 300` on a `u8` is rustc's own out-of-range error, and a
 /// setting the field lacks does not compile.
-pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::Field)) -> NodeCtor {
-    let mut field = P::Field::default();
-    set(&mut field);
-    NodeCtor::new(move |args| Box::new(args.node(field.clone())))
+pub fn field_for<Reg: FieldFor<TypeAtPath>, Model, TypeAtPath>(
+    _: fn(&Model) -> &TypeAtPath,
+    set: impl FnOnce(&mut Reg::Settings),
+) -> NodeCtor {
+    let mut settings = Reg::Settings::default();
+    set(&mut settings);
+    NodeCtor::for_field(Reg::build(settings))
 }
 
 /// The leaf constructor for a field `form!` gives `choices:`: a
@@ -63,13 +68,16 @@ pub fn field_for<M, P: DefaultField>(_: fn(&M) -> &P, set: impl FnOnce(&mut P::F
 /// WHICH field it is: a `String` with choices is a `ChoiceField<String>`, not
 /// a `StringField`. `form!` refuses `choices` beside a validated key, so the
 /// two constructors never meet on one field.
-pub fn choice_field_for<M, P, C>(_: fn(&M) -> &P, choices: impl IntoIterator<Item = C>) -> NodeCtor
+pub fn choice_field_for<Reg, Model, TypeAtPath, Choice>(
+    _: fn(&Model) -> &TypeAtPath,
+    choices: impl IntoIterator<Item = Choice>,
+) -> NodeCtor
 where
-    P: DefaultField,
-    C: IntoChoice<ValueOf<P>>,
-    ValueOf<P>: Send + Sync,
+    Reg: FieldFor<TypeAtPath>,
+    Choice: IntoChoice<ValueOf<Reg, TypeAtPath>>,
+    ValueOf<Reg, TypeAtPath>: Send + Sync,
 {
-    choice_node::<P, C>(choices)
+    choice_node::<Reg, TypeAtPath, Choice>(choices)
 }
 
 /// The leaf constructor for `field:`: the dev's own field, on a path whose
@@ -89,13 +97,14 @@ where
 
 /// [`choice_field_for`]'s constructor, by the field's type rather than a
 /// projection to it: what a set widget's `choices:` builds for the set's ITEMS.
-fn choice_node<P, C>(choices: impl IntoIterator<Item = C>) -> NodeCtor
+fn choice_node<Reg: FieldFor<TypeAtPath>, TypeAtPath, Choice>(
+    choices: impl IntoIterator<Item = Choice>,
+) -> NodeCtor
 where
-    P: DefaultField,
-    C: IntoChoice<ValueOf<P>>,
-    ValueOf<P>: Send + Sync,
+    Choice: IntoChoice<ValueOf<Reg, TypeAtPath>>,
+    ValueOf<Reg, TypeAtPath>: Send + Sync,
 {
-    let field = ChoiceField::<ValueOf<P>>::new(choices);
+    let field = ChoiceField::<ValueOf<Reg, TypeAtPath>>::new(choices);
     NodeCtor::new(move |args| Box::new(args.node(field.clone())))
 }
 
@@ -109,7 +118,9 @@ where
 /// is checked once `P` is known, so a check over the wrong type is reported
 /// at the check, and an un-annotated closure gets its argument type from the
 /// field.
-pub fn validator_for<M, P: Facet<'static> + 'static>(_: fn(&M) -> &P) -> ValidatorFor<P> {
+pub fn validator_for<Model, TypeAtPath: Facet<'static> + 'static>(
+    _: fn(&Model) -> &TypeAtPath,
+) -> ValidatorFor<TypeAtPath> {
     ValidatorFor(PhantomData)
 }
 
@@ -223,7 +234,7 @@ pub mod validators {
 
 /// The value type of a model field's default field: `u8` for a `u8` or an
 /// `Option<u8>`. What a choice field over that model field chooses among.
-type ValueOf<P> = <<P as DefaultField>::Field as Field>::Value;
+type ValueOf<Reg, TypeAtPath> = <<Reg as FieldFor<TypeAtPath>>::Field as Field>::Value;
 
 /// What `form!`'s `sort_by:` can order: a set, or a `Vec` written with `set`
 /// (whether a `Vec` carries `set` is a `const` check of its own).
@@ -623,19 +634,20 @@ impl WidgetSlot<false> {
     }
 
     /// `choices:` beside the widget: the field's own, as for any leaf.
-    pub fn choices<M: Clone + std::fmt::Debug + Facet<'static>, P, C>(
-        spec: FormSpec<M>,
-        path: &ModelPath<M>,
-        _items: &ModelPath<M>,
-        _: fn(&M) -> &P,
-        choices: impl IntoIterator<Item = C>,
-    ) -> FormSpec<M>
+    pub fn choices<Model, Reg, TypeAtPath, Choice>(
+        spec: FormSpec<Model>,
+        path: &ModelPath<Model>,
+        _items: &ModelPath<Model>,
+        _: fn(&Model) -> &TypeAtPath,
+        choices: impl IntoIterator<Item = Choice>,
+    ) -> FormSpec<Model>
     where
-        P: DefaultField,
-        C: IntoChoice<ValueOf<P>>,
-        ValueOf<P>: Send + Sync,
+        Model: Clone + Debug + Facet<'static>,
+        Reg: FieldFor<TypeAtPath>,
+        Choice: IntoChoice<ValueOf<Reg, TypeAtPath>>,
+        ValueOf<Reg, TypeAtPath>: Send + Sync,
     {
-        spec.with_node(path, choice_node::<P, C>(choices))
+        spec.with_node(path, choice_node::<Reg, TypeAtPath, Choice>(choices))
     }
 }
 
@@ -660,37 +672,39 @@ impl WidgetSlot<true> {
 
     /// A set widget's `choices:` are its ITEMS' choices (decision D), filed
     /// under `items` (`cities[]`), where the set's draft reads them.
-    pub fn set_choices<M: Clone + std::fmt::Debug + Facet<'static>, S, C>(
-        spec: FormSpec<M>,
-        items: &ModelPath<M>,
-        _: fn(&M) -> &S,
-        choices: impl IntoIterator<Item = C>,
-    ) -> FormSpec<M>
+    pub fn set_choices<Reg, Model, Set, Choice>(
+        spec: FormSpec<Model>,
+        items: &ModelPath<Model>,
+        _: fn(&Model) -> &Set,
+        choices: impl IntoIterator<Item = Choice>,
+    ) -> FormSpec<Model>
     where
-        S: SetItemsOf,
-        S::Item: DefaultField,
-        C: IntoChoice<ValueOf<S::Item>>,
-        ValueOf<S::Item>: Send + Sync,
+        Reg: FieldFor<Set::Item>,
+        Model: Clone + Debug + Facet<'static>,
+        Set: SetItemsOf,
+        Choice: IntoChoice<ValueOf<Reg, Set::Item>>,
+        ValueOf<Reg, Set::Item>: Send + Sync,
     {
-        spec.with_node(items, choice_node::<S::Item, C>(choices))
+        spec.with_node(items, choice_node::<Reg, Set::Item, Choice>(choices))
     }
 
     /// `choices:` beside a set's widget are its ITEMS' choices (decision D),
     /// filed under `items` (`cities[]`), where the set's draft reads them.
-    pub fn choices<M: Clone + std::fmt::Debug + Facet<'static>, S, C>(
-        spec: FormSpec<M>,
-        _path: &ModelPath<M>,
-        items: &ModelPath<M>,
-        _: fn(&M) -> &S,
-        choices: impl IntoIterator<Item = C>,
-    ) -> FormSpec<M>
+    pub fn choices<Reg, Model, Set, Choice>(
+        spec: FormSpec<Model>,
+        _path: &ModelPath<Model>,
+        items: &ModelPath<Model>,
+        _: fn(&Model) -> &Set,
+        choices: impl IntoIterator<Item = Choice>,
+    ) -> FormSpec<Model>
     where
-        S: SetItemsOf,
-        S::Item: DefaultField,
-        C: IntoChoice<ValueOf<S::Item>>,
-        ValueOf<S::Item>: Send + Sync,
+        Reg: FieldFor<Set::Item>,
+        Model: Clone + Debug + Facet<'static>,
+        Set: SetItemsOf,
+        Choice: IntoChoice<ValueOf<Reg, Set::Item>>,
+        ValueOf<Reg, Set::Item>: Send + Sync,
     {
-        spec.with_node(items, choice_node::<S::Item, C>(choices))
+        spec.with_node(items, choice_node::<Reg, Set::Item, Choice>(choices))
     }
 }
 

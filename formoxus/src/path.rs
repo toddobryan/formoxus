@@ -45,6 +45,7 @@ use std::marker::PhantomData;
 
 use crate::error::FormAccessError;
 use crate::nodes::no_such_path;
+use crate::type_registry::TypeRegistry;
 
 /// One leaf path into `T`, proven to exist at compile time.
 ///
@@ -484,12 +485,18 @@ impl<T> AsRef<str> for ModelPath<T> {
 /// What [`path!`](macro@crate::path) writes for `[= value]`: the value's text
 /// as its item's entry holds it, encoded so it cannot end the segment or the
 /// path (`.`, `[`, `]`) or be misread (`%`). The text is the one a set's
-/// item node writes for that value: a newtype's inner scalar, a unit enum's
-/// variant name, any other leaf's display, the way `build::node_for_shape`
-/// reads them. A set holds nothing but those.
+/// item node writes for that value (see `entry_text`).
+///
+/// `types` is the list of the `FormoxusTypes` where `path!` is written, which
+/// is always some list: a module with none of its own gets the prelude's
+/// built-ins (decision AC). It is looked up in the same order the form built
+/// its items in, so a key matches the item it names.
 #[doc(hidden)]
-pub fn item_value_key<Q: for<'f> Facet<'f> + ?Sized>(value: &Q) -> String {
-    let text = entry_text(Peek::new(value));
+pub fn item_value_key<Q: for<'f> Facet<'f> + ?Sized>(
+    types: &'static TypeRegistry,
+    value: &Q,
+) -> String {
+    let text = entry_text(Some(types), Peek::new(value));
     let mut encoded = String::with_capacity(text.len() + 3);
     encoded.push_str("[=");
     for c in text.chars() {
@@ -506,13 +513,21 @@ pub fn item_value_key<Q: for<'f> Facet<'f> + ?Sized>(value: &Q) -> String {
 }
 
 /// The entry an item node holding `value` writes for itself.
-fn entry_text(value: Peek<'_, '_>) -> String {
-    let shape = value.shape();
-    if shape.scalar_type().is_none()
-        && let Some(variant) = value
-            .into_enum()
-            .ok()
-            .and_then(|e| e.variant_name_active().ok())
+///
+/// In the order the walk builds items: a type with a field, in the lookup
+/// order every item's node was built in (`TypeRegistry::field_in`), writes its
+/// field's `format`; a unit enum, which the walk builds as a variant node and
+/// never as a field, writes its variant's name; anything else, its display.
+/// Never a panic: this runs inside a dev's validator, and an item it cannot
+/// name gets a key that matches nothing, which reports the error unplaced.
+fn entry_text(types: Option<&'static TypeRegistry>, value: Peek<'_, '_>) -> String {
+    if let Some(info) = TypeRegistry::field_in(types, value.shape()) {
+        return (info.format_value)(value);
+    }
+    if let Some(variant) = value
+        .into_enum()
+        .ok()
+        .and_then(|e| e.variant_name_active().ok())
     {
         return variant.to_string();
     }

@@ -8,6 +8,7 @@ use std::{
 
 use facet::{Facet, Peek, Shape};
 
+use crate::type_registry::TypeRegistry;
 use crate::{
     build::{FormMode, Walk, node_for_shape},
     error::{FormAccessError, ValidationMessage},
@@ -33,6 +34,7 @@ pub struct Items {
     /// `max_items`: refused before any were built, so a forged request
     /// cannot make the server build thousands of nodes to then reject.
     over_max: Option<usize>,
+    types: Option<&'static TypeRegistry>,
 }
 
 impl Items {
@@ -46,6 +48,7 @@ impl Items {
             min: None,
             max: None,
             over_max: None,
+            types: None,
         }
     }
 
@@ -53,6 +56,11 @@ impl Items {
     pub(crate) fn with_limits(mut self, min: Option<usize>, max: Option<usize>) -> Self {
         self.min = min;
         self.max = max;
+        self
+    }
+
+    pub(crate) fn with_types(mut self, types: Option<&'static TypeRegistry>) -> Self {
+        self.types = types;
         self
     }
 
@@ -246,7 +254,11 @@ impl Items {
             self.shape,
             name,
             peek,
-            Walk { mode, specs },
+            Walk {
+                mode,
+                specs,
+                types: self.types,
+            },
             &my_path.join(name),
             // Never the container's own `optional`: that says the container is an
             // `Option`'s payload, which its items are not, exactly as

@@ -1456,32 +1456,81 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
           `Tag` case (Claude).
 
     3. **(Todd) The run-time side, in formoxus.**
-       1. **`FieldFor<V>`**, in `type_registry.rs` beside `TypeRegistry`,
-          since the two are one concept seen at compile time and at run
-          time: `type Settings: Default; type Field: Field + Send + Sync;
-          fn build(settings: Self::Settings) -> Self::Field;`. Give it the
-          `#[diagnostic::on_unimplemented]` from the probe ("`{V}` has no
-          field in `{Self}`", with a note to list it in `types!`), because
-          that message is what a dev sees for an unlisted type.
-       2. **The built-ins are a `types!` list with no entries.** formoxus
-          declares `types! { pub struct BuiltIns; }` for itself (with
-          `extern crate self as formoxus;`, so the macro's `::formoxus::`
-          paths resolve inside formoxus too). `types!` already writes every
-          built-in for every list, so this needs nothing new, and
-          `BuiltIns::registry()` is the registry a form with no list falls
-          back to (3.7). The built-in types are then named in exactly one
-          place, `types!`' own list in formoxus-macros, instead of three
-          (`scalar_node`'s dispatch, the `DefaultField` impls, `Number`'s
-          impls), which the comment on `scalar_node` asks to keep in step by
-          hand today. **`DefaultField` and its impls are deleted**
-          (AB.10.4); `fields.rs` keeps `Number`'s impls, which
-          `NumberField<T>` needs.
-       3. **Replacing an entry.** `field_for` panics on a duplicate, which
-          stays right for a dev's own mistakes. `types!` needs a way to
-          build a list whose `replace` entries supersede a built-in or an
-          included entry: a `replace_field_for` that requires the type to
-          be present already, so a `replace` of something absent is caught
-          too.
+       1. **`FieldFor<V>` is a trait, generic over the model type `V`.**
+          (Expanded 2026-11-26 at Todd's request.) A list is a unit struct,
+          `struct AppTypes;`, and `types!` implements the trait for it once
+          per type the list holds: `impl FieldFor<Markdown> for AppTypes`,
+          `impl FieldFor<String> for AppTypes`, and so on. So "which field
+          does `AppTypes` give a `Markdown`" is a trait lookup rustc does at
+          compile time, `<AppTypes as FieldFor<Markdown>>::Field`.
+          It goes in `type_registry.rs`, beside `TypeRegistry`, because the
+          two are one list seen at compile time and at run time:
+
+          ```rust
+          #[diagnostic::on_unimplemented(
+              message = "`{V}` has no field in `{Self}`",
+              note = "list it in `{Self}`'s `formoxus::types!`: `{V} => newtype String`, or `{V} => field YourField`"
+          )]
+          pub trait FieldFor<V> {
+              /// What a path's settings in `form!` configure: the field
+              /// itself, or for a newtype entry its inner field.
+              type Settings: Default;
+              /// The field a path of type `V` gets.
+              type Field: Field + Send + Sync;
+              /// The field, from settings.
+              fn build(settings: Self::Settings) -> Self::Field;
+          }
+          ```
+
+          Two associated types, not one, because a newtype entry's
+          settings belong to its inner field: for `Note => newtype String`,
+          `Settings` is `StringField` and `Field` is
+          `Newtype<Note, StringField>`, and `build` wraps one in the other.
+          For a `field F` entry both are `F` and `build` returns its
+          argument. `Settings: Default` because a path with no settings
+          starts from the default; `Field: Send + Sync` because
+          `field_for` needs it. Nobody writes an impl by hand: `types!`
+          writes them all, which is what keeps the compile-time list and
+          the run-time registry from disagreeing.
+       2. **Built-ins: one list in the macro, `BuiltIns` in formoxus.**
+          1. **The list of built-in types lives in formoxus-macros**, in
+             `types!`' own module (4): `String`, `bool`, the ten numbers,
+             each with its field. Every list gets a `FieldFor` impl for
+             each, so `form!` can ask any list about a `String`.
+          2. **`BuiltIns` is declared in formoxus by invoking the macro**,
+             in `type_registry.rs`: `formoxus_macros::types! { pub struct
+             BuiltIns; }`, a list with no entries of its own. The macro
+             writes `::formoxus::…` paths, so `lib.rs` needs
+             `extern crate self as formoxus;` for them to resolve inside
+             formoxus itself. The prelude then exports
+             `pub use crate::type_registry::BuiltIns as FormoxusTypes;`
+             (AC), and `BuiltIns::registry()` is what a form with no list
+             falls back to (3.7).
+          3. **Order trap: `BuiltIns` needs `types!`, which is Claude's
+             step 4.** Do the rest of 3 first; `BuiltIns` is one line once
+             4 exists. Until then nothing needs it to compile but the
+             prelude line.
+          4. **How a list's registry gets its built-ins.** `registry()`
+             builds a `TypeRegistry` from every `FieldFor` impl, built-ins
+             included, but AF.1 has the public `field_for` refuse a
+             built-in type. So the generated code calls a hidden
+             `#[doc(hidden)] pub fn __built_in<F: Field + Send + Sync>(self,
+             field: F) -> Self`, which is `field_for` without that check.
+             The check itself needs the run-time side to know which shapes
+             are built-in: a `fn is_built_in(shape) -> bool` on the
+             scalar types the macro lists. That is a second copy of the
+             list, so a test pins that every built-in the macro writes is
+             one `is_built_in` accepts, and the other way round.
+          5. **`DefaultField` and its impls are deleted** (AB.10.4);
+             `fields.rs` keeps `Number`'s impls, which `NumberField<T>`
+             needs.
+       3. **No run-time `replace` is needed.** Earlier this step had a
+          `replace_field_for`. Under AF a `replace` supersedes only an
+          entry from an included list, and `types!` sees both through the
+          replay, so it drops the superseded entry before writing anything:
+          the run-time builder never sees two fields for one type, and
+          `field_for`'s duplicate panic stays as it is. `overrides()` is
+          the `replace` entries alone, through the ordinary `field_for`.
        4. **Your `FieldInfo.format_value`** keeps the shape it has: a
           closure from a `Peek` to the field's text, built in `field_for`
           from a clone of the field (clone BEFORE `NodeCtor::for_field`
@@ -1526,8 +1575,12 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
            walk's, or a key computed under an override would not match the
            item the walk built.
 
-    4. **(Claude) `types!`**, a proc macro in formoxus-macros, exported as
-       `formoxus::types!`. The grammar from AB.2. A `newtype V` entry's
+    4. **(Claude) `types!`**, a proc macro in formoxus-macros
+       (`formoxus-macros/src/types.rs`, with its `#[proc_macro]` entry in
+       `lib.rs` beside `form`), exported through the prelude like `form!`
+       (`pub use formoxus_macros::{form, path, types, using_fns};`), so
+       `formoxus::types!` works. It holds the one list of built-in types
+       (3.2.1). The grammar from AB.2. A `newtype V` entry's
        inner field is the list's own entry for `V`
        (`<Self as FieldFor<V>>`), never a fixed table (AB.10.4). It writes: the struct;
        one `FieldFor` impl per entry, per built-in not replaced, and the
@@ -1551,9 +1604,21 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        `FormoxusTypes::registry()` to `item_value_key`. Re-bless the goldens
        and read every diff: the spans of an unlisted type's error move.
 
-    6. **(Claude) The rest of the tree.** The examples crate (its forms
-       need no change under AC's recommendation), `type_registry.rs`'s
-       module docs rewritten around `types!`, and memory.
+    6. **(Claude) The rest of the tree.**
+       1. The examples crate: its forms need no change, since the prelude's
+          `FormoxusTypes` covers forms over built-in types (AC). Any custom
+          type it uses gets a list.
+       2. `type_registry.rs`' module docs, rewritten around `types!`: what
+          a list is, `FormoxusTypes`, `include` and `replace`, the lookup
+          order, why built-ins never change (AF), and what `install` is
+          now for. The same for `TypeRegistry`, `field_for` and `install`,
+          whose docs still describe the process-wide registry as the only
+          copy.
+       3. The `build.rs` comment on the constructor arm, which still says
+          registering a built-in replaces it everywhere (AF.4).
+       4. `refuse_unregistered_newtype`'s message (5.9.2's API item 5).
+       5. Memory: the probe file, `next_session.md`, and a new entry for
+          the lookup order if the docs alone do not carry it.
 
     7. **(Todd) Review, then on to 5.5.6.** 5.5.6's path check and 5.5.7's
        message are unchanged by AB. 5.8 loses Y. Box 6 becomes widget

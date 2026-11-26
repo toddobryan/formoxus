@@ -21,6 +21,7 @@ use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
 use crate::nodes::{SetFeedback, SetOrder};
 use crate::path::ModelPath;
+use crate::type_registry::TypeRegistry;
 use crate::widgets::AnyWidget;
 use crate::widgets::item_buttons::ItemAdder;
 use crate::widgets::widget::AnySetWidget;
@@ -79,6 +80,7 @@ pub struct FormSpec<T: Clone + Debug + Facet<'static>> {
     pub(crate) live_validation: Option<bool>,
     pub(crate) classes: Option<Classes>,
     pub(crate) edits: Vec<ClassEdit>,
+    pub(crate) types: Option<&'static TypeRegistry>,
     _type: PhantomData<T>,
 }
 
@@ -101,6 +103,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             live_validation: None,
             classes: None,
             edits: Vec::new(),
+            types: None,
             _type: PhantomData,
         }
     }
@@ -400,6 +403,11 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             );
         }
         self.field(path).attrs = attrs;
+        self
+    }
+
+    pub fn with_types(mut self, types: &'static TypeRegistry) -> Self {
+        self.types = Some(types);
         self
     }
 }

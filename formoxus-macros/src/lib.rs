@@ -34,6 +34,7 @@ use proc_macro::TokenStream;
 
 mod form;
 mod path;
+mod types;
 mod using_fns;
 
 // TODO: document the whole grammar here — the form-level keywords (`title`,

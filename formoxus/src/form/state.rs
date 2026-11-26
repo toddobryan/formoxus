@@ -584,6 +584,7 @@ fn form_for_impl<T: Clone + Debug + PartialEq + Facet<'static>>(
         Walk {
             mode,
             specs: &spec.fields,
+            types: spec.types,
         },
         &NodePath::root(),
         /* optional */ false,

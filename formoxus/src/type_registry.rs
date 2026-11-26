@@ -12,6 +12,7 @@
 //! fn main() {
 //!     TypeRegistry::new()
 //!         .field_for(TimeLimitField)
+//!         .field_for(Newtype::<Markdown, StringField>::new(StringField::default()))
 //!         .widget_for::<Markdown>(MarkdownWidget)
 //!         .install();
 //!     dioxus::launch(App);
@@ -31,11 +32,13 @@
 //!    [`default_widget`](crate::field::Field::default_widget). A registered
 //!    widget applies even under a `field:`.
 //!
-//! A `#[facet(transparent)]` type needs no registered field, since it reads
-//! and writes as its inner type. Its widget is still looked up by its own
-//! type, so `widget_for::<Markdown>` changes a transparent `Markdown(String)`
-//! and leaves every other `String` alone. A plain newtype or struct with no
-//! field registered and no `field:` makes the build panic, naming the type.
+//! No newtype is special, `#[facet(transparent)]` included: a
+//! `struct Markdown(String)` needs a field like any other type of the app's
+//! own. [`Newtype`](crate::fields::Newtype) is that field, reading and
+//! writing it through its inner field, registered with `field_for`. A newtype
+//! or struct with no field registered and no `field:` makes the build panic,
+//! naming the type. A widget registered for `Markdown` changes `Markdown`
+//! and leaves every other `String` alone.
 //!
 //! # Why installed, not provided
 //!
@@ -54,9 +57,10 @@
 //! built.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::fmt::Debug;
+use std::sync::{Arc, OnceLock};
 
-use facet::{Facet, Shape};
+use facet::{Facet, Peek, Shape};
 use formoxus_spec::FieldType;
 
 use crate::field::Field;
@@ -149,9 +153,16 @@ impl TypeRegistry {
                 shape
             );
         }
-        registered.field = Some(TypeAndCtor {
+        let formatter = field.clone();
+        registered.field = Some(FieldInfo {
             field_type: F::KIND,
             node_ctor: NodeCtor::for_field(field),
+            format_value: Arc::new(move |value: Peek<'_, '_>| {
+                let value = value
+                    .get::<F::Value>()
+                    .expect("a registry keys each field by its Value's shape");
+                formatter.format(value)
+            }),
         });
         self
     }
@@ -162,8 +173,8 @@ impl TypeRegistry {
     /// built-in.
     ///
     /// `T` is named because a widget does not say what type it renders. For
-    /// a `#[facet(transparent)]` type it is the outer type, so
-    /// `widget_for::<Markdown>` changes `Markdown` and not `String`.
+    /// a newtype it is the newtype, so `widget_for::<Markdown>` changes
+    /// `Markdown` and not `String`.
     ///
     /// # Panics
     ///
@@ -193,16 +204,28 @@ impl TypeRegistry {
         self
     }
 
-    /// The constructor of the field registered for `shape`, or `None` if
-    /// nothing is installed or the type has no field. `'static` because the
-    /// installed registry is, so the walk borrows it rather than cloning.
-    pub(crate) fn field_ctor(shape: &Shape) -> Option<&'static NodeCtor> {
-        Self::registry()?
-            .types
-            .get(shape)?
-            .field
-            .as_ref()
-            .map(|tac| &tac.node_ctor)
+    /// The field a leaf of type `shape` gets, in decision AB.6's order once
+    /// the path's own `field:` or settings have had their say: the installed
+    /// overrides, then the form's own list, or the built-ins for a form with
+    /// none (AD). `None` when neither knows the type, and the walk refuses it.
+    pub(crate) fn field_in(
+        types: Option<&'static TypeRegistry>,
+        shape: &Shape,
+    ) -> Option<&'static FieldInfo> {
+        Self::find(types, shape, |registered| registered.field.as_ref())
+    }
+
+    /// The order itself, once, for every part of an entry: box 6's widget
+    /// lookup will be `find(types, shape, |r| r.widget.as_ref())`.
+    fn find<T>(
+        types: Option<&'static TypeRegistry>,
+        shape: &Shape,
+        part: impl Fn(&'static Registered) -> Option<&'static T>,
+    ) -> Option<&'static T> {
+        let in_list = |list: &'static TypeRegistry| list.types.get(shape).and_then(&part);
+        Self::registry()
+            .and_then(in_list)
+            .or_else(|| types.and_then(in_list)) // TODO: BuiltIns
     }
 }
 
@@ -211,7 +234,7 @@ impl TypeRegistry {
 /// replaces the registered field and keeps the registered widget.
 #[derive(Debug, Default)]
 pub(crate) struct Registered {
-    pub(crate) field: Option<TypeAndCtor>,
+    pub(crate) field: Option<FieldInfo>,
     pub(crate) widget: Option<AnyWidget>,
 }
 
@@ -219,8 +242,35 @@ pub(crate) struct Registered {
 /// associated type, an associated const and an `impl Future` method), so the
 /// field lives inside the constructor, and its `KIND` is copied out beside
 /// it for the widget check.
-#[derive(Debug)]
-pub(crate) struct TypeAndCtor {
+pub(crate) struct FieldInfo {
     pub(crate) field_type: FieldType,
     pub(crate) node_ctor: NodeCtor,
+    pub(crate) format_value:
+        Arc<dyn for<'mem, 'facet> Fn(Peek<'mem, 'facet>) -> String + Send + Sync>,
+}
+
+impl Debug for FieldInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FieldInfo")
+            .field("field_type", &self.field_type)
+            .field("node_ctor", &self.node_ctor)
+            .field("format_value", &"Fn(Field::Value) -> String")
+            .finish()
+    }
+}
+
+#[diagnostic::on_unimplemented(
+    message = "`{V}` has no field in `{Self}`",
+    note = "list it in `{Self}`'s `formoxus::types!`: `{V} => newtype String`, or `{V} => field YourField`"
+)]
+pub trait FieldFor<V> {
+    /// What a path's settings in `form!` configure: the field
+    /// itself, or for a newtype entry its inner field.
+    type Settings: Default;
+
+    /// The field a path of type `V` gets.
+    type Field: Field + Send + Sync;
+
+    /// The field, from settings.
+    fn build(settings: Self::Settings) -> Self::Field;
 }

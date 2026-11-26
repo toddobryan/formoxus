@@ -56,6 +56,7 @@ pub(crate) enum FormMode {
 pub(crate) struct Walk<'s> {
     pub(crate) mode: FormMode,
     pub(crate) specs: &'s SpecsByPath,
+    pub(crate) types: Option<&'static TypeRegistry>,
 }
 
 impl<'s> Walk<'s> {
@@ -395,7 +396,7 @@ pub(crate) fn node_for_shape(
         return option_node(option_def, name, peek, walk, prefix);
     } else if let Some(ctor) = spec
         .and_then(|s| s.node.as_ref())
-        .or_else(|| TypeRegistry::field_ctor(shape))
+        .or_else(|| TypeRegistry::field_in(walk.types, shape).map(|f| &f.node_ctor))
     {
         // A spec that names this leaf with a constructor builds it, in place of the
         // default for its type. That is how `min: 3` reaches a typed field, and how
@@ -416,6 +417,9 @@ pub(crate) fn node_for_shape(
     } else if is_file_upload(shape) {
         return Box::new(file_node(name, peek, walk, prefix, optional));
     } else if let Some(scalar) = shape.scalar_type() {
+        // Until `BuiltIns` exists (5.9.3.2), the built-ins are still built
+        // here. Remove this arm and `scalar_node` together with switching
+        // `TypeRegistry::find` to `BuiltIns::registry()` (5.9.3.7, 5.9.3.9).
         return scalar_node(scalar, leaf(peek, shape)).unwrap_or_else(|| {
             panic!("scalar type {scalar:?} is not supported in Field (field {name})")
         });
@@ -636,7 +640,9 @@ fn list_node(
         validator: spec.and_then(|s| s.validator.clone()),
         optional,
         adder: spec.and_then(|s| s.adder).unwrap_or_default(),
-        items: Items::new(shape, items).with_limits(min_items, max_items),
+        items: Items::new(shape, items)
+            .with_limits(min_items, max_items)
+            .with_types(walk.types),
     })
 }
 
@@ -755,7 +761,9 @@ fn set_node(
     refuse_at_most_one(prefix, "set", shape, min_items, max_items);
     // Never pre-built from `min_items`: blank items in a set would be
     // duplicates of each other. Its draft is the way in.
-    let mut items = Items::new(shape, items).with_limits(min_items, max_items);
+    let mut items = Items::new(shape, items)
+        .with_limits(min_items, max_items)
+        .with_types(walk.types);
     let draft = items.new_draft(prefix, walk.specs);
     Box::new(SetNode {
         name: name.to_string(),
@@ -851,6 +859,7 @@ fn enum_node(
                 )
             })
             .unwrap_or_default(),
+        types: walk.types,
     })
 }
 
