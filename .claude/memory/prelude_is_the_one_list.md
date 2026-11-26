@@ -76,3 +76,10 @@ piecemeal now would only be undone or re-argued then.
    crate-root imports in `src/` and fixed them (`ValidationMessage` ×6, `Classes`,
    `ErrorsByPath`). Grep for `use crate::[A-Z]` and for capitalised top-level items in
    `use crate::{…}` to find any more.
+
+**Exception, 2026-11-26 (Todd, CUSTOM_FIELDS_PLAN decision AC):** the
+prelude exports `FormoxusTypes`, an alias for formoxus's `BuiltIns` type list.
+It is the fallback `form!` resolves when a module names no list of its own:
+a glob import is shadowed by an explicit `use AppTypes as FormoxusTypes;`. It is
+the one export that is part of the design rather than a convenience; the
+"no new re-exports until publish" rule otherwise stands.

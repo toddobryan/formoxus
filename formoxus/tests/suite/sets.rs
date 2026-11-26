@@ -7,14 +7,13 @@
 //! editable, until Edit (box 8) replaces that; the markup tests check the
 //! structure around them, not what an item renders as.
 
-use super::{across_the_wire, install_test_registry, store_keys, with_store_keys};
+use super::{across_the_wire, store_keys, with_store_keys};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue, SetFeedback, SetOrder};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::stores::ValuesByPath;
-use formoxus::type_registry::TypeRegistry;
 use formoxus::widgets::{AddItemProps, ItemAdder};
 use googletest::prelude::*;
 use std::cmp::Ordering;
@@ -451,7 +450,6 @@ fn a_leaf_widget_on_a_set_names_with_set_widget() {
 #[gtest]
 #[should_panic(expected = "applies only to a set")]
 fn with_set_widget_refuses_a_path_that_is_not_a_set() {
-    install_test_registry();
     let _ = FormSpec::<Post>::default().with_set_widget(&path!(Post.title), PropsAsText);
 }
 
@@ -460,12 +458,14 @@ fn with_set_widget_refuses_a_path_that_is_not_a_set() {
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Tag(String);
 
-/// This module's registered types, for `super::install_test_registry`. Not
-/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
-/// `Tag` is registered as a newtype over its `String`.
-pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
-    types.newtype::<Tag, String>()
+// This module's types (`CUSTOM_FIELDS_PLAN.md` decision AB): its forms
+// read them through `FormoxusTypes`, and a spec built by hand takes them
+// with `with_types`. Nothing is installed.
+formoxus::types! {
+    struct SetTypes;
+    Tag => newtype String,
 }
+use SetTypes as FormoxusTypes;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Shelf {
@@ -479,8 +479,7 @@ struct Shelf {
 #[gtest]
 #[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
 fn a_set_of_non_scalars_without_sort_by_fails_at_construction() {
-    install_test_registry();
-    let _ = empty_form::<Shelf>(FormSpec::default());
+    let _ = empty_form::<Shelf>(FormSpec::default().with_types(SetTypes::registry()));
 }
 
 /// Shortest first, unlike `Tag`'s own `Ord`, so a set that ignored its
@@ -533,7 +532,6 @@ fn tag_values(form: &FormState<Shelf>) -> Vec<String> {
 /// assigned, so `#0` is the shortest, not the first the set iterated.
 #[gtest]
 fn a_set_with_sort_by_is_in_that_order_when_built() {
-    install_test_registry();
     let form = form_for(&shelf(&["dioxus", "go", "rust"]), shelf_spec());
     expect_that!(
         tag_values(&form),
@@ -548,7 +546,6 @@ fn a_set_with_sort_by_is_in_that_order_when_built() {
 /// every key with the item it named.
 #[gtest]
 fn a_set_with_sort_by_puts_an_added_item_in_order() {
-    install_test_registry();
     let mut form = form_for(&shelf(&["dioxus", "go", "rust"]), shelf_spec());
     expect_that!(
         form.edit(&Edit::AddItem {
@@ -571,7 +568,6 @@ fn a_set_with_sort_by_puts_an_added_item_in_order() {
 /// empty until `distribute_values` reaches its leaf.
 #[gtest]
 fn a_set_with_sort_by_sorts_the_items_a_submit_rebuilds() {
-    install_test_registry();
     let mut form = empty_form::<Shelf>(shelf_spec());
     form.distribute_values(&values(&[
         ("tags", "#0,#1,#2"),
@@ -633,7 +629,6 @@ fn a_set_item_that_cannot_be_built_sorts_last_without_panicking() {
 /// gives, at build and on the server's rebuild.
 #[gtest]
 fn form_sort_by_takes_a_fn() {
-    install_test_registry();
     let spec = || form! { Shelf { tags => { sort_by: by_length } } };
     let form = form_for(&shelf(&["dioxus", "go", "rust"]), spec());
     expect_that!(
@@ -1020,11 +1015,15 @@ fn draft_tags(form: &FormState<Draft>) -> Vec<String> {
 /// sorted `Vec` with no duplicate (5e).
 #[gtest]
 fn a_list_treated_as_a_set_drops_its_duplicates_when_built() {
-    install_test_registry();
     let draft = Draft {
         tags: tags(&["rust", "dioxus", "rust", "css"]),
     };
-    let mut form = form_for(&draft, FormSpec::default().treat_as_set(&path!(Draft.tags)));
+    let mut form = form_for(
+        &draft,
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .treat_as_set(&path!(Draft.tags)),
+    );
     expect_that!(
         draft_tags(&form),
         elements_are![eq("css"), eq("dioxus"), eq("rust")]
@@ -1048,7 +1047,6 @@ struct TagList {
 /// "ab" goes, though "cd" sits between the two.
 #[gtest]
 fn a_list_treated_as_a_set_drops_by_equality_not_by_its_order() {
-    install_test_registry();
     let list = TagList {
         tags: ["ab", "cd", "ab", "xyz"]
             .iter()
@@ -1058,6 +1056,7 @@ fn a_list_treated_as_a_set_drops_by_equality_not_by_its_order() {
     let mut form = form_for(
         &list,
         FormSpec::default()
+            .with_types(SetTypes::registry())
             .treat_as_set(&path!(TagList.tags))
             .with_sort_by(
                 &path!(TagList.tags),
@@ -1246,8 +1245,11 @@ fn a_list_behind_an_option_can_be_treated_as_a_set() {
 #[gtest]
 #[should_panic(expected = "tags: a set of `Tag` has no default order; give it a sort_by")]
 fn a_list_of_newtypes_treated_as_a_set_without_sort_by_fails_at_construction() {
-    install_test_registry();
-    let _ = empty_form::<TagList>(FormSpec::default().treat_as_set(&path!(TagList.tags)));
+    let _ = empty_form::<TagList>(
+        FormSpec::default()
+            .with_types(SetTypes::registry())
+            .treat_as_set(&path!(TagList.tags)),
+    );
 }
 
 // ── Duplicates refused at the adder (box 6) ──────────────────────────────
@@ -1288,7 +1290,6 @@ fn a_set_takes_an_item_its_order_ties_but_its_type_does_not_equal() {
 /// second "go" is a duplicate.
 #[gtest]
 fn a_set_with_sort_by_refuses_only_an_equal_item() {
-    install_test_registry();
     let mut form = form_for(&shelf(&["go", "rust"]), shelf_spec());
     let add = |name: &str| Edit::AddItem {
         path: NodePath::new("tags"),
@@ -1434,7 +1435,6 @@ fn DuplicateThenAddProbe() -> Element {
 /// the next edit has done something else.
 #[gtest]
 fn the_next_edit_replaces_the_message() {
-    install_test_registry();
     let html = super::render_to_html(DuplicateThenAddProbe);
     expect_that!(html, not(contains_substring("is already there")));
     expect_that!(
@@ -1482,7 +1482,6 @@ fn AddPriorityProbe() -> Element {
 /// have: a newtype by its inner value, a unit enum by its variant.
 #[gtest]
 fn an_item_is_named_as_the_user_sees_it() {
-    install_test_registry();
     expect_that!(
         super::render_to_html(DuplicateTagProbe),
         contains_substring(refused("\"go\" is already there."))
@@ -1621,7 +1620,6 @@ fn ToasterProbe() -> Element {
 /// captured sync signal gets both, and `None` leaves the region empty.
 #[gtest]
 fn feedback_can_send_the_event_elsewhere_and_show_nothing() {
-    install_test_registry();
     let html = super::render_to_html(ToasterProbe);
     expect_that!(
         html,
@@ -1661,7 +1659,6 @@ fn TagFeedbackProbe() -> Element {
 /// item, not the string the set shows.
 #[gtest]
 fn feedback_gets_the_item_as_its_own_type() {
-    install_test_registry();
     expect_that!(
         super::render_to_html(TagFeedbackProbe),
         contains_substring(done("tag css (3 letters)"))

@@ -78,6 +78,11 @@ __test-util = []
 [dev-dependencies]
 # This crate, with `__test-util` on, for the suite. See `[features]`.
 formoxus = { path = ".", features = ["__test-util"] }
+# A library with a `types!` list and forms of its own, which the suite
+# includes (CUSTOM_FIELDS_PLAN.md decision AE). Cargo allows the cycle for a
+# dev-dependency, and the suite is an integration test, so it links the same
+# formoxus the fixture does.
+formoxus-fixture-lib = { path = "../formoxus-fixture-lib" }
 dioxus-html = { workspace = true }
 dioxus-ssr = { workspace = true }
 futures = { workspace = true }

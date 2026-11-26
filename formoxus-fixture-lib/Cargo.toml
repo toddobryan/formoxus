@@ -1,0 +1,14 @@
+[package]
+name = "formoxus-fixture-lib"
+description = "A library with types and forms of its own, for formoxus's suite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+facet = { workspace = true }
+formoxus = { workspace = true }

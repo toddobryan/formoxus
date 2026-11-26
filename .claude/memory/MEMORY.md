@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-26**: 5.5.1-5.5.4 done (uncommitted); AB decided (compile-time `types!`), WHEN open (AB.12); Todd's 5.5.5 `format_value` half-written
+- [**START HERE: next session**](next_session.md) — **2026-11-26**: 5.5.1-5.5.4 committed 59c4a47; AB's build = box 5.9; 5.9.2 tests written (uncommitted); next Todd 5.9.3 run-time side; `type_registry.rs` uncommitted
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead of his code: NO implementation, even throwaway
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`
@@ -42,7 +42,7 @@
 - [Facet form spike](facet_form_spike.md) — origin of the reflection path: RenderCtx, one component per leaf, `$Variant` segments, retiring the derive path
 - [Derive-path removal](derive_path_removal.md) — 2026-09-19: derive path deleted, `reflect` flattened to the crate root; three traps hit doing it
 - [Bound field](bound_field.md) — BUILT 2026-11-22: `BoundField<K>` per node kind, read-only views; why not one type, sealed `NodeKind`, `Items`, `Editing`; keys-only reads use store `iter()`
-- [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code uses full module paths; 2026-11-09: NO new re-exports until publish
+- [Prelude is the one list](prelude_is_the_one_list.md) — the prelude is the only export list; internal code uses full module paths; 2026-11-09: NO new re-exports until publish (exception: `FormoxusTypes`, AC)
 - [No shared string type](no_shared_string_type.md) — DECIDED 2026-11-12: no imstr/Arc<str> swap, it would leak into the public API; only `NodePath`'s private field could change
 - [Widget is the umbrella word](widget_is_the_umbrella_word.md) — "widget", never "control"; why the 2026-09-19 rename was reversed
 - [WidgetSlot dispatch](widget_slot_dispatch.md) — how `form!` picks leaf vs set widget builder by the field's shape: const-generic `WidgetSlot<IS_SET>`, failure codes

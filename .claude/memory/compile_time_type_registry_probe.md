@@ -47,9 +47,9 @@ beside a specific entry: E0119, "upstream crates may add a new impl of
 and `form!` in a library, we have something"):**
 
 1. `form!` finds its list by NAME RESOLUTION, not by the macro knowing
-   anything: it writes a bare `FormTypes`, resolved at the call site. The app
-   writes `use AppTypes as FormTypes;`; the library writes
-   `type FormTypes = crate::LibTypes;` (a type alias, because a `use`
+   anything: it writes a bare `FormoxusTypes`, resolved at the call site. The app
+   writes `use AppTypes as FormoxusTypes;`; the library writes
+   `type FormoxusTypes = crate::LibTypes;` (a type alias, because a `use`
    imports the macro of the same name too, and a crate may not reach its own
    macro-expanded `#[macro_export]` by an absolute path:
    `macro_expanded_macro_exports_accessed_by_absolute_paths`, deny-by-default).
@@ -83,12 +83,12 @@ and `form!` in a library, we have something"):**
    reads `CARGO_CRATE_NAME` when writing the replay) and skip a tag seen
    twice. Dedup by type TEXT is wrong: `$crate::Markdown` reads the same
    from two crates.
-9. PROBED the same day, WORKS: since `form!` knows its `FormTypes`, a form can carry
+9. PROBED the same day, WORKS: since `form!` knows its `FormoxusTypes`, a form can carry
    its list's run-time registry (a static per list) in its `FormSpec`,
    instead of a process-wide `install`. Then nothing needs installing,
    a library's forms can never meet an app that forgot to include them, and
    client and server agree by construction. `path!(…[= v])` would need its
-   list too (take `FormTypes` from scope, like `form!`) — that part NOT probed.
+   list too (take `FormoxusTypes` from scope, like `form!`) — that part NOT probed.
    How, in the scratch copy of formoxus: `FormSpec.types: Option<&'static
    TypeRegistry>` + `with_types`; `Walk.types`; the walk's registry arm asks
    `walk.types` first, else the global; `Items` and `VariantNode` keep
@@ -101,8 +101,14 @@ and `form!` in a library, we have something"):**
    and validated; a library's form over a type the app never lists worked;
    control: the same form with no list panics naming `Markdown`.
 
+10. `DefaultField` GOES (2026-11-26, Todd asked why it was still needed):
+   a `newtype V` entry takes its inner field from the SAME list's entry,
+   `<Self as FieldFor<V>>` (probed: a list whose `String` brackets text
+   showed `Markdown("hi")` as `[hi]`), and the built-ins are formoxus's own
+   empty `types! { pub struct BuiltIns; }`.
+
 **Open, untested:** how `form!` learns which `AppTypes` (a key per form, or
-a fixed path like `crate::FormTypes`); replacing a built-in (macro_rules
+a fixed path like `crate::FormoxusTypes`); replacing a built-in (macro_rules
 cannot omit a listed built-in; a proc macro matching type text is fragile
 with aliases, so an explicit `replace String => …` form is likelier);
 (libraries: see above).

@@ -248,15 +248,16 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
       ```rust
       formoxus::types! {
           pub struct AppTypes;
-          include LibTypes;
+          include libt::LibTypes;
           Markdown => newtype String,
           TimeLimit => field TimeLimitField,
-          replace String => field TrimmedStringField,
+          replace libt::Badge => field LoudBadgeField,
       }
       ```
 
-      It writes the struct; one `FieldFor` impl per entry, per built-in the
-      list does not replace, and one for `Option<T>` that reuses `T`'s; a
+      (`include` and `replace` as amended by AF and AI.) It writes the
+      struct; one `FieldFor` impl per entry, per built-in, and one for
+      `Option<T>` that reuses `T`'s; a
       `registry()` that builds the list's run-time `TypeRegistry` once (a
       `LazyLock` static); and, for a library, the replay macro of 4. The
       built-ins must be listed by the macro itself: a blanket
@@ -265,10 +266,10 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
       `DefaultField` for `Markdown`"). Widget entries (box 6) are not
       designed yet; see 11.
    3. **`form!` finds its list by name (probed).** It writes a bare
-      `FormTypes`, which rustc resolves at the call site like code typed
+      `FormoxusTypes`, which rustc resolves at the call site like code typed
       there, so a `use` points every form in a module at a list. The app
-      writes `use AppTypes as FormTypes;`. A library writes
-      `type FormTypes = crate::LibTypes;`, a type alias rather than a `use`:
+      writes `use AppTypes as FormoxusTypes;`. A library writes
+      `type FormoxusTypes = crate::LibTypes;`, a type alias rather than a `use`:
       a `use` would also import the macro of the same name (4), and rustc
       denies a crate reaching its own macro-generated `#[macro_export]` by an
       absolute path (`macro_expanded_macro_exports_accessed_by_absolute_paths`).
@@ -295,7 +296,7 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
       4. Listing a type an included list already has is E0119 on that type.
          `replace` is the way to mean it.
    5. **Each form carries its own list (probed).** `form!` puts
-      `FormTypes::registry()` in its `FormSpec` (a `with_types` builder), the
+      `FormoxusTypes::registry()` in its `FormSpec` (a `with_types` builder), the
       walk carries it (`Walk.types`), and the walk's registry arm asks it.
       `Items` and `VariantNode` keep the list from the walk that built them,
       because they walk again later: when the server fills a form from the
@@ -348,21 +349,29 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
    10. **What this replaces or changes, once built.**
        1. `TypeRegistry::install` and the process-wide registry stay, but
           hold the app's overrides rather than the only copy of its types.
-          `TypeRegistry::new().field_for(…)` in `main` becomes `types!`.
+          `TypeRegistry::new().field_for(…)` in `main` becomes `types!`, and
+          `TypeRegistry::newtype::<T, V>()` (Z) goes with `DefaultField`: a
+          `T => newtype V` entry does its job.
        2. Y's `newtype` key is no longer needed: a registered type's
           settings go through its `Settings`. An unregistered newtype with
           settings is refused, as one with none is (5.5.4).
        3. Most of V's run-time checks become compile-time ones; what is left
           is the second-to-last row of 9.
-       4. `DefaultField` stops being what `form!` asks; it asks
-          `<FormTypes as FieldFor<P>>`. `DefaultField` stays inside formoxus
-          to name a `newtype V` entry's inner field.
+       4. `DefaultField` goes (decided 2026-11-26, after Todd asked why it
+          was still needed). Its two remaining jobs both belong to the list:
+          `form!` asks `<FormoxusTypes as FieldFor<P>>` instead, and a
+          `newtype V` entry takes its inner field from the same list's own
+          entry for `V`, `<AppTypes as FieldFor<V>>`, so a list that
+          replaces `String` gets its newtypes over `String` through the
+          replacement too (probed: a list whose `String` field brackets its
+          text showed `Markdown("hi")` as `[hi]`).
        5. The built-ins sit in every list (2), so the walk's scalar arm and
-          `scalar_node`'s dispatch go, and one list in formoxus names the
-          built-in types instead of three (`scalar_node`, the `DefaultField`
-          impls, `Number`'s impls).
+          `scalar_node`'s dispatch go. The built-in types are named once, in
+          `types!` itself, instead of three times (`scalar_node`, the
+          `DefaultField` impls, `Number`'s impls, of which only `Number`'s
+          stay, because `NumberField<T>` is generic over them).
        6. 5.5.5's set-item key formats through the list: `path!(…[= v])`
-          takes `FormTypes` from scope, as `form!` does.
+          takes `FormoxusTypes` from scope, as `form!` does.
        7. Box 6's per-type widget becomes an entry in `types!`.
        8. AA still stands: `path!` sees the list, but not a form's
           per-path `field:` on a set's items.
@@ -373,18 +382,16 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
           macro reads `CARGO_CRATE_NAME`), and `types!` skips a tag it has
           seen. Matching on the type's text would be wrong, since
           `$crate::Markdown` reads the same from two crates.
-       2. `path!(…[= v])` with `FormTypes` from scope.
+       2. `path!(…[= v])` with `FormoxusTypes` from scope.
        3. Widget entries, and how `replace` names a widget rather than a
           field.
-       4. What `form!` says when no `FormTypes` is in scope. rustc's own
-          "cannot find type `FormTypes`" is a poor message; `form!` may want
+       4. What `form!` says when no `FormoxusTypes` is in scope. rustc's own
+          "cannot find type `FormoxusTypes`" is a poor message; `form!` may want
           a `types:` key for a form that names its list directly.
        5. A hand-built `FormSpec`: the built-ins and the installed list, or
           nothing.
-   12. **Open, for Todd: when.** Switch course now, partway through 5.5, or
-       finish 5.5 as written (5.5.5 to 5.5.7, then 5.6) and build AB after.
-       5.5's tests mostly survive either way; 5.5.5 and Y are where the two
-       routes differ most.
+   12. **When: now (Todd, 2026-11-26), in place of 5.5.5 as written.** The
+       build is box 5.9.
 
 ## Traps
 
@@ -1165,10 +1172,10 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        path and both types, and gives the exact line to write,
        `TypeRegistry::new().newtype::<Byline, String>()`. `newtypes` 28/28.
 
-    5. **(Todd) The set-item key, no longer parkable.** Expanded
-       2026-11-26 by Claude. **AB (10.6) changes this step once built:**
-       `path!` would format through the form's list, not the process-wide
-       registry. Until AB's timing is decided (AB.12), this is the route.
+    5. **SUPERSEDED 2026-11-26 by 5.9 (AB built now, AB.12 option 1).**
+       5.9.3.4 and 5.9.3.10 do it through the form's list. Kept for the
+       reasoning in 1 and 9. **(Todd) The set-item key, no longer parkable.**
+       Expanded 2026-11-26 by Claude.
 
        1. **What breaks, and why.** A validator names one set item by its
           value: `path!(Shelf.labels[= &old])`. `path!` turns the value into
@@ -1361,6 +1368,288 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
     value types and field types would hit Rust's rule against overlapping
     impls. The value-type spelling lives only where formoxus can translate
     it through `DefaultField`.
+
+  - [ ] **5.9** (Todd and Claude) **Build AB.** Written 2026-11-26 by
+    Claude. Done NEXT, in place of 5.5.5 as it stood (Todd chose AB.12's
+    option 1), and before 5.5.6, 5.5.7 and 5.6. On this branch, as one
+    breaking change: the compiler errors are the to-do list. Each step
+    says who does it, what, why, and the traps.
+
+    1. **(Todd) Decide AC, AD and AE** (below the steps). Each changes what
+       the tests in 2 look like. **Done 2026-11-26: all three as
+       recommended.**
+
+    2. **(Claude) Tests first.** Nothing below exists yet, so the suite
+       stops compiling until 3 to 5 are done, as with 5.2.
+       1. The suite's types move from `install_test_registry` and the
+          `register` functions in `suite.rs` to one `types!` list per
+          module, pointed at by `FormoxusTypes` (or by `with_types` on a
+          hand-built spec, AD). Most tests then need nothing installed.
+       2. New tests for each probed behaviour: two lists in one process
+          giving one type different fields; a server-style rebuild
+          (`empty_form`, then `distribute_values`) building a list item
+          and a variant's fields through the kept list; a form with no list
+          refusing a custom type.
+       3. Override tests. A test binary is one process and `install` runs
+          once in it, so the suite installs ONE overrides list for all of
+          them, replacing a type that only the override tests use. They
+          cover: the override wins over a form's list; it does not reach a
+          path the form configured (AB.7); a built-in the app did not
+          replace stays the form's own (the trap in 3.8).
+       4. Library tests (AE): a fixture library with its own `types!` and
+          forms, included by the suite.
+       5. trybuild goldens for `types!`' compile-time errors: a type listed
+          twice; a `replace` whose `KIND` differs from the included list's
+          (AB.8); a replacement widget that cannot render the field, once
+          box 6 adds widget entries; no `FormoxusTypes` in scope, per AC.
+
+       **Done 2026-11-26 (Claude), uncommitted.** Type-checked against
+       type-only stubs in a scratch copy: the one error left is the
+       expected one (`newtypes::a_setting_on_a_listed_newtypes_path_reaches_its_inner_field`
+       needs `form!` to ask `FieldFor`, 5.9.5). What was written:
+       1. `formoxus-fixture-lib`, a workspace member and a dev-dependency of
+          formoxus: `Badge` (never overridden), `Stamp` (the suite replaces
+          it), `Seal` (in a second list the suite does not include), a
+          `Card` form with `pinned => { field: PinnedStamp }`.
+       2. `suite.rs`: `install_test_registry` and the `register` functions
+          gone; one `SuiteOverrides` list (includes the fixture, `replace`s
+          `Stamp`, lists `Seal` as an own entry) installed by
+          `install_overrides()`; `across_the_wire_with(types, model)`.
+       3. The seven modules each have a private `types!` list and
+          `use … as FormoxusTypes;`; hand-built specs in the tests that met
+          a listed type take `.with_types(…::registry())`. 81
+          `install_test_registry();` calls gone.
+       4. `type_lists.rs`, 17 tests: one list, two lists in one process, a
+          rebuild building list items and a chosen variant's fields through
+          the kept list, the set-item key through `FormoxusTypes`, a
+          library's form, including a library, and five override tests.
+       5. `newtypes.rs`: `Motto` listed as `field Newtype<Motto, MottoString>`
+          (AG); a new test that a setting on a listed newtype's path
+          reaches its inner field (what Y was for); the duplicate test moved
+          to a golden; the refusal tests expect the message to name
+          `types!` and the line to add.
+       6. `custom_fields.rs`: the 7 registered-widget tests plus the one
+          that only passed because no widget was registered are ignored
+          (AH); the 5.6 widget test and the double-install test moved
+          (to a golden and to `type_lists`).
+       7. Seven goldens in `tests/ui-pending/` (no `.stderr` until the
+          checks exist): a type listed twice, a built-in entry, a `replace`
+          with another `KIND`, a `replace` with nothing included, a type
+          both listed and included, a path whose type is in no list, and a
+          `widget:` that cannot render a listed type.
+
+       The API the tests chose, for 5.9.3 to build or change:
+       1. `formoxus::types! { [vis] struct Name; include krate::List;
+          T => newtype V, T => field F, replace krate::T => field F }`,
+          exported through the prelude like `form!`.
+       2. `Name::registry() -> &'static TypeRegistry`,
+          `Name::overrides() -> TypeRegistry`, `Name::install()`.
+       3. `FormSpec::with_types(&'static TypeRegistry)`.
+       4. `formoxus::prelude::FormoxusTypes`, an alias of
+          `formoxus::type_registry::BuiltIns`.
+       5. `refuse_unregistered_newtype`'s message now has to name `types!`
+          and the line to add (`Headline => newtype String`), plus `field:`;
+          "transparent" for a transparent type. (Claude wrote that message;
+          Claude can update it in 5.9.3 if wanted.)
+       6. When `item_value_key` takes the list (5.9.3.10), `path.rs`'s
+          inline `a_values_text_is_its_item_entry` loses its unregistered
+          `Tag` case (Claude).
+
+    3. **(Todd) The run-time side, in formoxus.**
+       1. **`FieldFor<V>`**, in `type_registry.rs` beside `TypeRegistry`,
+          since the two are one concept seen at compile time and at run
+          time: `type Settings: Default; type Field: Field + Send + Sync;
+          fn build(settings: Self::Settings) -> Self::Field;`. Give it the
+          `#[diagnostic::on_unimplemented]` from the probe ("`{V}` has no
+          field in `{Self}`", with a note to list it in `types!`), because
+          that message is what a dev sees for an unlisted type.
+       2. **The built-ins are a `types!` list with no entries.** formoxus
+          declares `types! { pub struct BuiltIns; }` for itself (with
+          `extern crate self as formoxus;`, so the macro's `::formoxus::`
+          paths resolve inside formoxus too). `types!` already writes every
+          built-in for every list, so this needs nothing new, and
+          `BuiltIns::registry()` is the registry a form with no list falls
+          back to (3.7). The built-in types are then named in exactly one
+          place, `types!`' own list in formoxus-macros, instead of three
+          (`scalar_node`'s dispatch, the `DefaultField` impls, `Number`'s
+          impls), which the comment on `scalar_node` asks to keep in step by
+          hand today. **`DefaultField` and its impls are deleted**
+          (AB.10.4); `fields.rs` keeps `Number`'s impls, which
+          `NumberField<T>` needs.
+       3. **Replacing an entry.** `field_for` panics on a duplicate, which
+          stays right for a dev's own mistakes. `types!` needs a way to
+          build a list whose `replace` entries supersede a built-in or an
+          included entry: a `replace_field_for` that requires the type to
+          be present already, so a `replace` of something absent is caught
+          too.
+       4. **Your `FieldInfo.format_value`** keeps the shape it has: a
+          closure from a `Peek` to the field's text, built in `field_for`
+          from a clone of the field (clone BEFORE `NodeCtor::for_field`
+          takes it). What changes is only which registry it is looked up
+          in (7).
+       5. **`FormSpec.types: Option<&'static TypeRegistry>`** and a public
+          `with_types(&'static TypeRegistry)`, which `form!` calls with
+          `FormoxusTypes::registry()`. `&'static` because each list is a
+          static, which also keeps `FormSpec` cheap to clone.
+       6. **`Walk.types`, and the copies that walk later.** `Walk` gains
+          the form's list, set from the spec in `form_for_impl`.
+          **Trap:** `Items` and `VariantNode` must keep `walk.types` when
+          they are built (a `with_types` on `Items`, a field on
+          `VariantNode`), and use it when they build a `Walk` of their own
+          (`items.rs`, `variant_node.rs`). They walk again later, when the
+          server fills a form from the wire, when an item is added, and
+          when a variant is chosen. Forget it and those later walks quietly
+          use only the installed list and the built-ins: the form works
+          until a user adds an item. The probe changed exactly these
+          places.
+       7. **One lookup, in AB.6's order,** used by the walk, by the
+          set-item key and later by box 6's widgets: the path's spec; then
+          the installed list; then the form's list, or `BuiltIns::registry()`
+          when the form has none. A single function, because three copies of the
+          order would drift.
+       8. **OVERTAKEN by AF (no list can replace a built-in, and only
+          `replace` lines are installed).** Kept for the reasoning. **Trap:
+          the installed list must not hold the built-ins the app left alone.** If `AppTypes::install()` installed the whole list,
+          its untouched `String` would beat a library form's own
+          `replace String`, since the installed list is asked first. So
+          `types!` installs only what the app chose: its own entries, its
+          `replace`s, and what it included. The run-time side needs nothing
+          for this beyond `install` taking whatever registry it is given;
+          the point is in `install`'s docs and in 4.
+       9. **The walk's scalar arm and `scalar_node` go.** Every built-in
+          now comes through 7. Keep a clear panic for a scalar with no
+          field (a `char`, an `i128`), which today comes from `scalar_node`
+          returning `None`.
+       10. **The set-item key takes the form's list.**
+           `item_value_key` and `entry_text` get the list as a parameter
+           and format through 7's order. It must be the same order as the
+           walk's, or a key computed under an override would not match the
+           item the walk built.
+
+    4. **(Claude) `types!`**, a proc macro in formoxus-macros, exported as
+       `formoxus::types!`. The grammar from AB.2. A `newtype V` entry's
+       inner field is the list's own entry for `V`
+       (`<Self as FieldFor<V>>`), never a fixed table (AB.10.4). It writes: the struct;
+       one `FieldFor` impl per entry, per built-in not replaced, and the
+       `Option<T>` impl; `registry()` (everything) and the installed
+       overrides (3.8), each a `LazyLock` static; `install()`; and the
+       replay `macro_rules!` of AB.4, written by the proc macro so its
+       `$crate` names the right crate. `include` chains through an
+       accumulator, as in the probe. AB.8's check: through the replay it
+       sees the included entry a `replace` supersedes, and emits a free
+       `const _` comparing `KIND`s, with a message naming both lists.
+       Diamond includes (AB.11.1) wait until a real case: today they are a
+       plain E0119.
+
+    5. **(Claude) `form!` and `path!` use `FormoxusTypes`.** `field_kind`'s
+       settings and check helpers are bounded on `DefaultField` today
+       (`field_for`, `choice_field_for`, `ValueOf`, two more); they take
+       the list as a type parameter and ask `FieldFor` instead, and
+       `DefaultField`'s `on_unimplemented` message moves to `FieldFor`'s.
+       `form!` emits `FormoxusTypes` in each of them and
+       `.with_types(FormoxusTypes::registry())` on the spec; `path!` passes
+       `FormoxusTypes::registry()` to `item_value_key`. Re-bless the goldens
+       and read every diff: the spans of an unlisted type's error move.
+
+    6. **(Claude) The rest of the tree.** The examples crate (its forms
+       need no change under AC's recommendation), `type_registry.rs`'s
+       module docs rewritten around `types!`, and memory.
+
+    7. **(Todd) Review, then on to 5.5.6.** 5.5.6's path check and 5.5.7's
+       message are unchanged by AB. 5.8 loses Y. Box 6 becomes widget
+       entries in `types!` (AB.11.3), looked up in 3.7's order.
+
+    AC. **DECIDED 2026-11-26 (Todd): 1, the prelude's `FormoxusTypes` (Todd
+        named it; `FormTypes` before), an
+        agreed exception to "no new re-exports until publish".**
+        **What `form!` does with no `FormoxusTypes` in scope (AB.11.4).** The
+        suite has 321 `form!` calls, the examples more, apcsp more again,
+        and most forms use only built-in types. Options:
+        1. **(Recommended) The prelude supplies a fallback.**
+           `formoxus::prelude` exports `FormoxusTypes`, an alias for
+           `BuiltIns` (3.2). A glob import is shadowed by any explicit
+           `use` or local item of the same name, so a module that writes
+           `use AppTypes as FormoxusTypes;` gets its own list, and every other
+           form keeps working unchanged. This is a new prelude export,
+           which the 2026-11-09 rule ("no new re-exports until publish")
+           needs Todd to allow; it is the one export that is the point of
+           the design rather than a convenience.
+        2. Require it: every module with a form names a list. Explicit,
+           and hundreds of edits for no gain where only built-ins appear.
+        3. A `types:` key on `form!` naming the list, defaulting to 1 or 2.
+           Useful alongside 1 for a form that wants a list other than its
+           module's; not needed to start.
+
+    AD. **DECIDED 2026-11-26 (Todd): as recommended.**
+        **What a hand-built `FormSpec` with no list sees (AB.11.5).**
+        Recommended: the installed list, then the built-ins, through 3.7's
+        order with no form list. The suite's 369 hand-built specs then keep
+        working, and one that needs a custom type adds
+        `.with_types(SomeTypes::registry())`. The alternative, built-ins
+        only, would hide the app's overrides from any spec built by hand,
+        which is the inconsistency AB exists to remove.
+
+    AE. **DECIDED 2026-11-26 (Todd): as recommended.**
+        **Where the library tests live (2.4).** Replay needs a second crate.
+        Recommended: a workspace member `formoxus-fixture-lib`
+        (`publish = false`) holding a `types!` list, a model type re-exported
+        from its root, and a form, with formoxus taking it as a
+        dev-dependency. Cargo allows that cycle for dev-dependencies, and
+        the suite is an integration test, so it links the same formoxus the
+        fixture does. The alternative is to test libraries only in the
+        examples crate, which `just ci` builds but whose tests are thin.
+
+    AF. **DECIDED 2026-11-26 (Todd, with Claude's corollary): built-ins
+        cannot be replaced, and an override is exactly a `replace` line.**
+        `String`, the numbers and `bool` read the same in every form of
+        every crate. A dev who wants a shouting `String` declares a type of
+        their own and uses it, or writes `use … as …`. So:
+        1. `types!` refuses an entry for a built-in type, with a message
+           saying it is the same everywhere, and a hand-built
+           `TypeRegistry::field_for` panics for one.
+        2. `include` brings a library's own entries, nothing else.
+        3. `install` installs only the app's `replace` lines, not its own
+           entries: an own entry for a type the app did not include (a
+           library's `Badge`) must not quietly override that library's
+           forms. A `replace` needs its type to come from an included list.
+        4. This removes 3.8's trap (no list can replace `String`, so a
+           built-in can never beat a library's choice), and reverses two
+           passages that promise replacing a built-in: `type_registry.rs`'s
+           module docs and the comment on the constructor arm in `build.rs`.
+           No test relied on it.
+
+    AG. **DECIDED 2026-11-26 (Todd): no settings in `types!`.** An entry
+        names a field TYPE, built with `Default`. A type-wide default is a
+        field of the dev's own whose `Default` carries it:
+        `Motto => field Newtype<Motto, MottoString>`, where `MottoString`'s
+        `Default` has `max_length: Some(5)`. `FieldFor` needs no
+        `settings()`. A form's settings on such a path reach only what the
+        entry's field makes public, and `Newtype` makes nothing public: a
+        type-wide default belongs on a type of its own.
+
+    AH. **DECIDED 2026-11-26 (Todd): the registered-widget tests wait for
+        box 6.** The 7 in `custom_fields` test a type's registered widget,
+        which box 6 redesigns as `types!` entries; a `widget:` on the path
+        would test something else, already covered. They are
+        `#[ignore = "box 6: widget entries in types!"]` until then, with
+        their bodies unchanged, so they are rewritten once.
+
+    AI. **Found 2026-11-26 writing 2: the replay macro gets a name of its
+        own, and only a `pub` list has one.** AB.4 gave it the struct's name
+        so one `use` would bring both. But an app declares its list in one
+        module and points forms at it from others, `use crate::types::AppTypes
+        as FormoxusTypes;`, and that absolute path then also reaches the
+        macro, which rustc denies for a crate's own macro-generated
+        `#[macro_export]` (the lint the probe hit in the library). So:
+        1. The replay macro is `__formoxus_replay_<Name>`, hidden, at the
+           crate root as every `#[macro_export]` is.
+        2. `include` takes the list's crate and name, `include
+           fixture::FixtureTypes;`, and calls
+           `fixture::__formoxus_replay_FixtureTypes!`, wherever in the crate
+           the struct itself lives.
+        3. Only a `pub` list gets one: no other crate can include a list
+           that is not `pub`, and two private lists of one name in two
+           modules would otherwise collide at the crate root.
 
   - [ ] **5.6** (Todd) `kind` and the run-time checks (O.2). Expanded
     2026-11-26 by Claude. Two halves: loosen the compile-time checks for a
@@ -1624,3 +1913,59 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        which a per-attribute macro never sees together. Both could be checked
        where formoxus reads them, at install or build.
   - [ ] **10.2** (Claude) Expand into steps (R to T are decided).
+
+- [ ] **11.** (Todd decides, then both) **More built-in types.** Added
+      2026-11-26 at Todd's request: `Email(String)`, `Password(String)` and
+      others Django's forms offer, so a dev does not write the same newtype,
+      field and widget in every app. Under AB they would be built-ins: in
+      every `types!` list, and like `String` never replaceable (AF). After
+      5.9, since it extends `types!`' own list of built-ins (5.9.3.2).
+
+      What Django has that formoxus does not, each with the field formoxus
+      would give it:
+
+      1. `EmailField`: `Email(String)`, an `email` input, a check that it
+         looks like an address.
+      2. `Password(String)`: not a Django field (Django uses a
+         `PasswordInput` widget on a `CharField`), but here the type would
+         carry it: a `password` input, never trimmed (#16), never refilled
+         from a stored value.
+      3. `URLField`: `Url(String)`, a `url` input and its check.
+      4. `SlugField`: `Slug(String)`, letters, digits, `-` and `_`.
+      5. `UUIDField`: a UUID.
+      6. `GenericIPAddressField`: `std::net::IpAddr`, which is already a
+         type nobody needs to define.
+      7. `DecimalField`: a decimal, which needs a crate (`rust_decimal`).
+      8. `DateField`, `TimeField`, `DateTimeField`, `DurationField`: `date`,
+         `time` and `datetime-local` inputs, which need a date crate
+         (`jiff`, `time` or `chrono`) or `std::time::Duration` for the last.
+      9. `JSONField`, `RegexField`: likely not; a `pattern:` setting covers
+         most of the second.
+
+      AJ. **Where an `Email` type lives, so models stay plain.** A model
+          that writes `email: formoxus::Email` would depend on formoxus,
+          which "models stay plain" rules out (apcsp's `models` crate does
+          not depend on it). Options:
+          1. **(Recommended) A tiny crate of value types,** say
+             `formoxus-types`, depending only on `facet`: `Email`,
+             `Password`, `Url`, `Slug`. A models crate can depend on it
+             with no form library behind it, the way decision I has
+             `Ref<T>` living outside the storage layer. formoxus's built-ins
+             list knows them. The test for each type is whether it means
+             something without a form: an `Email` does; a `Password` is
+             arguably a storage concern too.
+          2. Types from crates the models already use, recognised behind
+             cargo features: `std::net::IpAddr` needs none; `uuid::Uuid`,
+             `jiff::civil::Date`, `rust_decimal::Decimal`, each behind a
+             feature, so formoxus does not pull them in for everyone.
+          3. Both: 1 for the types that are only text with a meaning, 2 for
+             the ones a real crate already defines.
+
+          1 and 2 are not rivals: a model's date is almost certainly already
+          a `jiff` or `chrono` type, while nothing upstream defines `Email`.
+          So the likely answer is 3.
+
+      AK. **Which, and in what order.** Recommended first: `Email`,
+          `Password`, `Url`, then the date and time types, since forms ask
+          for those most and the browser already has an input for each.
+          `Decimal`, `Uuid`, `IpAddr` and `Slug` when a real form needs one.

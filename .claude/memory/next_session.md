@@ -6,20 +6,35 @@ metadata:
 ---
 
 
-## ▶ 2026-11-26, latest: AB decided; 5.5.1-5.5.4 done; nothing committed
+## ▶ 2026-11-26, latest: AB decided, building it NOW (O.1); 5.5.1-5.5.4 committed 59c4a47
 
 1. 5.5.2 (Todd, Claude wrote parse/unwrap helpers, the four pass-through
    methods and docs at his request), 5.5.3 (Todd), 5.5.4 (Claude at Todd's
    request: `refuse_unregistered_newtype`, tuple structs over a scalar only)
    DONE. Suite 1029/10 failing, lib 275/1, all waiting on later steps.
-   NOTHING COMMITTED since `4ed8748`: Todd said wait until the tests compile
-   (they do now) — ask before committing.
+   Committed `59c4a47` (not pushed), everything EXCEPT
+   `type_registry.rs` (`TypeRegistry::newtype` + docs + half-written
+   `format_value` stay in the working tree), so the suite does not compile
+   at that commit.
 2. Todd's 5.5.5 is half-written: `FieldInfo.format_value` declared, not
    filled in `field_for`, so the crate does not compile.
 3. Decision AB written into the plan (Decisions section, end): compile-time
-   `types!`, per-form lists, the app's list installed as overrides. WHEN is
-   open (AB.12). Probe evidence: `compile_time_type_registry_probe.md`.
-4. Wording: Todd prefers "formoxus ignores `#[facet(transparent)]`", not
+   `types!`, per-form lists, the app's list installed as overrides. WHEN:
+   NOW, in place of 5.5.5 as written (Todd, AB.12 option 1). Its build is
+   box 5.9 (written, uncommitted). AC, AD, AE DECIDED as recommended
+   (prelude `FormoxusTypes` = `BuiltIns`; hand-built spec sees installed +
+   built-ins; fixture library crate). `DefaultField` GOES. AF-AI decided
+   (no replacing built-ins; only `replace` lines installed; no settings in
+   `types!`; widget tests ignored till box 6; replay macro named
+   `__formoxus_replay_<Name>`, `pub` lists only). 5.9.2 tests DONE,
+   uncommitted (see the plan's Done note for the API they pin). Next: Todd's run-time side (5.9.3), Claude's `types!`
+   and `form!`/`path!` (5.9.4-5). Trap found writing it: the INSTALLED list
+   must not hold untouched built-ins, or they beat a library's `replace`. Probe evidence: `compile_time_type_registry_probe.md`.
+4. Todd asked (mid-5.9.2) for more BUILT-IN types like Django's (Email,
+   Password, Url, dates...): CUSTOM_FIELDS_PLAN box 11, decisions AJ (where
+   they live so models stay plain: likely a tiny facet-only crate PLUS
+   feature-gated recognition of jiff/uuid/etc.) and AK (order), open.
+5. Wording: Todd prefers "formoxus ignores `#[facet(transparent)]`", not
    "does not follow it".
 
 ## 2026-11-26 final: W, transparent is not special either

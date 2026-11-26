@@ -8,15 +8,16 @@
 //! a `Field<Value = T>` that hands every question to an inner field `F` and
 //! wraps and unwraps through facet, so the model needs nothing extra.
 //!
-//! Registered here (`register`) for the whole suite with
-//! `TypeRegistry::newtype::<T, V>()` (decision Z), which is `field_for` with
-//! a default `Newtype<T, <V as DefaultField>::Field>`. The per-path route,
-//! `newtype: String` in `form!` (decision Y), is tested with the macro.
+//! Listed in this module's `types!` (decision AB) as `Note => newtype String`,
+//! which builds a `Newtype<Note, F>` over the list's own field for `String`.
+//! `Motto` shows the other kind of entry: a field type of the dev's own,
+//! `Newtype<Motto, MottoString>`, whose `Default` carries a setting, since a
+//! list has no settings of its own (decision AG).
 //!
 //! These pin both halves: the string-facing side behaves exactly like the
 //! inner field, and the value still rebuilds as the newtype.
 
-use super::{across_the_wire, install_test_registry, panic_message, render_to_html};
+use super::{across_the_wire_with, panic_message, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{Attr, AttrValue, FieldType};
@@ -31,16 +32,16 @@ use formoxus::widgets::{AnyWidget, Choice, Textarea};
 use futures::executor::block_on;
 use googletest::prelude::*;
 
-/// Every newtype this module registers, for `super::install_test_registry`.
-pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
-    types
-        .newtype::<Note, String>()
-        .newtype::<Count, u32>()
-        .field_for(Newtype::<Motto, _>::new(StringField {
-            max_length: Some(5),
-            ..StringField::default()
-        }))
+// This module's types (`CUSTOM_FIELDS_PLAN.md` decision AB): its forms
+// read them through `FormoxusTypes`, and a spec built by hand takes them
+// with `with_types`. Nothing is installed.
+formoxus::types! {
+    struct NewtypeTypes;
+    Note => newtype String,
+    Count => newtype u32,
+    Motto => field Newtype<Motto, MottoString>,
 }
+use NewtypeTypes as FormoxusTypes;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Note(String);
@@ -115,8 +116,7 @@ fn error_paths(
 
 #[gtest]
 fn a_registered_newtype_is_one_leaf_at_the_fields_own_path() {
-    install_test_registry();
-    let form = empty_form::<Doc>(FormSpec::default());
+    let form = empty_form::<Doc>(FormSpec::default().with_types(NewtypeTypes::registry()));
     expect_that!(
         paths_of(&form),
         elements_are![eq("title"), eq("body")],
@@ -128,13 +128,13 @@ fn a_registered_newtype_is_one_leaf_at_the_fields_own_path() {
 fn a_one_field_named_struct_is_still_a_struct() {
     // Leaf paths are the wire format, so a struct that happens to have one
     // field today must not be renamed to `config` behind the dev's back.
-    let form = empty_form::<Settings>(FormSpec::default());
+    let form = empty_form::<Settings>(FormSpec::default().with_types(NewtypeTypes::registry()));
     expect_that!(paths_of(&form), elements_are![eq("config.name")]);
 }
 
 #[gtest]
 fn a_newtype_around_a_non_scalar_is_still_a_struct() {
-    let form = empty_form::<HasPair>(FormSpec::default());
+    let form = empty_form::<HasPair>(FormSpec::default().with_types(NewtypeTypes::registry()));
     expect_that!(paths_of(&form), elements_are![eq("pair.0.name")]);
 }
 
@@ -149,22 +149,20 @@ struct Story {
     headline: Headline,
 }
 
-/// The type is named, with the ways to give it a field: the app's registry
-/// for every path, `field:` for this one, and the adapter that makes either
-/// one line.
+/// The type is named, with the ways to give it a field: the line to add to a
+/// `types!` list, for every path, and `field:` for this one.
 #[gtest]
 fn a_plain_newtype_without_a_registered_field_panics_naming_the_type() {
-    install_test_registry();
     let message = panic_message(|| {
-        let _ = empty_form::<Story>(FormSpec::default());
+        let _ = empty_form::<Story>(FormSpec::default().with_types(NewtypeTypes::registry()));
     });
     expect_that!(
         message,
         all![
             contains_substring("Headline"),
-            contains_substring("TypeRegistry::field_for"),
-            contains_substring("field:"),
-            contains_substring("Newtype")
+            contains_substring("types!"),
+            contains_substring("Headline => newtype String"),
+            contains_substring("field:")
         ]
     );
 }
@@ -183,15 +181,14 @@ struct Column {
 
 #[gtest]
 fn a_transparent_newtype_without_a_registered_field_panics_like_any_other() {
-    install_test_registry();
     let message = panic_message(|| {
-        let _ = empty_form::<Column>(FormSpec::default());
+        let _ = empty_form::<Column>(FormSpec::default().with_types(NewtypeTypes::registry()));
     });
     expect_that!(
         message,
         all![
             contains_substring("Byline"),
-            contains_substring("TypeRegistry::field_for"),
+            contains_substring("types!"),
             contains_substring("transparent")
         ]
     );
@@ -202,24 +199,31 @@ fn a_transparent_newtype_without_a_registered_field_panics_like_any_other() {
 #[gtest]
 fn a_registered_newtype_round_trips_through_edit_mode() {
     // Populating reads THROUGH the newtype, and writing rebuilds it.
-    install_test_registry();
     let doc = Doc {
         title: "Unit 1".to_string(),
         body: Note("hello **there**".to_string()),
     };
-    let mut form = form_for(&doc, FormSpec::default());
+    let mut form = form_for(
+        &doc,
+        FormSpec::default().with_types(NewtypeTypes::registry()),
+    );
     expect_that!(form.validate(), some(eq(&doc)));
-    expect_that!(across_the_wire(&doc), ok(eq(&doc)));
+    expect_that!(
+        across_the_wire_with(NewtypeTypes::registry(), &doc),
+        ok(eq(&doc))
+    );
 }
 
 #[gtest]
 fn a_populated_newtype_shows_its_inner_value_in_the_input() {
-    install_test_registry();
     let doc = Doc {
         title: "Unit 1".to_string(),
         body: Note("hello".to_string()),
     };
-    let form = form_for(&doc, FormSpec::default());
+    let form = form_for(
+        &doc,
+        FormSpec::default().with_types(NewtypeTypes::registry()),
+    );
     expect_that!(
         value_at(&form, "body"),
         some(eq("hello")),
@@ -229,8 +233,7 @@ fn a_populated_newtype_shows_its_inner_value_in_the_input() {
 
 #[gtest]
 fn a_newtype_builds_from_submitted_values() {
-    install_test_registry();
-    let mut form = empty_form::<Doc>(FormSpec::default());
+    let mut form = empty_form::<Doc>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[
         (NodePath::new("title"), "Unit 1".to_string()),
         (NodePath::new("body"), "typed by hand".to_string()),
@@ -248,8 +251,7 @@ fn a_newtype_builds_from_submitted_values() {
 /// default would not.
 #[gtest]
 fn a_string_newtype_trims_as_a_string_does() {
-    install_test_registry();
-    let mut form = empty_form::<Doc>(FormSpec::default());
+    let mut form = empty_form::<Doc>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[
         (NodePath::new("title"), "Unit 1".to_string()),
         (NodePath::new("body"), "  padded  ".to_string()),
@@ -267,8 +269,7 @@ fn a_string_newtype_trims_as_a_string_does() {
 
 #[gtest]
 fn a_numeric_newtype_parses_through_the_inner_field() {
-    install_test_registry();
-    let mut form = empty_form::<Tally>(FormSpec::default());
+    let mut form = empty_form::<Tally>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[
         (NodePath::new("label"), "Votes".to_string()),
         (NodePath::new("count"), "42".to_string()),
@@ -287,8 +288,7 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
     // The failure mode worth pinning: parsing goes through the INNER field,
     // so `Count("abc")` fails exactly as a bare `u32` would instead of
     // quietly becoming `Count(0)`.
-    install_test_registry();
-    let mut form = empty_form::<Tally>(FormSpec::default());
+    let mut form = empty_form::<Tally>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[
         (NodePath::new("label"), "Votes".to_string()),
         (NodePath::new("count"), "not-a-number".to_string()),
@@ -299,17 +299,63 @@ fn a_bad_inner_value_is_rejected_rather_than_defaulted() {
 
 #[gtest]
 fn an_empty_newtype_field_is_required_like_any_other() {
-    install_test_registry();
-    let mut form = empty_form::<Doc>(FormSpec::default());
+    let mut form = empty_form::<Doc>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(error_paths(&form), elements_are![eq("body")]);
 }
 
-/// Registered with a configured inner field, `StringField { max_length: 5 }`:
-/// the setting checks the value and reaches the input as `maxlength`.
+/// Listed with a field of its own, `Newtype<Motto, MottoString>`, whose
+/// `MottoString` defaults to `max_length: 5`: the setting checks the value and
+/// reaches the input as `maxlength`.
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Motto(String);
+
+/// A `StringField` whose default carries `max_length: Some(5)`. A list names
+/// a field TYPE and builds it with `Default` (decision AG), so a setting for
+/// every `Motto` lives in a field of the dev's own. Each method is the inner
+/// field's.
+#[derive(Clone, Debug, PartialEq)]
+struct MottoString(StringField);
+
+impl Default for MottoString {
+    fn default() -> Self {
+        Self(StringField {
+            max_length: Some(5),
+            ..StringField::default()
+        })
+    }
+}
+
+impl Field for MottoString {
+    type Value = String;
+    type Context = ();
+    const KIND: FieldType = FieldType::Text;
+
+    fn format(&self, value: &String) -> String {
+        self.0.format(value)
+    }
+
+    fn parse(&self, raw: &str) -> std::result::Result<String, ValidationMessage> {
+        self.0.parse(raw)
+    }
+
+    fn check(&self, value: &String) -> Vec<ValidationMessage> {
+        Field::check(&self.0, value)
+    }
+
+    fn widget_attrs(&self) -> FieldAttrs {
+        self.0.widget_attrs()
+    }
+
+    fn default_widget(&self, optional: bool) -> AnyWidget {
+        self.0.default_widget(optional)
+    }
+
+    fn trims(&self, password: bool) -> bool {
+        self.0.trims(password)
+    }
+}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Crest {
@@ -318,13 +364,12 @@ struct Crest {
 
 #[gtest]
 fn a_registered_inner_fields_settings_check_the_value() {
-    install_test_registry();
-    let mut form = empty_form::<Crest>(FormSpec::default());
+    let mut form = empty_form::<Crest>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[(NodePath::new("motto"), "far too long".to_string())]);
     expect_that!(form.validate(), none());
     expect_that!(error_paths(&form), elements_are![eq("motto")]);
 
-    let mut form = empty_form::<Crest>(FormSpec::default());
+    let mut form = empty_form::<Crest>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[(NodePath::new("motto"), "brief".to_string())]);
     expect_that!(
         form.validate(),
@@ -336,12 +381,12 @@ fn a_registered_inner_fields_settings_check_the_value() {
 
 #[component]
 fn EmptyCrest() -> Element {
-    use_form(|| empty_form::<Crest>(FormSpec::default())).render(using_fns! {})
+    use_form(|| empty_form::<Crest>(FormSpec::default().with_types(NewtypeTypes::registry())))
+        .render(using_fns! {})
 }
 
 #[gtest]
 fn a_registered_inner_fields_settings_reach_the_input() {
-    install_test_registry();
     let html = render_to_html(EmptyCrest);
     expect_that!(
         html,
@@ -351,6 +396,21 @@ fn a_registered_inner_fields_settings_reach_the_input() {
             contains_substring("maxlength=5")
         ]
     );
+}
+
+/// A setting on a listed newtype's path configures its inner field, typed at
+/// compile time through the list (AB.1): `Note => newtype String` makes
+/// `body => { max_length: 3 }` a `StringField` setting, which is what Y's
+/// `newtype` key was going to be for.
+#[gtest]
+fn a_setting_on_a_listed_newtypes_path_reaches_its_inner_field() {
+    let mut form = empty_form(form! { Doc { body => { max_length: 3 } } });
+    form.distribute_form_values(&[
+        (NodePath::new("title"), "Unit 1".to_string()),
+        (NodePath::new("body"), "far too long".to_string()),
+    ]);
+    expect_that!(form.validate(), none());
+    expect_that!(error_paths(&form), elements_are![eq("body")]);
 }
 
 // ── Optional ─────────────────────────────────────────────────────────────
@@ -363,8 +423,7 @@ struct MaybeDoc {
 
 #[gtest]
 fn an_absent_optional_newtype_round_trips_as_none() {
-    install_test_registry();
-    let mut form = empty_form::<MaybeDoc>(FormSpec::default());
+    let mut form = empty_form::<MaybeDoc>(FormSpec::default().with_types(NewtypeTypes::registry()));
     form.distribute_form_values(&[(NodePath::new("title"), "Unit 1".to_string())]);
     expect_that!(
         form.validate(),
@@ -377,14 +436,19 @@ fn an_absent_optional_newtype_round_trips_as_none() {
 
 #[gtest]
 fn a_present_optional_newtype_round_trips_as_some() {
-    install_test_registry();
     let doc = MaybeDoc {
         title: "Unit 1".to_string(),
         body: Some(Note("here".to_string())),
     };
-    let mut form = form_for(&doc, FormSpec::default());
+    let mut form = form_for(
+        &doc,
+        FormSpec::default().with_types(NewtypeTypes::registry()),
+    );
     expect_that!(form.validate(), some(eq(&doc)));
-    expect_that!(across_the_wire(&doc), ok(eq(&doc)));
+    expect_that!(
+        across_the_wire_with(NewtypeTypes::registry(), &doc),
+        ok(eq(&doc))
+    );
 }
 
 // ── `Newtype` hands every question to its inner field ────────────────────
@@ -544,28 +608,16 @@ fn a_newtype_over_a_field_of_the_wrong_type_panics_naming_both() {
     );
 }
 
-/// `TypeRegistry::newtype` is `field_for` underneath, so a newtype already
-/// registered panics as a second `field_for` would.
-#[gtest]
-fn registering_a_newtype_twice_panics_naming_the_type() {
-    let message = panic_message(|| {
-        let _ = TypeRegistry::new()
-            .newtype::<Note, String>()
-            .newtype::<Note, String>();
-    });
-    expect_that!(
-        message,
-        all![contains_substring("Note"), contains_substring("already")]
-    );
-}
-
-/// And its kind is the inner field's, so a registered widget that cannot
-/// render it is refused as for any registered field.
+/// A `Newtype`'s kind is its inner field's, so a registered widget that
+/// cannot render it is refused as for any registered field. (A type listed
+/// twice in `types!` is a compile error now, pinned in `tests/ui-pending/`.)
 #[gtest]
 fn a_registered_newtypes_kind_is_checked_against_its_widget() {
     let message = panic_message(|| {
         let _ = TypeRegistry::new()
-            .newtype::<Count, u32>()
+            .field_for(Newtype::<Count, NumberField<u32>>::new(
+                NumberField::default(),
+            ))
             .widget_for::<Count>(Textarea);
     });
     expect_that!(

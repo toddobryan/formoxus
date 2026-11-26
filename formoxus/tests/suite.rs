@@ -99,6 +99,8 @@ mod specs;
 mod submissions;
 #[path = "suite/trim.rs"]
 mod trim;
+#[path = "suite/type_lists.rs"]
+mod type_lists;
 #[path = "suite/vecs.rs"]
 mod vecs;
 #[path = "suite/widgets.rs"]
@@ -135,31 +137,50 @@ where
         .map(formoxus::Submission::into_model)
 }
 
-/// Install the suite's `TypeRegistry`, once for the whole binary.
-///
-/// `install` is once per process (`CUSTOM_FIELDS_PLAN.md` decision M), and
-/// the suite is ONE process, so every module's registered types go into one
-/// registry here and every test that meets one calls this first. A test that
-/// needs a type the registry does not know uses a type of its own.
-///
-/// Each module that registers anything has a `register`, which adds its own
-/// types: they are private to it, and a newtype is now registered wherever
-/// one is used (decision W).
-pub fn install_test_registry() {
-    static INSTALLED: std::sync::Once = std::sync::Once::new();
-    INSTALLED.call_once(|| test_types().install());
+/// [`across_the_wire`] for a model holding types from a list: both sides of
+/// the round trip build their spec with `types`, as a form from `form!` does
+/// with its module's `FormoxusTypes`.
+pub fn across_the_wire_with<T>(
+    types: &'static formoxus::type_registry::TypeRegistry,
+    model: &T,
+) -> Result<T, formoxus::FormErrors>
+where
+    T: Clone + std::fmt::Debug + PartialEq + facet::Facet<'static>,
+{
+    let wire =
+        formoxus::WireForm::from_model(model, formoxus::FormSpec::default().with_types(types));
+    formoxus::Submission::accept(
+        formoxus::FormSpec::default().with_types(types),
+        wire.values(),
+    )
+    .map(formoxus::Submission::into_model)
 }
 
-/// Every module's registered types, in one registry.
-fn test_types() -> formoxus::type_registry::TypeRegistry {
-    let types = formoxus::type_registry::TypeRegistry::new();
-    let types = custom_fields::register(types);
-    let types = newtypes::register(types);
-    let types = sets::register(types);
-    let types = set_item_errors::register(types);
-    let types = trim::register(types);
-    let types = field_validators::register(types);
-    form_macro::register(types)
+// The suite's overrides: what an app's `main` would install (decisions AB.6
+// and AF). `install` is once per process and the suite is one process, so this
+// is the ONLY list installed, by every test that relies on it, through
+// `install_overrides`. Everything else is found through each form's own list,
+// which needs nothing installed.
+//
+// It includes the fixture library and replaces one of its types, `Stamp`,
+// which only `type_lists`' override tests build. It also lists `Seal`, from a
+// fixture list it does NOT include: an entry that is not a `replace` must not
+// be installed, so the fixture's sealed card is untouched (AF.3). Not `pub`,
+// so it has no replay macro (AI.3).
+formoxus::types! {
+    struct SuiteOverrides;
+    include formoxus_fixture_lib::FixtureTypes;
+    replace formoxus_fixture_lib::Stamp => field type_lists::LoudStamp,
+    formoxus_fixture_lib::Seal => field type_lists::LoudSeal,
+}
+
+/// Install the suite's overrides, once for the whole binary. A test whose
+/// result depends on them calls this first; a test that must NOT see them
+/// uses types they never name, because another test may have installed them
+/// already.
+pub fn install_overrides() {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(SuiteOverrides::install);
 }
 
 /// The message `f` panics with. For a test that pins more than one part of a

@@ -4,6 +4,7 @@ members = [
     "formoxus",
     "formoxus-spec",
     "formoxus-macros",
+    "formoxus-fixture-lib",
     "examples",
     "e2e",
 ]
@@ -124,4 +125,5 @@ web-sys = { version = "0.3" }
 # a bare path dependency is rejected by `cargo package`. Bump it with
 # `workspace.package.version` — nothing enforces that they agree.
 formoxus-macros = { path = "formoxus-macros", version = "0.1.0" }
+formoxus = { path = "formoxus" }
 formoxus-spec = { path = "formoxus-spec", version = "0.1.0" }

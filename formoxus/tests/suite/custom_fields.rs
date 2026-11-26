@@ -3,32 +3,29 @@
 //!
 //! Box 2 wrote these against a `formoxus::proxy` on the type; box 5.2
 //! (2026-11-25) rewrote them against the registry once Todd ruled out
-//! formoxus-specific attributes on models. They do not compile until
-//! `TypeRegistry` exists (5.3). The three declarations, each kept where the
+//! formoxus-specific attributes on models; box 5.9 (2026-11-26) moved them to a
+//! `types!` list (decision AB). The three declarations, each kept where the
 //! thing it needs is visible:
 //!
-//! 1. **The app registers a type's field**,
-//!    `TypeRegistry::new().field_for(TimeLimitField)` (decision M), installed
-//!    once per process in `main`. Found by `Shape`, so it works in a list item,
-//!    in a variant and inside an `Option`, and on the server, which runs the same
-//!    `main` (5.1).
+//! 1. **The crate lists a type's field**, `TimeLimit => field TimeLimitField`
+//!    in this module's `types!`. Found by `Shape`, so it works in a list item,
+//!    in a variant and inside an `Option`, and on the server, because each
+//!    form carries its list in its spec. `form!` checks a listed type at
+//!    compile time through `FormoxusTypes`.
 //! 2. **A path declares its field**, `field: X` in `form!`. It beats the
-//!    registry: a path is more specific than a type (decision H).
-//! 3. **The app registers a type's widget**, `widget_for::<T>(W)` on the same
-//!    registry, chosen at BUILD on both sides (decision P), so it can change
-//!    what a value means (a password is not trimmed) and the server agrees.
+//!    list: a path is more specific than a type (decision H).
+//! 3. **A type's widget**, section 3. Box 6 redesigns it as a `types!` entry,
+//!    so its tests are ignored until then (decision AH), with their bodies
+//!    as box 5.2 wrote them.
 //!
-//! A newtype is no exception (decision W, 2026-11-26): formoxus ignores
-//! `#[facet(transparent)]`, so section 3's `Note` and `Secret` are plain newtypes
-//! registered with `TypeRegistry::newtype` (Z) as well as given a widget.
+//! A newtype is no exception (decision W): formoxus ignores
+//! `#[facet(transparent)]`, so section 3's `Note` and `Secret` are plain
+//! newtypes, listed as `Note => newtype String`.
 //!
-//! **The registry is installed once for the whole suite**, by
-//! `super::install_test_registry`, which takes this module's types from
-//! [`register`]. Every test that meets a registered type calls it first. A
-//! test that needs a type the registry does NOT know uses a type of its own,
-//! never one listed there.
+//! Nothing here is installed. A test that needs a type the list does NOT know
+//! uses a type of its own, never one listed there.
 
-use super::{FORM_ID, across_the_wire, install_test_registry, panic_message, render_to_html};
+use super::{FORM_ID, across_the_wire_with, panic_message, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::attrs::{AttrSet, FieldType, FieldTypeSet, Tag};
@@ -39,24 +36,24 @@ use formoxus::prelude::*;
 use formoxus::stores::ValuesByPath;
 use formoxus::type_registry::TypeRegistry;
 use formoxus::widgets::{
-    AnyWidget, LeafWidget, NumberInput, PasswordInput, TextInput, Textarea, Widget, WidgetProps,
+    AnyWidget, LeafWidget, NumberInput, TextInput, Textarea, Widget, WidgetProps,
 };
 use googletest::prelude::*;
 use std::marker::PhantomData;
 
-/// Every type this module registers, for `super::install_test_registry`.
-pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
-    types
-        .field_for(TimeLimitField)
-        .field_for(TopicField)
-        .widget_for::<Topic>(Textarea)
-        .newtype::<Note, String>()
-        .widget_for::<Note>(NoteWidget)
-        .newtype::<Remark, String>()
-        .newtype::<Secret, String>()
-        .widget_for::<Secret>(PasswordInput)
-        .field_for(RefField::<Question>::default())
+// This module's types (`CUSTOM_FIELDS_PLAN.md` decision AB): its forms
+// read them through `FormoxusTypes`, and a spec built by hand takes them
+// with `with_types`. Nothing is installed.
+formoxus::types! {
+    struct CustomTypes;
+    TimeLimit => field TimeLimitField,
+    Topic => field TopicField,
+    Note => newtype String,
+    Remark => newtype String,
+    Secret => newtype String,
+    Ref<Question> => field RefField<Question>,
 }
+use CustomTypes as FormoxusTypes;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -130,7 +127,7 @@ fn not_a_time(text: &str) -> String {
     format!("expected a time like 1h15m, not {text:?}")
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 struct TimeLimitField;
 
 impl Field for TimeLimitField {
@@ -190,8 +187,7 @@ fn quiz() -> Quiz {
 
 #[gtest]
 fn a_registered_type_is_one_leaf_at_its_own_path() {
-    install_test_registry();
-    let form = empty_form::<Quiz>(FormSpec::default());
+    let form = empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry()));
     expect_that!(
         paths_of(&form),
         elements_are![eq("title"), eq("limit")],
@@ -201,13 +197,13 @@ fn a_registered_type_is_one_leaf_at_its_own_path() {
 
 #[component]
 fn EmptyQuiz() -> Element {
-    use_form(|| empty_form::<Quiz>(FormSpec::default())).render(using_fns! {})
+    use_form(|| empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry())))
+        .render(using_fns! {})
 }
 
 #[gtest]
 fn a_registered_type_renders_its_fields_default_widget() {
     // A text input, not a number input: the inner `u32` is not what is typed.
-    install_test_registry();
     let html = render_to_html(EmptyQuiz);
     expect_that!(
         html,
@@ -222,16 +218,14 @@ fn a_registered_type_renders_its_fields_default_widget() {
 
 #[gtest]
 fn a_registered_type_parses_through_its_field() {
-    install_test_registry();
-    let mut form = empty_form::<Quiz>(FormSpec::default());
+    let mut form = empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "1h15m")]));
     expect_that!(form.validate(), some(eq(&quiz())));
 }
 
 #[gtest]
 fn a_registered_type_refuses_bad_text_with_its_fields_own_message() {
-    install_test_registry();
-    let mut form = empty_form::<Quiz>(FormSpec::default());
+    let mut form = empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "90")]));
     expect_that!(form.validate(), none());
     expect_that!(
@@ -246,8 +240,7 @@ fn the_inner_values_text_form_is_refused() {
     // `"4500"` is what the walk would take if it still unwrapped a newtype
     // over `u32` (decision N retires that). The registered field's text form
     // replaces the inner type's; it does not add to it.
-    install_test_registry();
-    let mut form = empty_form::<Quiz>(FormSpec::default());
+    let mut form = empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "4500")]));
     expect_that!(form.validate(), none());
     expect_that!(
@@ -260,8 +253,7 @@ fn the_inner_values_text_form_is_refused() {
 fn an_empty_registered_field_is_required_like_any_other() {
     // `""` is absence (`facet_form_design_decisions.md`), so it never reaches
     // the field's `parse`: its message would be the wrong one here.
-    install_test_registry();
-    let mut form = empty_form::<Quiz>(FormSpec::default());
+    let mut form = empty_form::<Quiz>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "")]));
     expect_that!(form.validate(), none());
     let errors = errors_at(&form, "limit");
@@ -273,8 +265,10 @@ fn an_empty_registered_field_is_required_like_any_other() {
 
 #[gtest]
 fn a_registered_type_refills_its_input_through_its_fields_format() {
-    install_test_registry();
-    let form = form_for(&quiz(), FormSpec::default());
+    let form = form_for(
+        &quiz(),
+        FormSpec::default().with_types(CustomTypes::registry()),
+    );
     expect_that!(
         value_at(&form, "limit"),
         some(eq("1h15m")),
@@ -284,22 +278,32 @@ fn a_registered_type_refills_its_input_through_its_fields_format() {
 
 #[component]
 fn FilledQuiz() -> Element {
-    use_form(|| form_for(&quiz(), FormSpec::default())).render(using_fns! {})
+    use_form(|| {
+        form_for(
+            &quiz(),
+            FormSpec::default().with_types(CustomTypes::registry()),
+        )
+    })
+    .render(using_fns! {})
 }
 
 #[gtest]
 fn a_refilled_registered_input_shows_its_fields_text() {
-    install_test_registry();
     let html = render_to_html(FilledQuiz);
     expect_that!(html, contains_substring(r#"name="limit" value="1h15m""#));
 }
 
 #[gtest]
 fn a_registered_type_round_trips_in_memory_and_across_the_wire() {
-    install_test_registry();
-    let mut form = form_for(&quiz(), FormSpec::default());
+    let mut form = form_for(
+        &quiz(),
+        FormSpec::default().with_types(CustomTypes::registry()),
+    );
     expect_that!(form.validate(), some(eq(&quiz())));
-    expect_that!(across_the_wire(&quiz()), ok(eq(&quiz())));
+    expect_that!(
+        across_the_wire_with(CustomTypes::registry(), &quiz()),
+        ok(eq(&quiz()))
+    );
 }
 
 // ── On the server ────────────────────────────────────────────────────────
@@ -308,9 +312,8 @@ fn a_registered_type_round_trips_in_memory_and_across_the_wire() {
 /// server function sees because the server runs the same `main` (5.1).
 #[gtest]
 fn submission_accept_parses_a_registered_type_from_raw_wire_text() {
-    install_test_registry();
     let accepted = Submission::<Quiz>::accept(
-        FormSpec::default(),
+        FormSpec::default().with_types(CustomTypes::registry()),
         &wire(&[("title", "Unit 1"), ("limit", "1h15m")]),
     )
     .map(Submission::into_model);
@@ -319,9 +322,8 @@ fn submission_accept_parses_a_registered_type_from_raw_wire_text() {
 
 #[gtest]
 fn submission_accept_refuses_a_registered_type_with_its_fields_own_message() {
-    install_test_registry();
     let refused = Submission::<Quiz>::accept(
-        FormSpec::default(),
+        FormSpec::default().with_types(CustomTypes::registry()),
         &wire(&[("title", "Unit 1"), ("limit", "90")]),
     )
     .expect_err("90 is not a time like 1h15m");
@@ -343,8 +345,8 @@ struct MaybeTimed {
 fn an_empty_optional_registered_field_is_none() {
     // Trap 6: `Option<TimeLimit>` peels to the registered leaf, so the
     // registry arm comes after the `Option` arm.
-    install_test_registry();
-    let mut form = empty_form::<MaybeTimed>(FormSpec::default());
+    let mut form =
+        empty_form::<MaybeTimed>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "")]));
     expect_that!(
         form.validate(),
@@ -357,8 +359,8 @@ fn an_empty_optional_registered_field_is_none() {
 
 #[gtest]
 fn a_filled_optional_registered_field_is_some() {
-    install_test_registry();
-    let mut form = empty_form::<MaybeTimed>(FormSpec::default());
+    let mut form =
+        empty_form::<MaybeTimed>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "30m")]));
     expect_that!(
         form.validate(),
@@ -371,7 +373,6 @@ fn a_filled_optional_registered_field_is_some() {
 
 #[gtest]
 fn an_optional_registered_field_round_trips_both_ways() {
-    install_test_registry();
     for model in [
         MaybeTimed {
             title: "Unit 1".to_string(),
@@ -382,7 +383,10 @@ fn an_optional_registered_field_round_trips_both_ways() {
             limit: Some(TimeLimit(3600)),
         },
     ] {
-        expect_that!(across_the_wire(&model), ok(eq(&model)));
+        expect_that!(
+            across_the_wire_with(CustomTypes::registry(), &model),
+            ok(eq(&model))
+        );
     }
 }
 
@@ -401,17 +405,24 @@ fn stages() -> Stages {
 
 #[gtest]
 fn a_registered_list_item_is_one_leaf_per_item() {
-    install_test_registry();
-    let form = form_for(&stages(), FormSpec::default());
+    let form = form_for(
+        &stages(),
+        FormSpec::default().with_types(CustomTypes::registry()),
+    );
     expect_that!(value_at(&form, "limits.#0"), some(eq("1h15m")));
     expect_that!(value_at(&form, "limits.#1"), some(eq("15m")));
-    expect_that!(across_the_wire(&stages()), ok(eq(&stages())));
+    expect_that!(
+        across_the_wire_with(CustomTypes::registry(), &stages()),
+        ok(eq(&stages()))
+    );
 }
 
 #[gtest]
 fn a_registered_list_item_refuses_bad_text_on_its_own_item() {
-    install_test_registry();
-    let mut form = form_for(&stages(), FormSpec::default());
+    let mut form = form_for(
+        &stages(),
+        FormSpec::default().with_types(CustomTypes::registry()),
+    );
     form.distribute_form_values(&typed(&[("limits.#0", "1h"), ("limits.#1", "soon")]));
     expect_that!(form.validate(), none());
     expect_that!(errors_at(&form, "limits.#0"), is_empty());
@@ -444,27 +455,28 @@ fn timed_for_an_hour() -> Paced {
 
 #[gtest]
 fn a_registered_field_in_a_variant_parses_and_refills() {
-    install_test_registry();
-    let mut form = empty_form::<Paced>(FormSpec::default());
+    let mut form = empty_form::<Paced>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("pace", "Timed"), ("pace.$Timed.limit", "1h")]));
     expect_that!(form.validate(), some(eq(&timed_for_an_hour())));
     expect_that!(
         value_at(
-            &form_for(&timed_for_an_hour(), FormSpec::default()),
+            &form_for(
+                &timed_for_an_hour(),
+                FormSpec::default().with_types(CustomTypes::registry())
+            ),
             "pace.$Timed.limit"
         ),
         some(eq("1h"))
     );
     expect_that!(
-        across_the_wire(&timed_for_an_hour()),
+        across_the_wire_with(CustomTypes::registry(), &timed_for_an_hour()),
         ok(eq(&timed_for_an_hour()))
     );
 }
 
 #[gtest]
 fn a_registered_field_in_a_variant_refuses_bad_text() {
-    install_test_registry();
-    let mut form = empty_form::<Paced>(FormSpec::default());
+    let mut form = empty_form::<Paced>(FormSpec::default().with_types(CustomTypes::registry()));
     form.distribute_form_values(&typed(&[("pace", "Timed"), ("pace.$Timed.limit", "90")]));
     expect_that!(form.validate(), none());
     expect_that!(
@@ -490,7 +502,6 @@ fn QuizWithATextarea() -> Element {
 /// `KIND`. A textarea renders text, so this one passes.
 #[gtest]
 fn form_accepts_a_text_widget_on_a_registered_type() {
-    install_test_registry();
     let html = render_to_html(QuizWithATextarea);
     expect_that!(
         html,
@@ -519,20 +530,9 @@ impl LeafWidget for IntOnly {
     }
 }
 
-/// The other half of O.2: `IntOnly` compiles on a `TimeLimit` path, because
-/// the compiler cannot see that its registered field reads text, and the
-/// build refuses it. The message names the path and the widget.
-#[gtest]
-fn a_widget_that_cannot_render_the_registered_fields_kind_panics_at_build() {
-    install_test_registry();
-    let message = panic_message(|| {
-        let _ = empty_form(form! { Quiz { limit => { widget: IntOnly } } });
-    });
-    expect_that!(
-        message,
-        all![contains_substring("limit"), contains_substring("int_only")]
-    );
-}
+// The other half of O.2, a `widget:` that cannot render a listed type's field
+// (`IntOnly` on a `TimeLimit` path), is a compile error under AB, since
+// `form!` sees the list: `tests/ui-pending/form_widget_cannot_render_a_listed_type.rs`.
 
 // ── `field:` beats the registry ──────────────────────────────────────────
 
@@ -568,7 +568,6 @@ fn minutes_quiz_spec() -> FormSpec<Quiz> {
 /// the one that parses, formats and picks the widget.
 #[gtest]
 fn a_named_field_beats_the_registered_field_for_its_type() {
-    install_test_registry();
     let mut form = empty_form(minutes_quiz_spec());
     form.distribute_form_values(&typed(&[("title", "Unit 1"), ("limit", "75")]));
     expect_that!(form.validate(), some(eq(&quiz())));
@@ -654,15 +653,6 @@ fn a_field_and_a_widget_for_the_same_type_are_not_duplicates() {
         .widget_for::<Topic>(Textarea);
 }
 
-/// `install` is once per process: a second registry would leave the client
-/// and the server free to have installed different ones.
-#[gtest]
-#[should_panic(expected = "installed")]
-fn installing_a_second_registry_panics() {
-    install_test_registry();
-    TypeRegistry::new().install();
-}
-
 // ── A registered field AND a registered widget for one type ──────────────
 
 /// A plain newtype the registry gives both a field (whose default widget is a
@@ -670,7 +660,7 @@ fn installing_a_second_registry_panics() {
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Topic(String);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 struct TopicField;
 
 impl Field for TopicField {
@@ -698,20 +688,24 @@ struct Course {
 
 #[component]
 fn TopicCourse() -> Element {
-    use_form(|| empty_form::<Course>(FormSpec::default())).render(using_fns! {})
+    use_form(|| empty_form::<Course>(FormSpec::default().with_types(CustomTypes::registry())))
+        .render(using_fns! {})
 }
 
 /// Decision H's order among the two the registry holds: the type's widget
 /// beats its field's `default_widget`.
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn the_registered_widget_beats_the_registered_fields_default_widget() {
-    install_test_registry();
     let html = render_to_html(TopicCourse);
     expect_that!(html, contains_regex(r#"<textarea [^>]*name="topic""#));
     let course = Course {
         topic: Topic("loops".to_string()),
     };
-    expect_that!(across_the_wire(&course), ok(eq(&course)));
+    expect_that!(
+        across_the_wire_with(CustomTypes::registry(), &course),
+        ok(eq(&course))
+    );
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1051,9 +1045,9 @@ fn a_named_field_on_an_option_is_none_when_empty_and_some_when_filled() {
 // 3. A type's widget, named once by the app: `TypeRegistry::widget_for`
 // ═════════════════════════════════════════════════════════════════════════
 
-/// apcsp's `Markdown`: a newtype over its text, registered as one with
-/// `TypeRegistry::newtype::<Note, String>()` (decision Z), and given a
-/// widget. Every form had to give it `widget: MarkdownWidget` by hand.
+/// apcsp's `Markdown`: a newtype over its text, listed as
+/// `Note => newtype String`, and given a widget. Every form had to give it
+/// `widget: MarkdownWidget` by hand.
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Note(String);
 
@@ -1094,7 +1088,13 @@ fn journal() -> Journal {
 
 #[component]
 fn RegisteredJournal() -> Element {
-    use_form(|| form_for(&journal(), FormSpec::default())).render(using_fns! {})
+    use_form(|| {
+        form_for(
+            &journal(),
+            FormSpec::default().with_types(CustomTypes::registry()),
+        )
+    })
+    .render(using_fns! {})
 }
 
 /// The control: a newtype registered with a field but NO widget. `Note` has
@@ -1114,7 +1114,7 @@ fn PlainDiary() -> Element {
             &Diary {
                 entry: Remark("began".to_string()),
             },
-            FormSpec::default(),
+            FormSpec::default().with_types(CustomTypes::registry()),
         )
     })
     .render(using_fns! {})
@@ -1122,7 +1122,6 @@ fn PlainDiary() -> Element {
 
 #[gtest]
 fn without_a_registered_widget_a_newtype_renders_its_inner_fields_widget() {
-    install_test_registry();
     let html = render_to_html(PlainDiary);
     expect_that!(html, not(contains_substring("note-widget")));
     expect_that!(
@@ -1134,10 +1133,10 @@ fn without_a_registered_widget_a_newtype_renders_its_inner_fields_widget() {
 }
 
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn the_registered_widget_for_a_type_renders_every_field_of_that_type() {
     // No `widget:` anywhere: on a field, on each list item (met by `Shape`
     // alone), and through an `Option`.
-    install_test_registry();
     let html = render_to_html(RegisteredJournal);
     for path in ["entry", "notes.#0", "notes.#1", "aside"] {
         expect_that!(
@@ -1150,8 +1149,8 @@ fn the_registered_widget_for_a_type_renders_every_field_of_that_type() {
 }
 
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn the_registered_widget_for_a_type_leaves_other_types_alone() {
-    install_test_registry();
     let html = render_to_html(RegisteredJournal);
     expect_that!(
         html,
@@ -1164,8 +1163,8 @@ fn the_registered_widget_for_a_type_leaves_other_types_alone() {
 /// No component provides anything and the `VirtualDom` has no root context:
 /// the registry is process-wide, not a Dioxus context (decision M).
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn the_registered_widget_needs_no_context() {
-    install_test_registry();
     let mut dom = VirtualDom::new(RegisteredJournal);
     dom.rebuild_in_place();
     let html = dioxus_ssr::render(&dom);
@@ -1184,8 +1183,8 @@ fn JournalWithATextareaEntry() -> Element {
 }
 
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn a_widget_on_the_path_overrides_the_registered_widget_for_its_type() {
-    install_test_registry();
     let html = render_to_html(JournalWithATextareaEntry);
     expect_that!(html, contains_regex(r#"<textarea [^>]*name="entry""#));
     expect_that!(html, not(contains_substring(r#"data-path="entry""#)));
@@ -1212,12 +1211,13 @@ struct Login {
 
 #[component]
 fn EmptyLogin() -> Element {
-    use_form(|| empty_form::<Login>(FormSpec::default())).render(using_fns! {})
+    use_form(|| empty_form::<Login>(FormSpec::default().with_types(CustomTypes::registry())))
+        .render(using_fns! {})
 }
 
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn a_registered_password_widget_renders_as_a_password_input() {
-    install_test_registry();
     let html = render_to_html(EmptyLogin);
     expect_that!(
         html,
@@ -1229,10 +1229,10 @@ fn a_registered_password_widget_renders_as_a_password_input() {
 /// with the same widget, so it does not trim the password either, while the
 /// plain text beside it is trimmed as usual.
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn a_registered_password_widget_is_not_trimmed_on_the_server() {
-    install_test_registry();
     let accepted = Submission::<Login>::accept(
-        FormSpec::default(),
+        FormSpec::default().with_types(CustomTypes::registry()),
         &wire(&[("name", "  ada  "), ("secret", "  hunter 2  ")]),
     )
     .map(Submission::into_model);
@@ -1290,8 +1290,8 @@ fn RegisteredMemo() -> Element {
 /// default with nothing registered is section 2's
 /// `a_named_field_renders_its_own_default_widget`.)
 #[gtest]
+#[ignore = "box 6: widget entries in types!"]
 fn the_registered_widget_for_a_type_beats_a_named_fields_default_widget() {
-    install_test_registry();
     let html = render_to_html(RegisteredMemo);
     expect_that!(html, contains_substring(r#"data-path="body""#));
     expect_that!(html, not(contains_substring("<textarea")));
@@ -1394,9 +1394,11 @@ fn assignment(keys: &[&str]) -> Assignment {
 
 #[gtest]
 fn a_registered_reference_is_one_leaf_per_item_and_round_trips_as_its_key() {
-    install_test_registry();
     let model = assignment(&["question:q1", "question:q2"]);
-    let form = form_for(&model, FormSpec::default());
+    let form = form_for(
+        &model,
+        FormSpec::default().with_types(CustomTypes::registry()),
+    );
     expect_that!(value_at(&form, "questions.#0"), some(eq("question:q1")));
     expect_that!(value_at(&form, "questions.#1"), some(eq("question:q2")));
     expect_that!(
@@ -1404,7 +1406,10 @@ fn a_registered_reference_is_one_leaf_per_item_and_round_trips_as_its_key() {
         not(contains(eq("questions.#0.key"))),
         "one leaf, not a fieldset around `key`"
     );
-    expect_that!(across_the_wire(&model), ok(eq(&model)));
+    expect_that!(
+        across_the_wire_with(CustomTypes::registry(), &model),
+        ok(eq(&model))
+    );
 }
 
 /// A registered type is ONE input, so a path into its fields names nothing
@@ -1412,7 +1417,6 @@ fn a_registered_reference_is_one_leaf_per_item_and_round_trips_as_its_key() {
 /// scalar is, rather than left to match nothing.
 #[gtest]
 fn a_path_into_a_registered_types_fields_is_refused() {
-    install_test_registry();
     let message = panic_message(|| {
         let _ = empty_form(form! { Assignment { questions[].key => { label: "Key" } } });
     });
@@ -1444,7 +1448,6 @@ mod deferred_q {
 
     #[gtest]
     fn registered_items_among_the_choices_pass() {
-        install_test_registry();
         let model = assignment(&["question:q1", "question:q3"]);
         let mut form = form_for(&model, assignment_spec());
         expect_that!(form.validate(), some(eq(&model)));
@@ -1452,7 +1455,6 @@ mod deferred_q {
 
     #[gtest]
     fn a_registered_item_outside_the_choices_is_refused_on_its_item() {
-        install_test_registry();
         let mut form = form_for(
             &assignment(&["question:q1", "question:q99"]),
             assignment_spec(),
@@ -1467,7 +1469,6 @@ mod deferred_q {
 
     #[gtest]
     fn a_forged_registered_item_is_refused_by_submission_accept() {
-        install_test_registry();
         let wire = WireForm::from_model(
             &assignment(&["question:q1", "question:q99"]),
             FormSpec::default(),

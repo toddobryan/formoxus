@@ -7,13 +7,12 @@
 //! (A value outside a set's static `choices:` is refused by the field; see
 //! the last section.)
 
-use super::{install_test_registry, render_to_html};
+use super::render_to_html;
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
-use formoxus::type_registry::TypeRegistry;
 use googletest::prelude::*;
 use std::collections::{BTreeSet, HashSet};
 
@@ -207,12 +206,14 @@ fn a_unit_enum_item_is_found_by_its_variant() {
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Tag(String);
 
-/// This module's registered types, for `super::install_test_registry`. Not
-/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
-/// `Tag` is registered as a newtype over its `String`.
-pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
-    types.newtype::<Tag, String>()
+// This module's types (`CUSTOM_FIELDS_PLAN.md` decision AB): its forms
+// read them through `FormoxusTypes`, and a spec built by hand takes them
+// with `with_types`. Nothing is installed.
+formoxus::types! {
+    struct SetItemTypes;
+    Tag => newtype String,
 }
+use SetItemTypes as FormoxusTypes;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Shelf {
@@ -233,7 +234,6 @@ fn a_newtype_item_is_found_by_its_inner_value() {
             Vec::new()
         }
     }
-    install_test_registry();
     let shelf = Shelf {
         labels: [Tag("new".to_string()), Tag("old".to_string())].into(),
     };
