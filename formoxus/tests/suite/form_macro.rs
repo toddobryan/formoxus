@@ -10,11 +10,12 @@ use formoxus::attrs::Tag;
 use formoxus::form;
 use formoxus::path::NodePath;
 use formoxus::stores::ValuesByPath;
+use formoxus::type_registry::TypeRegistry;
 use formoxus::{FormErrors, Submission, ValidationMessage, empty_form, form_for, use_form};
 use googletest::prelude::*;
 
-use super::across_the_wire;
 use super::render_to_html;
+use super::{across_the_wire, install_test_registry};
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Article {
@@ -1079,6 +1080,7 @@ fn an_integer_bound_written_bare_lands_on_the_right_field() {
 /// field as a `&'static str` and is anchored at check time.
 #[gtest]
 fn a_pattern_from_the_macro_reaches_validation() {
+    install_test_registry();
     let spec = || form! { Article { headline => { pattern: r"[A-Z].*" } } };
 
     let ok = wire(&[("headline", "Capitalized"), ("words", "1")]);
@@ -1103,8 +1105,14 @@ struct PriceRow {
 }
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Blurb(String);
+
+/// This module's registered types, for `super::install_test_registry`. Not
+/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
+/// `Blurb` is registered as a newtype over its `String`.
+pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
+    types.newtype::<Blurb, String>()
+}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Listing {
@@ -1123,6 +1131,7 @@ struct Listing {
 /// goldens in `tests/ui/`, since they cannot compile.
 #[gtest]
 fn a_constraint_is_accepted_wherever_its_field_can_take_it() {
+    install_test_registry();
     let spec = || {
         form! {
             Listing {

@@ -7,12 +7,13 @@
 //! (A value outside a set's static `choices:` is refused by the field; see
 //! the last section.)
 
-use super::render_to_html;
+use super::{install_test_registry, render_to_html};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::nodes::{Edit, ItemValue};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::type_registry::TypeRegistry;
 use googletest::prelude::*;
 use std::collections::{BTreeSet, HashSet};
 
@@ -204,8 +205,14 @@ fn a_unit_enum_item_is_found_by_its_variant() {
 }
 
 #[derive(Facet, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[facet(transparent)]
 struct Tag(String);
+
+/// This module's registered types, for `super::install_test_registry`. Not
+/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
+/// `Tag` is registered as a newtype over its `String`.
+pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
+    types.newtype::<Tag, String>()
+}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Shelf {
@@ -226,6 +233,7 @@ fn a_newtype_item_is_found_by_its_inner_value() {
             Vec::new()
         }
     }
+    install_test_registry();
     let shelf = Shelf {
         labels: [Tag("new".to_string()), Tag("old".to_string())].into(),
     };

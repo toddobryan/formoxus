@@ -2,11 +2,13 @@
 
 mod bool_field;
 mod choice_field;
+mod newtype;
 mod number_fields;
 mod string_field;
 
 pub use bool_field::BoolField;
 pub use choice_field::{ChoiceField, ChoiceValue, IntoChoice};
+pub use newtype::Newtype;
 pub use number_fields::{Number, NumberField};
 pub use string_field::StringField;
 

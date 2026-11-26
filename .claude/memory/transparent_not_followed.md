@@ -23,15 +23,19 @@ weighing it:
    write-back. Without it, a leaf's shape is always its path's own type.
 3. Transparent never gave settings anyway (`max_length:` on a newtype path
    needs `DefaultField`, which no newtype has). Decision Y gives them:
-   `bio => { newtype: String, max_length: 280 }` in `form!` builds the
-   `Newtype` from `<String as DefaultField>::Field` and runs every compile-time
-   check against `String`. Z is its registry twin,
-   `TypeRegistry::newtype::<Markdown, String>()`. Value types there, but
+   `bio => { newtype, max_length: 280 }` in `form!`, a BARE flag (Todd,
+   2026-11-26; it was `newtype: String`): the macro projects `&place.0`, so
+   rustc infers the inner type for `shape_of` and for a two-projection
+   sibling of `field_kind::field_for`, and every compile-time check runs
+   against it. Tuple newtypes only. `Facet` has only `SHAPE`, so the
+   projection is the ONLY way to learn the inner type. Z, the registry twin,
+   stays `TypeRegistry::newtype::<Markdown, String>()` (a closure form
+   `.newtype(|m: &Markdown| &m.0)` was turned down: types read better). But
    `Newtype<T, F>` itself keeps a FIELD parameter so a dev can wrap their own.
 
 **Cost accepted:** one registration line per newtype instead of one
 attribute, and, on the registry route only, the type's widget/attribute checks
-move from compile time to the build (V). The `newtype:` route keeps them.
+move from compile time to the build (V). The `newtype` route keeps them.
 
 **How to apply:** do not "helpfully" re-add transparent support. Todd's
 agreed fallback, only if it proves obnoxious in real use: follow a

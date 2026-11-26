@@ -34,7 +34,6 @@ fn text_field(name: &str, value: FieldValue<String>) -> Box<dyn Node> {
         optional: false,
         attrs: FieldAttrs::default(),
         widget: TextInput.into(),
-        wrapper: None,
         value,
         field: StringField::default(),
     })

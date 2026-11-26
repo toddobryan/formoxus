@@ -130,8 +130,7 @@ pub trait Node: Debug {
     ///
     /// Only a leaf holding a valid value has one. A container holds nodes, not
     /// a value, and a leaf that is `Empty` or `Invalid` has nothing to
-    /// compare, so `Items::sort_by` puts those last. A newtype's leaf gives
-    /// its INNER value, since that is what it holds.
+    /// compare, so `Items::sort_by` puts those last.
     fn peek_value(&self) -> Option<Peek<'_, 'static>> {
         None
     }

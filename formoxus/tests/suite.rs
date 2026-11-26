@@ -141,9 +141,25 @@ where
 /// the suite is ONE process, so every module's registered types go into one
 /// registry here and every test that meets one calls this first. A test that
 /// needs a type the registry does not know uses a type of its own.
+///
+/// Each module that registers anything has a `register`, which adds its own
+/// types: they are private to it, and a newtype is now registered wherever
+/// one is used (decision W).
 pub fn install_test_registry() {
     static INSTALLED: std::sync::Once = std::sync::Once::new();
-    INSTALLED.call_once(|| custom_fields::test_types().install());
+    INSTALLED.call_once(|| test_types().install());
+}
+
+/// Every module's registered types, in one registry.
+fn test_types() -> formoxus::type_registry::TypeRegistry {
+    let types = formoxus::type_registry::TypeRegistry::new();
+    let types = custom_fields::register(types);
+    let types = newtypes::register(types);
+    let types = sets::register(types);
+    let types = set_item_errors::register(types);
+    let types = trim::register(types);
+    let types = field_validators::register(types);
+    form_macro::register(types)
 }
 
 /// The message `f` panics with. For a test that pins more than one part of a

@@ -4,17 +4,24 @@
 //! password is never trimmed, `no_trim` turns it off for any other text
 //! field, and a number is always trimmed.
 
-use super::Harness;
+use super::{Harness, install_test_registry};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::path::NodePath;
+use formoxus::type_registry::TypeRegistry;
 use formoxus::{prelude::*, stores::ValuesByPath};
 use googletest::prelude::*;
 use std::collections::BTreeSet;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Bio(String);
+
+/// This module's registered types, for `super::install_test_registry`. Not
+/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
+/// `Bio` is registered as a newtype over its `String`.
+pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
+    types.newtype::<Bio, String>()
+}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Account {
@@ -62,6 +69,7 @@ fn typed() -> Vec<(&'static str, &'static str)> {
 
 #[gtest]
 fn each_field_is_read_as_its_rule_says() {
+    install_test_registry();
     let mut form = read(&typed());
     expect_that!(
         form.validate(),
@@ -86,6 +94,7 @@ fn each_field_is_read_as_its_rule_says() {
 /// where an answer of spaces was accepted.
 #[gtest]
 fn a_required_field_of_spaces_is_unfilled() {
+    install_test_registry();
     let mut pairs = typed();
     pairs[0] = ("name", "     ");
     let mut form = read(&pairs);
@@ -102,6 +111,7 @@ fn a_required_field_of_spaces_is_unfilled() {
 /// are never trimmed, so it is not mistaken for one left blank.
 #[gtest]
 fn a_password_is_never_trimmed() {
+    install_test_registry();
     let mut pairs = typed();
     pairs[2] = ("password", "   ");
     let mut form = read(&pairs);
@@ -114,6 +124,7 @@ fn a_password_is_never_trimmed() {
 /// A constraint judges the trimmed value: two letters inside spaces are two.
 #[gtest]
 fn constraints_see_the_trimmed_value() {
+    install_test_registry();
     let mut form = empty_form(form! { Account { name => { max_length: 3 } } });
     let mut pairs = typed();
     pairs[0] = ("name", "   Ada   ");
@@ -125,6 +136,7 @@ fn constraints_see_the_trimmed_value() {
 /// browser cannot sneak a field of spaces past `required`.
 #[gtest]
 fn the_server_trims_the_same_way() {
+    install_test_registry();
     let mut pairs = typed();
     pairs[0] = ("name", "   ");
     let refused = Submission::accept(spec(), &raw(&pairs))

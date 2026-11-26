@@ -6,11 +6,12 @@
 //! The rule every case shares: it runs only once everything under the field
 //! is valid, since until then there is no whole value to judge.
 
-use super::{Harness, render_to_html, without_form_id};
+use super::{Harness, install_test_registry, render_to_html, without_form_id};
 use dioxus::prelude::*;
 use facet::Facet;
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
+use formoxus::type_registry::TypeRegistry;
 use googletest::prelude::*;
 use std::collections::BTreeSet;
 
@@ -32,8 +33,14 @@ where
 // ── A leaf ───────────────────────────────────────────────────────────────
 
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Bio(String);
+
+/// This module's registered types, for `super::install_test_registry`. Not
+/// `#[facet(transparent)]`: formoxus follows no newtype (decision W), so
+/// `Bio` is registered as a newtype over its `String`.
+pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
+    types.newtype::<Bio, String>()
+}
 
 #[derive(Facet, Clone, Debug, PartialEq)]
 struct Signup {
@@ -91,6 +98,7 @@ fn signup(age: u8, nickname: Option<&str>, bio: &str) -> Signup {
 
 #[gtest]
 fn a_valid_model_passes_every_validator() {
+    install_test_registry();
     let model = signup(30, Some("ada"), "Hi.");
     let mut form = form_for(&model, signup_spec());
     expect_that!(form.validate(), some(eq(&model)));
@@ -98,6 +106,7 @@ fn a_valid_model_passes_every_validator() {
 
 #[gtest]
 fn a_leafs_messages_are_its_own() {
+    install_test_registry();
     let mut form = form_for(&signup(31, None, "Hi."), signup_spec());
     expect_that!(form.validate(), none());
     expect_that!(
@@ -110,6 +119,7 @@ fn a_leafs_messages_are_its_own() {
 /// One validator, several messages.
 #[gtest]
 fn a_validator_may_say_several_things() {
+    install_test_registry();
     let mut form = form_for(&signup(30, Some("ada lovelace"), "Hi."), signup_spec());
     expect_that!(form.validate(), none());
     expect_that!(
@@ -121,12 +131,14 @@ fn a_validator_may_say_several_things() {
 /// An absent `Option` is not checked: there is nothing to judge.
 #[gtest]
 fn an_absent_option_is_not_checked() {
+    install_test_registry();
     let mut form = form_for(&signup(30, None, "Hi."), signup_spec());
     expect_that!(form.validate(), some(anything()));
 }
 
 #[gtest]
 fn a_newtypes_validator_gets_the_newtype() {
+    install_test_registry();
     let mut form = form_for(&signup(30, None, "No stop"), signup_spec());
     expect_that!(form.validate(), none());
     expect_that!(
@@ -139,6 +151,7 @@ fn a_newtypes_validator_gets_the_newtype() {
 /// message: a constraint (`max`), and a value that does not parse.
 #[gtest]
 fn the_fields_own_checks_come_first() {
+    install_test_registry();
     let mut over = form_for(&signup(121, None, "Hi."), signup_spec());
     expect_that!(over.validate(), none());
     expect_that!(
@@ -183,6 +196,7 @@ fn a_leafs_message_renders_beside_it() {
 /// to a server (`Send + Sync`).
 #[gtest]
 fn a_closure_may_capture_its_data() {
+    install_test_registry();
     let taken: Vec<String> = vec!["ada".to_string()];
     let spec = form! {
         Signup {
@@ -235,6 +249,7 @@ fn each_field_type_takes_its_idiomatic_parameter() {
     fn bio(_: &Bio) -> Vec<ValidationMessage> {
         messages(&["bio"])
     }
+    install_test_registry();
     let model = Kinds {
         name: "Ada".to_string(),
         count: 3,
@@ -624,6 +639,7 @@ fn a_set_items_validator_refuses_an_add() {
 /// skipped the browser still meets every validator.
 #[gtest]
 fn a_server_runs_the_same_validators() {
+    install_test_registry();
     let wire = WireForm::from_model(&signup(31, None, "Hi."), FormSpec::default());
     let refused = Submission::accept(signup_spec(), wire.values())
         .expect_err("an odd age is refused on the server too");

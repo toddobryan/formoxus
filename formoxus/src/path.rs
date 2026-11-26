@@ -508,22 +508,13 @@ pub fn item_value_key<Q: for<'f> Facet<'f> + ?Sized>(value: &Q) -> String {
 /// The entry an item node holding `value` writes for itself.
 fn entry_text(value: Peek<'_, '_>) -> String {
     let shape = value.shape();
-    if shape.scalar_type().is_none() {
-        if crate::build::newtype_inner(shape).is_some()
-            && let Some(inner) = value
-                .into_struct()
-                .ok()
-                .and_then(|newtype| newtype.field(0).ok())
-        {
-            return inner.to_string();
-        }
-        if let Some(variant) = value
+    if shape.scalar_type().is_none()
+        && let Some(variant) = value
             .into_enum()
             .ok()
             .and_then(|e| e.variant_name_active().ok())
-        {
-            return variant.to_string();
-        }
+    {
+        return variant.to_string();
     }
     value.to_string()
 }

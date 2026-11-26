@@ -182,7 +182,7 @@ fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, 
         At::Shape(shape) => peel(shape),
     };
     match &shape.ty {
-        _ if newtype_inner(shape).is_some() || is_file_upload(shape) => Err(format!(
+        _ if is_file_upload(shape) => Err(format!(
             "`{walked}` is a `{shape}`, one input, which has no field `{name}`"
         )),
         Type::User(UserType::Struct(st)) => {
@@ -383,12 +383,11 @@ pub(crate) fn node_for_shape(
     let spec = walk.spec_for(prefix);
     // Every leaf is built from one of these. `prefix` is already the leaf's own
     // full path, with `name` qualified on.
-    let leaf = |peek, wrapper, shape| LeafArgs {
+    let leaf = |peek, shape| LeafArgs {
         name,
         path: prefix,
         peek,
         optional,
-        wrapper,
         spec,
         shape,
     };
@@ -413,34 +412,12 @@ pub(crate) fn node_for_shape(
         // the `Option` and comes back here with the same path, the inner shape and
         // the inner peek, so a field on an `Option<Span>` path holds a `Span`, as
         // its `Value` says. Checked first, it would be handed the `Option`'s peek.
-        //
-        // No wrapper: the named field holds the path's own type, so a `field:` on
-        // a `Note` path gets a `Note`, not the `String` inside it.
-        return ctor.build(leaf(peek, None, shape));
+        return ctor.build(leaf(peek, shape));
     } else if is_file_upload(shape) {
         return Box::new(file_node(name, peek, walk, prefix, optional));
     } else if let Some(scalar) = shape.scalar_type() {
-        return scalar_node(scalar, leaf(peek, None, shape)).unwrap_or_else(|| {
+        return scalar_node(scalar, leaf(peek, shape)).unwrap_or_else(|| {
             panic!("scalar type {scalar:?} is not supported in Field (field {name})")
-        });
-    } else if let Some(inner) = newtype_inner(shape) {
-        // A newtype is ONE input, not a fieldset around a field called "0".
-        // The peek descends with it: the field holds the inner scalar, so
-        // `populate` must see the inner value, not the wrapper.
-        let scalar = inner
-            .scalar_type()
-            .expect("newtype_inner only returns scalars");
-        let inner_peek = peek
-            .and_then(|p| p.into_struct().ok())
-            .and_then(|s| s.field(0).ok());
-        // The field carries the INNER type (`Field<String>` for a `Markdown`),
-        // because a concrete `T` cannot be recovered from a runtime `Shape`, so
-        // the newtype goes in as the wrapper and is re-applied when the value is
-        // written back. `inner` is the shape the field's `Value` must match.
-        return scalar_node(scalar, leaf(inner_peek, Some(shape), inner)).unwrap_or_else(|| {
-            panic!(
-                "newtype {shape} wraps {scalar:?}, which is not supported in Field (field {name})"
-            )
         });
     }
 
@@ -451,13 +428,52 @@ pub(crate) fn node_for_shape(
         }
         Def::List(list_def) => list_node(list_def.t, name, peek, walk, prefix, optional),
         _ => match &shape.ty {
-            Type::User(UserType::Struct(_)) => {
+            Type::User(UserType::Struct(st)) => {
+                refuse_unregistered_newtype(shape, st, prefix);
                 struct_node(shape, name, peek, walk, prefix, optional)
             }
             Type::User(UserType::Enum(enum_type)) => enum_node(enum_type, name, peek, walk, prefix),
             other => panic!("field {name} has unsupported type {other:?}"),
         },
     }
+}
+
+/// Panics for a newtype over a scalar that reached the struct arm, which means
+/// nothing gave it a field: no `field:` on the path and none registered for the
+/// type. Walked as a struct it would become a fieldset around one input at
+/// `headline.0`, which is formoxus guessing at a type of the app's own, and it
+/// never guesses (decisions N and W).
+///
+/// **A tuple struct only, and only over a scalar.** `Config { name: String }`
+/// is an ordinary struct that has one field today; refusing it would break a
+/// form that walks it correctly. `Pair(Config)` has no single input it could
+/// be, so it stays a struct too. What is left is Rust's newtype idiom, the one
+/// case where a dev plausibly expected one input.
+fn refuse_unregistered_newtype(shape: &'static Shape, st: &StructType, prefix: &NodePath) {
+    if st.kind != StructKind::TupleStruct || st.fields.len() != 1 {
+        return;
+    }
+    let inner = st.fields[0].shape();
+    if inner.scalar_type().is_none() {
+        return;
+    }
+    // A dev who wrote `#[facet(transparent)]` has told facet the type IS its
+    // inner value, and will expect formoxus to read it that way.
+    let transparent = if shape.inner.is_some() {
+        format!(
+            " `#[facet(transparent)]` does not change this: formoxus does not follow it, \
+             so a transparent `{shape}` needs a field like any other."
+        )
+    } else {
+        String::new()
+    };
+    panic!(
+        "{prefix}: `{shape}` wraps a `{inner}`, and formoxus has no field for it. Register one \
+         in `main`, for every `{shape}` in the app: `TypeRegistry::new().newtype::<{shape}, \
+         {inner}>()` reads and writes it as its `{inner}`, or `TypeRegistry::field_for` takes \
+         a `fields::Newtype` around a field with settings. Or, for this path alone, name a \
+         field whose `Value` is `{shape}` with `field:` in `form!`.{transparent}"
+    )
 }
 
 fn option_node(
@@ -481,37 +497,6 @@ fn option_node(
         /* optional */ true,
     );
     Box::new(OptionNode { inner })
-}
-
-/// The inner shape of a newtype wrapper — `String` for `struct Markdown(String)`.
-///
-/// `None` for anything else, which leaves the walk exactly as it was.
-///
-/// **A ONE-FIELD TUPLE STRUCT, not any one-field struct.** `Markdown(String)` is
-/// Rust's newtype idiom and means "this IS a string, with a type attached";
-/// `struct Config { name: String }` is an ordinary struct that happens to have
-/// one field today. Flattening the latter would rename its leaf from
-/// `config.name` to `config` — and leaf paths ARE the wire format now, the
-/// thing a server-side rebuild keys on. The day someone adds a second field the
-/// paths would silently change back, and every stored or in-flight payload
-/// would mean something different. A tuple struct cannot grow that way without
-/// the author rewriting it as a named struct, which is a visible act.
-///
-/// The inner must itself be a scalar: `struct Wrapper(SomeStruct)` stays a
-/// struct, because there is no single input that could carry it.
-///
-/// Note this needs NO `#[facet(transparent)]`. That attribute would also work
-/// (it populates `shape.inner`), but requiring it would mean a newtype in a
-/// crate we don't widget could never be a form field.
-pub(crate) fn newtype_inner(shape: &'static Shape) -> Option<&'static Shape> {
-    let Type::User(UserType::Struct(st)) = &shape.ty else {
-        return None;
-    };
-    if st.kind != StructKind::TupleStruct || st.fields.len() != 1 {
-        return None;
-    }
-    let inner = st.fields[0].shape();
-    inner.scalar_type().map(|_| inner)
 }
 
 /// The closed set of scalar types with a built-in field. Anything else needs a

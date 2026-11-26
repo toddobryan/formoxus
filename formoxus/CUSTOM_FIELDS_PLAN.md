@@ -221,6 +221,171 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
    fallback is dropped (O.1). K (`LeafArgs` gains the proxy): moot. L (the
    per-type widget is render-only, four built-ins refused): superseded by P.
 
+AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
+   compile time, carried by each form, with the app's list installed as
+   overrides.** Todd asked whether the `TypeRegistry` could exist at compile
+   time, then whether it could work for libraries that have types and forms
+   of their own, then how an app overrides a library's choices. Claude
+   probed each in a throwaway workspace (a plain models crate, a stand-in
+   for formoxus, two libraries, an app, and a working-tree copy of formoxus
+   changed as in 5 below); the details are in
+   `.claude/memory/compile_time_type_registry_probe.md`. Everything marked
+   "probed" compiled and ran there; everything under 11 did not get that far.
+
+   1. **The trait (probed).** formoxus gets
+      `trait FieldFor<V> { type Settings: Default; type Field: Field; fn build(Settings) -> Field; }`,
+      and an app implements it for a unit struct of its own:
+      `impl FieldFor<models::Markdown> for AppTypes`. That is legal even
+      though the app owns neither the trait nor the model: the orphan rule
+      needs one local type in the impl, and `AppTypes` is one. So models stay
+      plain and depend on nothing but `facet`. `Settings` is what `form!`'s
+      settings configure: the field itself, or for a newtype its inner field,
+      which `build` wraps in a `Newtype`. That is how `bio => { max_length: 280 }`
+      on a registered `Markdown` is typed at compile time with no extra key.
+   2. **`types!` declares a list once (probed).** In formoxus-macros, a
+      function-like proc macro:
+
+      ```rust
+      formoxus::types! {
+          pub struct AppTypes;
+          include LibTypes;
+          Markdown => newtype String,
+          TimeLimit => field TimeLimitField,
+          replace String => field TrimmedStringField,
+      }
+      ```
+
+      It writes the struct; one `FieldFor` impl per entry, per built-in the
+      list does not replace, and one for `Option<T>` that reuses `T`'s; a
+      `registry()` that builds the list's run-time `TypeRegistry` once (a
+      `LazyLock` static); and, for a library, the replay macro of 4. The
+      built-ins must be listed by the macro itself: a blanket
+      `impl<V: DefaultField> FieldFor<V> for AppTypes` beside the dev's
+      entries is refused (E0119, "upstream crates may add a new impl of
+      `DefaultField` for `Markdown`"). Widget entries (box 6) are not
+      designed yet; see 11.
+   3. **`form!` finds its list by name (probed).** It writes a bare
+      `FormTypes`, which rustc resolves at the call site like code typed
+      there, so a `use` points every form in a module at a list. The app
+      writes `use AppTypes as FormTypes;`. A library writes
+      `type FormTypes = crate::LibTypes;`, a type alias rather than a `use`:
+      a `use` would also import the macro of the same name (4), and rustc
+      denies a crate reaching its own macro-generated `#[macro_export]` by an
+      absolute path (`macro_expanded_macro_exports_accessed_by_absolute_paths`).
+      A proc macro cannot learn the module it expands in, but it does not
+      need to.
+   4. **Libraries are included by replay (probed with two).** A library's
+      `types!` also writes an exported `macro_rules!` with the same name as
+      its struct (macros and types are separate namespaces, so one
+      `use libt::LibTypes;` imports both). It replays the library's entries,
+      `$crate`-qualified, back into `types!`. The app writes
+      `include LibTypes;` once per library and gets a real impl for every
+      type in every list. Four things found doing it:
+      1. The replay macro must be written by the proc macro. Written by
+         `macro_rules!`, its `$crate` names the crate the tokens came from
+         (formoxus), not the library, even when the library passes in its
+         own `$`.
+      2. A library's entries must be reachable from its root
+         (`pub use models::Markdown;`), because the replay writes
+         `$crate::Markdown`. `types!` can say so when it is not.
+      3. Including by delegation
+         (`impl<T> FieldFor<T> for AppTypes where LibTypes: FieldFor<T>`)
+         fails as soon as the app lists a type from a third crate (E0119),
+         which is the common case.
+      4. Listing a type an included list already has is E0119 on that type.
+         `replace` is the way to mean it.
+   5. **Each form carries its own list (probed).** `form!` puts
+      `FormTypes::registry()` in its `FormSpec` (a `with_types` builder), the
+      walk carries it (`Walk.types`), and the walk's registry arm asks it.
+      `Items` and `VariantNode` keep the list from the walk that built them,
+      because they walk again later: when the server fills a form from the
+      wire, when an item is added, when a variant is chosen. Without their
+      own copy those later walks would quietly miss the form's types. In the
+      probe, with nothing installed: two lists in one process gave the same
+      type different fields and each form got its own; a server-style
+      rebuild (`empty_form`, then `distribute_values`) built a list item
+      through the kept list and validated; a library's form worked over a
+      type the app never listed; and, as a control, the same form with no
+      list panicked naming the type. So a library's forms bring their own
+      types, and client and server agree because both run the same form.
+   6. **The app's list is installed as overrides.** `main` calls
+      `AppTypes::install()`, as it calls `TypeRegistry::install` today, and
+      for the same reason (5.1): client and server both run `main`. A leaf's
+      field and widget are then looked up in this order:
+      1. the path's own settings, `field:` or `widget:` in its form;
+      2. the installed list;
+      3. the form's own list;
+      4. the built-ins.
+
+      For the app's own forms the installed list IS the list they compiled
+      against, so 2 and 3 agree. For a library's forms, 2 is how the app's
+      `replace`s reach them. Forgetting `install` now costs only the
+      overrides: every form still builds from its own list.
+   7. **An override never reaches a path the form configured.** A setting,
+      `field:` or `widget:` that a library wrote in its form was checked
+      against the library's list when the library compiled, and the app's
+      field for that type may not even have that setting. So a configured
+      path keeps what its form says (decision H: a path beats a type), and
+      an app that wants it changed overrides that form path by path.
+   8. **The app's `replace`s are checked when the app compiles.** Through the
+      replay, `types!` sees the library's entry for each type it replaces.
+      A replacement field whose `KIND` differs from the library's is
+      refused: a library form that renders `Headline` as text and suddenly
+      gets an `Int` field is almost certainly a mistake, and a dev who means
+      it overrides that library form path by path. A replacement widget must
+      accept the `KIND` of the replacement field and of the library's field.
+      (Decided 2026-11-26, Todd agreeing with Claude.)
+   9. **What is checked when.**
+
+      | What | When |
+      | --- | --- |
+      | The app's own forms, against `AppTypes` | compile time, all of it |
+      | A library's forms, against its own list | when the library compiles |
+      | The app's `replace`s, against the library's entries | when the app compiles |
+      | An installed widget meeting a library form's own `field:` (a field type the library's list does not hold) | when that form is built, as V's checks are now |
+      | A hand-built `FormSpec` with no list | when the form is built, against the built-ins and the installed list |
+
+   10. **What this replaces or changes, once built.**
+       1. `TypeRegistry::install` and the process-wide registry stay, but
+          hold the app's overrides rather than the only copy of its types.
+          `TypeRegistry::new().field_for(…)` in `main` becomes `types!`.
+       2. Y's `newtype` key is no longer needed: a registered type's
+          settings go through its `Settings`. An unregistered newtype with
+          settings is refused, as one with none is (5.5.4).
+       3. Most of V's run-time checks become compile-time ones; what is left
+          is the second-to-last row of 9.
+       4. `DefaultField` stops being what `form!` asks; it asks
+          `<FormTypes as FieldFor<P>>`. `DefaultField` stays inside formoxus
+          to name a `newtype V` entry's inner field.
+       5. The built-ins sit in every list (2), so the walk's scalar arm and
+          `scalar_node`'s dispatch go, and one list in formoxus names the
+          built-in types instead of three (`scalar_node`, the `DefaultField`
+          impls, `Number`'s impls).
+       6. 5.5.5's set-item key formats through the list: `path!(…[= v])`
+          takes `FormTypes` from scope, as `form!` does.
+       7. Box 6's per-type widget becomes an entry in `types!`.
+       8. AA still stands: `path!` sees the list, but not a form's
+          per-path `field:` on a set's items.
+   11. **Not probed, to settle while building.**
+       1. A library whose list includes another library's, with the app
+          including both, replays the shared entries twice (E0119). Likely
+          fix: each replay is tagged with its crate and list name (the proc
+          macro reads `CARGO_CRATE_NAME`), and `types!` skips a tag it has
+          seen. Matching on the type's text would be wrong, since
+          `$crate::Markdown` reads the same from two crates.
+       2. `path!(…[= v])` with `FormTypes` from scope.
+       3. Widget entries, and how `replace` names a widget rather than a
+          field.
+       4. What `form!` says when no `FormTypes` is in scope. rustc's own
+          "cannot find type `FormTypes`" is a poor message; `form!` may want
+          a `types:` key for a form that names its list directly.
+       5. A hand-built `FormSpec`: the built-ins and the installed list, or
+          nothing.
+   12. **Open, for Todd: when.** Switch course now, partway through 5.5, or
+       finish 5.5 as written (5.5.5 to 5.5.7, then 5.6) and build AB after.
+       5.5's tests mostly survive either way; 5.5.5 and Y are where the two
+       routes differ most.
+
 ## Traps
 
 **Traps 1 to 3 and 6's proxy half are moot since 2026-11-25** (no proxy). 4 and
@@ -577,9 +742,9 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
      2. No `begin_inner` write-back, and no outer shape threaded through
         `LeafArgs` for 6.2: a leaf's shape is always its path's own type.
      3. Settings on a newtype path, which transparent never gave
-        (`form_setting_on_a_newtype`): `bio => { newtype: String,
+        (`form_setting_on_a_newtype`): `bio => { newtype,
         max_length: 280 }` (Y), with every compile-time check back, judged
-        against `String`.
+        against the inner type, which rustc infers through `.0`.
      4. No `try_from` trap. facet lets a transparent type validate itself
         through `try_from`, and formoxus would build one through
         `begin_inner`, so a value the type refuses would fail inside
@@ -894,7 +1059,7 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           refused with the inner field's message, empty is required,
           `Option` in both states. Plus: a `#[facet(transparent)]` type with
           nothing registered panics like a plain one, and its message
-          mentions that `transparent` is not followed; `Pair(Config)` still
+          says that formoxus ignores `transparent`; `Pair(Config)` still
           walks as a struct.
        3. **`Newtype`'s own tests.** It takes `KIND`, `trims`, `check`,
           `check_on_server` and `default_widget` from the inner field; a
@@ -903,7 +1068,7 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           the type's field's type, naming both types (the one-field check
           is a build-time `const` assert, so it has no runtime test);
           `TypeRegistry::newtype` (Z) registers the default inner field.
-          Tests of Y's `newtype:` key belong to 5.8, with the macro, so this
+          Tests of Y's `newtype` key belong to 5.8, with the macro, so this
           step's tests compile once 5.5.2 exists.
        4. **The other modules' newtypes** (`Tag` in `sets` and
           `set_item_errors`, `Bio` in `trim` and `field_validators`, `Blurb`
@@ -915,6 +1080,20 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           registered with `Newtype` plus their widgets. `Remark`, the
           unregistered control, gets a `Newtype` too, since unregistered it
           would now panic.
+
+       **Done 2026-11-26 (Claude), uncommitted.** As listed, with these
+       choices for 5.5.2 to build or change: `Newtype::new(field)`;
+       `TypeRegistry::newtype::<T, V>()`; `new`'s mismatch panic names the
+       newtype and the inner field's `Value` (`Note`, `u32`); 4's panic
+       names the type, `TypeRegistry::field_for`, `field:` and `Newtype`,
+       plus "transparent" for a transparent type. `newtypes.rs` has 28
+       tests, nine of them one per delegated method through a test field
+       `Loud` that overrides every default, so a forgotten delegation fails
+       by name. `custom_fields.rs` gains
+       `a_path_into_a_registered_types_fields_is_refused` (6). The suite
+       fails to compile only on the missing `fields::Newtype` and
+       `TypeRegistry::newtype` (10 errors); with `todo!()` stubs in a
+       scratch copy it compiles with no warnings.
 
     2. **(Todd) `formoxus::fields::Newtype<T, F>`.**
        1. **Shape of the type.** It holds the inner field and a
@@ -954,8 +1133,8 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
           duplicate and mismatch panics.
        6. **Docs**, for the module and the type: the registered route
           (`newtype::<T, V>()`, or `field_for` with a configured or custom
-          inner field), the per-path route (`newtype:` in `form!`, Y), and
-          why `transparent` is not followed (W).
+          inner field), the per-path route (`newtype` in `form!`, Y), and
+          why formoxus ignores `transparent` (W).
 
     3. **(Todd) Delete the special-casing.** The newtype arm in
        `node_for_shape`; `newtype_inner` and its long doc; `FieldNode::wrapper`
@@ -975,21 +1154,96 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        Keep that scalar condition: `Pair(Config)` still walks as a struct
        (`a_newtype_around_a_non_scalar_is_still_a_struct`). The message names
        the type, `TypeRegistry::field_for`, `field:` and `fields::Newtype`,
-       and when `shape.inner` is `Some`, adds that formoxus does not follow
+       and when `shape.inner` is `Some`, adds that formoxus ignores
        `#[facet(transparent)]`.
 
-    5. **(Todd) The set-item key, no longer parkable.** `entry_text`
-       (`path.rs`) writes the `[= v]` key that names a set item by its
-       value, and it must match the raw text the item's node holds, which
-       for a registered type is its field's `format`. Its newtype branch
-       goes, and a registered type must key through its field instead.
-       `set_item_errors` pins this with `Tag`. So the registry stores, next
-       to each field's constructor, an erased formatter built in
-       `field_for` (a boxed closure taking a `Peek`, borrowing the
-       `&F::Value` and calling `format`), and `entry_text` asks the registry
-       before anything else. `path!` runs wherever the dev writes it,
-       including in a server-side validator, which is fine because `install`
-       runs on both sides.
+       **Done 2026-11-26 (Claude, at Todd's request).**
+       `refuse_unregistered_newtype` in `build.rs`, called from the struct
+       arm. A one-field TUPLE struct only, not "a one-field struct" as
+       above: `a_one_field_named_struct_is_still_a_struct` keeps
+       `Config { name: String }` walking as a struct. The message names the
+       path and both types, and gives the exact line to write,
+       `TypeRegistry::new().newtype::<Byline, String>()`. `newtypes` 28/28.
+
+    5. **(Todd) The set-item key, no longer parkable.** Expanded
+       2026-11-26 by Claude. **AB (10.6) changes this step once built:**
+       `path!` would format through the form's list, not the process-wide
+       registry. Until AB's timing is decided (AB.12), this is the route.
+
+       1. **What breaks, and why.** A validator names one set item by its
+          value: `path!(Shelf.labels[= &old])`. `path!` turns the value into
+          text with `item_value_key`, through the private `entry_text` in
+          `path.rs`, and `ModelPath::resolve` later finds the item whose own
+          entry is that text. An item's entry is what its node writes in
+          `collect_values`, which for a leaf is its field's `format`. So the
+          two sides must write the same text for the same value. The node
+          side already does it right: a registered `Tag` is a
+          `FieldNode<Newtype<Tag, StringField>>`, whose `format` writes
+          `rust`. The key side has only the value, with no node and no form
+          (a validator can run on the server, long after the form is gone),
+          so `entry_text` falls through to facet's `Display`, which for a
+          plain `Tag` writes `⟨Tag⟩`. The key never matches, and the error
+          lands where every unresolved path does, not on the item.
+       2. **There is no newtype branch to remove.** `entry_text` had one
+          (`newtype_inner`, then `field(0)` and the inner value's `Display`),
+          and 5.5.3 removed it with `newtype_inner`. This step adds a
+          branch, not takes one away.
+       3. **The registry learns to format a value.** The only thing that
+          knows how a registered type is written is its field, so the
+          registry keeps, next to each field's constructor, a closure that
+          formats a value of the field's type:
+          `Arc<dyn for<'m, 'f> Fn(Peek<'m, 'f>) -> String + Send + Sync>`.
+          `field_for` builds it from a clone of the field: the closure
+          borrows `&F::Value` out of the peek with
+          `peek.get::<F::Value>()` and calls the field's `format`. The
+          `get` cannot fail, because the entry is keyed by
+          `F::Value::SHAPE`, so `expect` with a message saying so. (Proven
+          in Claude's scratch probe: the higher-ranked closure type compiles
+          and formats a `Note` through a `Peek`.) `Arc` rather than `Box` to
+          match `NodeCtor`; nothing clones it, so either works.
+       4. **`REGISTRY` keeps its type.** It stays
+          `OnceLock<TypeRegistry>`. What grows is `TypeAndCtor`, which gains
+          a third member for the closure. Two consequences:
+          1. `TypeAndCtor` derives `Debug`, and an `Arc<dyn Fn>` has no
+             `Debug`. Either wrap the closure in a small type with a
+             hand-written `Debug`, the way `NodeCtor` does
+             (`field_node.rs`), or write `TypeAndCtor`'s `Debug` by hand.
+          2. With three members the name `TypeAndCtor` no longer fits;
+             `RegisteredField { kind, ctor, format }` would. Optional.
+
+          `Send + Sync` costs nothing new: the closure captures a clone of
+          `F`, and `field_for` already requires `F: Send + Sync`.
+       5. **A lookup beside `field_ctor`.** `pub(crate) fn
+          format_value(value: Peek<'_, '_>) -> Option<String>` on
+          `TypeRegistry`: `registry()?`, the entry for `value.shape()`, its
+          field, then the closure. `None` with nothing installed or nothing
+          registered for the type.
+       6. **`entry_text` asks the registry first.** Before the enum branch
+          and before `Display`. First, not last, for the reason the walk's
+          constructor arm comes before the scalar arm: an app that registers
+          a field for a built-in type (a `String`) replaces the built-in
+          everywhere, so its items must key through that field too, or the
+          two sides disagree again. Update `item_value_key`'s doc, which
+          still says "a newtype's inner scalar": the text is now "the
+          registered field's `format` for a registered type, a unit enum's
+          variant name, any other leaf's display".
+       7. **Both sides need the registry, and both have it.** `path!` runs
+          wherever the validator does, on the server included, which is
+          fine because `install` runs in `main` on both sides (5.1).
+       8. **Tests.** `set_item_errors::a_newtype_item_is_found_by_its_inner_value`
+          goes green. The inline `path::tests::a_values_text_is_its_item_entry`
+          cannot: its `Tag` is unregistered, and the library's tests share
+          one process, so one test calling `install` would collide with any
+          other that did. Claude takes the `Tag` case out of it, since
+          `set_item_errors` covers it through the suite's registry.
+       9. **A gap this leaves, raised rather than fixed.** A per-path
+          `field:` on a set's items (`labels[] => { field: TagField }`)
+          formats the node with `TagField`, but `path!` has no form and
+          cannot see the spec, so the key still comes from the registry or
+          `Display`. If the two write different text, a `[= v]` error never
+          reaches its item. It predates this step (it came in with box 4's
+          `field:`); a registered field avoids it. Recorded as decision AA
+          for Todd.
 
     6. **(Todd) The runtime path check** (`build.rs:185`, "`{walked}` is a
        `{shape}`, one input, which has no field"). Its test becomes "a type
@@ -1033,34 +1287,76 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        take a call, and box 4's rule (a struct expression or a unit struct)
        stays as it is.
 
-    Y. **A `newtype:` key in `form!`.** `bio => { newtype: String,
-       max_length: 280 }` says the path's type is a newtype over `String`,
-       and the other keys read as if the path were a `String`. `form!`
-       already builds a configured built-in field for a `String` path
-       (`field_kind::field_for`, bounded on `DefaultField`); here it does
-       the same for the named inner type and wraps the result:
-       `Newtype::<_, <String as DefaultField>::Field>::new(configured)`.
-       The `_` is the path's own type, inferred through `named_field`'s
-       `F: Field<Value = P>` bound, so the dev never repeats `Blurb`. And
-       because the macro names the inner type, its settings, widget and
-       attribute checks run against `String::SHAPE` instead of the path's
-       `Unknown`, so `widget: checkbox` or `min: 3` on `bio` is a compile
-       error again. A key of its own rather than `field: Newtype<Blurb,
-       String>`: no type name to recognise (an alias would break it), `T`
-       comes from the path, and `field:` keeps its one meaning, beside which
-       box 4 refuses every setting. `newtype:` and `field:` together are
-       refused. The value is a value type with a `DefaultField` (`String`,
-       `bool`, a number), not a field type; a newtype over a field of the
-       dev's own is written `field: Newtype::<…>` in Rust or registered.
-       Claude, in 5.8. **DECIDED 2026-11-26 (Todd).**
+    Y. **SUPERSEDED 2026-11-26 by AB (10.2), once AB is built.** **A bare `newtype` key in `form!`.** `bio => { newtype,
+       max_length: 280 }` says the path's type is a tuple newtype, and the
+       other keys read as if the path were its inner type. No type follows
+       the key: `form!` already gets a path's type from rustc by projecting
+       into the model (`field_kind::shape_of(|__m: &Model| &__m.bio)`), and
+       `newtype` lets it project one step further, `&__m.bio.0`, so rustc
+       infers the inner type too. (facet's `Facet` trait has only `SHAPE`,
+       so there is no type-level "inner type" to ask for; the projection is
+       the only way, and it is enough.) From there:
+
+       1. **The checks** use `shape_of(|__m| &__m.bio.0)`, which is
+          `String`'s shape, so `widget: checkbox` or `min: 3` on `bio` is a
+          compile error again instead of `Unknown`.
+       2. **The settings** go through a sibling of `field_kind::field_for`
+          that takes both projections: `P` from `&m.bio`, `I: DefaultField`
+          from `&m.bio.0`, the closure configures `I::Field`, and the result
+          is `Newtype::<P, I::Field>::new(configured)`. The dev never names
+          `Blurb` or `String`.
+       3. **Tuple newtypes only**, because of `.0`. On a one-field named
+          struct the error is rustc's "no field `0` on type `Bio`"; span it on
+          the `newtype` key, and pin it with a golden. Such a type can only
+          be registered: box 4 refuses a call in `field:`, and `Newtype`'s
+          fields are private, so there is no struct expression to write.
+       4. **A flag, like the other bare keys.** Field-body flags are already
+          written without a value (`parse_value` refuses `name:` after one),
+          and a nested path needs `=>`, so `newtype` followed by `,` or `}`
+          is unambiguous.
+
+       A key of its own rather than `field: Newtype<Blurb, String>`: no type
+       name to recognise (an alias would break it), and `field:` keeps its
+       one meaning, beside which box 4 refuses every setting. `newtype` and
+       `field:` together are refused. The inner type must have a
+       `DefaultField` (`String`, `bool`, a number); a newtype over a field of
+       the dev's own (`Newtype<Wrapper, TimeLimitField>`) is registered with
+       `field_for`. Claude, in 5.8. **DECIDED 2026-11-26 (Todd); bare, with
+       no type after it, decided the same day (it was `newtype: String`).**
 
     Z. **`TypeRegistry::newtype::<T, V>()`**, the app-wide twin of Y:
        `field_for(Newtype::<T, <V as DefaultField>::Field>::new(Default::default()))`,
-       so both places say "`Markdown` is a newtype over `String`" the same
-       way. Todd, in 5.5.2. **DECIDED 2026-11-26 (Todd).**
+       Todd, in 5.5.2. **DECIDED 2026-11-26 (Todd).** It names `V` where Y
+       infers it, because nothing gives the registry a projection to infer
+       from; the alternative `.newtype(|m: &Markdown| &m.0)` would infer
+       both, and was turned down the same day: a list of types reads better
+       in `main` than a closure.
+
+    AA. **A `field:` on a set's items and the `[= v]` key (5.5.5.9).**
+       `path!(M.set[= v])` writes `v`'s text from the registry or `Display`,
+       because it has no form and cannot see a spec; the item's node writes
+       its text with whatever field it was built with. A `field:` on
+       `labels[]` whose `format` differs from the registered one (or from
+       `Display`, for a type with nothing registered) makes every `[= v]`
+       error on that set miss its item. Options:
+
+       1. **Document it, nothing more (recommended).** In `field:`'s docs
+          and `path!`'s: a set's items are named by value through the
+          type's registered field, so give a set's item type its field in
+          the registry, not with `field:`. Cheap, and the case is narrow: a
+          set item with a per-path field that also formats differently from
+          the app-wide one.
+       2. **Refuse `field:` on a set's items** in `form!`, pointing at the
+          registry. Closes the gap, but also refuses the harmless case
+          where the two fields format the same way.
+       3. **Resolve `[= v]` by value instead of text.** Not possible:
+          `WireForm::errors_at` resolves on the server from the wire's text
+          alone, with no nodes to compare values against.
+
+       Open, for Todd.
 
     Why `Newtype<T, F>` itself keeps a FIELD as its second parameter, while
-    Y and Z take a value type: a dev must be able to wrap a field of their
+    Y and Z work from a value type: a dev must be able to wrap a field of their
     own (`Newtype<Wrapper, TimeLimitField>`), and one trait covering both
     value types and field types would hit Rust's rule against overlapping
     impls. The value-type spelling lives only where formoxus can translate
@@ -1159,7 +1455,8 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
        until #18 can check against the registry.
        **DECIDED 2026-11-26 (Todd): yes, as recommended.**
 
-    V. **The run-time widget and attribute checks only where the compiler
+    V. **Mostly overtaken 2026-11-26 by AB (10.3), once AB is built:** what
+       stays run-time is AB.9's second-to-last row. **The run-time widget and attribute checks only where the compiler
        could not judge (3.3).** Recommended, because it is what O.2 says
        and because it changes nothing for a hand-built `FormSpec` over
        ordinary types: `field_kind.rs:381-385` records that a pair `form!`
@@ -1176,14 +1473,19 @@ J, K, L. **Decided 2026-11-25 as recommended, then overtaken the same day.**
 
   - [ ] **5.8** (Claude) `form!`'s side: J's dispatch with Q's fallback, O.1's
     note on the settings route, and the goldens that change (O.2). Then the
-    suite is green. Added 2026-11-26: Y's `newtype:` key, with its tests
+    suite is green. Added 2026-11-26: Y's bare `newtype` key, with its tests
     and goldens (it replaces X's call form, which is not built); the goldens and inline `field_kind` test 5.6
     turns red (5.6.2); `form_setting_on_a_newtype`'s note pointing at
-    `fields::Newtype`.
+    `fields::Newtype`; and a third route in `Newtype`'s and
+    `TypeRegistry`'s docs, the `newtype` key, once it exists (5.5.2.6's docs
+    leave it out until then), and in `refuse_unregistered_newtype`'s
+    message, whose per-path advice is `field:` until then.
 
 - [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
-      2026-11-24, in `a8463e0`) is superseded with L.
+      2026-11-24, in `a8463e0`) is superseded with L. **AB (10.7) makes the
+      per-type widget an entry in `types!` once built**; the lookup order is
+      AB.6's.
 
   - [ ] **6.1** (Todd) `widget_for` itself moved to 5.3.4 on 2026-11-26,
     because the suite's registry calls it. What is left here is the

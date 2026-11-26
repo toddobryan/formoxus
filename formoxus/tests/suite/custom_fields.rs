@@ -18,10 +18,15 @@
 //!    registry, chosen at BUILD on both sides (decision P), so it can change
 //!    what a value means (a password is not trimmed) and the server agrees.
 //!
+//! A newtype is no exception (decision W, 2026-11-26): formoxus ignores
+//! `#[facet(transparent)]`, so section 3's `Note` and `Secret` are plain newtypes
+//! registered with `TypeRegistry::newtype` (Z) as well as given a widget.
+//!
 //! **The registry is installed once for the whole suite**, by
-//! `super::install_test_registry`, from [`test_types`]. Every test that meets
-//! a registered type calls it first. A test that needs a type the registry does
-//! NOT know uses a type of its own, never one listed there.
+//! `super::install_test_registry`, which takes this module's types from
+//! [`register`]. Every test that meets a registered type calls it first. A
+//! test that needs a type the registry does NOT know uses a type of its own,
+//! never one listed there.
 
 use super::{FORM_ID, across_the_wire, install_test_registry, panic_message, render_to_html};
 use dioxus::prelude::*;
@@ -40,12 +45,15 @@ use googletest::prelude::*;
 use std::marker::PhantomData;
 
 /// Every type this module registers, for `super::install_test_registry`.
-pub(crate) fn test_types() -> TypeRegistry {
-    TypeRegistry::default()
+pub(crate) fn register(types: TypeRegistry) -> TypeRegistry {
+    types
         .field_for(TimeLimitField)
         .field_for(TopicField)
         .widget_for::<Topic>(Textarea)
+        .newtype::<Note, String>()
         .widget_for::<Note>(NoteWidget)
+        .newtype::<Remark, String>()
+        .newtype::<Secret, String>()
         .widget_for::<Secret>(PasswordInput)
         .field_for(RefField::<Question>::default())
 }
@@ -1043,12 +1051,10 @@ fn a_named_field_on_an_option_is_none_when_empty_and_some_when_filled() {
 // 3. A type's widget, named once by the app: `TypeRegistry::widget_for`
 // ═════════════════════════════════════════════════════════════════════════
 
-/// apcsp's `Markdown`: `#[facet(transparent)]`, facet's own statement that
-/// the type IS its string, so formoxus reads it as a `String` with no field
-/// registered (decision N keeps `transparent`; O.a). Every form had to give it
-/// `widget: MarkdownWidget` by hand.
+/// apcsp's `Markdown`: a newtype over its text, registered as one with
+/// `TypeRegistry::newtype::<Note, String>()` (decision Z), and given a
+/// widget. Every form had to give it `widget: MarkdownWidget` by hand.
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Note(String);
 
 /// Stands in for apcsp's `MarkdownWidget`, which lives in a crate (`ui`)
@@ -1091,10 +1097,9 @@ fn RegisteredJournal() -> Element {
     use_form(|| form_for(&journal(), FormSpec::default())).render(using_fns! {})
 }
 
-/// The control: a transparent newtype the registry does NOT know. `Note` is
-/// registered for the whole process, so this needs a type of its own.
+/// The control: a newtype registered with a field but NO widget. `Note` has
+/// a widget for the whole process, so this needs a type of its own.
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Remark(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -1116,7 +1121,7 @@ fn PlainDiary() -> Element {
 }
 
 #[gtest]
-fn without_a_registration_a_transparent_newtype_renders_as_its_inner_type() {
+fn without_a_registered_widget_a_newtype_renders_its_inner_fields_widget() {
     install_test_registry();
     let html = render_to_html(PlainDiary);
     expect_that!(html, not(contains_substring("note-widget")));
@@ -1193,10 +1198,10 @@ fn a_widget_on_the_path_overrides_the_registered_widget_for_its_type() {
 
 // ── Chosen at build, so the server agrees (decision P) ───────────────────
 
-/// Registered with `PasswordInput`. A password is not trimmed, since a space
-/// is part of the secret, and that is read off the widget.
+/// Registered as a newtype over `String` and with `PasswordInput`. A password
+/// is not trimmed, since a space is part of the secret, and that is read off
+/// the widget.
 #[derive(Facet, Clone, Debug, PartialEq)]
-#[facet(transparent)]
 struct Secret(String);
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -1400,6 +1405,21 @@ fn a_registered_reference_is_one_leaf_per_item_and_round_trips_as_its_key() {
         "one leaf, not a fieldset around `key`"
     );
     expect_that!(across_the_wire(&model), ok(eq(&model)));
+}
+
+/// A registered type is ONE input, so a path into its fields names nothing
+/// that is built (5.5.6). Refused when the spec is built, as a path into a
+/// scalar is, rather than left to match nothing.
+#[gtest]
+fn a_path_into_a_registered_types_fields_is_refused() {
+    install_test_registry();
+    let message = panic_message(|| {
+        let _ = empty_form(form! { Assignment { questions[].key => { label: "Key" } } });
+    });
+    expect_that!(
+        message,
+        all![contains_substring("key"), contains_substring("one input")]
+    );
 }
 
 /// `choices:` on a registered type, DEFERRED with decision Q (2026-11-25).

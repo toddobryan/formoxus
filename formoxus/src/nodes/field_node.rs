@@ -1,5 +1,8 @@
 //! The leaf node: one [`Field`] plus the tree state every field shares.
 
+use std::fmt::Debug;
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek, ReflectError, Shape};
 use formoxus_spec::Attr;
@@ -29,7 +32,6 @@ pub struct LeafArgs<'a> {
     pub path: &'a NodePath,
     pub peek: Option<Peek<'a, 'static>>,
     pub optional: bool,
-    pub wrapper: Option<&'static Shape>,
     /// The spec that names this leaf, if any.
     pub spec: Option<&'a FieldSpec>,
     /// The type the walk is building at this path, which the field's `Value` must be.
@@ -63,7 +65,6 @@ impl LeafArgs<'_> {
             widget: spec
                 .and_then(|s| s.widget.clone())
                 .unwrap_or_else(|| field.default_widget(self.optional)),
-            wrapper: self.wrapper,
             value: populate(&field, self.peek),
             field,
         };
@@ -94,7 +95,7 @@ impl LeafArgs<'_> {
 #[derive(Clone)]
 pub struct NodeCtor(
     #[allow(clippy::type_complexity)]
-    pub  std::sync::Arc<dyn for<'a> Fn(LeafArgs<'a>) -> Box<dyn Node> + Send + Sync>,
+    pub  Arc<dyn for<'a> Fn(LeafArgs<'a>) -> Box<dyn Node> + Send + Sync>,
 );
 
 impl NodeCtor {
@@ -115,7 +116,7 @@ impl NodeCtor {
     }
 }
 
-impl std::fmt::Debug for NodeCtor {
+impl Debug for NodeCtor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("NodeCtor(..)")
     }
@@ -143,20 +144,6 @@ pub struct FieldNode<F: Field> {
     /// widget (decision A-1, `FIELDS_PLAN.md` Step 4).
     pub attrs: FieldAttrs,
     pub widget: AnyWidget,
-    /// The newtype this field's value is wrapped in — `Markdown` for a
-    /// `String` field standing in for a `Markdown` field. `None` for an
-    /// ordinary scalar.
-    ///
-    /// **The field carries the INNER type, not the newtype**, because a
-    /// concrete type cannot be recovered from a runtime `&'static Shape`: the
-    /// shape walk only ever has a shape in hand, and `F::Value` is fixed at
-    /// compile time. So a `Markdown` field becomes a `String` field that
-    /// remembers what to re-wrap it in, and every string-facing operation —
-    /// parsing, display, `check`, the widget — goes on working unchanged
-    /// against the inner scalar.
-    ///
-    /// Only [`write_value_into`](Node::write_value_into) consults it.
-    pub wrapper: Option<&'static Shape>,
     pub value: FieldValue<F::Value>,
     pub field: F,
 }
@@ -387,16 +374,7 @@ impl<F: Field> Node for FieldNode<F> {
     }
 
     fn write_value_into<'p>(&self, partial: Partial<'p>) -> Result<Partial<'p>, ReflectError> {
-        // The one place `wrapper` matters. The slot the parent opened is the
-        // NEWTYPE's, so a bare `set` of the inner scalar would be a type error;
-        // descending into field 0, setting there, and coming back up builds the
-        // wrapper around it. `None` is the ordinary case and stays a plain set.
-        let set = |p: Partial<'p>, t: F::Value| -> Result<Partial<'p>, ReflectError> {
-            match self.wrapper {
-                None => p.set(t),
-                Some(_) => p.begin_nth_field(0)?.set(t)?.end(),
-            }
-        };
+        let set = |p: Partial<'p>, t: F::Value| -> Result<Partial<'p>, ReflectError> { p.set(t) };
         let partial = match &self.value {
             FieldValue::Valid(t) => set(partial, t.clone())?,
             // An unticked checkbox is `Empty` like any other unfilled input, and
@@ -424,8 +402,6 @@ impl<F: Field> Node for FieldNode<F> {
         Ok(partial)
     }
 
-    // The inner value for a newtype, not the wrapper: `value` is all this node
-    // holds, and `wrapper` is only a shape.
     fn peek_value(&self) -> Option<Peek<'_, 'static>> {
         match &self.value {
             FieldValue::Valid(t) => Some(Peek::new(t)),
@@ -488,7 +464,6 @@ mod tests {
             optional: false,
             attrs: FieldAttrs::default(),
             widget: field.default_widget(false),
-            wrapper: None,
             value,
             field,
         }
