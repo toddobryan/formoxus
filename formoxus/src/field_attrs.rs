@@ -22,6 +22,10 @@ impl FieldAttrs {
         self.0.contains_key(&AttrKey::Std(attr))
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// A copy without `attr`, for a widget that puts it somewhere other than
     /// where its spread lands (`RadioGroup`'s `required`). `shift_remove`, so
     /// the rest keep their order.

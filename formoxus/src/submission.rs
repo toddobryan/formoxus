@@ -16,6 +16,7 @@ use crate::form::{FormErrors, FormSpec, FormState, empty_form, form_for};
 use crate::nodes::{is_file_upload, stored_shapes};
 use crate::path::{ITEM_SIGIL, ModelPath, NodePath};
 use crate::stores::{FilesByPath, ValuesByPath};
+use crate::type_registry::TypeRegistry;
 use crate::wire::WireForm;
 
 /// A submitted form that passed its own validation, holding both the model the
@@ -347,7 +348,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
         let Some(path) = field.name().map(NodePath::new) else {
             return Ok(());
         };
-        if !is_file_leaf::<T>(&path) {
+        if !is_file_leaf::<T>(spec.types, &path) {
             return Ok(());
         }
         let key = path.spec_key();
@@ -435,7 +436,9 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
             .values
             .iter()
             .filter(|(path, name)| {
-                !name.is_empty() && !received.files.contains_key(*path) && is_file_leaf::<T>(path)
+                !name.is_empty()
+                    && !received.files.contains_key(*path)
+                    && is_file_leaf::<T>(spec.types, path)
             })
             .map(|(path, _)| path.clone())
             .collect();
@@ -461,8 +464,8 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> Submission<T> {
 /// Whether `path` names a `FileUpload` leaf of `T`, optional or not. Peeled:
 /// `spec_key_shape` returns an `Option<FileUpload>` field's shape as the
 /// `Option`.
-fn is_file_leaf<T: Facet<'static>>(path: &NodePath) -> bool {
-    spec_key_shape(T::SHAPE, &path.spec_key()).is_ok_and(|shape| is_file_upload(peel(shape)))
+fn is_file_leaf<T: Facet<'static>>(types: Option<&'static TypeRegistry>, path: &NodePath) -> bool {
+    spec_key_shape(types, T::SHAPE, &path.spec_key()).is_ok_and(|shape| is_file_upload(peel(shape)))
 }
 
 /// What h.8 gathers from the file parts, for h.9 and h.10.

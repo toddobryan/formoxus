@@ -122,14 +122,14 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// at all. A `ModelPath` comes only from `path!` or `form!`, which refuse
     /// the same paths at compile time, so this is a backstop: the two checks
     /// are separate code, and a disagreement between them should be loud.
-    fn shape_at(path: &ModelPath<T>) -> &'static Shape {
+    fn shape_at(&self, path: &ModelPath<T>) -> &'static Shape {
         if let Some(every_item) = every_item_spelling(path.as_str()) {
             panic!(
                 "{path}: names one item, but a spec names every item at once; \
                  write `{every_item}`"
             );
         }
-        crate::build::spec_key_shape(T::SHAPE, path.as_str()).unwrap_or_else(|why| {
+        crate::build::spec_key_shape(self.types, T::SHAPE, path.as_str()).unwrap_or_else(|why| {
             panic!("{path}: names nothing in a form over `{}`: {why}", T::SHAPE)
         })
     }
@@ -140,7 +140,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     ///
     /// As [`shape_at`](Self::shape_at) does, if `path` names nothing.
     fn field(&mut self, path: &ModelPath<T>) -> &mut FieldSpec {
-        Self::shape_at(path);
+        self.shape_at(path);
         self.fields.entry(path.to_string()).or_default()
     }
 
@@ -151,7 +151,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     ///
     /// As `field` does, and if `path` names anything but a list.
     fn collection_field(&mut self, path: &ModelPath<T>, key: &str) -> &mut FieldSpec {
-        let shape = Self::shape_at(path);
+        let shape = self.shape_at(path);
         assert!(
             is_list(shape) || is_set(shape),
             "{path}: `{key}` applies only to list or set, not `{shape}`"
@@ -291,7 +291,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     }
 
     pub fn treat_as_set(mut self, path: &ModelPath<T>) -> Self {
-        let shape = Self::shape_at(path);
+        let shape = self.shape_at(path);
         assert!(
             !is_set(shape),
             "{path} is already a set; don't call `treat_as_set`"
@@ -342,7 +342,7 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
     /// `Def::Set`, or a list `treat_as_set` has already marked, since `form!`
     /// emits `treat_as_set` first (decision B in box 5).
     fn set_field(&mut self, path: &ModelPath<T>, key: &str) -> &mut FieldSpec {
-        let shape = Self::shape_at(path);
+        let shape = self.shape_at(path);
         assert!(
             !is_list(shape) || self.field(path).treat_as_set,
             "{path}: if you want to treat this list as a set, call `treat_as_set` first"
@@ -417,6 +417,19 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
         self
     }
 
+    /// The list this form reads its types through: a `types!` list's
+    /// [`registry()`](crate::type_registry::BuiltIns::registry). `form!`
+    /// writes it from the `FormoxusTypes` in scope; a hand-built spec with
+    /// none sees only the built-in types and the installed overrides.
+    ///
+    /// Call it first, straight after [`new`](Self::new), as `form!` does.
+    /// Every builder that names a path checks the path against the list
+    /// known at that moment, and a listed type is one input, so a path into
+    /// its fields (`questions[].key` for a listed `Question`) is refused.
+    /// Named before `with_types`, that path is not refused, and the walk,
+    /// which builds the listed type as one leaf, never looks its spec up: the
+    /// setting is silently lost.
+    #[must_use]
     pub fn with_types(mut self, types: &'static TypeRegistry) -> Self {
         self.types = Some(types);
         self

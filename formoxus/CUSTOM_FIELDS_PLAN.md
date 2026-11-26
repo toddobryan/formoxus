@@ -340,11 +340,18 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
 
       | What | When |
       | --- | --- |
-      | The app's own forms, against `AppTypes` | compile time, all of it |
+      | The app's own forms, against `AppTypes` | compile time, all of it but one case (below) |
       | A library's forms, against its own list | when the library compiles |
       | The app's `replace`s, against the library's entries | when the app compiles |
       | An installed widget meeting a library form's own `field:` (a field type the library's list does not hold) | when that form is built, as V's checks are now |
       | A hand-built `FormSpec` with no list | when the form is built, against the built-ins and the installed list |
+
+      The one case, found building it (5.9's G): a path that mentions an
+      unlisted newtype with no settings and no widget (`shade => { label:
+      "Shade" }`) is refused when the form is built. A const cannot tell
+      `Shade(String)`, which is refused, from `Wrapper(Address)`, which is
+      walked as a struct, since a tuple struct's field shape is a fn
+      pointer. `form_unlisted_type` stays in `ui-pending/`.
 
    10. **What this replaces or changes, once built.**
        1. `TypeRegistry::install` and the process-wide registry stay, but
@@ -781,6 +788,14 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
         and `form_setting_on_a_newtype` change.
      Alternative: keep `Other` for structs and refuse `widget:` on any struct
      path, which forces a `field:` next to every `widget:` on a `Ref`.
+
+     **SUPERSEDED 2026-11-26 by AB and 5.6's revision.** `form!` sees the
+     list in scope (`TypeKinds::KINDS`), so neither premise holds. O.1:
+     settings go through `FieldFor`, not `DefaultField` (gone, AB.10.4). O.2:
+     a listed type is judged at compile time by its field's `KIND`; an
+     unlisted struct stays `Other` and the compiler refuses it; only an
+     unlisted newtype is `Unknown`. Neither the cost O.2 names nor its
+     alternative's applies.
 
      **Todd's two questions (2026-11-25), answered by Claude:**
 
@@ -1261,6 +1276,23 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        into its fields is refused. This relies on `install` running before
        specs are built, which its doc requires. Claude adds a test for the
        registered case in 1.
+
+       **Updated 2026-11-26 for AB:** "registered" now means the spec's
+       list or the installed overrides, `TypeRegistry::field_in(types,
+       shape).is_some()`, not the installed registry alone. The check is in
+       `field_named` (`build.rs:167`), reached through `spec_key_shape(root,
+       key)` from `FormSpec::shape_at(path)`, and none of the three sees a
+       list today: `shape_at` is an associated fn with no `self`. So thread
+       `types` down: `shape_at` takes `&self` and passes `self.types`, and
+       `spec_key_shape` and `field_named` take a `types:
+       Option<&'static TypeRegistry>`. It works for `form!` because
+       `with_types` is the first call after `new()`; a hand-built spec that
+       calls `with_types` after naming a path into a listed type is not
+       refused, and the build, which walks the listed type as one leaf,
+       never looks that spec up, so it is silently ignored (macro first:
+       say so in `with_types`' doc rather than make the order free). The test waiting on it is
+       `custom_fields::a_path_into_a_registered_types_fields_is_refused`,
+       the suite's one failure.
 
     7. **(Todd) Reword the last-resort panic** (`other => panic!("field
        {name} has unsupported type {other:?}")`) the same way as 4: name
@@ -1888,16 +1920,34 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
           message names the path and `widget.name()`; the test checks for
           `limit` and `int_only`. Likewise for attributes: each
           `spec.attrs` key must apply to `F::KIND`, the run-time twin of
-          `applies`. Scope these to the leaves the compiler could not
-          judge, `kind(self.shape)` being `Unknown` (expose a
-          `pub(crate) const fn is_unknown`). See letter V for why not every
-          leaf.
+          `applies`. Scope these to the leaves whose field came from a list
+          or the installed overrides: the walk knows, because
+          `TypeRegistry::field_in` is what returned the field, so check
+          there and nowhere else. Not `kind(self.shape)` being `Unknown`
+          (decision AL): a listed struct is `Other` to `kind`, so that test
+          would skip exactly the leaves this is for. No `is_unknown` is
+          needed. Through `form!` this never fires, since the compiler
+          already judged the same list (5.6's revision); it is for a
+          hand-built spec. See letter V for why not every leaf.
 
     4. **The old 5.1's proxy scan is not needed**, as before: there is no
        proxy.
 
     Then the suite should be 1015 passed, with only 6.2's 7 failing, plus
-    the 5.8 goldens and the one inline test.
+    the 5.8 goldens and the one inline test. (Stale since 5.6's revision:
+    no goldens or inline test turn red, and the counts have moved.)
+
+    AL. **DECIDED 2026-11-26 (Todd): as recommended; 3.3 rewritten.** What scopes 3.3, now that a listed
+        struct is `Other`?** 3.3 says to check only the leaves where
+        `kind(self.shape)` is `Unknown` (V). After 5.6's revision only an
+        unlisted newtype is `Unknown`, and the build refuses those anyway,
+        so the check would skip exactly the leaves it is for: a hand-built
+        spec over a listed `Tone { level: u8 }` with `widget: checkbox` is
+        `Other` to `kind` and would never be checked. Recommended: scope it
+        to leaves whose field came from a list or the overrides (the walk
+        knows, since `TypeRegistry::field_in` returned it), and drop
+        `is_unknown`. The intent of V is unchanged: built-in leaves in a
+        hand-built spec stay unchecked, as `field_kind.rs` records.
 
     **Letters for Todd (2026-11-26, Claude recommends; both DECIDED the same
     day):**
@@ -1910,6 +1960,10 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
        a compile error and makes a set of registered structs impossible
        until #18 can check against the registry.
        **DECIDED 2026-11-26 (Todd): yes, as recommended.**
+       **Met differently by 5.6's revision:** a set of LISTED structs
+       compiles (`is_leaf` reads `KINDS`), and a set of unlisted ones stays
+       a compile error, which was the alternative's benefit without its cost.
+       3.2's assert now only backs up a hand-built spec.
 
     V. **Mostly overtaken 2026-11-26 by AB (10.3), once AB is built:** what
        stays run-time is AB.9's second-to-last row. **The run-time widget and attribute checks only where the compiler
@@ -1937,13 +1991,25 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
     leave it out until then), and in `refuse_unregistered_newtype`'s
     message, whose per-path advice is `field:` until then.
 
+    **Mostly done or gone, 2026-11-26.** The settings route is `FieldFor`
+    (5.9.5), which replaced J's dispatch and O.1's note; Y is superseded by
+    AB, so no `newtype` key, goldens or docs; 5.6.2's goldens do not turn
+    red (5.6's revision); `form_setting_on_a_newtype`'s note and
+    `refuse_unregistered_newtype`'s message both name `types!`. What is
+    left is Q's part, deferred with Q (5.7).
+
 - [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
       2026-11-24, in `a8463e0`) is superseded with L. **AB (10.7) makes the
       per-type widget an entry in `types!` once built**; the lookup order is
       AB.6's.
 
-  - [ ] **6.1** (Todd) `widget_for` itself moved to 5.3.4 on 2026-11-26,
+  - [ ] **6.1** **FOLDED INTO box 6's `types!` widget entries (AM).** When
+    `types!` takes a widget for an entry, it writes a free `const _`
+    beside it asserting that the widget's `ACCEPTS` contains the entry's
+    field's `KIND`, and box 6 decides whether a built-in type can have a
+    widget entry (AF). The text below is the superseded version.
+    `widget_for` itself moved to 5.3.4 on 2026-11-26,
     because the suite's registry calls it. What is left here is the
     compile-time half: check the widget against `T` with an inline `const {
     assert!(field_kind::renders::<W>(T::SHAPE, false)) }`, which fires when the
@@ -1954,6 +2020,19 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
     through. That case is still worth it: a built-in type has no registered
     field, so 5.3.3 and 5.3.4's run-time check never sees it, and V's build
     check is only for `Unknown` leaves.
+
+    AM. **DECIDED 2026-11-26 (Todd): as recommended, 6.1 folds into box 6.**
+        Is 6.1 still a step? It is stale
+        twice over: a user struct is `Other` to `kind`, not `Unknown`, and
+        AB.10.7 makes the per-type widget an entry in `types!` rather than a
+        `widget_for` call. In `types!` the check is a free `const _` the
+        macro writes beside the entry, `W::ACCEPTS.contains(F::KIND)`, which
+        fires under `cargo check` too, with no shape walk, and covers a
+        user type exactly, because it asks the entry's own field. A widget
+        for a BUILT-IN type is AF's question (can a list change how a
+        `bool` renders?), and box 6 should settle it. Recommended: fold 6.1
+        into box 6's `types!` widget entries, with that check, and decide
+        the built-in case there.
 
   - [ ] **6.2** (Todd) Choose in `LeafArgs::node`: `spec.widget`, else the
     registry's widget for `self.shape` (the path's own type: `Note` for a
@@ -1984,6 +2063,12 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
       that one place, which `choices:` already checks (`assignment_shape.rs`),
       and converts them where the model is saved. Do NOT add facet to today's
       surreal-table `Ref<T>` in the meantime: `table!` would only undo it.
+
+      **Updated 2026-11-26 for AB:** "a `TypeRegistry` installed in `main`"
+      is now a `types!` list in apcsp (`TimeLimit => field TimeLimitField`,
+      `Markdown => newtype String`, `ChoiceId => …`), with `use AppTypes as
+      FormoxusTypes;` where its forms are, and `install()` only if it has
+      `replace` lines. `MarkdownWidget` waits on box 6's widget entries.
 
 - [ ] **9.** (Todd) Merge, and close #28.
 

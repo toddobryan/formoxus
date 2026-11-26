@@ -74,7 +74,11 @@ impl<'s> Walk<'s> {
 /// is every item of a list, and `$Variant` enters a variant of the enum before
 /// it. A top-level enum's fields have no `$Variant` in front (see
 /// `fields_from_enum`), so at the root a name may be any variant's field.
-pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static Shape, String> {
+pub(crate) fn spec_key_shape(
+    types: Option<&'static TypeRegistry>,
+    root: &'static Shape,
+    key: &str,
+) -> Result<&'static Shape, String> {
     let mut at = At::Shape(root);
     let mut walked = String::new();
     for segment in key.split('.') {
@@ -89,7 +93,8 @@ pub(crate) fn spec_key_shape(root: &'static Shape, key: &str) -> Result<&'static
         } else {
             let name = segment.trim_end_matches("[]");
             let brackets = (segment.len() - name.len()) / 2;
-            field_named(at, name, &walked).and_then(|field| items_of(field.shape(), name, brackets))
+            field_named(types, at, name, &walked)
+                .and_then(|field| items_of(field.shape(), name, brackets))
         };
         at = next?;
         // A spec key, not a `NodePath`: `answers[]` names every item at once.
@@ -164,7 +169,12 @@ fn variant_named(at: At, name: &str, walked: &str) -> Result<&'static Variant, S
 }
 
 /// The field `name` of whatever is at `at`, for a segment after `walked`.
-fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, String> {
+fn field_named(
+    types: Option<&'static TypeRegistry>,
+    at: At,
+    name: &str,
+    walked: &str,
+) -> Result<&'static FacetField, String> {
     let shape = match at {
         At::Variant(variant) => {
             return variant
@@ -183,9 +193,9 @@ fn field_named(at: At, name: &str, walked: &str) -> Result<&'static FacetField, 
         At::Shape(shape) => peel(shape),
     };
     match &shape.ty {
-        _ if is_file_upload(shape) => Err(format!(
-            "`{walked}` is a `{shape}`, one input, which has no field `{name}`"
-        )),
+        _ if is_file_upload(shape) || TypeRegistry::field_in(types, shape).is_some() => Err(
+            format!("`{walked}` is a `{shape}`, one input, which has no field `{name}`"),
+        ),
         Type::User(UserType::Struct(st)) => {
             st.fields.iter().find(|f| f.name == name).ok_or_else(|| {
                 format!(
@@ -800,9 +810,12 @@ fn struct_node(
     let spec = walk.spec_for(prefix);
     if let Some(spec) = spec {
         assert!(
-            spec.widget.is_none(),
-            "{prefix} is a struct, which has no single widget to override \
-             (a composite widget for one isn't supported yet) — did you mean `label`?"
+            spec.widget.is_none() && spec.attrs.is_empty(),
+            "{prefix} is a struct (`{shape}`) that no list gives a field, so it has no single \
+             widget or attributes to take. To read it as one value, list it in the \
+             `formoxus::types!` this form reads (`{shape} => field YourField,`), or name a \
+             field for this path with `field:`. To title it as a group of fields, did you \
+             mean `label`?"
         );
     }
     Box::new(StructNode {
@@ -939,7 +952,7 @@ mod tests {
     }
 
     fn key(key: &str) -> std::result::Result<(), String> {
-        spec_key_shape(Coursework::SHAPE, key).map(|_| ())
+        spec_key_shape(None, Coursework::SHAPE, key).map(|_| ())
     }
 
     #[gtest]

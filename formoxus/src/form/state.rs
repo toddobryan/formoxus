@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use facet::{Facet, Partial, Peek};
 use formoxus_spec::FixedKey;
 
-use crate::build::{FormMode, Walk, nodes_for};
+use crate::build::{FormMode, Walk, nodes_for, spec_key_shape};
 use crate::buttons::ButtonSpec;
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::form::{ErrorsByPath, FormErrors};
@@ -317,7 +317,7 @@ impl<T: Clone + Debug + PartialEq + Facet<'static>> FormState<T> {
     /// set, whose Add leaves focus in its draft.
     pub(crate) fn is_set(&self, path: &NodePath) -> bool {
         let key = path.spec_key();
-        crate::build::spec_key_shape(T::SHAPE, &key).is_ok_and(|shape| {
+        spec_key_shape(self.spec.types, T::SHAPE, &key).is_ok_and(|shape| {
             crate::field_kind::is_set(shape)
                 || (crate::field_kind::is_list(shape)
                     && self.spec.fields.get(&key).is_some_and(|s| s.treat_as_set))
