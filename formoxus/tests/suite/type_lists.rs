@@ -87,9 +87,46 @@ impl Field for ShoutShade {
     }
 }
 
+/// A struct this module lists, read as one number: what a listed type whose
+/// shape is a struct, not a newtype, gets from `form!`'s checks.
+#[derive(Facet, Clone, Debug, PartialEq, Eq, Hash)]
+struct Tone {
+    level: u8,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ToneField;
+
+impl Field for ToneField {
+    type Value = Tone;
+    type Context = ();
+    const KIND: FieldType = FieldType::Text;
+
+    fn format(&self, value: &Tone) -> String {
+        value.level.to_string()
+    }
+
+    fn parse(&self, raw: &str) -> Result<Tone, ValidationMessage> {
+        raw.parse()
+            .map(|level| Tone { level })
+            .map_err(|_| "not a level".into())
+    }
+
+    fn default_widget(&self, _optional: bool) -> AnyWidget {
+        TextInput.into()
+    }
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Mixer {
+    tone: Tone,
+    tones: Vec<Tone>,
+}
+
 formoxus::types! {
     struct PlainTypes;
     Shade => newtype String,
+    Tone => field ToneField,
 }
 
 /// This module's forms read `PlainTypes`, through `form!` as through a spec
@@ -175,6 +212,35 @@ fn a_form_reads_and_writes_through_its_list() {
     expect_that!(
         across_the_wire_with(PlainTypes::registry(), &palette()),
         ok(eq(&palette()))
+    );
+}
+
+/// A listed struct is one value, judged by its field's `KIND` (AB.10.3): a
+/// text widget and a text attribute compile on it, and so does `set` on a
+/// list of them, where an unlisted struct gets compile errors
+/// (`form_widget_on_a_struct`, `form_constraint_on_a_struct`,
+/// `form_set_on_a_list_of_structs`). Building it proves the run-time `set`
+/// check asks the spec's list too.
+#[gtest]
+fn a_listed_struct_takes_a_widget_an_attribute_and_set() {
+    let spec = form! {
+        Mixer {
+            tone => { widget: textarea, placeholder: "0 to 255" },
+            tones => { set, sort_by: |a: &Tone, b: &Tone| a.level.cmp(&b.level) },
+        }
+    };
+    let mixer = Mixer {
+        tone: Tone { level: 7 },
+        tones: vec![Tone { level: 3 }],
+    };
+    let form = form_for(&mixer, spec);
+    expect_that!(value_at(&form, "tone"), some(eq("7")));
+    expect_that!(
+        form.collect_values()
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect::<Vec<_>>(),
+        contains(eq("3"))
     );
 }
 

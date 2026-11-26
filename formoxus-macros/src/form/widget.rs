@@ -188,7 +188,7 @@ fn optional_refusal(widget_name: WidgetName) -> &'static str {
 /// The `KINDS` of the list in scope at the `form!`, by its bare name as every
 /// other use of `FormoxusTypes` is: what the widget checks judge a listed type
 /// by (decision AB.10.3).
-fn kinds() -> TokenStream2 {
+pub(crate) fn kinds() -> TokenStream2 {
     quote! { <FormoxusTypes as ::formoxus::type_registry::TypeKinds>::KINDS }
 }
 

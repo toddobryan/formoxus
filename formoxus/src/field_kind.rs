@@ -336,35 +336,38 @@ pub fn some<T>(_: &Option<T>) -> &T {
 ///
 /// An enum allows the attributes that apply to `<select>`
 ///
-/// An opaque newtype is let through, since nothing here can see what it
-/// wraps; a struct or list is refused, since no attribute applies to one.
-pub const fn applies(attr: Attr, shape: &Shape) -> bool {
-    match kind(shape) {
+/// A type the list holds is judged by its field's `KIND` (`kinds`, as for
+/// [`is_single_value`]). An unlisted newtype is let through, for the reason
+/// `Kind::Unknown` gives; an unlisted struct or a list is refused, since no
+/// attribute applies to one.
+pub const fn applies(kinds: &[(&Shape, FieldType)], attr: Attr, shape: &Shape) -> bool {
+    match kind_in(kinds, shape) {
         // no need to check Attr::Multiple since it's owned by Formoxus
         Kind::Enum => !attr.validated() && attr.is_valid_on(HtmlElement::Select),
         Kind::Unknown => true,
-        Kind::List | Kind::Other => false,
-        _ => match field_type(shape) {
-            Some(t) => attr.applies_to(t),
-            None => false,
-        },
+        Kind::List | Kind::Set | Kind::Other => false,
+        Kind::Text => attr.applies_to(FieldType::Text),
+        Kind::Int => attr.applies_to(FieldType::Int),
+        Kind::Float => attr.applies_to(FieldType::Float),
+        Kind::Bool => attr.applies_to(FieldType::Bool),
+        Kind::File => attr.applies_to(FieldType::File),
     }
 }
 
 /// Whether `min_length` or `max_length` can apply to this field.
-pub const fn takes_length(shape: &Shape) -> bool {
-    applies(Attr::MinLength, shape)
+pub const fn takes_length(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    applies(kinds, Attr::MinLength, shape)
 }
 
 /// Whether `pattern` can apply to this field. Its own check rather than
 /// `takes_length`'s, so the question asked of the table names the attribute.
-pub const fn takes_pattern(shape: &Shape) -> bool {
-    applies(Attr::Pattern, shape)
+pub const fn takes_pattern(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    applies(kinds, Attr::Pattern, shape)
 }
 
 /// Whether `min` or `max` can apply to this field.
-pub const fn takes_bound(shape: &Shape) -> bool {
-    applies(Attr::Min, shape)
+pub const fn takes_bound(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    applies(kinds, Attr::Min, shape)
 }
 
 /// Whether `required_true` can apply: only to a bool, where it means the value
@@ -373,8 +376,8 @@ pub const fn takes_bound(shape: &Shape) -> bool {
 ///
 /// An `Option<bool>` passes HERE, because `kind` peels the `Option`.
 /// [`required_is_not_optional`] refuses it, with its own message.
-pub const fn takes_required(shape: &Shape) -> bool {
-    applies(Attr::RequiredTrue, shape)
+pub const fn takes_required(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    applies(kinds, Attr::RequiredTrue, shape)
 }
 
 /// Whether `required_true` avoids an `Option`. An optional field may be left
@@ -382,8 +385,8 @@ pub const fn takes_required(shape: &Shape) -> bool {
 ///
 /// `true` for anything [`takes_required`] rejects, so `required` on an
 /// `Option<String>` reports once, from there, not twice.
-pub const fn required_is_not_optional(shape: &Shape) -> bool {
-    !is_optional(shape) || !takes_required(shape)
+pub const fn required_is_not_optional(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    !is_optional(shape) || !takes_required(kinds, shape)
 }
 
 // ── Can this widget render this field? ──────────────────────────────────
@@ -402,8 +405,7 @@ pub const fn required_is_not_optional(shape: &Shape) -> bool {
 /// since its field reads it from one: `kinds` is the list's
 /// [`TypeKinds::KINDS`](crate::type_registry::TypeKinds::KINDS).
 pub const fn is_single_value(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
-    listed_kind(kinds, shape).is_some()
-        || !matches!(kind(shape), Kind::List | Kind::Other | Kind::Enum)
+    !matches!(kind_in(kinds, shape), Kind::List | Kind::Other | Kind::Enum)
 }
 
 /// Whether the field is a list (`Vec` or `Option<Vec>`)
@@ -427,20 +429,20 @@ pub const fn is_set(shape: &Shape) -> bool {
 /// not edited, and only a leaf has a text to show.
 ///
 /// A leaf is a string, number, bool, an enum none of whose variants carries
-/// data, or a newtype over one of those. A newtype whose inside is out of
-/// reach counts, for the reason `Kind::Unknown` gives. An `Option` item does
+/// data, or a type the list holds (`kinds`, as for [`is_single_value`]). An
+/// unlisted newtype counts, for the reason `Kind::Unknown` gives. An `Option` item does
 /// not: a set refuses a blank item, so its `None` could never be added.
 ///
 /// `false` for anything that is not a list, so `form!` asserts it as
 /// `!is_list(..) || is_list_of_leaves(..)`, and a non-list reports once, from
 /// [`is_list`].
-pub const fn is_list_of_leaves(shape: &Shape) -> bool {
+pub const fn is_list_of_leaves(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
     let shape = match &shape.def {
         Def::Option(option) => option.t,
         _ => shape,
     };
     match &shape.def {
-        Def::List(list) => is_leaf(list.t),
+        Def::List(list) => is_leaf(kinds, list.t),
         _ => false,
     }
 }
@@ -482,26 +484,23 @@ const fn is_scalar(shape: &Shape) -> bool {
     }
 }
 
-const fn is_leaf(shape: &Shape) -> bool {
+const fn is_leaf(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
     if is_optional(shape) {
         return false;
     }
-    match kind(shape) {
+    match kind_in(kinds, shape) {
         Kind::Text | Kind::Int | Kind::Float | Kind::Bool | Kind::File | Kind::Unknown => true,
         Kind::Enum => is_unit_enum(shape),
         Kind::List | Kind::Set | Kind::Other => false,
     }
 }
 
-/// Whether no variant carries data, looking through a transparent newtype as
-/// `kind` does, since that is how `kind` came to say `Enum`.
+/// Whether no variant carries data. Through nothing: `kind` says `Enum` only
+/// for an enum itself, since it ignores `transparent` (decision W).
 const fn is_unit_enum(shape: &Shape) -> bool {
     match &shape.ty {
         Type::User(UserType::Enum(_)) => is_bare_unit_enum(shape),
-        _ => match shape.inner {
-            Some(inner) => is_unit_enum(inner),
-            None => false,
-        },
+        _ => false,
     }
 }
 
@@ -544,11 +543,7 @@ pub const fn renders<LW: LeafWidget>(
     shape: &Shape,
     has_choices: bool,
 ) -> bool {
-    if let Some(field_type) = listed_kind(kinds, shape) {
-        return LW::ACCEPTS.contains(field_type)
-            || (!matches!(field_type, FieldType::File) && LW::TAKES_CHOICES && has_choices);
-    }
-    let field_type = match kind(shape) {
+    let field_type = match kind_in(kinds, shape) {
         Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => {
             return true;
         }
@@ -767,20 +762,20 @@ pub const fn optional_is_okay<LW: LeafWidget>(shape: &Shape) -> bool {
     !is_optional(shape) || LW::ACCEPTS_OPTIONAL
 }
 
-pub const fn is_enum(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Enum)
+pub const fn is_enum(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    matches!(kind_in(kinds, shape), Kind::Enum)
 }
 
 /// Whether this field holds an integer, `Option` peeled: what refuses a
 /// fractional `step` on one.
-pub const fn is_int(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Int)
+pub const fn is_int(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    matches!(kind_in(kinds, shape), Kind::Int)
 }
 
 /// Whether this field holds a float, `Option` peeled: what makes `step:`
 /// required on a float `range`, which would otherwise step by 1.
-pub const fn is_float(shape: &Shape) -> bool {
-    matches!(kind(shape), Kind::Float)
+pub const fn is_float(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+    matches!(kind_in(kinds, shape), Kind::Float)
 }
 
 enum Kind {
@@ -796,14 +791,15 @@ enum Kind {
     List,
     /// A Facet `Set`, including `HashSet` and `BTreeSet`
     Set,
-    /// Something that is not one value: a struct, or a scalar
+    /// Something that is not one value: a struct no list holds, or a scalar
     /// formoxus does not support.
     Other,
-    /// A newtype, which only its field can classify. A tuple struct's field
-    /// shape sits behind a `ShapeRef` fn pointer, and const code cannot call
-    /// one; a transparent one's `inner` is in reach, but formoxus ignores
-    /// `transparent` (decision W). The field may well take the constraint, so
-    /// saying "no" here would reject `Markdown(String)` with `max_length`.
+    /// A newtype no list holds, which nothing here can classify: a tuple
+    /// struct's field shape sits behind a `ShapeRef` fn pointer, which const
+    /// code cannot call, and a transparent one's `inner`, though in reach, is
+    /// ignored (decision W). Let through rather than refused: a setting on
+    /// one is refused by `FieldFor`, with a better message, and a widget by
+    /// the build, which can see what it wraps.
     Unknown,
 }
 
@@ -853,6 +849,23 @@ const fn kind(shape: &Shape) -> Kind {
     }
 }
 
+/// What `kind` says, except for a type the list holds (`kinds`, the list's
+/// [`TypeKinds::KINDS`](crate::type_registry::TypeKinds::KINDS)), which is
+/// what its field's `KIND` says (decision AB.10.3), whatever its shape. The
+/// list in scope at a `form!` is exactly what the build reads, since an
+/// installed override only replaces an included entry and keeps its `KIND`
+/// (AF), so judging by it at compile time loses nothing.
+const fn kind_in(kinds: &[(&Shape, FieldType)], shape: &Shape) -> Kind {
+    match listed_kind(kinds, shape) {
+        Some(FieldType::Text) => Kind::Text,
+        Some(FieldType::Int) => Kind::Int,
+        Some(FieldType::Float) => Kind::Float,
+        Some(FieldType::Bool) => Kind::Bool,
+        Some(FieldType::File) => Kind::File,
+        None => kind(shape),
+    }
+}
+
 /// The scalars `build::scalar_node` supports. `usize`/`isize` are absent there
 /// on purpose, so they are absent here too.
 const fn primitive(name: &str) -> Kind {
@@ -881,17 +894,6 @@ const fn is_newtype(shape: &Shape) -> bool {
             matches!(st.kind, StructKind::TupleStruct) && st.fields.len() == 1
         }
         _ => false,
-    }
-}
-
-const fn field_type(shape: &Shape) -> Option<FieldType> {
-    match kind(shape) {
-        Kind::Text => Some(FieldType::Text),
-        Kind::Int => Some(FieldType::Int),
-        Kind::Float => Some(FieldType::Float),
-        Kind::Bool => Some(FieldType::Bool),
-        Kind::File => Some(FieldType::File),
-        Kind::List | Kind::Set | Kind::Enum | Kind::Other | Kind::Unknown => None,
     }
 }
 
@@ -964,7 +966,7 @@ mod tests {
     use crate::widgets::{CheckboxInput, Select, TextInput, Textarea};
 
     use super::{
-        applies, is_enum, is_list_of_leaves, is_optional, is_single_value, renders,
+        applies, is_enum, is_int, is_list_of_leaves, is_optional, is_single_value, renders,
         required_is_not_optional, same_type, takes_bound, takes_length, takes_pattern,
         takes_required,
     };
@@ -1017,8 +1019,8 @@ mod tests {
 
     #[gtest]
     fn text_takes_lengths_and_not_bounds() {
-        expect_that!(takes_length(std::string::String::SHAPE), eq(true));
-        expect_that!(takes_bound(std::string::String::SHAPE), eq(false));
+        expect_that!(takes_length(&[], std::string::String::SHAPE), eq(true));
+        expect_that!(takes_bound(&[], std::string::String::SHAPE), eq(false));
     }
 
     #[gtest]
@@ -1035,8 +1037,8 @@ mod tests {
             f32::SHAPE,
             f64::SHAPE,
         ] {
-            expect_that!(takes_bound(shape), eq(true), "{shape}");
-            expect_that!(takes_length(shape), eq(false), "{shape}");
+            expect_that!(takes_bound(&[], shape), eq(true), "{shape}");
+            expect_that!(takes_length(&[], shape), eq(false), "{shape}");
         }
     }
 
@@ -1058,7 +1060,7 @@ mod tests {
             Vec::<Speed>::SHAPE,
             Option::<Vec<std::string::String>>::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(shape), eq(true), "{shape}");
+            expect_that!(is_list_of_leaves(&[], shape), eq(true), "{shape}");
         }
     }
 
@@ -1066,7 +1068,7 @@ mod tests {
     /// is everywhere else.
     #[gtest]
     fn a_list_of_opaque_newtypes_counts_as_leaves() {
-        expect_that!(is_list_of_leaves(Vec::<Markdown>::SHAPE), eq(true));
+        expect_that!(is_list_of_leaves(&[], Vec::<Markdown>::SHAPE), eq(true));
     }
 
     #[gtest]
@@ -1078,7 +1080,7 @@ mod tests {
             Vec::<std::collections::BTreeSet<std::string::String>>::SHAPE,
             Vec::<Option<std::string::String>>::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(shape), eq(false), "{shape}");
+            expect_that!(is_list_of_leaves(&[], shape), eq(false), "{shape}");
         }
     }
 
@@ -1089,7 +1091,7 @@ mod tests {
             std::collections::BTreeSet::<std::string::String>::SHAPE,
             Address::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(shape), eq(false), "{shape}");
+            expect_that!(is_list_of_leaves(&[], shape), eq(false), "{shape}");
         }
     }
 
@@ -1197,6 +1199,21 @@ mod tests {
         expect_that!(renders::<Textarea>(kinds, Address::SHAPE, false), eq(true));
     }
 
+    /// The attribute, `set` and step checks read the list the same way: a
+    /// listed struct takes what its field's `KIND` takes, and the same struct
+    /// unlisted takes nothing.
+    #[gtest]
+    fn every_kind_check_reads_the_list() {
+        let kinds: &[(&Shape, FieldType)] = &[(Address::SHAPE, FieldType::Int)];
+        expect_that!(takes_bound(kinds, Address::SHAPE), eq(true));
+        expect_that!(takes_length(kinds, Address::SHAPE), eq(false));
+        expect_that!(takes_bound(&[], Address::SHAPE), eq(false));
+        expect_that!(is_int(kinds, Address::SHAPE), eq(true));
+        expect_that!(is_int(&[], Address::SHAPE), eq(false));
+        expect_that!(is_list_of_leaves(kinds, <Vec<Address>>::SHAPE), eq(true));
+        expect_that!(is_list_of_leaves(&[], <Vec<Address>>::SHAPE), eq(false));
+    }
+
     /// Names, module and every type parameter: `Vec<Markdown>` is not
     /// `Vec<Slug>`, though both are `Vec` from `alloc::vec`.
     #[gtest]
@@ -1216,20 +1233,20 @@ mod tests {
 
     #[gtest]
     fn a_bool_takes_nothing() {
-        expect_that!(takes_length(bool::SHAPE), eq(false));
-        expect_that!(takes_bound(bool::SHAPE), eq(false));
+        expect_that!(takes_length(&[], bool::SHAPE), eq(false));
+        expect_that!(takes_bound(&[], bool::SHAPE), eq(false));
     }
 
     /// `required_true` means "must be true", so a bool is the only kind that
     /// takes it.
     #[gtest]
     fn only_a_bool_takes_required() {
-        expect_that!(takes_required(bool::SHAPE), eq(true));
+        expect_that!(takes_required(&[], bool::SHAPE), eq(true));
         for shape in [std::string::String::SHAPE, i32::SHAPE, f64::SHAPE] {
-            expect_that!(takes_required(shape), eq(false), "{shape}");
+            expect_that!(takes_required(&[], shape), eq(false), "{shape}");
         }
-        expect_that!(takes_required(<Vec<bool>>::SHAPE), eq(false));
-        expect_that!(takes_required(Flag::SHAPE), eq(true));
+        expect_that!(takes_required(&[], <Vec<bool>>::SHAPE), eq(false));
+        expect_that!(takes_required(&[], Flag::SHAPE), eq(true));
     }
 
     /// `kind` peels the `Option`, so `takes_required` alone would let an
@@ -1237,9 +1254,9 @@ mod tests {
     #[gtest]
     fn an_optional_bool_takes_the_type_check_but_fails_the_optional_one() {
         let maybe = <Option<bool>>::SHAPE;
-        expect_that!(takes_required(maybe), eq(true));
-        expect_that!(required_is_not_optional(maybe), eq(false));
-        expect_that!(required_is_not_optional(bool::SHAPE), eq(true));
+        expect_that!(takes_required(&[], maybe), eq(true));
+        expect_that!(required_is_not_optional(&[], maybe), eq(false));
+        expect_that!(required_is_not_optional(&[], bool::SHAPE), eq(true));
     }
 
     /// `required` on an `Option<String>` is wrong for two reasons, and should
@@ -1247,8 +1264,8 @@ mod tests {
     #[gtest]
     fn an_optional_non_bool_is_left_to_the_type_check() {
         let maybe = <Option<std::string::String>>::SHAPE;
-        expect_that!(takes_required(maybe), eq(false));
-        expect_that!(required_is_not_optional(maybe), eq(true));
+        expect_that!(takes_required(&[], maybe), eq(false));
+        expect_that!(required_is_not_optional(&[], maybe), eq(true));
     }
 
     /// Unsupported by `scalar_node`, so a constraint on one could only ever be
@@ -1256,22 +1273,31 @@ mod tests {
     #[gtest]
     fn unsupported_scalars_take_nothing() {
         for shape in [usize::SHAPE, isize::SHAPE, char::SHAPE] {
-            expect_that!(takes_bound(shape), eq(false), "{shape}");
-            expect_that!(takes_length(shape), eq(false), "{shape}");
+            expect_that!(takes_bound(&[], shape), eq(false), "{shape}");
+            expect_that!(takes_length(&[], shape), eq(false), "{shape}");
         }
     }
 
     #[gtest]
     fn an_option_is_classified_by_what_it_holds() {
-        expect_that!(takes_length(<Option<std::string::String>>::SHAPE), eq(true));
-        expect_that!(takes_bound(<Option<u32>>::SHAPE), eq(true));
-        expect_that!(takes_bound(<Option<std::string::String>>::SHAPE), eq(false));
+        expect_that!(
+            takes_length(&[], <Option<std::string::String>>::SHAPE),
+            eq(true)
+        );
+        expect_that!(takes_bound(&[], <Option<u32>>::SHAPE), eq(true));
+        expect_that!(
+            takes_bound(&[], <Option<std::string::String>>::SHAPE),
+            eq(false)
+        );
     }
 
     #[gtest]
     fn a_list_takes_nothing() {
-        expect_that!(takes_length(<Vec<std::string::String>>::SHAPE), eq(false));
-        expect_that!(takes_bound(<Vec<u32>>::SHAPE), eq(false));
+        expect_that!(
+            takes_length(&[], <Vec<std::string::String>>::SHAPE),
+            eq(false)
+        );
+        expect_that!(takes_bound(&[], <Vec<u32>>::SHAPE), eq(false));
     }
 
     // ── Enums ────────────────────────────────────────────────────────────
@@ -1290,7 +1316,7 @@ mod tests {
                 Attr::Autofocus,
                 Attr::AriaLabel,
             ] {
-                expect_that!(applies(attr, shape), eq(true), "{attr:?} on {shape}");
+                expect_that!(applies(&[], attr, shape), eq(true), "{attr:?} on {shape}");
             }
         }
     }
@@ -1310,12 +1336,12 @@ mod tests {
                 Attr::Readonly,
                 Attr::Rows,
             ] {
-                expect_that!(applies(attr, shape), eq(false), "{attr:?} on {shape}");
+                expect_that!(applies(&[], attr, shape), eq(false), "{attr:?} on {shape}");
             }
-            expect_that!(takes_length(shape), eq(false), "{shape}");
-            expect_that!(takes_bound(shape), eq(false), "{shape}");
-            expect_that!(takes_pattern(shape), eq(false), "{shape}");
-            expect_that!(takes_required(shape), eq(false), "{shape}");
+            expect_that!(takes_length(&[], shape), eq(false), "{shape}");
+            expect_that!(takes_bound(&[], shape), eq(false), "{shape}");
+            expect_that!(takes_pattern(&[], shape), eq(false), "{shape}");
+            expect_that!(takes_required(&[], shape), eq(false), "{shape}");
         }
     }
 
@@ -1345,11 +1371,14 @@ mod tests {
     /// asks `kind`, which peels the `Option` first.
     #[gtest]
     fn an_option_is_an_enum_only_when_it_holds_one() {
-        expect_that!(is_enum(Shipping::SHAPE), eq(true));
-        expect_that!(is_enum(<Option<Shipping>>::SHAPE), eq(true));
-        expect_that!(is_enum(<Option<std::string::String>>::SHAPE), eq(false));
-        expect_that!(is_enum(<Option<u32>>::SHAPE), eq(false));
-        expect_that!(is_enum(Address::SHAPE), eq(false));
+        expect_that!(is_enum(&[], Shipping::SHAPE), eq(true));
+        expect_that!(is_enum(&[], <Option<Shipping>>::SHAPE), eq(true));
+        expect_that!(
+            is_enum(&[], <Option<std::string::String>>::SHAPE),
+            eq(false)
+        );
+        expect_that!(is_enum(&[], <Option<u32>>::SHAPE), eq(false));
+        expect_that!(is_enum(&[], Address::SHAPE), eq(false));
     }
 
     /// A `FileUpload` is an enum to facet, but one file to formoxus: `kind`
@@ -1357,9 +1386,12 @@ mod tests {
     #[gtest]
     fn a_file_upload_is_not_an_enum() {
         use crate::file::FileUpload;
-        expect_that!(is_enum(<FileUpload>::SHAPE), eq(false));
-        expect_that!(is_enum(<FileUpload<std::string::String>>::SHAPE), eq(false));
-        expect_that!(is_enum(<Option<FileUpload>>::SHAPE), eq(false));
+        expect_that!(is_enum(&[], <FileUpload>::SHAPE), eq(false));
+        expect_that!(
+            is_enum(&[], <FileUpload<std::string::String>>::SHAPE),
+            eq(false)
+        );
+        expect_that!(is_enum(&[], <Option<FileUpload>>::SHAPE), eq(false));
     }
 
     /// Only `file` renders a `FileUpload`, and `file` renders nothing else:
@@ -1404,7 +1436,7 @@ mod tests {
             Attr::Class,
             Attr::AriaLabel,
         ] {
-            expect_that!(applies(attr, shape), eq(true), "{attr:?}");
+            expect_that!(applies(&[], attr, shape), eq(true), "{attr:?}");
         }
         for attr in [
             Attr::Placeholder,
@@ -1412,7 +1444,7 @@ mod tests {
             Attr::Min,
             Attr::Autocomplete,
         ] {
-            expect_that!(applies(attr, shape), eq(false), "{attr:?}");
+            expect_that!(applies(&[], attr, shape), eq(false), "{attr:?}");
         }
     }
 
@@ -1422,8 +1454,8 @@ mod tests {
     #[gtest]
     fn a_struct_and_a_list_still_take_nothing_not_even_class() {
         for shape in [Address::SHAPE, <Vec<std::string::String>>::SHAPE] {
-            expect_that!(applies(Attr::Class, shape), eq(false), "{shape}");
-            expect_that!(applies(Attr::Style, shape), eq(false), "{shape}");
+            expect_that!(applies(&[], Attr::Class, shape), eq(false), "{shape}");
+            expect_that!(applies(&[], Attr::Style, shape), eq(false), "{shape}");
         }
     }
 
@@ -1432,27 +1464,27 @@ mod tests {
     /// not), numbers, bools and lists no, an opaque newtype let through.
     #[gtest]
     fn pattern_applies_to_text_and_nothing_else() {
-        expect_that!(takes_pattern(std::string::String::SHAPE), eq(true));
+        expect_that!(takes_pattern(&[], std::string::String::SHAPE), eq(true));
         expect_that!(
-            takes_pattern(<Option<std::string::String>>::SHAPE),
+            takes_pattern(&[], <Option<std::string::String>>::SHAPE),
             eq(true)
         );
-        expect_that!(takes_pattern(Markdown::SHAPE), eq(true));
+        expect_that!(takes_pattern(&[], Markdown::SHAPE), eq(true));
         for shape in [
             u32::SHAPE,
             f64::SHAPE,
             bool::SHAPE,
             <Vec<std::string::String>>::SHAPE,
         ] {
-            expect_that!(takes_pattern(shape), eq(false), "{shape}");
+            expect_that!(takes_pattern(&[], shape), eq(false), "{shape}");
         }
     }
 
     /// Out of reach, so let through: the runtime sees the `String` inside.
     #[gtest]
     fn a_plain_newtype_takes_either() {
-        expect_that!(takes_length(Markdown::SHAPE), eq(true));
-        expect_that!(takes_bound(Markdown::SHAPE), eq(true));
+        expect_that!(takes_length(&[], Markdown::SHAPE), eq(true));
+        expect_that!(takes_bound(&[], Markdown::SHAPE), eq(true));
     }
 
     /// formoxus ignores `#[facet(transparent)]` (decision W), so a transparent
@@ -1460,15 +1492,15 @@ mod tests {
     /// reach: what it takes is up to its field.
     #[gtest]
     fn a_transparent_newtype_is_not_looked_through() {
-        expect_that!(takes_length(Slug::SHAPE), eq(true));
-        expect_that!(takes_bound(Slug::SHAPE), eq(true));
-        expect_that!(takes_length(Flag::SHAPE), eq(true));
+        expect_that!(takes_length(&[], Slug::SHAPE), eq(true));
+        expect_that!(takes_bound(&[], Slug::SHAPE), eq(true));
+        expect_that!(takes_length(&[], Flag::SHAPE), eq(true));
     }
 
     /// Names are compared, so a user type must not pass for the real one.
     #[gtest]
     fn a_user_type_named_like_a_scalar_is_not_one() {
-        expect_that!(takes_bound(u8::SHAPE), eq(false));
-        expect_that!(takes_length(String::SHAPE), eq(false));
+        expect_that!(takes_bound(&[], u8::SHAPE), eq(false));
+        expect_that!(takes_length(&[], String::SHAPE), eq(false));
     }
 }

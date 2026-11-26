@@ -453,6 +453,7 @@ impl FieldBody {
         path_span: Span,
         index: usize,
     ) -> TokenStream2 {
+        let kinds = crate::form::widget::kinds();
         let shape = quote! { ::formoxus::field_kind::shape_of(|__m: &#model| &#place) };
         let takes = |span: Span, test: TokenStream2, message: &str| {
             quote_spanned! { span=>
@@ -472,7 +473,7 @@ impl FieldBody {
             let AttrId::Std(attr) = attr_id else { continue };
             let variant = Ident::new(attr.variant_name(), Span::call_site());
             let test = quote! {
-                ::formoxus::field_kind::applies(::formoxus::attrs::Attr::#variant, #shape)
+                ::formoxus::field_kind::applies(#kinds, ::formoxus::attrs::Attr::#variant, #shape)
             };
             let span = parsed_attr.value_span();
             if *attr == Attr::RequiredTrue {
@@ -488,14 +489,14 @@ impl FieldBody {
                     may be left unanswered, so it cannot also be required to be true";
                 checks.push(takes(
                     span,
-                    quote!(::formoxus::field_kind::required_is_not_optional(#shape)),
+                    quote!(::formoxus::field_kind::required_is_not_optional(#kinds, #shape)),
                     msg,
                 ));
             } else {
                 // Two asserts for the same reason: an enum is refused for its
                 // own reasons, which the generic message does not give. Each
                 // is `true` where the other one speaks.
-                let is_enum = quote!(::formoxus::field_kind::is_enum(#shape));
+                let is_enum = quote!(::formoxus::field_kind::is_enum(#kinds, #shape));
                 let msg = format!(
                     "`{}` applies only to {}",
                     attr.variant_name().to_snake_case(),
@@ -551,7 +552,7 @@ impl FieldBody {
             checks.push(quote_spanned! { step.span()=>
                 #[allow(#cast_lints, clippy::assertions_on_constants)]
                 const _: () = ::core::assert!(
-                    !::formoxus::field_kind::is_int(#shape) || ((#step) as f64) % 1.0 == 0.0,
+                    !::formoxus::field_kind::is_int(#kinds, #shape) || ((#step) as f64) % 1.0 == 0.0,
                     "`step` on an integer field must be a whole number"
                 );
             });
@@ -649,6 +650,7 @@ impl FieldBody {
     /// by 1 unless told otherwise. The rest is `range_checks`, at parse time.
     /// Spanned on the widget's name.
     fn range_type_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let kinds = crate::form::widget::kinds();
         let Some(WidgetKind::Named {
             name,
             widget: WidgetName::RangeInput,
@@ -661,7 +663,7 @@ impl FieldBody {
         }
         quote_spanned! { name.span()=>
             const _: () = ::core::assert!(
-                !::formoxus::field_kind::is_float(#shape),
+                !::formoxus::field_kind::is_float(#kinds, #shape),
                 "a float `range` needs `step:` — a range steps by 1 unless told otherwise, \
                  so without one it offers only whole numbers"
             );
@@ -707,6 +709,7 @@ impl FieldBody {
     /// leaves. Each is written so only the first that fails reports: a set
     /// passes the second and third, and a non-list the third.
     fn set_checks(&self, shape: &TokenStream2) -> TokenStream2 {
+        let kinds = crate::form::widget::kinds();
         let Some(set) = &self.set else {
             return TokenStream2::new();
         };
@@ -721,7 +724,7 @@ impl FieldBody {
                 "`set` applies only to list fields"
             );
             const _: () = ::core::assert!(
-                !#fk::is_list(#shape) || #fk::is_list_of_leaves(#shape),
+                !#fk::is_list(#shape) || #fk::is_list_of_leaves(#kinds, #shape),
                 "`set` applies only to a list of single values (a string, number, bool, enum \
                  without data, or newtype over one): a set's items are shown, not edited"
             );
@@ -795,6 +798,7 @@ impl FieldBody {
     /// `quote_spanned!`, so it keeps the call site's span: on the path's span,
     /// clippy reads a field named `r#type` as a raw string literal.
     fn order_checks(&self, shape: &TokenStream2, path_span: Span) -> TokenStream2 {
+        let kinds = crate::form::widget::kinds();
         let fk = quote! { ::formoxus::field_kind };
         match (&self.sort_by, &self.set) {
             (Some(_), Some(_)) => TokenStream2::new(),
@@ -812,7 +816,7 @@ impl FieldBody {
                                bools and enums without data have one): give it `sort_by: …`, which for an `Ord` \
                                type is `sort_by: Type::cmp`";
                 let applies = if marked_set {
-                    quote!(!#fk::is_list_of_leaves(#shape) ||)
+                    quote!(!#fk::is_list_of_leaves(#kinds, #shape) ||)
                 } else {
                     TokenStream2::new()
                 };
@@ -3114,8 +3118,9 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                "! :: formoxus :: field_kind :: is_list_of_leaves (:: formoxus :: field_kind :: \
-                 shape_of (| __m : & Source | & __m . tags)) || :: formoxus :: field_kind :: \
+                "! :: formoxus :: field_kind :: is_list_of_leaves (< FormoxusTypes as :: \
+                 formoxus :: type_registry :: TypeKinds > :: KINDS , :: formoxus :: field_kind \
+                 :: shape_of (| __m : & Source | & __m . tags)) || :: formoxus :: field_kind :: \
                  items_have_default_order"
             )
         );

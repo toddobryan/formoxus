@@ -1807,6 +1807,23 @@ AB. **DECIDED 2026-11-26 (Todd): one list of the app's types, known at
     longer do. The test that waits on it is
     `a_widget_that_cannot_render_the_registered_fields_kind_panics_at_build`.
 
+    **REVISED 2026-11-26 (Todd agreed): 1's struct change is not made, and
+    2 does not happen.** 5.6 was written before AB was built. Its premise,
+    that `form!` cannot see what the app registers, no longer holds: the
+    list in scope is `TypeKinds::KINDS`, and the installed overrides only
+    replace its included entries, keeping their `KIND` (AF). So `kind_in`
+    judges a listed type by its field's `KIND`, and every check that reads
+    `kind` (`applies` and the `takes_*`, `required_is_not_optional`,
+    `is_list_of_leaves`, `is_enum`, `is_int`, `is_float`, `is_single_value`,
+    `renders`) takes `kinds` first. An unlisted struct stays `Other` and is
+    still refused at compile time, so `form_widget_on_a_struct`,
+    `form_constraint_on_a_struct` and `form_set_on_a_list_of_structs` keep
+    failing; a listed one takes what its `KIND` takes
+    (`type_lists::a_listed_struct_takes_a_widget_an_attribute_and_set`).
+    `treat_as_set` asks the spec's list too. What 1 said by W stands: no
+    `inner` following in `kind` or `is_unit_enum`. 3's run-time checks now
+    only back up a hand-built spec.
+
     1. **`kind` gives `Unknown` for every user struct.** A plain newtype
        already gets `Unknown` today: `is_newtype` with no `inner` (the
        `None => Kind::Unknown` arm, `field_kind.rs:811`), because a tuple

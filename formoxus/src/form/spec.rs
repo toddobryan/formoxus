@@ -4,8 +4,8 @@
 
 use std::{fmt::Debug, marker::PhantomData};
 
-use facet::Facet;
 use facet::Shape;
+use facet::{Def, Facet};
 use formoxus_spec::FileType;
 use heck::ToSnakeCase;
 use indexmap::IndexMap;
@@ -300,8 +300,19 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             is_list(shape),
             "{path}: `treat_as_set` applies only to a list, not `{shape}`"
         );
+        // A listed item type is a leaf whatever its shape (AB.10.3), as
+        // `form!`'s `set` check already judged it; a hand-built spec with no
+        // list sees only the built-in ones.
+        let item = match &shape.def {
+            Def::Option(option) => option.t,
+            _ => shape,
+        };
+        let listed_items = match &item.def {
+            Def::List(list) => TypeRegistry::field_in(self.types, list.t).is_some(),
+            _ => false,
+        };
         assert!(
-            is_list_of_leaves(shape),
+            listed_items || is_list_of_leaves(&[], shape),
             "{path}: `treat_as_set` applies only to a list of single values (a string, number, bool, enum without data, or newtype over one): a set's items are shown, not edited"
         );
         self.field(path).treat_as_set = true;
