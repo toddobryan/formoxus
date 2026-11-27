@@ -5,6 +5,16 @@ metadata:
   type: project
 ---
 
+**DECIDED 2026-11-27, CUSTOM_FIELDS_PLAN decision AS (supersedes the open
+tiers below):** a choice field owns its text, as Django's `TypedChoiceField`:
+choices are `(key, label)`; `coerce: key -> value` and `key: value -> key`,
+each defaulting to `P`'s listed field (or a built-in's own text); membership
+checked before `coerce`, which is pure and runs on both sides. Runtime choices
+need no `Context`: the form is a function of its data, built on each side
+(`choices:` already takes any expression). The server must not trust the
+client's inputs to its choices; load before build (`use_form` runs once).
+Built in CUSTOM_FIELDS_PLAN 5.7.
+
 Answers the fork left open in [[widget-table-and-choice]]: what produces a
 *value* choice, as distinct from the shape choice `VariantSet` already handles.
 Read that file first for why this is not a missing-match-arm job.

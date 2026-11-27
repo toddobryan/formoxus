@@ -62,7 +62,7 @@
 
 ## Widgets, choices, attributes
 - [Widget table & what a Choice is](widget_table_and_choice.md) — unrenderable (kind, widget) pairs are compile errors; shape choice vs value choice
-- [Choice fields design](choice_fields_design.md) — tier 1 now FIELD-level `choices:` → typed `ChoiceField<T>` (2026-10-18); tiers 2–3 open (runtime = Step 8 `Context`); `""` never a value
+- [Choice fields design](choice_fields_design.md) — 2026-11-27 AS: `(key, label)` + `coerce`/`key` (Django TypedChoiceField); runtime = form built per side, no `Context`; `""` never a value
 - [Chooser ideas](chooser_ideas.md) — QUEUED: select-vs-radio by choice count, per-choice hint text
 - [Enum as a value choice](enum_as_a_value_choice.md) — GAP: a unit enum can't take a widget (no radio group over an enum)
 - [Constraint attributes gap](constraint_attributes_gap.md) — BUILT 2026-09-27 + e2e-proven; validity is issue #4; don't re-anchor `pattern`; `step` never emitted, but a dev may write one (2026-10-19)

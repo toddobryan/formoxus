@@ -442,7 +442,7 @@ P. **DECIDED 2026-11-25: the per-type widget is chosen once, at build,** in
    the same widget, which supersedes L. Under AB the type's widget is an
    entry in `types!` (box 6).
 
-Q. **DEFERRED 2026-11-25 (Todd), BACK 2026-11-27 as 5.7, whose revision replaces the mechanism below: `choices:` on a listed type**
+Q. **DEFERRED 2026-11-25 (Todd), BACK 2026-11-27 as 5.7; its mechanism is REPLACED by AS: `choices:` on a listed type**
    (`Ref<Question>` in `groups[].questions[]`). Recommended when it comes
    back: a choice field over `P` whose `format` is `P`'s listed field's,
    and whose `parse` finds the choice whose text equals the input, so it
@@ -642,6 +642,44 @@ AR. **DECIDED 2026-11-27 (Todd): `path!(…[i])` on a set counts in the
     index means something only in the instance formoxus handed over; a
     validator that iterates its own copy of a `HashSet` may count in another
     order (a `BTreeSet` iterates by `Ord`, so any copy agrees). Box 12.3.
+
+AS. **DECIDED 2026-11-27 (Todd): a choice field owns its text, as Django's
+    `TypedChoiceField` does.** Replaces Q's mechanism and 5.7's first
+    rewrite, both of which parsed the choices through `P`'s field.
+    1. **Choices are `(key, label)` pairs.** The client never needs a value
+       it will not use: a query asks for a primary key and a name, and that
+       is the list.
+    2. **`coerce: key → value`** turns the chosen key into what goes in the
+       model, and **`key: value → key`** goes the other way, so a form filled
+       from an existing model shows its current choice as selected (Django's
+       `prepare_value`). Each defaults on its own: to `P`'s listed field's
+       `parse` and `format` when the form's list gives `P` a field, to a
+       built-in's own text for a built-in. An explicit `coerce:` or `key:`
+       wins, so a choice is never limited to what `P`'s field parses. A `P`
+       with neither a field nor both functions is refused.
+    3. **Membership before `coerce`.** A key that is not in the list gets
+       "not one of the available choices", and `coerce` never sees it, so
+       it only ever receives a key the server itself offered: a forged key
+       never reaches it.
+    4. **`coerce` runs on both sides, synchronously:** the browser's
+       `validate()` builds the model too. So it must be pure and give the
+       same answer on both sides: no database. For a `Ref<Question>` that
+       costs nothing, since a `Ref` is its key and the model never holds the
+       `Question` itself (where Django's `coerce` may return the object).
+    5. **Runtime choices need no new mechanism** (Todd, A): a form is a
+       function of its data, built on each side. `choices:` already takes
+       any expression, evaluated when the spec is built, so
+       `fn assignment_form(questions: &[(String, String)]) -> FormSpec<_>` is
+       called by the browser (after loading the list through a server
+       function) and by the submit server function (after loading it
+       itself). Nothing crosses the wire but values, so no closure has to.
+       No `Context` in `form!`. Two traps, the dev's, for the docs: **the
+       server must not trust what the client sends as the inputs to its
+       choices** (a forged `course_id` would widen them unless the server
+       checks the teacher may use that course; the 2026-10-16 rule), and
+       **the data must arrive before the form is built**, since
+       `use_form`'s initializer runs once: render the form only once the
+       `use_resource` has a value.
 
 ## Traps
 
@@ -1078,50 +1116,67 @@ AR. **DECIDED 2026-11-27 (Todd): `path!(…[i])` on a set counts in the
     fires, since the compiler already judged the same list; built-in leaves
     in a hand-built spec stay unchecked on purpose (V).
 
-  - [ ] **5.7** (Todd, then Claude) **`choices:` on a listed type (Q),
-    REVISED 2026-11-27 for AB; no longer deferred** (Todd put it after
-    5.6.3.3 and before box 6). `P` is the type of the path that carries
-    `choices:`, the value being chosen: in `questions[] => { choices:
-    COURSE_QUESTIONS }` over `questions: Vec<Ref<Question>>`, `P` is
-    `Ref<Question>`.
+  - [ ] **5.7** (Claude, Todd, then Claude) **Choices that own their text
+    (AS), run-time ones included.** Rewritten 2026-11-27 for AS (the first
+    rewrite of the same day parsed choices through `P`'s field; Todd turned
+    that down). After 5.6.3.3, before box 6. The motivating case:
+    `questions: Vec<Ref<Question>>`, `questions[] => { choices: questions }`,
+    where `questions` is the course's `(key, label)` list, loaded at run time.
 
-    **Why it does not work today.** A `<select>`'s options submit text, so
-    `ChoiceField<T>` writes each choice with `format` and reads it back with
-    `parse`, both its defaults, which know only a string's, a number's and
-    a bool's text; and its `KIND` is `field_type_of(T::SHAPE)`, which
-    panics at compile time on a struct ("a choice field's value must be
-    text, a number, or a bool"). Only `P`'s listed field knows that a `Ref`
-    is written `question:q1`.
+    1. **(Claude) Tests first.**
+       1. Bring back `custom_fields.rs`' `#[cfg(any())] mod deferred_q`,
+          rewritten for `(key, label)` choices over a listed `Ref<Question>`:
+          a listed key passes, an unlisted one is refused on its item, a
+          forged one is refused by `Submission::accept`.
+       2. New: a form filled from a model shows its choice selected (the
+          `key` direction); an unlisted `P` with both `coerce:` and `key:`;
+          `coerce` is never called with a key outside the list (a `coerce`
+          that panics on anything else); a list built at run time, by a
+          function, giving the same result through `form_for` and through
+          `Submission::accept`.
+       3. Unchanged, and must stay green: every built-in `choices:` test
+          (`(1, "Small")` on a `u8`, `STATES` on a `String`).
 
-    **Why the old plan is obsolete.** Q (2026-11-25) had the registry hand
-    out a `FieldText<P>` behind an `Arc<dyn Any>`, downcast at build,
-    because `form!` could not see a registry filled at run time. Under AB,
-    `choice_node` already receives the list as `Reg`, so `P`'s field is
-    known at compile time: `<Reg as FieldFor<P>>::Field`. No `Any`, no
-    downcast, no lookup.
+    2. **(Todd) Reshape `ChoiceField<P>`** (`fields/choice_field.rs`).
+       1. **What it holds:** the `(key, label)` pairs, and the two functions,
+          each an `Arc<dyn Fn … + Send + Sync>` (a `NodeCtor` must be
+          `Send + Sync`): `coerce: Fn(&str) -> Result<P, ValidationMessage>`
+          and `key: Fn(&P) -> String`.
+       2. **The `Field` impl:** `parse(raw)` checks membership first, then
+          coerces (AS.3); `format(v)` is `key(v)`; `check(v)` is membership
+          of `key(v)`, for a value that came from the model rather than from
+          `parse`; `choices()` hands the widget the pairs as they are.
+       3. **Keep built-ins working unchanged.** Today a choice is written as
+          `(value, label)` with a typed value, so `(1, "Small")` on a `u8`
+          infers `1` as a `u8` and `(300, "Huge")` is rustc's out-of-range
+          error. For a built-in, keep accepting that, turned into its key
+          through `key`; for any `P`, accept `(key, label)` with a `&str` or
+          `String` key. On a `String` both spellings mean the same.
+       4. **Trap: `KIND`.** Today it is `field_type_of(P::SHAPE)`, which
+          panics at compile time on a struct. A choice's text is its key, so
+          `Text` may be right for every choice field; check what reads a
+          choice field's `KIND` (widget checks take choices whatever the
+          `KIND`; `resolve_bounds`; the attribute check, though `form!`
+          refuses constraints beside `choices`) before changing it, or keep
+          the built-in's `KIND` and use `Text` otherwise.
+       5. **The defaults (AS.2) live where `choice_node` builds the field**
+          (`field_kind.rs`): from `<Reg as FieldFor<P>>::Field`'s `parse`
+          and `format` when the list has `P`, from the built-in otherwise.
 
-    1. **(Todd) `ChoiceField` holds the item's field.** Give it the field
-       for `P` (a second type parameter, `ChoiceField<T, F>`, or `F` alone,
-       with `T = F::Value`), and take `format`, `parse`, `trims` and `KIND`
-       from it, so a `ChoiceField<u8>` and a `ChoiceField<Ref<Question>>`
-       work the same way. `check` stays membership. `choice_node` builds it
-       from `Reg::build(Default::default())`. Keep it one type, not a second
-       choice field beside the first (one function, not two).
-    2. **(Todd) Choices written as text.** apcsp's tables are `const`
-       `(&str, &str)` pairs, and a `Ref<Question>` has no `const` value, so a
-       choice's value may be written as `P`'s text and parsed through `P`'s
-       field once, when the field is built, panicking with the choice's
-       label if it does not parse. `ChoiceValue` today turns `&str` into a
-       `String` only; it needs a way to parse through the field instead,
-       which means it is no longer a plain conversion. Real `P` values still
-       work.
-    3. **(Claude)** `form!`'s side, if any: the `choices:` checks
-       (`is_single_value` with `has_choices`, `renders`) already judge a
-       listed type by its `KIND`. Bring the three tests in
-       `custom_fields.rs`' `#[cfg(any())] mod deferred_q` back (they write
-       choices as text, so 2 is what they test), plus one with real `P`
-       values and one for a choice text that does not parse; the
-       `choices:` docs.
+    3. **(Claude) `form!`'s side.** `coerce:` and `key:` keys beside
+       `choices:` (in `legal_keys`, refused without `choices:`); the
+       refusal for a `P` with no field in the list and no `coerce:`/`key:`,
+       at compile time where `FieldFor` can say it; the `choices:` docs:
+       `(key, label)`, the defaults, `coerce` pure and two-sided, and AS.5's
+       two traps with a two-sided example.
+
+    4. **(Claude) An example and its e2e test, in a pair.** A test form at
+       `/t/<slug>` whose choices come from a server function that sleeps
+       before answering, read through `use_resource`, with the form rendered
+       only once it has a value; the submit server function builds the same
+       spec from its own copy of the list. The e2e test waits for the
+       options, picks one, submits, and sees it come back; and checks that a
+       key the server did not offer is refused.
 
 - [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
