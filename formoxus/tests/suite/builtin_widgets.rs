@@ -320,3 +320,132 @@ fn a_seeded_textareas_content_is_escaped() {
         contains_substring(">a &lt; b &amp;&amp; &lt;/textarea&gt; c</textarea>")
     );
 }
+
+// ── Which (value type, widget) pairs build ──────────────────────────────
+//
+// What was `examples/src/bin/widget_matrix.rs`, a table printed by hand,
+// until 2026-11-27, when a hand-built spec started getting the refusal
+// `form!` gives (`CUSTOM_FIELDS_PLAN.md` decision V, reversed). The run time
+// and `form!` now judge a pair by the same test, each widget's `ACCEPTS`, so
+// what is left to check is that the two agree in practice: a pair a widget
+// accepts builds AND renders, and every other pair is refused when the form
+// is built. `range` is left out, since it needs `min:` and `max:` to build at
+// all; its own tests cover it.
+
+#[derive(facet::Facet, Clone, Debug, PartialEq)]
+struct Sampler {
+    text: String,
+    int: i64,
+    float: f64,
+    flag: bool,
+    maybe_text: Option<String>,
+    maybe_flag: Option<bool>,
+}
+
+/// Each sampled path, its type, and whether it is an `Option`'s inside.
+const SAMPLED: [(&str, formoxus::attrs::FieldType, bool); 6] = [
+    ("text", formoxus::attrs::FieldType::Text, false),
+    ("int", formoxus::attrs::FieldType::Int, false),
+    ("float", formoxus::attrs::FieldType::Float, false),
+    ("flag", formoxus::attrs::FieldType::Bool, false),
+    ("maybe_text", formoxus::attrs::FieldType::Text, true),
+    ("maybe_flag", formoxus::attrs::FieldType::Bool, true),
+];
+
+fn sampled_path(name: &str) -> formoxus::ModelPath<Sampler> {
+    match name {
+        "text" => formoxus::path!(Sampler.text),
+        "int" => formoxus::path!(Sampler.int),
+        "float" => formoxus::path!(Sampler.float),
+        "flag" => formoxus::path!(Sampler.flag),
+        "maybe_text" => formoxus::path!(Sampler.maybe_text?),
+        _ => formoxus::path!(Sampler.maybe_flag?),
+    }
+}
+
+/// A widget's `form!` name, the widget, and whether it renders a type, and
+/// an `Option` of one: what `form!` asks with no choices.
+type Sample = (
+    &'static str,
+    AnyWidget,
+    fn(formoxus::attrs::FieldType, bool) -> bool,
+);
+
+fn sample<LW: formoxus::widgets::LeafWidget + Default>() -> Sample {
+    (LW::NAME, LW::default().into(), |t, optional| {
+        LW::ACCEPTS.contains(t) && (!optional || LW::ACCEPTS_OPTIONAL)
+    })
+}
+
+fn every_single_value_widget() -> [Sample; 18] {
+    [
+        sample::<TextInput>(),
+        sample::<PasswordInput>(),
+        sample::<HiddenInput>(),
+        sample::<NumberInput>(),
+        sample::<EmailInput>(),
+        sample::<TelInput>(),
+        sample::<UrlInput>(),
+        sample::<SearchInput>(),
+        sample::<ColorInput>(),
+        sample::<DateInput>(),
+        sample::<TimeInput>(),
+        sample::<DatetimeLocalInput>(),
+        sample::<MonthInput>(),
+        sample::<WeekInput>(),
+        sample::<CheckboxInput>(),
+        sample::<Textarea>(),
+        sample::<Select>(),
+        sample::<RadioGroup>(),
+    ]
+}
+
+fn sampler_spec(name: &str, widget: AnyWidget) -> formoxus::FormSpec<Sampler> {
+    formoxus::FormSpec::<Sampler>::new().with_widget(&sampled_path(name), widget)
+}
+
+#[derive(Props, Clone, PartialEq)]
+struct OneSampleProps {
+    name: &'static str,
+    widget: AnyWidget,
+}
+
+#[allow(non_snake_case)]
+fn OneSample(props: OneSampleProps) -> Element {
+    let form = formoxus::use_form(move || {
+        formoxus::empty_form(sampler_spec(props.name, props.widget.clone()))
+    });
+    form.render(formoxus::using_fns! {})
+}
+
+#[gtest]
+fn a_pair_a_widget_accepts_renders_and_every_other_is_refused_at_build() {
+    for (widget_name, widget, accepts) in every_single_value_widget() {
+        for (name, field_type, optional) in SAMPLED {
+            if accepts(field_type, optional) {
+                let html = html_of(
+                    OneSample,
+                    OneSampleProps {
+                        name,
+                        widget: widget.clone(),
+                    },
+                );
+                expect_that!(
+                    html,
+                    contains_substring(format!(r#"name="{name}""#)),
+                    "`{widget_name}` on {field_type:?} (optional: {optional}) is accepted, so \
+                     it must render"
+                );
+            } else {
+                let message = super::panic_message(|| {
+                    let _ = formoxus::empty_form(sampler_spec(name, widget.clone()));
+                });
+                expect_that!(
+                    message,
+                    contains_substring(format!("the widget `{widget_name}` cannot render")),
+                    "`{widget_name}` on {field_type:?} (optional: {optional})"
+                );
+            }
+        }
+    }
+}

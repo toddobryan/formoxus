@@ -68,6 +68,49 @@ impl LeafArgs<'_> {
             value: populate(&field, self.peek),
             field,
         };
+        // `form!`'s `renders`, `optional_is_okay` and `applies`, at build time, so a hand-built
+        // spec gets the refusal `form!` gives at compile time, for every leaf,
+        // built-in or listed. Through `form!` neither can fire: the compiler
+        // already judged every path it names, against the same list.
+        let widget = &node.widget;
+        assert!(
+            widget.accepts().contains(F::KIND)
+                || (widget.takes_choices() && node.field.choices().is_some()),
+            "{}: the widget `{}` cannot render a `{}`, whose field reads {:?}. Give this path \
+             a widget that renders {:?}, or give `{}` a field that reads what `{}` renders",
+            self.path,
+            widget.name(),
+            self.shape,
+            F::KIND,
+            F::KIND,
+            self.shape,
+            widget.name(),
+        );
+        // `optional` is true only for an `Option`'s inside, which is what a
+        // widget must be able to leave blank.
+        assert!(
+            !self.optional || widget.accepts_optional(),
+            "{}: the widget `{}` cannot render an `Option`, since it has no way to show \
+             no value. Give this path a widget that can, such as `select`, whose blank \
+             option is one, or make the field a `{}` rather than an `Option`",
+            self.path,
+            widget.name(),
+            self.shape,
+        );
+        // The spec's own attributes only: the field's (`widget_attrs`) are its
+        // own to get right.
+        if let Some(attr) = node.attrs.first_where(|attr| !attr.applies_to(F::KIND)) {
+            panic!(
+                "{}: `{}` does not apply to a `{}`, whose field reads {:?}. Leave it out, or \
+                 give `{}` a field that reads a type `{}` applies to",
+                self.path,
+                attr.name(),
+                self.shape,
+                F::KIND,
+                self.shape,
+                attr.name(),
+            );
+        }
         // A field with no value whose widget cannot show "empty" starts at what
         // the widget shows instead (a range's midpoint; `WIDGETS_PLAN.md`
         // decision A). Here, where every leaf is built, so `empty_form`, `reset`

@@ -113,28 +113,26 @@ fn the_derived_widgets_are_what_the_override_has_to_beat() {
     expect_that!(html.matches("<select").count(), eq(1));
 }
 
-#[component]
-fn OptionalBoolForcedToCheckbox() -> Element {
-    let form = use_form(|| {
-        empty_form(
-            FormSpec::<Flags>::default().with_widget(&path!(Flags.subscribed?), CheckboxInput),
-        )
-    });
-    form.render(using_fns! {})
-}
-
+/// A checkbox cannot show the third state an `Option<bool>` has, so `None`
+/// would be unreachable. `form!` refuses that pair at compile time, and a
+/// spec built by hand is refused when the form is built (decision V,
+/// reversed 2026-11-27). An override still displaces the widget a shape
+/// chose, as `an_override_works_in_the_other_direction_too` shows.
 #[gtest]
-fn an_override_beats_a_derived_widget() {
-    // `Option<bool>` derives `Select`. Forcing a checkbox is the strongest form
-    // of the precedence rule: the override has to displace a widget the shape
-    // actively chose, not merely fill a gap.
-    //
-    // (Whether this is a GOOD idea is another matter — a checkbox can't express
-    // the third state, so `None` becomes unreachable. The point is that the spec
-    // is obeyed, which is what makes the author responsible for the choice.)
-    let html = render_to_html(OptionalBoolForcedToCheckbox);
-    expect_that!(html.matches(r#"type="checkbox""#).count(), eq(2));
-    expect_that!(html.matches("<select").count(), eq(0));
+fn an_override_that_cannot_render_an_option_is_refused() {
+    let message = super::panic_message(|| {
+        let _ = empty_form(
+            FormSpec::<Flags>::default().with_widget(&path!(Flags.subscribed?), CheckboxInput),
+        );
+    });
+    expect_that!(
+        message,
+        all![
+            starts_with("subscribed: "),
+            contains_substring("`checkbox` cannot render an `Option`"),
+            contains_substring("`select`")
+        ]
+    );
 }
 
 #[component]

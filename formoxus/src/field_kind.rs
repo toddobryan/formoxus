@@ -393,10 +393,9 @@ pub const fn required_is_not_optional(kinds: &[(&Shape, FieldType)], shape: &Sha
 //
 // Which (field type, widget) pairs render is each widget's `ACCEPTS`,
 // `ACCEPTS_OPTIONAL` and `TAKES_CHOICES`. These checks, called from `form!`'s
-// `const _` items, are the only place it is enforced: no widget type checks
-// its field's type at runtime, so a pair
-// `form!` refuses still renders from a hand-built `FormSpec` (`widget_matrix`
-// marks those `ok*`).
+// `const _` items, enforce it at compile time. `LeafArgs::node` makes the same
+// tests when a leaf is built, for every leaf, so a hand-built `FormSpec` gets
+// the refusal `form!` gives (decision V, amended 2026-11-27).
 
 /// Whether the field is one value, and so can have a widget at all. A struct,
 /// list or enum is several, and a widget on one is either rejected at runtime

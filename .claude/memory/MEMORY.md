@@ -3,7 +3,7 @@
 **Index rule: one line per entry, under ~200 chars. Detail goes in the topic file, never here** — this file is truncated past ~24KB.
 
 ## Start here / how Todd works
-- [**START HERE: next session**](next_session.md) — **2026-11-27**: box 5 nearly done; AN-AR decided (sets, tuples); order 5.6.3.3 -> 5.7 -> box 6 -> box 12
+- [**START HERE: next session**](next_session.md) — **2026-11-27**: box 5 nearly done; AN-AR decided (sets, tuples); 5.6.3.3 done (every leaf checked at build); Todd on 5.7
 - [User role](user_role.md) — Todd writes core library code; I write tests, plans, memory, investigate; he edits the same files concurrently — re-read first
 - [Todd owns the runtime](feedback_todd_owns_the_runtime.md) — plans give what, why, traps; no finished code unless he asks; tests ahead: NO implementation; docs + dev-facing messages are MINE
 - [Straight double quotes](feedback_straight_quotes.md) — emitted text quotes values as `Remove "x"`, never curly or single; HTML tests see `&#34;`

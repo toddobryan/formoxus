@@ -75,8 +75,15 @@ impl FieldAttrs {
     /// `FormSpec::with_attrs` refuses, because a field's settings validate
     /// now and attributes only render.
     pub(crate) fn first_validated(&self) -> Option<Attr> {
+        self.first_where(Attr::validated)
+    }
+
+    /// The first standard attribute here that `test` accepts, in order. A
+    /// quoted key (`data-x`) is never one: it is not in the table, so there is
+    /// nothing to ask about it.
+    pub(crate) fn first_where(&self, test: impl Fn(Attr) -> bool) -> Option<Attr> {
         self.0.keys().find_map(|key| match key {
-            AttrKey::Std(attr) if attr.validated() => Some(*attr),
+            AttrKey::Std(attr) if test(*attr) => Some(*attr),
             _ => None,
         })
     }

@@ -145,9 +145,10 @@ Being explicit, since this is pre-release:
   own line unless its items are an enum without data, whose variants are the
   choices; beside one, `adder:`, `item:` and `feedback:` are refused. A
   widget for a single value on a set is refused too, and says to write `tags[]`
-  to give every item one. `file` renders nothing yet and is refused by name. Run
-  `cargo run -p formoxus-examples --bin widget_matrix` for the current table of
-  single-value widgets.
+  to give every item one. `file` renders nothing yet and is refused by name. A
+  `FormSpec` built by hand, without `form!`, gets the same refusals when the
+  form is built: a widget that cannot render its field's type or an `Option`,
+  and an attribute that does not apply.
 - **No file upload**, which is the `file` widget above.
 - **An error that appears as a field loses focus moves what is below it.**
   Clicking a button just below a field with a bad value blurs the field on

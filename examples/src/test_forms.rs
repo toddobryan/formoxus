@@ -6,10 +6,6 @@
 //! are for `just e2e`, so each one is as small as it can be. A form with one
 //! field and one button needs no scoped selectors, no `nth()`, and no test ids.
 //!
-//! There is precedent for test-only artifacts living in this crate:
-//! `bin/widget_matrix.rs` calls itself "a development tool rather than a teaching
-//! example".
-//!
 //! **Nothing human keeps these from rotting**, because nobody browses them. The
 //! e2e tests are the only guard, so a form without a test is dead weight — add
 //! them in pairs.

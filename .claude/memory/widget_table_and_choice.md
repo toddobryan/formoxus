@@ -12,8 +12,10 @@ come from the macro's `widget.rs::rule`, derived from the `WidgetType` variant.
 `select_multiple`, `checkbox_multiple` and `file` are refused while the macro
 parses. A widget on a struct, list or enum is refused too. On an enum it was
 silently IGNORED before, since `VariantSet` stores `custom_widget` and never
-reads it. `widget_matrix` still measures the runtime match directly, so the two
-tables can be compared.
+reads it. (`widget_matrix` measured the runtime match directly until
+2026-11-27, when `LeafArgs::node` began making `form!`'s check at build for
+every leaf and the tool was replaced by the suite test
+`builtin_widgets::a_pair_a_widget_accepts_renders_and_every_other_is_refused_at_build`.)
 
 **`radio_group` SHIPPED 2026-09-25**, and the divergence noted here is gone. It
 keeps `select`'s choices rule (`bool` always, anything else only with `choices`)

@@ -320,6 +320,111 @@ fn a_set_whose_items_name_a_field_builds_with_no_list() {
     expect_that!(value_at(&form, "tones.#0"), some(eq("3")));
 }
 
+/// 5.6.3.3: `form!` refuses a widget that cannot render a listed type's
+/// field at compile time (`form_widget_cannot_render_a_listed_type`); a spec
+/// built by hand gets the same refusal when the form is built, naming the
+/// path, the widget and what the field reads. `Tone` reads as text, and a
+/// checkbox renders only a `bool`.
+#[gtest]
+fn a_hand_built_widget_that_cannot_render_a_listed_types_field_is_refused() {
+    let message = panic_message(|| {
+        let _ = empty_form::<Mixer>(
+            plain().with_widget(&path!(Mixer.tone), formoxus::widgets::CheckboxInput),
+        );
+    });
+    expect_that!(
+        message,
+        all![
+            starts_with("tone: "),
+            contains_substring("`checkbox`"),
+            contains_substring("`Tone`"),
+            contains_substring("reads Text")
+        ]
+    );
+}
+
+/// A widget that takes choices renders any field that has them, and only
+/// then: a `select` on a `Tone` with no choices is refused like the checkbox.
+#[gtest]
+fn a_choice_widget_on_a_listed_type_with_no_choices_is_refused() {
+    let message = panic_message(|| {
+        let _ =
+            empty_form::<Mixer>(plain().with_widget(&path!(Mixer.tone), formoxus::widgets::Select));
+    });
+    expect_that!(
+        message,
+        all![starts_with("tone: "), contains_substring("`select`")]
+    );
+}
+
+/// The attribute half: `step` applies to a number, and `Tone` reads as text,
+/// so a spec built by hand that gives it one is refused, naming the path, the
+/// attribute and what the field reads. A quoted key is not in the table, so
+/// nothing is asked about it.
+#[gtest]
+fn a_hand_built_attribute_that_does_not_apply_to_a_listed_types_field_is_refused() {
+    use formoxus::attrs::{Attr, AttrKey, AttrValue, Step};
+    let message = panic_message(|| {
+        let _ = empty_form::<Mixer>(plain().with_attrs(
+            &path!(Mixer.tone),
+            formoxus::field_attrs::FieldAttrs::from([
+                (
+                    AttrKey::NonStd("data-x"),
+                    AttrValue::String("1".to_string()),
+                ),
+                (AttrKey::Std(Attr::Step), AttrValue::Step(Step::Any)),
+            ]),
+        ));
+    });
+    expect_that!(
+        message,
+        all![
+            starts_with("tone: "),
+            contains_substring("`step`"),
+            contains_substring("`Tone`"),
+            contains_substring("reads Text")
+        ]
+    );
+}
+
+#[gtest]
+fn a_hand_built_attribute_that_applies_to_a_listed_types_field_builds() {
+    use formoxus::attrs::{Attr, AttrKey, AttrValue};
+    let _ = empty_form::<Mixer>(plain().with_attrs(
+        &path!(Mixer.tone),
+        formoxus::field_attrs::FieldAttrs::from([
+            (
+                AttrKey::NonStd("data-x"),
+                AttrValue::String("1".to_string()),
+            ),
+            (
+                AttrKey::Std(Attr::Placeholder),
+                AttrValue::String("0 to 255".to_string()),
+            ),
+        ]),
+    ));
+}
+
+/// A built-in type is checked the same way (decision V, amended
+/// 2026-11-27): a checkbox on a `String` is refused when the form is built,
+/// as `form!` refuses it at compile time.
+#[gtest]
+fn a_hand_built_widget_on_a_built_in_type_is_checked_too() {
+    let message = panic_message(|| {
+        let _ = empty_form::<Palette>(
+            plain().with_widget(&path!(Palette.name), formoxus::widgets::CheckboxInput),
+        );
+    });
+    expect_that!(
+        message,
+        all![
+            starts_with("name: "),
+            contains_substring("`checkbox`"),
+            contains_substring("`String`")
+        ]
+    );
+}
+
 /// AF at run time: a hand-built registry cannot give a built-in type a field
 /// either. `types!` refuses the same entry at compile time
 /// (`types_built_in_entry`); this is `field_for`'s own refusal, which says

@@ -29,7 +29,13 @@ on a set counts in the validator's own iteration order; replaces AO). Box 12
 holds AP/AR/AQ's steps. "Renderable" goes into CLAUDE.md vocabulary only once
 box 12 lands (Todd: nail it down first). Q is back as 5.7, rewritten for AB
 (ChoiceField holds P's listed field; no Any/downcast).
-ORDER (Todd): 5.6.3.3 (Todd, NEXT) -> 5.7 -> box 6 -> box 12 -> boxes 7-9.
+ORDER (Todd): 5.6.3.3 -> 5.7 -> box 6 -> box 12 -> boxes 7-9.
+5.6.3.3 DONE: LeafArgs::node checks EVERY leaf (V reversed: built-ins too)
+for ACCEPTS/TAKES_CHOICES, ACCEPTS_OPTIONAL and attributes, so a hand-built
+spec gets form!'s refusals; widget_matrix deleted, replaced by the suite test
+builtin_widgets::a_pair_a_widget_accepts_renders_and_every_other_is_refused_at_build.
+NEXT: Todd 5.7.1 (ChoiceField holds P's field). Root README "What isn't done"
+still claims no file upload (stale; for the doc pass).
 
 ## 2026-11-26 DAY: QA-QJ answered, all as recommended; committed and pushed
 

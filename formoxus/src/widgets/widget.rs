@@ -132,6 +132,8 @@ pub(crate) trait DynWidget: Debug + Send + Sync {
     fn name(&self) -> &'static str;
     fn extends(&self) -> AttrSet;
     fn accepts(&self) -> FieldTypeSet;
+    fn takes_choices(&self) -> bool;
+    fn accepts_optional(&self) -> bool;
     fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String>;
     fn clone_box(&self) -> Box<dyn DynWidget>;
     fn as_any(&self) -> &dyn Any;
@@ -150,6 +152,12 @@ impl<LW: LeafWidget> DynWidget for LW {
     }
     fn accepts(&self) -> FieldTypeSet {
         LW::ACCEPTS
+    }
+    fn takes_choices(&self) -> bool {
+        LW::TAKES_CHOICES
+    }
+    fn accepts_optional(&self) -> bool {
+        LW::ACCEPTS_OPTIONAL
     }
     fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
         LW::value_when_empty(self, attrs)
@@ -192,11 +200,22 @@ impl AnyWidget {
     pub fn value_when_empty(&self, attrs: &FieldAttrs) -> Option<String> {
         self.0.value_when_empty(attrs)
     }
-    /// The widget's [`LeafWidget::ACCEPTS`], for a check `form!` makes at
+    /// The widget's [`LeafWidget::ACCEPTS`], for checks `form!` makes at
     /// compile time but a hand-built `FormSpec` reaches only at build time:
-    /// that a `FileUpload` field's widget takes files (`file_node`).
+    /// that a `FileUpload` field's widget takes files (`file_node`), and that
+    /// a listed type's widget renders its field (`LeafArgs::node`).
     pub(crate) fn accepts(&self) -> FieldTypeSet {
         self.0.accepts()
+    }
+    /// The widget's [`LeafWidget::TAKES_CHOICES`], for the same build-time
+    /// check: a widget that takes choices renders any field that has them.
+    pub(crate) fn takes_choices(&self) -> bool {
+        self.0.takes_choices()
+    }
+    /// The widget's [`LeafWidget::ACCEPTS_OPTIONAL`], for the same build-time
+    /// check: whether it can render an `Option`'s inside.
+    pub(crate) fn accepts_optional(&self) -> bool {
+        self.0.accepts_optional()
     }
 }
 impl<LW: LeafWidget> From<LW> for AnyWidget {

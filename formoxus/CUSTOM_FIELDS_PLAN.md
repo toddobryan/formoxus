@@ -456,11 +456,15 @@ U. **DECIDED 2026-11-26 (Todd), met by 5.6's revision: a set of LISTED
    a compile error; 5.6.3.2 backs that up for a hand-built spec.
    **AMENDED 2026-11-27 by AN:** a set of unlisted structs is allowed too.
 
-V. **DECIDED 2026-11-26 (Todd), scoped by AL: run-time widget and attribute
-   checks only where the compiler could not judge.** A hand-built spec over
-   built-in types keeps rendering a pair `form!` refuses, on purpose
-   (recorded in `field_kind.rs`). Checking every leaf would be one rule, but
-   a behaviour change for hand-built specs.
+V. **DECIDED 2026-11-26 (Todd), scoped by AL; REVERSED 2026-11-27 (Todd):
+   the run-time widget and attribute checks run on every leaf.** First
+   decided as "only where the compiler could not judge", so a hand-built
+   spec over built-in types could keep a pair `form!` refuses. Once the
+   built-ins came through the list (5.9.3.9) that was a second rule for no
+   gain: with every leaf checked, the only test that failed was the one
+   pinning the skip, and what the skip protected was `widget_matrix`'s
+   `ok*` column, which existed to show that gap. So a hand-built spec now
+   gets the refusal `form!` gives, `ACCEPTS_OPTIONAL` included.
 
 X. **SUPERSEDED 2026-11-26 by Y, then AB.** `field:` still takes only a
    struct expression or a unit struct; nothing needs it to take a call.
@@ -1054,7 +1058,15 @@ AR. **DECIDED 2026-11-27 (Todd): `path!(…[i])` on a set counts in the
     is something a leaf is built from: a built-in, a unit enum, or a type
     the form's list or the overrides give a field.
 
-  - [ ] **5.6.3.3** (Todd; Claude writes the messages) **A listed field's
+  - [x] **5.6.3.3** **Done 2026-11-27** (Todd started the widget assert;
+    Claude finished it, wrote the attribute half and the tests). In
+    `LeafArgs::node`, for every leaf: the widget must accept `F::KIND`, or take choices when
+    the field has them (`AnyWidget::takes_choices`, new); and the first
+    standard attribute of the spec's that does not apply to `F::KIND`
+    panics (`FieldAttrs::first_where`, which `first_validated` now calls).
+    Tests in `type_lists`. First scoped to types that are not built in; V
+    was reversed the same day, so every leaf. **A listed
+    field's
     widget and attributes, in `LeafArgs::node`, for a hand-built spec.**
     After the widget is chosen, assert that it renders `F::KIND`
     (`widget.accepts().contains(F::KIND)`, mirroring `renders`, so
