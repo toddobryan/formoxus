@@ -168,7 +168,7 @@ fn a_plain_newtype_without_a_registered_field_panics_naming_the_type() {
 }
 
 /// `#[facet(transparent)]` is facet's statement that the type IS its inner
-/// value, and formoxus does not act on it (W). The message says so, since a
+/// value, and formoxus ignores it (W). The message says so, since a
 /// dev who wrote it will expect otherwise.
 #[derive(Facet, Clone, Debug, PartialEq)]
 #[facet(transparent)]
@@ -189,7 +189,32 @@ fn a_transparent_newtype_without_a_registered_field_panics_like_any_other() {
         all![
             contains_substring("Byline"),
             contains_substring("types!"),
-            contains_substring("transparent")
+            contains_substring("formoxus ignores it")
+        ]
+    );
+}
+
+/// A type formoxus builds no node for, which no list gives a field: the
+/// last-resort refusal (5.5.7). It names the path and the type as the
+/// newtype refusal does, with the same two ways out, a `types!` line for
+/// every path and `field:` for this one.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Netmask {
+    octets: [u8; 4],
+}
+
+#[gtest]
+fn a_type_formoxus_cannot_build_panics_naming_the_path_and_the_type() {
+    let message = panic_message(|| {
+        let _ = empty_form::<Netmask>(FormSpec::default().with_types(NewtypeTypes::registry()));
+    });
+    expect_that!(
+        message,
+        all![
+            contains_substring("octets"),
+            contains_substring("[u8; 4]"),
+            contains_substring("types!"),
+            contains_substring("field:")
         ]
     );
 }

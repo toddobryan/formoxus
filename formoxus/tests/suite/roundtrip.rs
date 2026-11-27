@@ -15,8 +15,9 @@
 //! for `f32`/`f64` emits the shortest decimal string that parses back to the
 //! identical value.
 //!
-//! `usize`/`isize` are absent because a `Field` cannot hold them — see
-//! `scalar_node`, which excludes them for being target-dependent widths.
+//! `usize`/`isize` are absent because they are not built in: their width is
+//! target-dependent, so the same field would read differently on the wasm
+//! client and the server (see `built_ins` in `formoxus-macros/src/types.rs`).
 //!
 //! **Custom scalars cannot be checked here.** A user-supplied type reaching a
 //! `Field` must uphold the same property in its own `Facet` display/parse

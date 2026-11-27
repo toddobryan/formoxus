@@ -45,8 +45,7 @@ use syn::{
 /// wire, and a value the server accepts could be unparseable in the browser.
 /// A form model uses a fixed width (`u32`, `u64`) and converts at the edges.
 /// Adding them would compile and look fine; the disagreement only shows up at
-/// run time, on one target. (Moved here from `build.rs`' `scalar_node`, which
-/// goes once these are the built-ins, 5.9.3.9.)
+/// run time, on one target.
 fn built_ins() -> Vec<(&'static str, TokenStream, TokenStream)> {
     let fields = quote!(::formoxus::fields);
     let mut list = vec![
@@ -502,11 +501,16 @@ impl Input {
 
         let replay = self.replay_macro(entries)?;
         let (attrs, vis) = (&self.attrs, &self.vis);
-        // QUESTION for Todd (5.9.4, recorded in the plan): built-ins go
-        // through the public `field_for` until the hidden `__built_in` exists
-        // (5.9.3.2.4); `field_for` does not refuse built-ins yet, so this works.
+        // Built-ins through the hidden `__built_in`, since `field_for`
+        // refuses them (AF.1); everything else through `field_for`, with its
+        // checks.
         let build = |ty: &TokenStream| quote!(.field_for(<#name as #field_for<#ty>>::build(::core::default::Default::default())));
-        let registrations = listed.iter().map(build);
+        let built_in = |ty: &TokenStream| quote!(.__built_in(<#name as #field_for<#ty>>::build(::core::default::Default::default())));
+        let registrations = listed[..first_own]
+            .iter()
+            .map(built_in)
+            .chain(listed[first_own..].iter().map(build));
+        let overrides = replaced.iter().map(build);
         // The built-ins are judged by shape, which already knows them.
         let kinds = listed[first_own..].iter().map(|ty| {
             quote! {
@@ -516,7 +520,6 @@ impl Input {
                 )
             }
         });
-        let overrides = replaced.iter().map(build);
         Ok(quote! {
             #(#attrs)*
             #vis struct #name;

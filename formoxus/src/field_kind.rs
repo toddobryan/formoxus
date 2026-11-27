@@ -866,8 +866,9 @@ const fn kind_in(kinds: &[(&Shape, FieldType)], shape: &Shape) -> Kind {
     }
 }
 
-/// The scalars `build::scalar_node` supports. `usize`/`isize` are absent there
-/// on purpose, so they are absent here too.
+/// The scalar built-ins every `types!` list holds (`type_registry::is_built_in`).
+/// `usize`, `isize` and `char` are not built in, on purpose, so they are absent
+/// here too and are `Other` unless a list gives them a field.
 const fn primitive(name: &str) -> Kind {
     const INTS: [&str; 8] = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"];
     let mut i = 0;
@@ -886,8 +887,8 @@ const fn primitive(name: &str) -> Kind {
     Kind::Other
 }
 
-/// A one-field tuple struct: the same test as `build::newtype_inner`, minus the
-/// part that needs the field's shape.
+/// A one-field tuple struct: the same test as `build::refuse_unregistered_newtype`,
+/// minus the part that needs the field's shape.
 const fn is_newtype(shape: &Shape) -> bool {
     match &shape.ty {
         Type::User(UserType::Struct(st)) => {
@@ -1268,8 +1269,8 @@ mod tests {
         expect_that!(required_is_not_optional(&[], maybe), eq(true));
     }
 
-    /// Unsupported by `scalar_node`, so a constraint on one could only ever be
-    /// dropped or panic.
+    /// Not built in, so with no list giving them a field a constraint on one
+    /// could only ever be dropped or panic.
     #[gtest]
     fn unsupported_scalars_take_nothing() {
         for shape in [usize::SHAPE, isize::SHAPE, char::SHAPE] {

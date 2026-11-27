@@ -3,12 +3,11 @@
 //! a shape can be.
 
 use facet::{
-    Def, EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, ScalarType, Shape, StructKind,
-    StructType, Type, UserType, Variant,
+    Def, EnumType, Field as FacetField, OptionDef, Peek, PeekEnum, Shape, StructKind, StructType,
+    Type, UserType, Variant,
 };
 use formoxus_spec::FieldType;
 
-use crate::fields::{BoolField, NumberField, StringField};
 use crate::form::FieldSpec;
 use crate::nodes::LeafArgs;
 use crate::nodes::{
@@ -412,12 +411,14 @@ pub(crate) fn node_for_shape(
         // default for its type. That is how `min: 3` reaches a typed field, and how
         // `field: X` changes the node's type, with nothing mutated afterwards.
         //
-        // Failing that, the field the app registered for this type builds it. The
-        // spec comes first because a path is more specific than a type (decision
-        // H), so a `field:` on one `TimeLimit` path beats the registry's field for
-        // every `TimeLimit`. Both come BEFORE the file and scalar arms, so an app
-        // that registers a field for a built-in type (a `String`, say) replaces the
-        // built-in everywhere.
+        // Failing that, the type's field builds it, from the installed overrides,
+        // then the form's list, or the built-ins when the form has none
+        // (`TypeRegistry::field_in`). The spec comes first because a path is more
+        // specific than a type (decision H), so a `field:` on one `TimeLimit` path
+        // beats the list's field for every `TimeLimit`. Every built-in (`String`,
+        // `bool`, the numbers) comes through here too, from the list; no list can
+        // give one a field of its own (decision AF), so a `String` reads the same
+        // in every form.
         //
         // Both must come AFTER the `Option` arm, never before. `option_node` peels
         // the `Option` and comes back here with the same path, the inner shape and
@@ -426,13 +427,6 @@ pub(crate) fn node_for_shape(
         return ctor.build(leaf(peek, shape));
     } else if is_file_upload(shape) {
         return Box::new(file_node(name, peek, walk, prefix, optional));
-    } else if let Some(scalar) = shape.scalar_type() {
-        // Until `BuiltIns` exists (5.9.3.2), the built-ins are still built
-        // here. Remove this arm and `scalar_node` together with switching
-        // `TypeRegistry::find` to `BuiltIns::registry()` (5.9.3.7, 5.9.3.9).
-        return scalar_node(scalar, leaf(peek, shape)).unwrap_or_else(|| {
-            panic!("scalar type {scalar:?} is not supported in Field (field {name})")
-        });
     }
 
     match shape.def {
@@ -447,7 +441,12 @@ pub(crate) fn node_for_shape(
                 struct_node(shape, name, peek, walk, prefix, optional)
             }
             Type::User(UserType::Enum(enum_type)) => enum_node(enum_type, name, peek, walk, prefix),
-            other => panic!("field {name} has unsupported type {other:?}"),
+            _ => panic!(
+                "{prefix}: formoxus has no field for a `{shape}`, and no list gives it one. \
+                 List it in the `formoxus::types!` this form reads through `FormoxusTypes` \
+                 (`{shape} => field YourField,`), or, for this path alone, name a field whose \
+                 `Value` is `{shape}` with `field:` in `form!`."
+            ),
         },
     }
 }
@@ -475,8 +474,8 @@ fn refuse_unregistered_newtype(shape: &'static Shape, st: &StructType, prefix: &
     // inner value, and will expect formoxus to read it that way.
     let transparent = if shape.inner.is_some() {
         format!(
-            " `#[facet(transparent)]` does not change this: formoxus does not follow it, \
-             so a transparent `{shape}` needs a field like any other."
+            " `#[facet(transparent)]` does not change this: formoxus ignores it, so a \
+             transparent `{shape}` needs a field like any other."
         )
     } else {
         String::new()
@@ -511,63 +510,6 @@ fn option_node(
         /* optional */ true,
     );
     Box::new(OptionNode { inner })
-}
-
-/// The closed set of scalar types with a built-in field. Anything else needs a
-/// field of its own, named with `field:` or `with_node`, and returns `None`
-/// here, which `node_for_shape` turns into a panic naming the type.
-///
-/// **`usize` and `isize` are left out on purpose, not by oversight.** Their
-/// width is target-dependent — 32 bits on the wasm client, 64 on the server —
-/// so the same field would carry different bounds on each side of the wire, and
-/// a value the server accepts could be unparseable in the browser. Use a fixed
-/// width (`u32`, `u64`) in a form model and convert at the edges. Adding the
-/// arms back would compile and look fine; the disagreement only shows up at
-/// runtime, on one target.
-///
-/// **This walk no longer decides anything about presentation.** It used to
-/// assign an `InputKind` per arm; the widget is now resolved once, in
-/// `LeafArgs::node`: the spec's `with_widget`, else the field's own
-/// `default_widget`. So the
-/// only thing the shape contributes here is *which concrete `T`* the field
-/// carries, and the only thing the walk contributes is `optional` — a
-/// structural fact (`Option` peeling) that no later reader can recover,
-/// because `bool` and `Option<bool>` both arrive as `Field<bool>`.
-fn scalar_node(scalar: ScalarType, args: LeafArgs<'_>) -> Option<Box<dyn Node>> {
-    // The variant and the type can't be collapsed into one token: `ScalarType`
-    // spells them `I8`/`U32` and Rust spells them `i8`/`u32`, and `macro_rules!`
-    // has no way to change an identifier's case. So each arm names both, and the
-    // pairing is the one thing to get right when adding a type.
-    //
-    // The numeric arms are exactly `Number`'s impls (`fields/number_fields.rs`);
-    // keep the two lists in step.
-    macro_rules! dispatch {
-        ($( $variant:ident => $ty:ty ),* $(,)?) => {
-            match scalar {
-                ScalarType::String => Some(Box::new(args.node(StringField::default())) as Box<dyn Node>),
-                ScalarType::Bool => Some(Box::new(args.node(BoolField::default())) as Box<dyn Node>),
-                $(
-                    ScalarType::$variant => Some(
-                        Box::new(args.node(NumberField::<$ty>::default())) as Box<dyn Node>
-                    ),
-                )*
-                _ => None
-            }
-        };
-    }
-
-    dispatch! {
-        I8 => i8,
-        I16 => i16,
-        I32 => i32,
-        I64 => i64,
-        U8 => u8,
-        U16 => u16,
-        U32 => u32,
-        U64 => u64,
-        F32 => f32,
-        F64 => f64,
-    }
 }
 
 /// A list-typed field: a [`ListNode`] whose items are named by a `#`-prefixed key,

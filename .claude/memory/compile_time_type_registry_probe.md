@@ -1,11 +1,11 @@
 ---
 name: compile-time-type-registry-probe
-description: "DECIDED 2026-11-26 as CUSTOM_FIELDS_PLAN decision AB (Todd), not built. PROVEN in scratch probes: a compile-time type registry works through `impl FieldFor<ModelType> for AppTypes` (local marker type satisfies the orphan rule); one `types!` list yields compile-time impls AND the run-time TypeRegistry; all checks fire under cargo check. Not decided."
+description: "BUILT 2026-11-26/27 as CUSTOM_FIELDS_PLAN decision AB; the dev-facing guide (lists, include/replace, install, lookup order) is now `formoxus/src/type_registry.rs` module docs. Probe history below. PROVEN in scratch probes: a compile-time type registry works through `impl FieldFor<ModelType> for AppTypes` (local marker type satisfies the orphan rule); one `types!` list yields compile-time impls AND the run-time TypeRegistry; all checks fire under cargo check. Not decided."
 metadata:
   type: project
 ---
 
-**DECIDED 2026-11-26: CUSTOM_FIELDS_PLAN decision AB** — per-crate `types!`
+**BUILT 2026-11-27** (the guide is `type_registry.rs`'s module docs). **DECIDED 2026-11-26: CUSTOM_FIELDS_PLAN decision AB** — per-crate `types!`
 lists, libraries by replay, each form carries its list, the app's list
 installed as OVERRIDES (order: path's own > installed > form's list >
 built-ins), an override never reaches a configured path, a `replace` with a

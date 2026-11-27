@@ -476,12 +476,15 @@ struct Unsupported {
 }
 
 #[gtest]
-#[should_panic(expected = "scalar type USize is not supported in Field")]
+#[should_panic(expected = "count: formoxus has no field for a `usize`, and no list gives it one")]
 fn an_unsupported_scalar_fails_loudly_at_construction() {
     // Loud rather than silent: the alternative to panicking is rendering the
     // field as something it isn't, and a form that quietly mis-handles a value
     // is worse than one that refuses to build. Construction is also the right
     // moment — it happens once, in a hook initialiser, not per render.
+    //
+    // `usize` is not built in on purpose, so no list holds it and it reaches
+    // the walk's last-resort arm, whose message names the path and the type.
     let _ = empty_form::<Unsupported>(FormSpec::default());
 }
 

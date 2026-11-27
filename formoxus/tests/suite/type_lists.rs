@@ -244,6 +244,25 @@ fn a_listed_struct_takes_a_widget_an_attribute_and_set() {
     );
 }
 
+/// AF at run time: a hand-built registry cannot give a built-in type a field
+/// either. `types!` refuses the same entry at compile time
+/// (`types_built_in_entry`); this is `field_for`'s own refusal, which says
+/// what to do instead.
+#[gtest]
+fn field_for_refuses_a_built_in_type() {
+    let message = panic_message(|| {
+        let _ = formoxus::type_registry::TypeRegistry::new()
+            .field_for(formoxus::fields::StringField::default());
+    });
+    expect_that!(
+        message,
+        all![
+            contains_substring("`String` is built in"),
+            contains_substring("struct Shouty(String);")
+        ]
+    );
+}
+
 /// `form!` takes the list from the `FormoxusTypes` in scope, here
 /// `PlainTypes`, with no `with_types` written.
 #[gtest]

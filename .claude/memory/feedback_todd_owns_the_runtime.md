@@ -1,6 +1,6 @@
 ---
 name: feedback-todd-owns-the-runtime
-description: "Todd writes the runtime to own and understand it, so he can answer issues after publishing without relying on Claude: plans give what, why and traps, not finished code, unless he asks"
+description: "Todd writes the runtime to own and understand it, so he can answer issues after publishing without relying on Claude: plans give what, why and traps, not finished code, unless he asks; but docs and dev-facing messages are mine to write"
 metadata:
   type: feedback
 ---
@@ -42,3 +42,15 @@ what is easy to code, when the tests' job is to say what a dev SHOULD see, error
 above all; (2) it is point 2 again, the working-out done and thrown away. So write the
 tests from the plan and from the dev reading the message, and let his implementation be
 their first run. If a test is wrong, he finds it, which he likes.
+
+**Docs and dev-facing messages are mine to WRITE, even inside his runtime code**
+(Todd, 2026-11-26: "I will usually have you write docs and user-facing messages.
+You're much more likely to be consistent than I am, and I will review them at some
+point."). That means rustdoc, module docs, and the text of every panic, `const _`
+assert, `on_unimplemented` note and compile error a dev reads (the "user-facing" in
+his words is a DEV reading formoxus's messages: [[dev-vs-user-vocabulary]]). When a
+plan step of his has a message in it, write the message myself, in the house style
+(`{prefix}:` first, the type by `{shape}` Display, then the ways out: a `types!` line,
+then `field:`), rather than describing it for him to type. The logic around it stays
+his. He reviews the wording later, so keep the same phrasing across sibling messages
+and list what I wrote in my reply.
