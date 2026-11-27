@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: `set` applies only to a list of single values (a string, number, bool, enum without data, or newtype over one): a set's items are shown, not edited
+error[E0080]: evaluation panicked: this set's items have no default order (only strings, numbers, bools and enums without data have one): give it `sort_by: …`, which for an `Ord` type is `sort_by: Type::cmp`
   --> tests/ui/form_set_on_a_list_of_structs.rs:20:26
    |
 20 |             answers => { set },

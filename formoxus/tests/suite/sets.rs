@@ -664,6 +664,50 @@ fn a_set_item_that_cannot_be_built_sorts_last_without_panicking() {
     expect_that!(form.validate(), none());
 }
 
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Corkboard {
+    pins: Vec<Pin>,
+}
+
+fn corkboard() -> Corkboard {
+    Corkboard {
+        pins: vec![
+            Pin {
+                label: "second".to_string(),
+                rank: 2,
+            },
+            Pin {
+                label: "first".to_string(),
+                rank: 1,
+            },
+            Pin {
+                label: "second".to_string(),
+                rank: 2,
+            },
+        ],
+    }
+}
+
+/// `set` on a `Vec` of structs makes it a set, as a `BTreeSet<Pin>` field
+/// is: each item is a group of fields, in `sort_by`'s order, a duplicate kept
+/// once. `form!` asks only for the order (`form_set_on_a_list_of_structs`);
+/// whether every field can be built is the build's to say.
+#[gtest]
+fn set_on_a_list_of_structs_makes_it_a_set_of_groups() {
+    let spec = form! {
+        Corkboard {
+            pins => { set, sort_by: by_rank },
+        }
+    };
+    let mut form = form_for(&corkboard(), spec);
+    let values = form.collect_values();
+    expect_that!(item_keys(&form, "pins"), eq("#0,#1"));
+    expect_that!(values.get("pins.#0.label"), some(eq("first")));
+    expect_that!(values.get("pins.#1.label"), some(eq("second")));
+    expect_that!(values.get("pins.#2.label"), none());
+    expect_that!(form.validate(), some(field!(Corkboard.pins, len(eq(2)))));
+}
+
 // ── `sort_by` in `form!` ─────────────────────────────────────────────────
 
 /// A fn, its `T` inferred from the field: the same order as `with_sort_by`

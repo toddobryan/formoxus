@@ -424,25 +424,38 @@ pub const fn is_set(shape: &Shape) -> bool {
     matches!(kind(shape), Kind::Set)
 }
 
-/// Whether the field is a list (`Vec` or `Option<Vec>`) whose items are each
-/// one value, which is what `set` on a `Vec` needs: a set's items are shown,
-/// not edited, and only a leaf has a text to show.
+/// Whether the field is a list (`Vec` or `Option<Vec>`) whose items a set can
+/// hold, which is what `set` on a `Vec` needs: the same items a `BTreeSet`
+/// field holds.
 ///
-/// A leaf is a string, number, bool, an enum none of whose variants carries
-/// data, or a type the list holds (`kinds`, as for [`is_single_value`]). An
-/// unlisted newtype counts, for the reason `Kind::Unknown` gives. An `Option` item does
-/// not: a set refuses a blank item, so its `None` could never be added.
+/// A set item is shown as its text and edited through a draft, so it is
+/// either one value or a group of them:
+///
+/// 1. One value: a string, number, bool, an enum none of whose variants
+///    carries data, or a type the list holds (`kinds`, as for
+///    [`is_single_value`]). An unlisted newtype counts, for the reason
+///    `Kind::Unknown` gives; the build refuses it.
+/// 2. A group: a struct, or an enum with data, each item shown as its fields.
+///    Whether every field can be built is the build's to say, through the
+///    set's draft, since const code cannot read a struct's field types.
+///
+/// Not an `Option`, since a set refuses a blank item, so its `None` could
+/// never be added. Not a list or a set, which writes its own item keys at its
+/// path, so a set would show and compare items by keys rather than values.
 ///
 /// `false` for anything that is not a list, so `form!` asserts it as
-/// `!is_list(..) || is_list_of_leaves(..)`, and a non-list reports once, from
-/// [`is_list`].
-pub const fn is_list_of_leaves(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
+/// `!is_list(..) || is_list_of_set_items(..)`, and a non-list reports once,
+/// from [`is_list`].
+pub const fn is_list_of_set_items(kinds: &[(&Shape, FieldType)], shape: &Shape) -> bool {
     let shape = match &shape.def {
         Def::Option(option) => option.t,
         _ => shape,
     };
     match &shape.def {
-        Def::List(list) => is_leaf(kinds, list.t),
+        Def::List(list) => {
+            is_leaf(kinds, list.t)
+                || !matches!(list.t.def, Def::Option(_) | Def::List(_) | Def::Set(_))
+        }
         _ => false,
     }
 }
@@ -967,7 +980,7 @@ mod tests {
     use crate::widgets::{CheckboxInput, Select, TextInput, Textarea};
 
     use super::{
-        applies, is_enum, is_int, is_list_of_leaves, is_optional, is_single_value, renders,
+        applies, is_enum, is_int, is_list_of_set_items, is_optional, is_single_value, renders,
         required_is_not_optional, same_type, takes_bound, takes_length, takes_pattern,
         takes_required,
     };
@@ -1043,7 +1056,7 @@ mod tests {
         }
     }
 
-    // ── Lists of leaves ──────────────────────────────────────────────────
+    // ── Lists a set can hold ──────────────────────────────────────────────────
 
     #[derive(Facet)]
     #[facet(transparent)]
@@ -1061,7 +1074,7 @@ mod tests {
             Vec::<Speed>::SHAPE,
             Option::<Vec<std::string::String>>::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(&[], shape), eq(true), "{shape}");
+            expect_that!(is_list_of_set_items(&[], shape), eq(true), "{shape}");
         }
     }
 
@@ -1069,30 +1082,37 @@ mod tests {
     /// is everywhere else.
     #[gtest]
     fn a_list_of_opaque_newtypes_counts_as_leaves() {
-        expect_that!(is_list_of_leaves(&[], Vec::<Markdown>::SHAPE), eq(true));
+        expect_that!(is_list_of_set_items(&[], Vec::<Markdown>::SHAPE), eq(true));
     }
 
+    /// A group of values is a set item too: each is shown as its fields.
     #[gtest]
-    fn a_list_of_several_values_is_not() {
+    fn a_list_of_structs_or_enums_with_data_is_a_list_of_set_items() {
+        for shape in [Vec::<Footprint>::SHAPE, Vec::<Address>::SHAPE] {
+            expect_that!(is_list_of_set_items(&[], shape), eq(true), "{shape}");
+        }
+    }
+
+    /// What writes item keys at its own path, or could only ever be blank.
+    #[gtest]
+    fn a_list_of_collections_or_options_is_not() {
         for shape in [
-            Vec::<Footprint>::SHAPE,
-            Vec::<Address>::SHAPE,
             Vec::<Vec<std::string::String>>::SHAPE,
             Vec::<std::collections::BTreeSet<std::string::String>>::SHAPE,
             Vec::<Option<std::string::String>>::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(&[], shape), eq(false), "{shape}");
+            expect_that!(is_list_of_set_items(&[], shape), eq(false), "{shape}");
         }
     }
 
     #[gtest]
-    fn what_is_not_a_list_is_not_a_list_of_leaves() {
+    fn what_is_not_a_list_is_not_a_list_of_set_items() {
         for shape in [
             std::string::String::SHAPE,
             std::collections::BTreeSet::<std::string::String>::SHAPE,
             Address::SHAPE,
         ] {
-            expect_that!(is_list_of_leaves(&[], shape), eq(false), "{shape}");
+            expect_that!(is_list_of_set_items(&[], shape), eq(false), "{shape}");
         }
     }
 
@@ -1206,13 +1226,16 @@ mod tests {
     #[gtest]
     fn every_kind_check_reads_the_list() {
         let kinds: &[(&Shape, FieldType)] = &[(Address::SHAPE, FieldType::Int)];
+        // A listed type is one value whatever its shape, even a list's.
+        let words: &[(&Shape, FieldType)] = &[(Vec::<std::string::String>::SHAPE, FieldType::Text)];
+        let lines = Vec::<Vec<std::string::String>>::SHAPE;
+        expect_that!(is_list_of_set_items(words, lines), eq(true));
+        expect_that!(is_list_of_set_items(&[], lines), eq(false));
         expect_that!(takes_bound(kinds, Address::SHAPE), eq(true));
         expect_that!(takes_length(kinds, Address::SHAPE), eq(false));
         expect_that!(takes_bound(&[], Address::SHAPE), eq(false));
         expect_that!(is_int(kinds, Address::SHAPE), eq(true));
         expect_that!(is_int(&[], Address::SHAPE), eq(false));
-        expect_that!(is_list_of_leaves(kinds, <Vec<Address>>::SHAPE), eq(true));
-        expect_that!(is_list_of_leaves(&[], <Vec<Address>>::SHAPE), eq(false));
     }
 
     /// Names, module and every type parameter: `Vec<Markdown>` is not

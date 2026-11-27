@@ -1,5 +1,5 @@
-//! A set's items are shown, not edited, so each must be one value; an
-//! `Answer` is a struct, several.
+//! `set` takes a list of structs, as a `BTreeSet` field does, but a struct
+//! has no default order, so the set needs `sort_by`.
 #![allow(unused_imports)] use facet::Facet;
 use formoxus::{FormoxusTypes, empty_form, form};
 

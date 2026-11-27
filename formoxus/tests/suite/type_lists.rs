@@ -244,6 +244,82 @@ fn a_listed_struct_takes_a_widget_an_attribute_and_set() {
     );
 }
 
+/// A real set of a struct, for 5.6.3.2's run-time check on a set's items.
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Chord {
+    tones: HashSet<Tone>,
+}
+
+fn chord() -> Chord {
+    Chord {
+        tones: HashSet::from([Tone { level: 3 }]),
+    }
+}
+
+/// A struct has no default order, so every `Chord` spec that builds needs one.
+fn by_level() -> formoxus::nodes::SetOrder {
+    formoxus::nodes::SetOrder::custom(|a: &Tone, b: &Tone| a.level.cmp(&b.level), "level")
+}
+
+/// A struct item no list holds is a group of fields, so a set of one needs
+/// only that each field can be built. A field that cannot is refused when the
+/// form is built, even with the set empty, because the set always builds its
+/// draft, whose walk meets the field. The message names the field's own path,
+/// which a check on the set as a whole could not (5.6.3.2, found not needed).
+#[derive(Facet, Clone, Debug, PartialEq, Eq, Hash)]
+struct Spot {
+    x: usize,
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Board {
+    spots: HashSet<Spot>,
+}
+
+#[gtest]
+fn a_set_item_with_a_field_formoxus_cannot_build_is_refused_naming_the_field() {
+    let message = panic_message(|| {
+        let _ = empty_form::<Board>(FormSpec::default().with_sort_by(
+            &path!(Board.spots),
+            formoxus::nodes::SetOrder::custom(|a: &Spot, b: &Spot| a.x.cmp(&b.x), "x"),
+        ));
+    });
+    expect_that!(
+        message,
+        all![
+            starts_with("spots.#0.x: "),
+            contains_substring("`usize`"),
+            contains_substring("formoxus::types!")
+        ]
+    );
+}
+
+/// The same set builds when the spec's list gives `Tone` its field: each
+/// item is one leaf, written through `ToneField`.
+#[gtest]
+fn a_set_of_a_listed_struct_builds_each_item_as_one_leaf() {
+    let form = form_for(
+        &chord(),
+        plain().with_sort_by(&path!(Chord.tones), by_level()),
+    );
+    expect_that!(value_at(&form, "tones.#0"), some(eq("3")));
+}
+
+/// And it builds when the items' own path names a field, with no list
+/// holding `Tone`: the constructor arm builds each item as a leaf whatever
+/// its type, so the check must not refuse it.
+#[gtest]
+fn a_set_whose_items_name_a_field_builds_with_no_list() {
+    let spec = FormSpec::<Chord>::default()
+        .with_sort_by(&path!(Chord.tones), by_level())
+        .with_node(
+            &path!(Chord.tones[]),
+            formoxus::field_kind::named_field(|_: &Chord| -> &Tone { unreachable!() }, ToneField),
+        );
+    let form = form_for(&chord(), spec);
+    expect_that!(value_at(&form, "tones.#0"), some(eq("3")));
+}
+
 /// AF at run time: a hand-built registry cannot give a built-in type a field
 /// either. `types!` refuses the same entry at compile time
 /// (`types_built_in_entry`); this is `field_for`'s own refusal, which says

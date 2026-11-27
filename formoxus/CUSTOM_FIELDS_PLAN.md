@@ -442,7 +442,7 @@ P. **DECIDED 2026-11-25: the per-type widget is chosen once, at build,** in
    the same widget, which supersedes L. Under AB the type's widget is an
    entry in `types!` (box 6).
 
-Q. **DEFERRED 2026-11-25 (Todd): `choices:` on a listed type**
+Q. **DEFERRED 2026-11-25 (Todd), BACK 2026-11-27 as 5.7, whose revision replaces the mechanism below: `choices:` on a listed type**
    (`Ref<Question>` in `groups[].questions[]`). Recommended when it comes
    back: a choice field over `P` whose `format` is `P`'s listed field's,
    and whose `parse` finds the choice whose text equals the input, so it
@@ -454,6 +454,7 @@ U. **DECIDED 2026-11-26 (Todd), met by 5.6's revision: a set of LISTED
    structs compiles** (`is_leaf` reads `KINDS`), since a listed struct is a
    leaf and a set of `Ref<Question>` needs it. A set of unlisted ones stays
    a compile error; 5.6.3.2 backs that up for a hand-built spec.
+   **AMENDED 2026-11-27 by AN:** a set of unlisted structs is allowed too.
 
 V. **DECIDED 2026-11-26 (Todd), scoped by AL: run-time widget and attribute
    checks only where the compiler could not judge.** A hand-built spec over
@@ -539,6 +540,104 @@ AL. **DECIDED 2026-11-26 (Todd): 5.6.3.3 checks the leaves whose field came
     from a list or the overrides,** not those `kind` calls `Unknown`: a
     listed struct is `Other` to `kind`, so that test would skip exactly the
     leaves the check is for.
+
+AN. **DECIDED 2026-11-27 (Todd): a set holds what a `BTreeSet` field holds,
+    structs included.** An unlisted struct needs no entry to be a set item:
+    each item is a group of fields, which `SetNode` already shows (its
+    fields joined), edits (through a draft that is a group of fields) and
+    orders (a custom `sort_by` rebuilds it). So `set` on a `Vec` and
+    `treat_as_set` take the same items a `BTreeSet` field does
+    (`field_kind::is_list_of_set_items`, which replaced `is_list_of_leaves`):
+    one value, or a group of them (a struct, or an enum with data). Not an
+    `Option`, a list or a set: a list or set item writes its own item keys
+    at its path, so a set would show and compare its items by keys (probed:
+    a set of `Vec<String>` builds and validates, and shows "#0,#1, a, c").
+    Todd's two conditions:
+    1. **An order**, at compile time: a struct has no default order, so
+       `form!` requires `sort_by` (`form_set_on_a_list_of_structs`).
+    2. **A known struct**, at build time: the set always builds its draft,
+       whose walk refuses a field formoxus cannot build, naming that field.
+       Const code cannot read a struct's field types, so not at compile time.
+
+AO. **SUPERSEDED 2026-11-27 by AR.** **`path!(…[= v])` for a struct item.** A set item is
+    found by its own entry, and a struct item has none (its fields write at
+    `pins.#3.label`, `pins.#3.rank`), so a validator's `[= v]` on a set of
+    structs names no item, and its error shows with the form's. Placing is
+    not the problem: an error at `pins.#3` already renders on that item, as
+    a list item's does. A list never meets this, since it finds an item by
+    position (`[i]`), and a set cannot: the validator counts in the model's
+    iteration order, which is not `sort_by`'s, and a `HashSet`'s is not even
+    the same between two copies. Recommended fix: for a struct item, match on
+    its fields. `path!` writes `v` as (field path, text) pairs, each through
+    the list as today, and `resolve` picks the item where each pair matches
+    the entry at `pins.#k.<field>`, which works on the server from the wire
+    alone. That is exactly a set item's identity, since a set is unique on
+    the whole value. Costs an escaping rule for the separators, and a scope:
+    leaf and nested-struct fields only, since a `Vec` field's item keys move.
+
+AP. **DECIDED 2026-11-27 (Todd): a group needs names, so every tuple
+    struct needs a field from a list.** A struct is a group of its NAMED
+    fields: each name is a label and a path segment. A tuple's parts have
+    neither (`default_label` gives digits no label), so walked as a group,
+    `Imag(f32)` is a fieldset around one unlabelled input at `imag.0`, and
+    `Pair(u8, u8)` two of them. So a tuple struct of any arity, a newtype
+    included, builds only through a list entry, which makes it one value, a
+    leaf, whatever its parts are. That forces the entry for a newtype, whose
+    only reason to exist is to be treated differently from what it wraps
+    (`Markdown => newtype String`; a widget alone is not enough, since
+    formoxus would then have to take the field from the inner type, the
+    guess N and W retired). And it lets any tuple struct into a model, even
+    `Address(u32, String, String, State, Zip)` (Todd's deliberately horrible
+    example), as long as the dev lists it with a field of their own that
+    parses and formats it as text, whose `default_widget` renders it (box 6
+    adds a widget entry beside it). This replaces 5.5.4's narrower rule (one
+    field, over a scalar), which let `Pair(u8, u8)` and `Wrapper(Address)`
+    through as groups.
+
+    1. **A plain tuple, `(u8, u8)`, is not handled at all:** not walked and
+       not listable, since an entry for an anonymous type would be awkward
+       to name and to write a field for. `types!` refuses one as an entry,
+       and the build refuses one in a model, saying to declare a tuple
+       struct and list that.
+    2. **A tuple variant with one field** (`Mood::Bold(Shade)`) is the
+       exception: its variant name labels its payload.
+    3. **A tuple variant with several fields** (`Pen::Rgb(u8, u8, u8)`) is
+       refused when the form is built, as a tuple struct would be without
+       its entry (Todd, 2026-11-27). The dev owns the enum, so a struct
+       variant, `Rgb { r: u8, g: u8, b: u8 }`, costs nothing; or the payload
+       becomes one listed tuple struct, `Rgb(Color)`. An enum the dev does
+       not own can be listed whole with a field of its own.
+
+    **Aliases** (`type Date = String;`) are not types: Rust replaces the
+    name before anything sees it, so a `Date` reads exactly as a `String`
+    everywhere, and a `types!` entry for one is rustc's E0119 against the
+    built-in `String`. Documented, not handled: it is a fact about Rust,
+    and the reason the newtype pattern exists (Todd, 2026-11-27).
+
+AQ. **DECIDED 2026-11-27 (Todd): a set may hold lists and sets.** Nothing
+    principled refused them: a set whose items have no default order needs
+    `sort_by`, and that custom order dedups and finds items by rebuilding
+    each item's value and comparing with `==`, which is right for a
+    `Vec<String>`. What is missing is the text a list or set item shows (its
+    own item keys, "#0,#1, a, c") and a browser test of a set inside a
+    set's draft. An `Option` item stays refused, on principle: a set refuses
+    a blank item, and `None` is blank, so it could never be added. Box 12.4.
+
+AR. **DECIDED 2026-11-27 (Todd): `path!(…[i])` on a set counts in the
+    validator's own order.** Replaces AO. Set items already have keys (`#k`,
+    from `Items`, as list items do) that survive round trips; what a
+    validator lacks is a way to name one, since it sees the plain model. A
+    list bridges that by position, because the `Vec`'s order is the order
+    shown. A set can too, if `[i]` counts in the order the validator
+    iterates: formoxus builds the model it hands the validator, so right
+    after building it, it records each set's item keys in that instance's
+    iteration order, matching each element to its item node by value. Then
+    `resolve`, unchanged, is given those keys for a set. Works for any item
+    type (struct, list, set), needs no text encoding, and avoids AA for
+    `[i]`. `[= v]` stays, as the shorthand for a set of leaves. **Trap:** the
+    index means something only in the instance formoxus handed over; a
+    validator that iterates its own copy of a `HashSet` may count in another
+    order (a `BTreeSet` iterates by `Ord`, so any copy agrees). Box 12.3.
 
 ## Traps
 
@@ -933,8 +1032,20 @@ AL. **DECIDED 2026-11-26 (Todd): 5.6.3.3 checks the leaves whose field came
     only copy. Then memory (5.9.6.5): the probe file and an entry for the
     lookup order if the docs alone do not carry it.
 
-  - [ ] **5.6.3.2** (Todd; Claude writes the message) **A set over items
-    that are not leaves, in a hand-built spec.** Through `form!` a set of
+  - [x] **5.6.3.2** **NOT NEEDED, found 2026-11-27.** A set of an unlisted
+    struct is supported, not a mistake: each item is a group of fields,
+    `SetNode` shows it as its fields joined, edits it through a draft that is
+    a group of fields, and a custom `sort_by` rebuilds it
+    (`sets::a_set_item_that_cannot_be_built_sorts_last_without_panicking`).
+    What matters is that every field can be built, and the walk already
+    refuses one that cannot when the form is built, because `set_node` always
+    builds the set's draft, even for an empty set; its message names the
+    field's own path (`type_lists::a_set_item_with_a_field_formoxus_cannot_build_is_refused_naming_the_field`).
+    A check up front would repeat the walk's rules and name only the set.
+    Todd built one, and it was taken out the same day. Also, this check was
+    never for hand-built specs only: `form!` checks only the paths it names,
+    so an unmentioned `HashSet<Spot>` reaches the build too. The old text
+    follows. **A set over items that are not leaves, in a hand-built spec.** Through `form!` a set of
     unlisted structs is a compile error (U), but a hand-built spec can
     still ask for one. `set_node` builds each item through
     `node_for_shape`, so an unlisted struct item would become a fieldset
@@ -955,11 +1066,50 @@ AL. **DECIDED 2026-11-26 (Todd): 5.6.3.3 checks the leaves whose field came
     fires, since the compiler already judged the same list; built-in leaves
     in a hand-built spec stay unchecked on purpose (V).
 
-  - [ ] **5.7** (Todd, DEFERRED with Q) Q's run-time side: `FieldText<P>`,
-    the registry storing it, and the choice field over `P` that reads it.
-    Then Claude's half (what was left of 5.8): `form!`'s dispatch for
-    `choices:` on a listed type, and the three tests parked in
-    `custom_fields.rs`' `#[cfg(any())] mod deferred_q`.
+  - [ ] **5.7** (Todd, then Claude) **`choices:` on a listed type (Q),
+    REVISED 2026-11-27 for AB; no longer deferred** (Todd put it after
+    5.6.3.3 and before box 6). `P` is the type of the path that carries
+    `choices:`, the value being chosen: in `questions[] => { choices:
+    COURSE_QUESTIONS }` over `questions: Vec<Ref<Question>>`, `P` is
+    `Ref<Question>`.
+
+    **Why it does not work today.** A `<select>`'s options submit text, so
+    `ChoiceField<T>` writes each choice with `format` and reads it back with
+    `parse`, both its defaults, which know only a string's, a number's and
+    a bool's text; and its `KIND` is `field_type_of(T::SHAPE)`, which
+    panics at compile time on a struct ("a choice field's value must be
+    text, a number, or a bool"). Only `P`'s listed field knows that a `Ref`
+    is written `question:q1`.
+
+    **Why the old plan is obsolete.** Q (2026-11-25) had the registry hand
+    out a `FieldText<P>` behind an `Arc<dyn Any>`, downcast at build,
+    because `form!` could not see a registry filled at run time. Under AB,
+    `choice_node` already receives the list as `Reg`, so `P`'s field is
+    known at compile time: `<Reg as FieldFor<P>>::Field`. No `Any`, no
+    downcast, no lookup.
+
+    1. **(Todd) `ChoiceField` holds the item's field.** Give it the field
+       for `P` (a second type parameter, `ChoiceField<T, F>`, or `F` alone,
+       with `T = F::Value`), and take `format`, `parse`, `trims` and `KIND`
+       from it, so a `ChoiceField<u8>` and a `ChoiceField<Ref<Question>>`
+       work the same way. `check` stays membership. `choice_node` builds it
+       from `Reg::build(Default::default())`. Keep it one type, not a second
+       choice field beside the first (one function, not two).
+    2. **(Todd) Choices written as text.** apcsp's tables are `const`
+       `(&str, &str)` pairs, and a `Ref<Question>` has no `const` value, so a
+       choice's value may be written as `P`'s text and parsed through `P`'s
+       field once, when the field is built, panicking with the choice's
+       label if it does not parse. `ChoiceValue` today turns `&str` into a
+       `String` only; it needs a way to parse through the field instead,
+       which means it is no longer a plain conversion. Real `P` values still
+       work.
+    3. **(Claude)** `form!`'s side, if any: the `choices:` checks
+       (`is_single_value` with `has_choices`, `renders`) already judge a
+       listed type by its `KIND`. Bring the three tests in
+       `custom_fields.rs`' `#[cfg(any())] mod deferred_q` back (they write
+       choices as text, so 2 is what they test), plus one with real `P`
+       values and one for a choice text that does not parse; the
+       `choices:` docs.
 
 - [ ] **6.** (Todd) The per-type widget, chosen at build (P). Rewritten
       2026-11-25 by Claude; the render-time version (6.1 to 6.5 of
@@ -1184,3 +1334,83 @@ AL. **DECIDED 2026-11-26 (Todd): 5.6.3.3 checks the leaves whose field came
           `Password`, `Url`, then the date and time types, since forms ask
           for those most and the browser already has an input for each.
           `Decimal`, `Uuid`, `IpAddr` and `Slug` when a real form needs one.
+
+- [ ] **12.** (Todd and Claude) **What "renderable" means, nailed down
+      (AP, AQ, AR).** Added 2026-11-27. **Order (Todd, 2026-11-27): 5.6.3.3,
+      then 5.7, then box 6, then this box, then 7 to 9.** A type at a path is renderable when
+      every part of it reduces to form controls formoxus can render, or
+      combines into lists and sets of them. This box settles the three places
+      the rule was uneven; once it lands, Claude writes the definition into
+      CLAUDE.md's vocabulary and memory (G, 2026-11-27: not before). In AP,
+      AR, AQ order: the smallest first, and AQ's browser test last.
+
+  - [ ] **12.1** (Claude) Tests first for 12.2 and 12.3, failing until they
+    are built.
+
+  - [ ] **12.2** (Todd; Claude writes the messages and docs) **No tuple
+    struct is a group (AP).**
+    1. **Widen `refuse_unregistered_newtype`** (`build.rs:465`) to every
+       tuple struct no list holds (`StructKind::TupleStruct`, any arity),
+       and refuse every plain tuple (`StructKind::Tuple`), listed or not
+       (AP.1). Drop the one-field and over-a-scalar conditions, and probably
+       the name with them (`refuse_tuple`). It runs before the struct arm,
+       after the list lookup, so a listed tuple struct still builds through
+       its entry. A unit struct (`struct Marker;`) is not a tuple and is
+       left alone.
+    2. **Refuse a path into one,** in `field_named` (`build.rs`, the
+       5.5.6 guard): `with_widget(&path!(M.pair.0), …)` names a part that
+       will never be built, so it is refused like a path into a listed
+       type's fields, rather than silently lost.
+    3. **Tuple variants (AP.2, AP.3):** a variant's fields are built one by
+       one (`fields_from_enum`, `node_for_shape` per field), never through
+       `struct_node`, so the widened refusal does not reach them. Add a
+       refusal where a variant's fields are built: a tuple variant with more
+       than one field. A one-field tuple variant builds as today.
+    4. **Claude:** the messages (a tuple struct: a `newtype` line for one
+       field around a type with a field, `field YourField` for any; a plain
+       tuple: declare a tuple struct and list that; a tuple variant with
+       several fields: a struct variant, or one listed tuple struct as its
+       payload); `types!` refusing a plain tuple entry, with a golden;
+       `newtypes::a_newtype_around_a_non_scalar_is_still_a_struct` flips to a
+       refusal, and so does `submissions.rs`' `Pen::Rgb(u8, u8, u8)` round
+       trip ("Tuple variants, which build exactly as struct variants do");
+       new tests for `Pair(u8, u8)`, a plain `(u8, u8)` field, a path into a
+       tuple struct's part, a listed tuple struct of several fields, and a
+       one-field tuple variant; the `type_registry.rs` module docs' "a type
+       no list holds" paragraph, with aliases, and
+       `refuse_unregistered_newtype`'s doc.
+
+  - [ ] **12.3** (Todd for the recording; Claude for `path!`, tests and
+    docs) **`[i]` on a set (AR).**
+    1. **Where:** `FormState::validate` and `Submission::accept`, after the
+       model is built and before the validator runs, since that instance is
+       the one the validator iterates. Every set counts, nested ones
+       included (a set inside a list item, inside a variant).
+    2. **What:** for each set, walk the built instance's elements in their
+       iteration order and find, for each, the item node holding the same
+       value, then record the item keys in that order, keyed by the set's
+       path. Matching by value is what `CustomOrder::position` already does,
+       but typed; here the item type is known only as a `Shape`, so the
+       item's value has to be rebuilt untyped (check facet-reflect 0.46.5
+       for an `alloc_shape`) and compared as a `Peek`. A set of leaves can
+       compare `peek_value()` directly, as `DefaultOrder` does.
+    3. **Then `resolve` is not changed:** the `entry` closure at
+       `state.rs:605` returns the recorded keys for a set's path in place of
+       the shown order, and every other entry as before.
+    4. **Claude:** `path!` stops refusing `[i]` on a set (its doc's "Only on
+       a `Vec`"); tests over a `BTreeSet` and a `HashSet` of structs, with
+       the error landing on the right item in the browser-side `validate`
+       and in `Submission::accept`; the trap in AR, in `path!`'s doc.
+
+  - [ ] **12.4** (Todd for `shown`; Claude for the rest) **Sets of lists and
+    sets (AQ).**
+    1. **Todd:** a `ListNode` and a `SetNode` leave their own item keys out
+       of what they show. The keys are a `RawValue::Structure` entry at the
+       node's own path; a variant's name is a `Structure` entry too and must
+       still show, so drop only the node's own keys, not every `Structure`.
+    2. **Claude:** `field_kind::is_list_of_set_items` takes lists and sets
+       as items (still not an `Option`); `form!`'s and `treat_as_set`'s
+       messages; `form_set_on_a_list_of_lists` becomes the missing-`sort_by`
+       error; suite tests (a set of `Vec<String>` shows "a, c", dedups by
+       value, round-trips; a set of sets); an e2e test form for a set of
+       lists, with its test, added in a pair.

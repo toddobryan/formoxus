@@ -705,9 +705,13 @@ impl FieldBody {
     }
 
     /// `set`'s three `const _` assertions, spanned on the key: that the field
-    /// is not already a set, that it is a list, and that its items are
-    /// leaves. Each is written so only the first that fails reports: a set
-    /// passes the second and third, and a non-list the third.
+    /// is not already a set, that it is a list, and that a set can hold its
+    /// items (`field_kind::is_list_of_set_items`): the items a `BTreeSet`
+    /// field holds, structs included. Written so only the first that fails
+    /// reports: a set passes the second and third, and a non-list the third.
+    /// An item type with no default order also needs `sort_by`
+    /// (`order_checks`), and one with a field formoxus cannot build is
+    /// refused when the form is built, by the set's draft.
     fn set_checks(&self, shape: &TokenStream2) -> TokenStream2 {
         let kinds = crate::form::widget::kinds();
         let Some(set) = &self.set else {
@@ -724,9 +728,10 @@ impl FieldBody {
                 "`set` applies only to list fields"
             );
             const _: () = ::core::assert!(
-                !#fk::is_list(#shape) || #fk::is_list_of_leaves(#kinds, #shape),
-                "`set` applies only to a list of single values (a string, number, bool, enum \
-                 without data, or newtype over one): a set's items are shown, not edited"
+                !#fk::is_list(#shape) || #fk::is_list_of_set_items(#kinds, #shape),
+                "`set` applies only to a list whose items a set can hold: a single value (a \
+                 string, number, bool, enum without data, or a type the list holds) or a group \
+                 of them (a struct, or an enum with data), but not an `Option`, a list or a set"
             );
         }
     }
@@ -815,8 +820,10 @@ impl FieldBody {
                 let message = "this set's items have no default order (only strings, numbers, \
                                bools and enums without data have one): give it `sort_by: …`, which for an `Ord` \
                                type is `sort_by: Type::cmp`";
+                // Asked only once `set`'s own checks pass, so a list `set`
+                // refuses reports once, from `set`.
                 let applies = if marked_set {
-                    quote!(!#fk::is_list_of_leaves(#kinds, #shape) ||)
+                    quote!(!#fk::is_list_of_set_items(#kinds, #shape) ||)
                 } else {
                     TokenStream2::new()
                 };
@@ -2843,7 +2850,7 @@ mod tests {
         );
         expect_that!(
             tokens,
-            contains_substring("field_kind :: is_list_of_leaves")
+            contains_substring("field_kind :: is_list_of_set_items")
         );
         expect_that!(tokens, contains_substring("this one is already a set"));
         expect_that!(
@@ -2852,17 +2859,14 @@ mod tests {
         );
         expect_that!(
             tokens,
-            contains_substring("a set's items are shown, not edited")
+            contains_substring("but not an `Option`, a list or a set")
         );
     }
 
     #[gtest]
     fn without_set_none_are_asked() {
         let spec = parse(quote! { Source { tags => { label: "Tags" } } }).unwrap();
-        expect_that!(
-            spec.expand().to_string(),
-            not(contains_substring("is_list_of_leaves"))
-        );
+        expect_that!(spec.expand().to_string(), not(contains_substring("is_set")));
     }
 
     /// In `legal_keys`, so a near miss is suggested like any other key.
@@ -3106,9 +3110,9 @@ mod tests {
         expect_that!(tokens, not(contains_substring("`feedback` on a list")));
     }
 
-    /// `set` makes a list a set, so its items are asked about too, but only
-    /// once `set`'s own checks pass: a list of structs is refused once, by
-    /// `set`.
+    /// `set` makes a list a set, so its items are asked for a default order,
+    /// a list of structs included, but only once `set`'s own checks pass: a
+    /// list of lists is refused once, by `set`.
     #[gtest]
     fn with_set_and_no_sort_by_the_list_is_asked_as_a_set() {
         let tokens = parse(quote! { Source { tags => { set } } })
@@ -3118,7 +3122,7 @@ mod tests {
         expect_that!(
             tokens,
             contains_substring(
-                "! :: formoxus :: field_kind :: is_list_of_leaves (< FormoxusTypes as :: \
+                "! :: formoxus :: field_kind :: is_list_of_set_items (< FormoxusTypes as :: \
                  formoxus :: type_registry :: TypeKinds > :: KINDS , :: formoxus :: field_kind \
                  :: shape_of (| __m : & Source | & __m . tags)) || :: formoxus :: field_kind :: \
                  items_have_default_order"

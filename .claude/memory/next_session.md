@@ -19,7 +19,17 @@ AF, AI that code cites) moved to the Decisions section, shortened; QA-QJ
 are gone from the plan (all answered). Full old text at `9cd17bf`.
 Later the same day: Todd did 5.9.3.9 (scalar arm gone); I did 5.9.6.3 and
 5.9.6.2 (module docs = the dev guide to lists; registry panics reworded).
-NEXT: Todd's 5.6.3.2 and 5.6.3.3 (I write their messages), then box 6.
+Later still: 5.6.3.2 found NOT NEEDED (a set of unlisted structs is a
+feature: the set's draft walk already refuses an unbuildable field, naming
+it); Todd's check was taken out. Decisions AN (a set holds what a BTreeSet
+holds; `is_list_of_set_items` replaced `is_list_of_leaves`; BUILT), AP (every
+tuple struct needs a list entry; bare tuples never; multi-field tuple variants
+refused; aliases documented only), AQ (sets of lists/sets allowed), AR (`[i]`
+on a set counts in the validator's own iteration order; replaces AO). Box 12
+holds AP/AR/AQ's steps. "Renderable" goes into CLAUDE.md vocabulary only once
+box 12 lands (Todd: nail it down first). Q is back as 5.7, rewritten for AB
+(ChoiceField holds P's listed field; no Any/downcast).
+ORDER (Todd): 5.6.3.3 (Todd, NEXT) -> 5.7 -> box 6 -> box 12 -> boxes 7-9.
 
 ## 2026-11-26 DAY: QA-QJ answered, all as recommended; committed and pushed
 

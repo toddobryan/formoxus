@@ -484,16 +484,18 @@ fn treat_as_set_on_a_scalar_is_refused() {
     let _ = FormSpec::<Lists>::default().treat_as_set(&path!(Lists.title));
 }
 
-/// A set's items are shown, not edited, so each must be one value.
+/// A set holds what a `BTreeSet` field does, a struct included: each item is
+/// a group of fields. Building it would also need a `sort_by`, since a struct
+/// has no default order, but marking it a set does not.
 #[gtest]
-#[should_panic(expected = "venues: `treat_as_set` applies only to a list of single values")]
-fn treat_as_set_on_a_list_of_structs_is_refused() {
+fn treat_as_set_on_a_list_of_structs_is_accepted() {
     let _ = FormSpec::<Lists>::default().treat_as_set(&path!(Lists.venues));
 }
 
-/// The outer list's items are lists, which are not single values either.
+/// The outer list's items are lists, which write their own item keys at
+/// their paths, so a set would show and compare them by keys.
 #[gtest]
-#[should_panic(expected = "grid: `treat_as_set` applies only to a list of single values")]
+#[should_panic(expected = "grid: `treat_as_set` applies only to a list whose items a set can hold")]
 fn treat_as_set_on_a_list_of_lists_is_refused() {
     let _ = FormSpec::<Lists>::default().treat_as_set(&path!(Lists.grid));
 }

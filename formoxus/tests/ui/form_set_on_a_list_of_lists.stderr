@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `set` applies only to a list whose items a set can hold: a single value (a string, number, bool, enum without data, or a type the list holds) or a group of them (a struct, or an enum with data), but not an `Option`, a list or a set
+  --> tests/ui/form_set_on_a_list_of_lists.rs:16:23
+   |
+16 |             rows => { set },
+   |                       ^^^ evaluation of `main::_` failed here

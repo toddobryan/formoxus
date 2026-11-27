@@ -16,7 +16,7 @@ use crate::classes::Classes;
 use crate::error::ValidationError;
 use crate::field_attrs::FieldAttrs;
 use crate::field_kind::is_list;
-use crate::field_kind::is_list_of_leaves;
+use crate::field_kind::is_list_of_set_items;
 use crate::field_kind::is_set;
 use crate::label_case::LabelCase;
 use crate::nodes::{SetFeedback, SetOrder};
@@ -312,8 +312,8 @@ impl<T: Clone + Debug + Facet<'static>> FormSpec<T> {
             _ => false,
         };
         assert!(
-            listed_items || is_list_of_leaves(&[], shape),
-            "{path}: `treat_as_set` applies only to a list of single values (a string, number, bool, enum without data, or newtype over one): a set's items are shown, not edited"
+            listed_items || is_list_of_set_items(&[], shape),
+            "{path}: `treat_as_set` applies only to a list whose items a set can hold: a single value (a string, number, bool, enum without data, or a type the list holds) or a group of them (a struct, or an enum with data), but not an `Option`, a list or a set"
         );
         self.field(path).treat_as_set = true;
         self
