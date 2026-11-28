@@ -140,8 +140,8 @@ pub(crate) fn RadioGroupView(widget_props: WidgetProps) -> Element {
                         // its choice.
                         id: "{props.id()}-{index}",
                         name: "{props.path()}",
-                        value: "{choice.value}",
-                        checked: choice.value == current,
+                        value: "{choice.key}",
+                        checked: choice.key == current,
                         // On every radio, though one would do for the browser:
                         // each then announces "required" when it has focus.
                         required,

@@ -7,15 +7,14 @@
 use crate::bound_field::{BoundField, List};
 use crate::error::FormAccessError;
 use crate::field_attrs::Validity;
+use crate::fields::Choice;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, Edit, Items, Node, SpecsByPath, default_label};
 use crate::nodes::{NodeContext, RawValue};
 use crate::path::NodePath;
 use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
 use crate::widgets::field_row::required_marker;
-use crate::widgets::{
-    AddItemProps, Choice, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton,
-};
+use crate::widgets::{AddItemProps, FieldErrors, ItemAdder, MoveItemButtons, RemoveItemButton};
 use crate::widgets::{described_by, field_help};
 use dioxus::core::{DynamicNode, VComponent};
 use dioxus::prelude::*;

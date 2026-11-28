@@ -10,7 +10,7 @@ use formoxus::path::NodePath;
 use formoxus::prelude::*;
 
 use super::FORM_ID;
-use formoxus::widgets::Choice;
+use formoxus::fields::Choice;
 use googletest::prelude::*;
 
 #[derive(Facet, Clone, Debug, PartialEq)]
@@ -167,7 +167,7 @@ fn an_explicit_list_overrides_a_bools_derived_one() {
 fn a_const_table_of_pairs_becomes_choices() {
     let built: Vec<Choice> = STATES.iter().map(Into::into).collect();
     expect_that!(built.len(), eq(2));
-    expect_that!(built[0].value, eq("AL"));
+    expect_that!(built[0].key, eq("AL"));
     expect_that!(built[0].display, eq("Alabama"));
 }
 
@@ -176,7 +176,7 @@ fn a_const_table_of_pairs_becomes_choices() {
 #[gtest]
 fn a_bare_string_is_its_own_display() {
     let choice: Choice = "Alabama".into();
-    expect_that!(choice.value, eq("Alabama"));
+    expect_that!(choice.key, eq("Alabama"));
     expect_that!(choice.display, eq("Alabama"));
 }
 

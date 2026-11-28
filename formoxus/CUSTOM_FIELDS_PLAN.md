@@ -644,7 +644,7 @@ AR. **DECIDED 2026-11-27 (Todd): `path!(…[i])` on a set counts in the
     order (a `BTreeSet` iterates by `Ord`, so any copy agrees). Box 12.3.
 
 AS. **DECIDED 2026-11-27 (Todd): a choice field owns its text, as Django's
-    `TypedChoiceField` does.** Replaces Q's mechanism and 5.7's first
+    `TypedChoiceField` does.** AS.2's defaults and its `coerce:`/`key:` keys are AMENDED by AT. Replaces Q's mechanism and 5.7's first
     rewrite, both of which parsed the choices through `P`'s field.
     1. **Choices are `(key, label)` pairs.** The client never needs a value
        it will not use: a query asks for a primary key and a name, and that
@@ -680,6 +680,44 @@ AS. **DECIDED 2026-11-27 (Todd): a choice field owns its text, as Django's
        **the data must arrive before the form is built**, since
        `use_form`'s initializer runs once: render the form only once the
        `use_resource` has a value.
+
+AT. **DECIDED 2026-11-27 (Todd): a non-built-in type's choices come
+    through `field:`, from a `ChoiceField` trait.** Amends AS.2. Easier to
+    think about than three keys in `form!`, and Django's shape:
+    `ModelChoiceField` is a `Field` a dev configures or subclasses.
+    1. **`ChoiceField` is a trait** a dev implements on a small type of their
+       own holding the list: `type Value`, the `(key, label)` list, `coerce`
+       and `key`. A blanket `impl<C: ChoiceField> Field for C` writes the
+       rest once: `parse` checks membership and then coerces (AS.3, so no dev
+       can skip it), `format` is `key`, `check` is membership,
+       `default_widget` is a `select`. The dev passes it as
+       `questions[] => { field: QuestionChoice { choices: questions.clone() } }`
+       inside a function given the loaded list, which is AS.5 unchanged.
+    2. **`choices:` stays, for built-ins only:** `STATES` on a `String`,
+       `(1, "Small")` on a `u8`, building the trait's built-in
+       implementation (today's `ChoiceField<T>`, renamed).
+    3. **No `coerce:` or `key:` keys, and no default from `P`'s listed field**
+       (AS.2's defaults are dropped): one way in for a type of the dev's own.
+    4. **`widgets::Choice` moves into `fields/choice_field.rs`** (Todd), as
+       the `(key, label)` pair, replacing the widget-side type.
+
+AU. **DECIDED 2026-11-27 (Todd): `Field::choices()` is sealed, and
+    `Field::HAS_CHOICES` is a documented const.** `Field::choices()` cannot
+    simply go, though Todd asked: every caller is in `FieldNode<F>`, which
+    knows only `F: Field`, and without specialization generic code cannot
+    ask whether `F` is also a `ChoiceField`. Storing the choices on the node
+    instead would lose a dev's choice field arriving through `field:`, which
+    reaches the node through code that knows only `Field`. So:
+    1. **`fn choices(&self, _: Sealed) -> Option<Vec<Choice>>`,** defaulting
+       to `None`, where `Sealed` is a type only formoxus can build. Outside
+       formoxus it can be neither called nor usefully overridden; the blanket
+       `ChoiceField` impl returns `Some`, and `Newtype` passes it through.
+    2. **`const HAS_CHOICES: bool = false`,** `true` from the blanket impl,
+       for `form!`'s `field:` checks (5.7.3), since `form!` reads a const at
+       compile time and cannot call a method. A const cannot be sealed, so
+       its doc says only the blanket impl sets it.
+    3. `newtypes.rs`' `Loud` test field stops overriding `choices`; the
+       delegation is tested through a `Newtype` over a `ChoiceField`.
 
 ## Traps
 
@@ -1116,59 +1154,83 @@ AS. **DECIDED 2026-11-27 (Todd): a choice field owns its text, as Django's
     fires, since the compiler already judged the same list; built-in leaves
     in a hand-built spec stay unchecked on purpose (V).
 
-  - [ ] **5.7** (Claude, Todd, then Claude) **Choices that own their text
-    (AS), run-time ones included.** Rewritten 2026-11-27 for AS (the first
-    rewrite of the same day parsed choices through `P`'s field; Todd turned
-    that down). After 5.6.3.3, before box 6. The motivating case:
-    `questions: Vec<Ref<Question>>`, `questions[] => { choices: questions }`,
+  - [ ] **5.7** (Todd, then Claude) **Choices that own their text (AS, AT),
+    run-time ones included.** Rewritten 2026-11-27 for AT. After 5.6.3.3,
+    before box 6. The motivating case: `questions: Vec<Ref<Question>>` with
+    `questions[] => { field: QuestionChoice { choices: questions.clone() } }`,
     where `questions` is the course's `(key, label)` list, loaded at run time.
+    Todd writes `ChoiceField` first (2026-11-27: tests wait until its shape
+    is settled).
 
-    1. **(Claude) Tests first.**
-       1. Bring back `custom_fields.rs`' `#[cfg(any())] mod deferred_q`,
-          rewritten for `(key, label)` choices over a listed `Ref<Question>`:
-          a listed key passes, an unlisted one is refused on its item, a
-          forged one is refused by `Submission::accept`.
-       2. New: a form filled from a model shows its choice selected (the
-          `key` direction); an unlisted `P` with both `coerce:` and `key:`;
-          `coerce` is never called with a key outside the list (a `coerce`
-          that panics on anything else); a list built at run time, by a
-          function, giving the same result through `form_for` and through
-          `Submission::accept`.
-       3. Unchanged, and must stay green: every built-in `choices:` test
-          (`(1, "Small")` on a `u8`, `STATES` on a `String`).
-
-    2. **(Todd) Reshape `ChoiceField<P>`** (`fields/choice_field.rs`).
-       1. **What it holds:** the `(key, label)` pairs, and the two functions,
-          each an `Arc<dyn Fn … + Send + Sync>` (a `NodeCtor` must be
-          `Send + Sync`): `coerce: Fn(&str) -> Result<P, ValidationMessage>`
-          and `key: Fn(&P) -> String`.
-       2. **The `Field` impl:** `parse(raw)` checks membership first, then
-          coerces (AS.3); `format(v)` is `key(v)`; `check(v)` is membership
-          of `key(v)`, for a value that came from the model rather than from
-          `parse`; `choices()` hands the widget the pairs as they are.
-       3. **Keep built-ins working unchanged.** Today a choice is written as
-          `(value, label)` with a typed value, so `(1, "Small")` on a `u8`
-          infers `1` as a `u8` and `(300, "Huge")` is rustc's out-of-range
-          error. For a built-in, keep accepting that, turned into its key
-          through `key`; for any `P`, accept `(key, label)` with a `&str` or
-          `String` key. On a `String` both spellings mean the same.
-       4. **Trap: `KIND`.** Today it is `field_type_of(P::SHAPE)`, which
+    1. **(Claude, at Todd's request, from his draft) The `ChoiceField`
+       trait and its built-in implementation** (`fields/choice_field.rs`).
+       **Built 2026-11-27, uncommitted, for Todd's review;** `just ci` green.
+       As below, with these choices: the list method is `options()`; the
+       built-in implementation is `ScalarChoices<T>` (keys derived through
+       the type's own text, `coerce` is `parse_scalar`); `Choice` is
+       `fields::Choice { key, display }` (Todd's rename of `value`), and
+       `widgets::Choice` is gone, with every import following;
+       `ChoiceField::KIND` defaults to `Text`, `ScalarChoices` keeps
+       `field_type_of(T::SHAPE)`; no `default_widget` on the trait (a name
+       shared with `Field` would make calls ambiguous), a `select` always.
+       Beyond the list: the blanket impl is `#[diagnostic::do_not_recommend]`,
+       since without it a type that is no `Field` was told to implement
+       `ChoiceField` (`form_field_not_a_field` re-blessed, read), and
+       `Field`'s `on_unimplemented` gained a note pointing at `ChoiceField`;
+       `LeafArgs::node` refuses a dev choice field offering a `""` key;
+       the coherence probe was the build itself, which passed. `newtypes.rs`'
+       `Loud` no longer overrides `choices` (AU.3): its delegation test is a
+       `Newtype` over `ScalarChoices`, by `HAS_CHOICES` and rendered options.
+       1. **The trait:** `type Value`; the list (`&[Choice]`, the moved
+          `(key, label)` type, AT.4); `coerce(&self, key: &str) ->
+          Result<Self::Value, ValidationMessage>`; `key(&self, value:
+          &Self::Value) -> String`. Name the list method something other
+          than `choices`: `Field` already has `fn choices()`, and with both
+          traits in scope a call on a concrete type would be ambiguous.
+       2. **The blanket `impl<C: ChoiceField> Field for C`:** `parse`
+          checks membership, then coerces (AS.3); `format` is `key`; `check`
+          is membership of `key(v)`, for a value from the model rather than
+          from `parse`; `choices()` hands the widget the list;
+          `default_widget` is a `select`. Probe the coherence first (a ten-
+          line scratch crate): formoxus sees every local `Field` impl, and a
+          dev type implementing both traits should get rustc's "conflicting
+          implementations".
+       3. **The built-in implementation** (today's `ChoiceField<T>`,
+          renamed, say `ScalarChoices<T>`), which `choices:` keeps building:
+          `(1, "Small")` on a `u8` still infers `1` as a `u8`, and its `key`
+          and `coerce` are the built-in's own text.
+       4. **Trap: `KIND`.** Today it is `field_type_of(T::SHAPE)`, which
           panics at compile time on a struct. A choice's text is its key, so
-          `Text` may be right for every choice field; check what reads a
-          choice field's `KIND` (widget checks take choices whatever the
-          `KIND`; `resolve_bounds`; the attribute check, though `form!`
-          refuses constraints beside `choices`) before changing it, or keep
-          the built-in's `KIND` and use `Text` otherwise.
-       5. **The defaults (AS.2) live where `choice_node` builds the field**
-          (`field_kind.rs`): from `<Reg as FieldFor<P>>::Field`'s `parse`
-          and `format` when the list has `P`, from the built-in otherwise.
+          a dev's choice field can say `Text`; decide whether the trait asks
+          for it or the blanket impl fixes it.
+       5. **`widgets::Choice` moves here** (AT.4): its uses (about 20 files,
+          and `widgets::*` re-exports it for custom widgets) follow, or the
+          widgets module keeps re-exporting it from its new home.
+       6. **Seal `Field::choices()` and add `Field::HAS_CHOICES` (AU).** The
+          four callers in `field_node.rs` (widget props, the shown text, the
+          node's own `choices`, the build-time widget check) and `Newtype`'s
+          delegation pass a `Sealed`.
 
-    3. **(Claude) `form!`'s side.** `coerce:` and `key:` keys beside
-       `choices:` (in `legal_keys`, refused without `choices:`); the
-       refusal for a `P` with no field in the list and no `coerce:`/`key:`,
-       at compile time where `FieldFor` can say it; the `choices:` docs:
-       `(key, label)`, the defaults, `coerce` pure and two-sided, and AS.5's
-       two traps with a two-sided example.
+    2. **(Claude) Tests,** once 1's shape is settled:
+       1. Bring back `custom_fields.rs`' `#[cfg(any())] mod deferred_q`,
+          rewritten for a `QuestionChoice` over `Ref<Question>`: a listed
+          key passes, an unlisted one is refused on its item, a forged one is
+          refused by `Submission::accept`.
+       2. New: a form filled from a model shows its choice selected (the
+          `key` direction); `coerce` is never called with a key outside the
+          list; a list built at run time, by a function, gives the same
+          result through `form_for` and `Submission::accept`; a dev choice
+          field's `default_widget` is a `select`.
+       3. Unchanged and green: every built-in `choices:` test.
+
+    3. **(Claude) `form!`'s side.** **Trap: `form!` decides "this path has
+       choices" from the `choices:` key itself,** so with
+       `field: QuestionChoice { … }` it sees none, and a `widget:
+       radio_group` on a listed `Ref<Question>` read as text would be refused
+       (`renders` lets a widget that takes choices through only with
+       choices). Fix: `Field::HAS_CHOICES` (AU.2), read by `form!`'s
+       `field:` checks. Then the `choices:` and `field:` docs: AS's rules, a
+       two-sided example, AS.5's two traps.
 
     4. **(Claude) An example and its e2e test, in a pair.** A test form at
        `/t/<slug>` whose choices come from a server function that sleeps

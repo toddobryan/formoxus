@@ -13,6 +13,12 @@ checked before `coerce`, which is pure and runs on both sides. Runtime choices
 need no `Context`: the form is a function of its data, built on each side
 (`choices:` already takes any expression). The server must not trust the
 client's inputs to its choices; load before build (`use_form` runs once).
+**AMENDED 2026-11-27 by AT:** no `coerce:`/`key:` keys and no listed-field
+default. A non-built-in type's choices come through `field:`, from a
+`ChoiceField` TRAIT (Value, the (key, label) list, coerce, key) with a blanket
+`Field` impl that does membership-then-coerce; `choices:` is for built-ins
+only. `widgets::Choice` moves into `fields/choice_field.rs`. Trap: `form!` sees
+choices only from the `choices:` key, so `Field` needs a `HAS_CHOICES` const.
 Built in CUSTOM_FIELDS_PLAN 5.7.
 
 Answers the fork left open in [[widget-table-and-choice]]: what produces a

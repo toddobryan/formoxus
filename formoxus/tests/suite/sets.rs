@@ -378,7 +378,7 @@ impl formoxus::widgets::SetWidget for PropsAsText {
         let choices = props
             .choices
             .iter()
-            .map(|c| format!("{}={}", c.value, c.display))
+            .map(|c| format!("{}={}", c.key, c.display))
             .collect::<Vec<_>>()
             .join(",");
         let chosen = props.chosen.join(",");

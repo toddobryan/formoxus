@@ -11,9 +11,9 @@ use formoxus::attrs::AttrSet;
 use formoxus::attrs::{Attr, AttrKey, AttrValue, InputType as T};
 use formoxus::classes::Classes;
 use formoxus::field_attrs::FieldAttrs;
+use formoxus::fields::Choice;
 use formoxus::path::NodePath;
 use formoxus::stores::{ErrorsByPath, ValuesByPath};
-use formoxus::widgets::Choice;
 use formoxus::widgets::WidgetProps;
 use formoxus::widgets::{
     AnyWidget, CheckboxInput, ColorInput, DateInput, DatetimeLocalInput, EmailInput, HiddenInput,

@@ -9,8 +9,10 @@ use formoxus_spec::Attr;
 
 use crate::bound_field::BoundField;
 use crate::error::{FormAccessError, ValidationMessage};
+use crate::field::Sealed;
 use crate::field::{Field, FieldValue, populate};
 use crate::field_attrs::FieldAttrs;
+use crate::fields::Choice;
 use crate::form::FieldSpec;
 use crate::label_case::LabelCase;
 use crate::nodes::{Drafts, FieldValidator, FilesByPath, Shown};
@@ -18,7 +20,7 @@ use crate::nodes::{Edit, Node, NodeContext, RawValue, SpecsByPath, ValuesByPath,
 use crate::path::NodePath;
 use crate::stores::ErrorsByPath;
 use crate::widgets::widget_props::WidgetProps;
-use crate::widgets::{AnyWidget, CheckboxInput, Choice, Widget};
+use crate::widgets::{AnyWidget, CheckboxInput, Widget};
 
 /// Everything the walk knows about a leaf when it builds one.
 ///
@@ -74,8 +76,7 @@ impl LeafArgs<'_> {
         // already judged every path it names, against the same list.
         let widget = &node.widget;
         assert!(
-            widget.accepts().contains(F::KIND)
-                || (widget.takes_choices() && node.field.choices().is_some()),
+            widget.accepts().contains(F::KIND) || (widget.takes_choices() && F::HAS_CHOICES),
             "{}: the widget `{}` cannot render a `{}`, whose field reads {:?}. Give this path \
              a widget that renders {:?}, or give `{}` a field that reads what `{}` renders",
             self.path,
@@ -97,6 +98,22 @@ impl LeafArgs<'_> {
             widget.name(),
             self.shape,
         );
+        // A choice field of the dev's own could offer `""`, which reads as no
+        // answer, so it could never be chosen. `ScalarChoices` refuses one when
+        // it is made; this covers every other `ChoiceField`, once per leaf.
+        if F::HAS_CHOICES
+            && let Some(empty) = node
+                .field
+                .choices(Sealed::new())
+                .and_then(|choices| choices.into_iter().find(|c| c.key.is_empty()))
+        {
+            panic!(
+                "{}: the choice labelled {:?} has the key \"\", which formoxus reads as no \
+                 answer at all, so it could never be chosen. Give it a key of its own; the \
+                 widget offers \"no answer\" itself where the field is an `Option`",
+                self.path, empty.display,
+            );
+        }
         // The spec's own attributes only: the field's (`widget_attrs`) are its
         // own to get right.
         if let Some(attr) = node.attrs.first_where(|attr| !attr.applies_to(F::KIND)) {
@@ -283,8 +300,8 @@ impl<F: Field> Node for FieldNode<F> {
         let raw = self.raw_value();
         Shown::plain(
             self.field
-                .choices()
-                .and_then(|choices| choices.into_iter().find(|choice| choice.value == raw))
+                .choices(Sealed::new())
+                .and_then(|choices| choices.into_iter().find(|choice| choice.key == raw))
                 .map_or(raw, |choice| choice.display),
         )
     }
@@ -347,7 +364,7 @@ impl<F: Field> Node for FieldNode<F> {
         self.widget.render(WidgetProps {
             base_attrs,
             extra_attrs: Vec::new(),
-            choices: self.field.choices(),
+            choices: self.field.choices(Sealed::new()),
             field: BoundField::new(
                 ctx.id(&self.name),
                 ctx.path(&self.name),
@@ -481,7 +498,7 @@ impl<F: Field> Node for FieldNode<F> {
     }
 
     fn choices(&self, _case: LabelCase) -> Option<Vec<Choice>> {
-        self.field.choices()
+        self.field.choices(Sealed::new())
     }
 }
 

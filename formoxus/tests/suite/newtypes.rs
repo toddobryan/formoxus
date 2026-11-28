@@ -24,11 +24,11 @@ use formoxus::attrs::{Attr, AttrValue, FieldType};
 use formoxus::error::ValidationMessage;
 use formoxus::field::Field;
 use formoxus::field_attrs::FieldAttrs;
-use formoxus::fields::{Newtype, NumberField, StringField};
+use formoxus::fields::{Newtype, NumberField, ScalarChoices, StringField};
 use formoxus::path::NodePath;
 use formoxus::prelude::*;
 use formoxus::type_registry::TypeRegistry;
-use formoxus::widgets::{AnyWidget, Choice, Textarea};
+use formoxus::widgets::{AnyWidget, Textarea};
 use futures::executor::block_on;
 use googletest::prelude::*;
 
@@ -538,10 +538,6 @@ impl Field for Loud {
         })
     }
 
-    fn choices(&self) -> Option<Vec<Choice>> {
-        Some(vec![Choice::new("a", "A"), Choice::new("b", "B")])
-    }
-
     fn trims(&self, _password: bool) -> bool {
         true
     }
@@ -607,9 +603,42 @@ fn newtype_takes_its_default_widget_from_the_inner_field() {
     );
 }
 
+/// `Field::choices` is sealed (decision AU), so a field outside formoxus can
+/// neither offer choices nor be asked for them: `Loud` cannot test this
+/// delegation. A `Newtype` over a choice field can, by what it says and what
+/// its widget renders.
 #[gtest]
 fn newtype_takes_its_choices_from_the_inner_field() {
-    expect_that!(shout().choices(), eq(&Loud.choices()));
+    expect_that!(
+        <Newtype<Shout, ScalarChoices<String>> as Field>::HAS_CHOICES,
+        eq(true)
+    );
+    expect_that!(<Newtype<Shout, Loud> as Field>::HAS_CHOICES, eq(false));
+    let html = render_to_html(MegaphoneWithChoices);
+    expect_that!(html, contains_substring(r#"<option value="a""#));
+    expect_that!(html, contains_substring(r#"<option value="b""#));
+}
+
+#[derive(Facet, Clone, Debug, PartialEq)]
+struct Megaphone {
+    shout: Shout,
+}
+
+#[component]
+fn MegaphoneWithChoices() -> Element {
+    let form = use_form(|| {
+        empty_form(FormSpec::<Megaphone>::default().with_node(
+            &path!(Megaphone.shout),
+            formoxus::field_kind::named_field(
+                |m: &Megaphone| &m.shout,
+                Newtype::<Shout, ScalarChoices<String>>::new(ScalarChoices::new([
+                    ("a", "A"),
+                    ("b", "B"),
+                ])),
+            ),
+        ))
+    });
+    form.render(using_fns! {})
 }
 
 #[gtest]

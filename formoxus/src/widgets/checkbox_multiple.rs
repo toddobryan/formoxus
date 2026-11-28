@@ -52,11 +52,11 @@ pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
     let input_class = props.part_class::<CheckboxMultiple>(Tag::Input);
     let label_class = props.part_class::<CheckboxMultiple>(Tag::Label);
     let choices = props.choices.iter().enumerate().map(|(index, choice)| {
-        let is_checked = props.chosen.contains(&choice.value);
-        let chosen_index = props.chosen.iter().position(|e| *e == choice.value);
+        let is_checked = props.chosen.contains(&choice.key);
+        let chosen_index = props.chosen.iter().position(|e| *e == choice.key);
         let is_disabled =
             !is_checked && props.max_items.is_some_and(|max| props.chosen.len() >= max);
-        let value = choice.value.clone();
+        let value = choice.key.clone();
         let id = format!("{}-{index}", props.id());
         let field = props.field();
         let on_change = move |e: FormEvent| {
@@ -73,7 +73,7 @@ pub(crate) fn CheckboxMultipleView(widget_props: SetWidgetProps) -> Element {
                 input { class: &input_class,
                     r#type: "checkbox",
                     id: "{id}",
-                    value: "{choice.value}",
+                    value: "{choice.key}",
                     checked: is_checked,
                     disabled: is_disabled,
                     onchange: on_change,

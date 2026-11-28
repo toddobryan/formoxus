@@ -34,7 +34,7 @@ ORDER (Todd): 5.6.3.3 -> 5.7 -> box 6 -> box 12 -> boxes 7-9.
 for ACCEPTS/TAKES_CHOICES, ACCEPTS_OPTIONAL and attributes, so a hand-built
 spec gets form!'s refusals; widget_matrix deleted, replaced by the suite test
 builtin_widgets::a_pair_a_widget_accepts_renders_and_every_other_is_refused_at_build.
-NEXT: Todd 5.7.1 (ChoiceField holds P's field). Root README "What isn't done"
+5.7.1 BUILT by Claude 2026-11-27 (Todd asked, stepped away), UNCOMMITTED, ci green: ChoiceField trait + blanket Field impl (do_not_recommend), ScalarChoices<T>, fields::Choice {key, display}, widgets::Choice gone, Field::choices sealed + HAS_CHOICES. NEXT: Todd reviews; then Claude 5.7.2 tests. Root README "What isn't done"
 still claims no file upload (stale; for the doc pass).
 
 ## 2026-11-26 DAY: QA-QJ answered, all as recommended; committed and pushed

@@ -4,10 +4,28 @@ use facet::{Facet, Partial, Peek};
 use formoxus_spec::FieldType;
 
 use crate::{
-    error::ValidationMessage,
-    field_attrs::FieldAttrs,
-    widgets::{AnyWidget, Choice},
+    error::ValidationMessage, field_attrs::FieldAttrs, fields::Choice, widgets::AnyWidget,
 };
+
+/// The token [`Field::choices`] takes, which only formoxus can build: outside
+/// the crate that method can be neither called nor overridden, so only the
+/// blanket impl for a [`ChoiceField`](crate::fields::ChoiceField) (and
+/// [`Newtype`](crate::fields::Newtype), passing it through) ever says a field
+/// has choices (`CUSTOM_FIELDS_PLAN.md` decision AU).
+///
+/// `pub` in a private module, the sealed-method pattern: nameable inside the
+/// crate, unreachable outside it.
+mod sealed {
+    #[derive(Clone, Copy, Debug)]
+    pub struct Sealed(());
+
+    impl Sealed {
+        pub(crate) const fn new() -> Self {
+            Self(())
+        }
+    }
+}
+pub(crate) use sealed::Sealed;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldValue<T: Clone + Debug + PartialEq> {
@@ -21,7 +39,9 @@ pub enum FieldValue<T: Clone + Debug + PartialEq> {
 
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a formoxus `Field`",
-    label = "`field:` takes a type that implements `formoxus::field::Field`"
+    label = "`field:` takes a type that implements `formoxus::field::Field`",
+    note = "for a value chosen from a list, implement `formoxus::fields::ChoiceField` instead: \
+            it makes the type a `Field`"
 )]
 pub trait Field: Clone + Debug + PartialEq + 'static {
     type Value: Clone + Debug + PartialEq + for<'f> Facet<'f> + 'static;
@@ -106,7 +126,21 @@ pub trait Field: Clone + Debug + PartialEq + 'static {
         async { Vec::new() }
     }
 
-    fn choices(&self) -> Option<Vec<Choice>> {
+    /// Whether this field offers a list to choose from: `true` only for a
+    /// [`ChoiceField`](crate::fields::ChoiceField), whose blanket impl sets
+    /// it, and for a [`Newtype`](crate::fields::Newtype) over one. A const,
+    /// not a method, because `form!` asks it at compile time: a `field:` that
+    /// brings choices lets a widget that takes choices (`radio_group`) through
+    /// whatever the field's `KIND`. Leave it alone in a field of your own; to
+    /// offer choices, implement `ChoiceField` instead.
+    const HAS_CHOICES: bool = false;
+
+    /// The list, for the widget to render and for a set to show each item's
+    /// label. Sealed (decision AU): only formoxus calls it, and only a
+    /// `ChoiceField`'s blanket impl and `Newtype` answer anything but `None`.
+    #[doc(hidden)]
+    #[allow(private_interfaces)]
+    fn choices(&self, _: Sealed) -> Option<Vec<Choice>> {
         None
     }
 

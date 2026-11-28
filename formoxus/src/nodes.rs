@@ -34,12 +34,12 @@ pub use variant_node::{VariantChoice, VariantNode};
 use crate::bound_field::OnFieldEvent;
 use crate::classes::Classes;
 use crate::error::FormAccessError;
+use crate::fields::Choice;
 use crate::form::Contents;
 use crate::form::FieldSpec;
 use crate::label_case::{LabelCase, ToCase};
 use crate::path::{ITEM_SIGIL, NodePath};
 use crate::stores::{ErrorsByPath, ErrorsView, FilesByPath, ValuesByPath};
-use crate::widgets::Choice;
 
 pub type SpecsByPath = IndexMap<String, FieldSpec>;
 

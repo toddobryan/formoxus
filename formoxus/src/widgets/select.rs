@@ -92,8 +92,8 @@ pub(crate) fn SelectView(widget_props: WidgetProps) -> Element {
             }
             for choice in choices {
                 option {
-                    value: "{choice.value}",
-                    selected: choice.value == current,
+                    value: "{choice.key}",
+                    selected: choice.key == current,
                     "{choice.display}"
                 }
             }

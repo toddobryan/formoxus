@@ -4,6 +4,7 @@ use crate::bound_field::BoundField;
 use crate::build::{FormMode, Walk, variant_nodes};
 use crate::error::{FormAccessError, ValidationMessage};
 use crate::field_attrs::FieldAttrs;
+use crate::fields::Choice;
 use crate::label_case::{LabelCase, ToCase};
 use crate::nodes::{Drafts, Edit, Node, SpecsByPath, default_label, no_such_path};
 use crate::nodes::{NodeContext, RawValue, Shown};
@@ -12,7 +13,7 @@ use crate::stores::{ErrorsByPath, FilesByPath, ValuesByPath};
 use crate::type_registry::TypeRegistry;
 use crate::widgets::field_row::required_marker;
 use crate::widgets::widget_props::WidgetProps;
-use crate::widgets::{Choice, VariantSelect, field_help};
+use crate::widgets::{VariantSelect, field_help};
 use dioxus::prelude::*;
 use facet::{EnumType, Partial, ReflectError, Variant};
 use formoxus_spec::{Attr, AttrValue, FixedKey};
@@ -510,7 +511,7 @@ impl Node for VariantNode {
             self.variants()
                 .iter()
                 .map(|v| Choice {
-                    value: v.to_string(),
+                    key: v.to_string(),
                     display: v.to_case(case),
                 })
                 .collect(),

@@ -8,6 +8,7 @@ use crate::bound_field::BoundField;
 use crate::{
     error::{FormAccessError, ValidationMessage},
     field_attrs::FieldAttrs,
+    fields::Choice,
     file::{FileMeta, FileUpload, format_size},
     label_case::LabelCase,
     nodes::{
@@ -16,7 +17,7 @@ use crate::{
     },
     path::NodePath,
     stores::ErrorsByPath,
-    widgets::{AnyWidget, Choice, WidgetProps},
+    widgets::{AnyWidget, WidgetProps},
 };
 
 #[derive(Clone, Debug)]

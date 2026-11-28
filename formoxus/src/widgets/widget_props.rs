@@ -10,11 +10,11 @@ use crate::bound_field::{BoundField, Leaf, NodeKind, OnFieldEvent, Set};
 use crate::classes::Classes;
 use crate::defaults::Formoxus;
 use crate::field_attrs::FieldAttrs;
+use crate::fields::Choice;
 use crate::form::Contents;
 use crate::nodes::FormWide;
 use crate::path::NodePath;
 use crate::stores::{ErrorsByPath, ErrorsView, FilesSignal, ValuesByPath};
-use crate::widgets::types::Choice;
 use crate::widgets::widget::Widget;
 
 /// What a widget is handed to render one node: its bound field, which these

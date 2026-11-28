@@ -74,7 +74,8 @@
 //!
 //! # Layout
 //!
-//! - [`types`] — [`Choice`], one legal value a chooser offers.
+//! - [`types`] — the `InputType` re-export, and the choices a `bool` offers;
+//!   a chooser's options are [`Choice`](crate::fields::Choice)s.
 //! - [`widget`] — the [`Widget`] trait every widget implements, the
 //!   [`LeafWidget`] trait for one that renders one value and [`SetWidget`] for
 //!   one that renders a whole set, and [`AnyWidget`] and [`AnySetWidget`], the
@@ -139,7 +140,7 @@ pub use select::{ABSENT_DISPLAY, Select};
 pub use select_multiple::SelectMultiple;
 pub use set_item::{ItemText, ItemView, SetItemProps};
 pub use textarea::Textarea;
-pub use types::{Choice, InputType};
+pub use types::InputType;
 // Defined in `nodes`, re-exported here because a custom widget cannot be
 // written without them — so `use formoxus::widgets::*` is the whole kit. A
 // custom adder (`AddItemProps`, above) sends an `Edit`, and fills its item with

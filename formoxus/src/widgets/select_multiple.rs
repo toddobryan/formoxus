@@ -118,12 +118,12 @@ pub(crate) fn SelectMultipleView(widget_props: SetWidgetProps) -> Element {
             onchange: on_change,
             for choice in props.choices.iter() {
                 option {
-                    value: "{choice.value}",
-                    selected: props.chosen.contains(&choice.value),
+                    value: "{choice.key}",
+                    selected: props.chosen.contains(&choice.key),
                     // At the limit only the selected options stay live, as
                     // the Add button stops a list: the user can still
                     // deselect one and pick another.
-                    disabled: at_max && !props.chosen.contains(&choice.value),
+                    disabled: at_max && !props.chosen.contains(&choice.key),
                     "{choice.display}"
                 }
             }

@@ -30,7 +30,7 @@ use facet::{Def, Facet, Shape, StructKind, Type, UserType};
 use formoxus_spec::{Attr, FieldType, HtmlElement};
 
 use crate::field::Field;
-use crate::fields::{ChoiceField, IntoChoice};
+use crate::fields::{IntoChoice, ScalarChoices};
 use crate::form::FormSpec;
 use crate::nodes::NodeCtor;
 use crate::nodes::{SetEvent, SetFeedback, SetOrder, is_file_upload};
@@ -61,12 +61,12 @@ pub fn field_for<Reg: FieldFor<TypeAtPath>, Model, TypeAtPath>(
 }
 
 /// The leaf constructor for a field `form!` gives `choices:`: a
-/// [`ChoiceField`] over the model field's own type, so `(1, "Small")` is a
+/// [`ScalarChoices`] over the model field's own type, so `(1, "Small")` is a
 /// `u8` on a `u8` field and an `Option<u8>` field chooses among `u8`s.
 ///
 /// Not a setting on the default field, as `min` is, because choices change
-/// WHICH field it is: a `String` with choices is a `ChoiceField<String>`, not
-/// a `StringField`. `form!` refuses `choices` beside a validated key, so the
+/// WHICH field it is: a `String` with choices is a `ScalarChoices<String>`,
+/// not a `StringField`. `form!` refuses `choices` beside a validated key, so the
 /// two constructors never meet on one field.
 pub fn choice_field_for<Reg, Model, TypeAtPath, Choice>(
     _: fn(&Model) -> &TypeAtPath,
@@ -104,7 +104,7 @@ where
     Choice: IntoChoice<ValueOf<Reg, TypeAtPath>>,
     ValueOf<Reg, TypeAtPath>: Send + Sync,
 {
-    let field = ChoiceField::<ValueOf<Reg, TypeAtPath>>::new(choices);
+    let field = ScalarChoices::<ValueOf<Reg, TypeAtPath>>::new(choices);
     NodeCtor::new(move |args| Box::new(args.node(field.clone())))
 }
 

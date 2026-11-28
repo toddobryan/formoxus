@@ -6,8 +6,10 @@ use formoxus_spec::FieldType;
 
 use crate::error::ValidationMessage;
 use crate::field::Field;
+use crate::field::Sealed;
 use crate::field_attrs::FieldAttrs;
-use crate::widgets::{AnyWidget, Choice};
+use crate::fields::Choice;
+use crate::widgets::AnyWidget;
 
 /// The [`Field`] for a newtype: `T`, a struct with one field, read and
 /// written through `F`, the field for the type it wraps.
@@ -155,6 +157,7 @@ where
     type Context = F::Context;
 
     const KIND: FieldType = F::KIND;
+    const HAS_CHOICES: bool = F::HAS_CHOICES;
 
     fn parse(&self, raw: &str) -> Result<T, ValidationMessage> {
         let inner = self.field.parse(raw)?;
@@ -190,8 +193,9 @@ where
         self.field.default_widget(optional)
     }
 
-    fn choices(&self) -> Option<Vec<Choice>> {
-        self.field.choices()
+    #[allow(private_interfaces)]
+    fn choices(&self, sealed: Sealed) -> Option<Vec<Choice>> {
+        self.field.choices(sealed)
     }
 
     fn trims(&self, password: bool) -> bool {

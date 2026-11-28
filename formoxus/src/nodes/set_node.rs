@@ -24,6 +24,7 @@ use formoxus_spec::FixedKey;
 use unicase::{Ascii, UniCase};
 
 use crate::bound_field::{BoundField, Set};
+use crate::fields::Choice;
 use crate::widgets::item_buttons::Editing;
 use crate::{
     build::retain_first,
@@ -34,7 +35,7 @@ use crate::{
     path::NodePath,
     stores::{ErrorsByPath, FilesByPath, ValuesByPath},
     widgets::{
-        AddItemProps, Choice, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
+        AddItemProps, DraftAdder, EditItemButton, FieldErrors, ItemAdder, ItemView,
         RemoveItemButton, SetItemProps, SetWidgetProps, described_by, field_help,
         field_row::required_marker, widget::AnySetWidget,
     },
